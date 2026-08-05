@@ -107,7 +107,8 @@
         "clangd.arguments": {
           "type": "array",
           "default": [
-            "--background-index"
+            "--background-index",
+            "--enable-config=false"
           ],
           "items": {
             "type": "string"

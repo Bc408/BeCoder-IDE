@@ -62,7 +62,7 @@ function clangdArgumentsForCompiler(compiler: string): string[] {
 		];
 	}
 	return process.platform === 'win32'
-		? ['--background-index']
+		? ['--background-index', '--enable-config=false']
 		: ['--background-index', `--query-driver=${compiler}`];
 }
 

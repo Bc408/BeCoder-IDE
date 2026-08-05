@@ -992,7 +992,7 @@ export class CodeApplication extends Disposable {
 			'becoder.runner.cFlags': ['-O2', '-Wall', '-DDEBUG'],
 			'becoder.runner.cleanupExecutable': true,
 			'clangd.path': clangd,
-			'clangd.arguments': ['--background-index'],
+			'clangd.arguments': ['--background-index', '--enable-config=false'],
 			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler, request.cppStandard),
 			'clangd.enable': true
 		};

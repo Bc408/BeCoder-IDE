@@ -25,6 +25,26 @@ export function isClangdDocument(document: vscode.TextDocument) {
   return vscode.languages.match(clangdDocumentSelector, document);
 }
 
+function isCompetitiveToolchainHeader(uri: vscode.Uri): boolean {
+  return /[\\/]include[\\/]c\+\+[\\/]14\.1\.0[\\/]/i.test(uri.fsPath);
+}
+
+function isKnownGccHeaderFalsePositive(uri: vscode.Uri,
+                                       diagnostic: vscode.Diagnostic): boolean {
+  const code = typeof diagnostic.code === 'string' ? diagnostic.code : '';
+  if (code !== 'typecheck_expression_not_modifiable_lvalue' &&
+      code !== 'clang(typecheck_expression_not_modifiable_lvalue)')
+    return false;
+
+  if (isCompetitiveToolchainHeader(uri))
+    return true;
+
+  // clangd may publish an "In included file" diagnostic on the user's source
+  // line and put the actual GCC header location in relatedInformation.
+  return diagnostic.relatedInformation?.some(info =>
+      isCompetitiveToolchainHeader(info.location.uri)) ?? false;
+}
+
 class ClangdLanguageClient extends vscodelc.LanguageClient {
   // Override the default implementation for failed requests. The default
   // behavior is just to log failures in the output panel, however output panel
@@ -128,6 +148,13 @@ export class ClangdContext implements vscode.Disposable {
       // We also mark the list as incomplete to force retrieving new rankings.
       // See https://github.com/microsoft/language-server-protocol/issues/898
       middleware: {
+        // GCC 14.1.0's unicode.h contains a construct that clangd 22 reports
+        // as non-modifiable only while parsing the bundled libstdc++ headers.
+        // Keep real diagnostics in user files visible.
+        handleDiagnostics: (uri, diagnostics, next) => {
+          next(uri, diagnostics.filter(diagnostic =>
+              !isKnownGccHeaderFalsePositive(uri, diagnostic)));
+        },
         provideCompletionItem: async (document, position, context, token,
                                       next) => {
           if (!await config.get<boolean>('enableCodeCompletion'))

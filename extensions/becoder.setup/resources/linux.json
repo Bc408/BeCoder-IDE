@@ -1,0 +1,45 @@
+{
+	"pages": [
+		{
+			"id": "method",
+			"title": { "en": "BeCoder IDE", "zh-CN": "BeCoder IDE" },
+			"text": { "en": "Select your configuration method.", "zh-CN": "选择配置方式。" },
+			"selections": {
+				"Recommended": {
+					"label": { "en": "Recommended", "zh-CN": "推荐" },
+					"jumpto": 2,
+					"description": { "en": "Use the system g++ compiler and portable clangd.", "zh-CN": "使用系统 g++ 与 portable clangd。" }
+				}
+			}
+		},
+		{
+			"id": "toolchain",
+			"title": { "en": "Installing clangd", "zh-CN": "正在安装 clangd" },
+			"text": { "en": "Downloading portable clangd and checking the system g++ compiler.", "zh-CN": "正在下载 portable clangd 并检查系统 g++。" },
+			"jumpto": 3
+		},
+		{
+			"id": "configuration",
+			"title": { "en": "Configuration", "zh-CN": "配置" },
+			"text": { "en": "Choose editor defaults and the C++ language standard.", "zh-CN": "选择编辑器默认设置与 C++ 语言标准。" },
+			"controls": [
+				{ "key": "editor", "type": "boolean", "default": true, "label": { "en": "Apply editor and save defaults", "zh-CN": "应用编辑器与保存预设" } },
+				{ "key": "installToolchain", "type": "boolean", "default": true, "label": { "en": "Install g++ and clangd when missing", "zh-CN": "缺少时安装 g++ 与 clangd" } },
+				{ "key": "fontLigatures", "type": "boolean", "default": true, "label": { "en": "Enable font ligatures", "zh-CN": "启用字体连字" } },
+				{ "key": "fontSize", "type": "number", "default": 14, "min": 10, "max": 32, "label": { "en": "Editor font size", "zh-CN": "编辑器字号" } },
+				{ "key": "clangdVariableTypeHints", "type": "boolean", "default": true, "label": { "en": "Show clangd variable type hints", "zh-CN": "显示 clangd 变量类型提示" } },
+				{ "key": "cppStandard", "type": "select", "default": "c++20", "label": { "en": "Default C++ language version", "zh-CN": "默认 C++ 语言版本" }, "options": [{ "value": "c++11", "label": "C++11" }, { "value": "c++14", "label": "C++14" }, { "value": "c++17", "label": "C++17" }, { "value": "c++20", "label": "C++20" }, { "value": "c++23", "label": "C++23" }] },
+				{ "key": "workspaceFolder", "type": "folder", "label": { "en": "Workspace folder", "zh-CN": "工作目录" }, "placeholder": { "en": "Select a folder for your projects", "zh-CN": "选择项目目录" }, "buttonLabel": { "en": "Choose folder", "zh-CN": "选择目录" } }
+			]
+		}
+	],
+	"downloadSourceLabel": { "en": "clangd download source", "zh-CN": "clangd 下载源" },
+	"downloadSources": [
+		{ "id": "github", "label": { "en": "GitHub Release", "zh-CN": "GitHub Release" } },
+		{ "id": "ghfast", "label": { "en": "GH mirror", "zh-CN": "GH 镜像" } }
+	],
+	"portableToolchain": false,
+	"compilerCandidates": ["g++-16", "g++-15", "g++"],
+	"clangdCandidates": ["{{TOOLCHAIN_ROOT}}/clangd/clangd_22.1.6/bin/clangd", "clangd"],
+	"installDescription": "Use a system g++ compiler and portable clangd"
+}

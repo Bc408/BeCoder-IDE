@@ -1,0 +1,152 @@
+{
+	"name": "becoder-setup",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"publisher": "becoder",
+	"engines": {
+		"vscode": "^1.129.0"
+	},
+	"categories": ["Other"],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"activationEvents": ["*", "onCommand:becoder.setupEnvironment", "onCommand:becoder.redetectToolchain", "onCommand:becoder.repairToolchain", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.openToolchainDiagnostics"],
+	"main": "./out/extension.js",
+	"scripts": {
+		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
+		"compile": "npm run clean && node ../../node_modules/typescript/bin/tsc6 -p ./",
+		"vscode:prepublish": "npm run compile"
+	},
+	"contributes": {
+		"configuration": {
+			"title": "%configuration.title%",
+			"properties": {
+				"becoder.setup.completed": {
+					"type": "boolean",
+					"default": false,
+					"scope": "window",
+					"description": "%configuration.completed%"
+				},
+				"becoder.setup.pending": {
+					"type": "object",
+					"default": {},
+					"scope": "window",
+					"description": "%configuration.pending%"
+				},
+				"becoder.executableCleanupDelaySeconds": {
+					"type": "number",
+					"default": 60,
+					"minimum": 0,
+					"maximum": 86400,
+					"scope": "window",
+					"description": "%configuration.executableCleanupDelaySeconds%"
+				},
+				"becoder.newFile.defaultLanguage": {
+					"type": "string",
+					"default": "cpp",
+					"scope": "window",
+					"description": "%configuration.newFileDefaultLanguage%"
+				},
+				"becoder.toolchain.compilerPath": {
+					"type": "string",
+					"default": "",
+					"scope": "window",
+					"description": "Absolute compiler path used by BeCoder Runner."
+				},
+				"becoder.toolchain.cCompilerPath": {
+					"type": "string",
+					"default": "",
+					"scope": "window",
+					"description": "Absolute C compiler path used by BeCoder Runner."
+				},
+				"becoder.toolchain.clangdPath": {
+					"type": "string",
+					"default": "",
+					"scope": "window",
+					"description": "Absolute clangd path bundled by BeCoder."
+				},
+				"becoder.toolchain.stdIncludePath": {
+					"type": "string",
+					"default": "",
+					"scope": "window",
+					"description": "Bundled libstdc++ include directory."
+				},
+				"becoder.toolchain.debuggerHeader": {
+					"type": "string",
+					"default": "",
+					"scope": "window",
+					"description": "Bundled debugger.h path."
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "becoder.initializeOiWorkspace",
+				"title": "%command.initializeOiWorkspace%"
+			},
+			{
+				"command": "becoder.setupEnvironment",
+				"title": "%command.configure%"
+			},
+			{
+				"command": "becoder.rerunFirstRunSetup",
+				"title": "%command.rerunFirstRun%"
+			},
+			{
+				"command": "becoder.openSettings",
+				"title": "%command.openSettings%",
+				"icon": "$(settings-gear)"
+			},
+			{
+				"command": "becoder.configureCppSnippets",
+				"title": "%command.configureCppSnippets%"
+			},
+			{
+				"command": "becoder.configureAutoFormat",
+				"title": "%command.configureAutoFormat%"
+			},
+			{
+				"command": "becoder.openToolchainDiagnostics",
+				"title": "%command.openToolchainDiagnostics%",
+				"icon": "$(pulse)"
+			},
+			{
+				"command": "becoder.redetectToolchain",
+				"title": "%command.redetectToolchain%",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "becoder.repairToolchain",
+				"title": "%command.repairToolchain%",
+				"icon": "$(tools)"
+			},
+			{
+				"command": "becoder.showAllFiles",
+				"title": "%command.showAllFiles%",
+				"icon": "$(eye)"
+			},
+			{
+				"command": "becoder.hideSetupFiles",
+				"title": "%command.hideSetupFiles%",
+				"icon": "$(eye-closed)"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "becoder.showAllFiles",
+					"when": "view == workbench.explorer.fileView && !becoder.showAllFiles",
+					"group": "navigation@10"
+				},
+				{
+					"command": "becoder.hideSetupFiles",
+					"when": "view == workbench.explorer.fileView && becoder.showAllFiles",
+					"group": "navigation@10"
+				}
+			]
+		}
+	}
+}

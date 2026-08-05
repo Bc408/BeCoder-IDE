@@ -1,0 +1,48 @@
+{
+	"pages": [
+		{
+			"id": "method",
+			"title": { "en": "BeCoder IDE", "zh-CN": "BeCoder IDE" },
+			"text": { "en": "Select your configuration method.", "zh-CN": "选择你的配置方式。" },
+			"selections": {
+				"Recommended": { "label": { "en": "Recommended", "zh-CN": "推荐配置" }, "jumpto": 2, "description": { "en": "Install GCC and LLVM with Homebrew, then apply the contest preset.", "zh-CN": "使用 Homebrew 安装 GCC 与 LLVM，并应用竞赛预设。" } }
+			}
+		},
+		{
+			"id": "xcode",
+			"title": { "en": "Command Line Tools Required", "zh-CN": "需要 Xcode Command Line Tools" },
+			"text": { "en": "Installing Apple's Command Line Tools. Complete the system dialog if it appears.", "zh-CN": "正在安装 Apple Command Line Tools。如出现系统对话框，请完成安装。" },
+			"onSuccess": "homebrew"
+		},
+		{
+			"id": "homebrew",
+			"title": { "en": "Homebrew Required", "zh-CN": "需要 Homebrew" },
+			"text": { "en": "Homebrew is required on macOS. The official installer opens in Terminal, where you can securely enter your administrator password.", "zh-CN": "macOS 需要先安装 Homebrew。将使用 HomebrewCN 国内安装脚本，并在“终端”中打开；请在终端里安全输入管理员密码。" },
+			"onSuccess": "toolchain"
+		},
+		{
+			"id": "toolchain",
+			"title": { "en": "Installing Toolchain", "zh-CN": "正在安装编译环境" },
+			"text": { "en": "Installing GCC and LLVM with Homebrew…", "zh-CN": "正在通过 Homebrew 安装 GCC 与 LLVM…" },
+			"onSuccess": "configuration"
+		},
+		{
+			"id": "configuration",
+			"title": { "en": "Configuration", "zh-CN": "配置" },
+			"text": { "en": "Choose editor defaults and the C++ language standard.", "zh-CN": "选择编辑器默认设置与 C++ 语言标准。" },
+			"controls": [
+				{ "key": "editor", "type": "boolean", "default": true, "label": { "en": "Apply editor and save defaults", "zh-CN": "应用编辑器与保存体验预设" } },
+				{ "key": "installToolchain", "type": "boolean", "default": true, "label": { "en": "Install g++ and clangd when missing", "zh-CN": "缺少时下载 g++ 与 clangd" } },
+				{ "key": "fontLigatures", "type": "boolean", "default": true, "label": { "en": "Enable font ligatures", "zh-CN": "启用字体连字" } },
+				{ "key": "fontSize", "type": "number", "default": 14, "min": 10, "max": 32, "label": { "en": "Editor font size", "zh-CN": "编辑器字体大小" } },
+				{ "key": "clangdVariableTypeHints", "type": "boolean", "default": true, "label": { "en": "Show clangd variable type hints", "zh-CN": "显示 clangd 变量类型提示" } },
+				{ "key": "cppStandard", "type": "select", "default": "c++20", "label": { "en": "Default C++ language version", "zh-CN": "默认 C++ 语言版本" }, "options": [{ "value": "c++11", "label": "C++11" }, { "value": "c++14", "label": "C++14" }, { "value": "c++17", "label": "C++17" }, { "value": "c++20", "label": "C++20" }, { "value": "c++23", "label": "C++23" }] },
+				{ "key": "workspaceFolder", "type": "folder", "label": { "en": "Workspace folder", "zh-CN": "工作目录" }, "placeholder": { "en": "Select a folder for your OI projects", "zh-CN": "选择存放 OI 项目的目录" }, "buttonLabel": { "en": "Choose folder", "zh-CN": "选择目录" } }
+			]
+		}
+	],
+	"portableToolchain": false,
+	"compilerCandidates": [],
+	"clangdCandidates": ["/opt/homebrew/opt/llvm/bin/clangd", "/usr/local/opt/llvm/bin/clangd", "clangd"],
+	"installDescription": "Install GCC and LLVM (clangd) with Homebrew"
+}

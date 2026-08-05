@@ -1,0 +1,306 @@
+name: Release BeCoder
+
+on:
+  push:
+    tags:
+      - 'Release-v*'
+      - 'Beta-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows x64 (${{ matrix.label }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: exclude
+            label: Exclude Compiler
+            artifact: windows-x64-exclude-compiler
+            variant: Exclude-Compiler
+            archive: BeCoder-Windows-Exclude-Compiler-x64.zip
+          - id: include
+            label: Include Compiler
+            artifact: windows-x64-include-compiler
+            variant: Include-Compiler
+            archive: BeCoder-Windows-Include-Compiler-x64.zip
+    env:
+      VSCODE_ARCH: x64
+      npm_config_arch: x64
+      npm_config_foreground_scripts: "true"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Verify BeCoder release version
+        if: startsWith(github.ref_name, 'Release-v')
+        shell: bash
+        run: |
+          expected_version="${GITHUB_REF_NAME#Release-v}"
+          declared_version="$(node -p "require('./package.json').version")"
+          if [[ "$declared_version" != "$expected_version" ]]; then
+            echo "package.json version ($declared_version) must match $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Locate Visual Studio C++ toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ([string]::IsNullOrWhiteSpace($vsPath)) {
+            throw 'No Visual Studio installation with the MSVC C++ build tools was found on this runner.'
+          }
+          "vs2022_install=$vsPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $signTool = Get-ChildItem -Path $sdkBin -Filter signtool.exe -File -Recurse |
+            Where-Object { $_.Directory.Name -eq 'x64' } |
+            Sort-Object -Property FullName -Descending |
+            Select-Object -First 1
+          if (-not $signTool) {
+            throw "signtool.exe was not found under $sdkBin. Install the Windows 10/11 SDK."
+          }
+          $signTool.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $signTool.FullName /? | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "signtool.exe validation failed with exit code $LASTEXITCODE."
+          }
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          . build/azure-pipelines/win32/exec.ps1
+          $ErrorActionPreference = 'Stop'
+          exec { npm ci }
+          $nativeBindings = @(
+            'node_modules\@vscode\policy-watcher\build\Release\vscode-policy-watcher.node',
+            'node_modules\@vscode\spdlog\build\Release\spdlog.node',
+            'node_modules\@vscode\sqlite3\build\Release\vscode-sqlite3.node',
+            'node_modules\native-keymap\build\Release\keymapping.node',
+            'node_modules\windows-foreground-love\build\Release\foreground_love.node'
+          )
+          if ($nativeBindings.Where({ -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -gt 0) {
+            exec { npm rebuild '@vscode/policy-watcher' '@vscode/spdlog' '@vscode/sqlite3' 'native-keymap' --foreground-scripts }
+            exec { npx --yes node-gyp rebuild --directory node_modules/windows-foreground-love --target=42.6.0 --dist-url=https://electronjs.org/headers --runtime=electron --arch=x64 }
+          }
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Build bundled OI extensions
+        run: npm run compile-oi-extensions
+      - name: Verify bundled BeCoder compiler archive
+        if: matrix.id == 'include'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = 'resources\oi-defaults\toolchains\becoder-ucrt64.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or (Get-Item -LiteralPath $archive).Length -lt 100MB) {
+            throw "The Git LFS BeCoder compiler archive is missing or not hydrated: $archive"
+          }
+      - name: Exclude bundled BeCoder compiler archive
+        if: matrix.id == 'exclude'
+        shell: pwsh
+        run: Remove-Item -LiteralPath 'resources\oi-defaults\toolchains\becoder-ucrt64.zip' -Force -ErrorAction SilentlyContinue
+      - name: Build Windows package
+        shell: pwsh
+        run: npm run gulp vscode-win32-x64-min
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Prepare Inno updater
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run gulp -- vscode-win32-x64-inno-updater
+          $tools = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64\tools'
+          foreach ($file in @('inno_updater.exe', 'vcruntime140.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $tools $file) -PathType Leaf)) {
+              throw "Required Inno updater file was not produced: $file"
+            }
+          }
+
+      - name: Build Inno Setup installers
+        shell: pwsh
+        run: npm run gulp -- vscode-win32-x64-system-setup vscode-win32-x64-user-setup
+
+      - name: Archive Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64'
+          $artifactRoot = Join-Path $env:GITHUB_WORKSPACE '.build\artifacts'
+          $destination = Join-Path $artifactRoot 'VSCode-win32-x64'
+          if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            throw "Packaged application was not found at $source."
+          }
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          Move-Item -LiteralPath $source -Destination $destination
+          Remove-Item -LiteralPath (Join-Path $destination 'tools') -Recurse -Force -ErrorAction SilentlyContinue
+          $includeCompiler = '${{ matrix.id }}' -eq 'include'
+          & .\build\azure-pipelines\win32\verify-becoder-package.ps1 `
+            -PackagePath $destination `
+            -IncludeCompiler $includeCompiler
+          $requiredExtensionEntries = @(
+            'resources\app\extensions\becoder.setup\out\extension.js',
+            'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\extension.js',
+            'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\out\bundle.js'
+          )
+          foreach ($entry in $requiredExtensionEntries) {
+            $entryPath = Join-Path $destination $entry
+            if (-not (Test-Path -LiteralPath $entryPath -PathType Leaf)) {
+              throw "Required extension entry file was not packaged: $entry"
+            }
+          }
+          $localePath = Join-Path $destination 'locales'
+          $locales = @(Get-ChildItem -LiteralPath $localePath -Filter '*.pak' -File)
+          $unexpectedLocales = @($locales | Where-Object Name -NotIn @('en-US.pak', 'zh-CN.pak'))
+          if (-not (Test-Path -LiteralPath (Join-Path $localePath 'en-US.pak') -PathType Leaf) -or
+              -not (Test-Path -LiteralPath (Join-Path $localePath 'zh-CN.pak') -PathType Leaf) -or
+              $unexpectedLocales.Count -ne 0) {
+            throw "Packaged Electron locales must contain only en-US.pak and zh-CN.pak."
+          }
+          Compress-Archive -Path "$destination\*" -DestinationPath "${{ matrix.archive }}"
+
+          $installerOutputs = @(
+            @{ Source = '.build\win32-x64\system-setup\VSCodeSetup.exe'; Destination = 'BeCoder-Windows-${{ matrix.variant }}-x64-Setup.exe' },
+            @{ Source = '.build\win32-x64\user-setup\VSCodeSetup.exe'; Destination = 'BeCoder-Windows-${{ matrix.variant }}-x64-User-Setup.exe' }
+          )
+          foreach ($installer in $installerOutputs) {
+            if (-not (Test-Path -LiteralPath $installer.Source -PathType Leaf)) {
+              throw "Inno Setup installer was not produced: $($installer.Source)"
+            }
+            Copy-Item -LiteralPath $installer.Source -Destination $installer.Destination
+            if ((Get-Item -LiteralPath $installer.Destination).Length -lt 10MB) {
+              throw "Inno Setup installer is unexpectedly small: $($installer.Destination)"
+            }
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.archive }}
+            BeCoder-Windows-${{ matrix.variant }}-x64-Setup.exe
+            BeCoder-Windows-${{ matrix.variant }}-x64-User-Setup.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS ARM64
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      VSCODE_ARCH: arm64
+      npm_config_arch: arm64
+      npm_config_foreground_scripts: "true"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: |
+          npm ci
+          missing=0
+          for binding in \
+            node_modules/@vscode/policy-watcher/build/Release/vscode-policy-watcher.node \
+            node_modules/@vscode/spdlog/build/Release/spdlog.node \
+            node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node \
+            node_modules/native-keymap/build/Release/keymapping.node; do
+            test -f "$binding" || missing=1
+          done
+          if [ "$missing" -eq 1 ]; then
+            npm rebuild @vscode/policy-watcher @vscode/spdlog @vscode/sqlite3 native-keymap --foreground-scripts
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Build bundled OI extensions
+        run: npm run compile-oi-extensions
+      - name: Build macOS package
+        run: npm run gulp vscode-darwin-arm64-min
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Archive macOS application
+        run: |
+          app="../VSCode-darwin-arm64/BeCoder.app"
+          for entry in \
+            "becoder.setup/out/extension.js" \
+            "danielpinto8zz6.c-cpp-compile-run/dist/extension.js" \
+            "llvm-vs-code-extensions.vscode-clangd/out/bundle.js"; do
+            test -f "$app/Contents/Resources/app/extensions/$entry" || {
+              echo "Required extension entry file was not packaged: $entry" >&2
+              exit 1
+            }
+          done
+          test ! -e "$app/Contents/Resources/app/resources/oi-defaults/toolchains/becoder-ucrt64.zip"
+          test ! -e "$app/Contents/Resources/app/resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip"
+          locale_dir="$app/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources"
+          test -f "$locale_dir/en.lproj/locale.pak"
+          test -f "$locale_dir/zh_CN.lproj/locale.pak"
+          test -z "$(find "$locale_dir" -maxdepth 1 -type d -name '*.lproj' ! -name 'en.lproj' ! -name 'zh_CN.lproj' -print -quit)"
+          mkdir artifacts
+          ditto -c -k --sequesterRsrc --keepParent "$app" artifacts/BeCoder-macos-arm64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64
+          path: artifacts/BeCoder-macos-arm64.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      # `gh release create` derives the repository from the local Git checkout.
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          latest_asset=()
+          if [[ "$tag" == Release-v* ]]; then
+            version="${tag#Release-v}"
+            download_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+            manifest_version="$(node -p "require('./latest.json').version")"
+            manifest_download_url="$(node -p "require('./latest.json').downloadUrl")"
+            if [[ "$manifest_version" != "$version" || "$manifest_download_url" != "$download_url" ]]; then
+              echo "latest.json must describe $tag before publishing." >&2
+              exit 1
+            fi
+            latest_asset=(latest.json)
+          fi
+          if [[ "$tag" == Beta-v* ]]; then
+            title="BeCoder Beta v${tag#Beta-v}"
+            notes="Beta release — preview build for testing."
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" release/* "${latest_asset[@]}" --clobber
+              gh release edit "$tag" --prerelease --title "$title" --notes "$notes"
+            else
+              gh release create "$tag" release/* "${latest_asset[@]}" --prerelease --title "$title" --notes "$notes"
+            fi
+          else
+            title="BeCoder Release v${tag#Release-v}"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" release/* "${latest_asset[@]}" --clobber
+              gh release edit "$tag" --title "$title"
+            else
+              gh release create "$tag" release/* "${latest_asset[@]}" --generate-notes --title "$title"
+            fi
+          fi

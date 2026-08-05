@@ -1,0 +1,185 @@
+name: Build BeCoder (Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      compiler:
+        description: Compiler payload included in the package
+        required: true
+        default: Exclude Compiler
+        type: choice
+        options:
+          - Exclude Compiler
+          - Include Compiler
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VSCODE_ARCH: x64
+      npm_config_arch: x64
+      npm_config_foreground_scripts: "true"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Locate Visual Studio C++ toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ([string]::IsNullOrWhiteSpace($vsPath)) {
+            throw 'No Visual Studio installation with the MSVC C++ build tools was found on this runner.'
+          }
+          "vs2022_install=$vsPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using Visual Studio at $vsPath"
+
+          $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $signTool = Get-ChildItem -Path $sdkBin -Filter signtool.exe -File -Recurse |
+            Where-Object { $_.Directory.Name -eq 'x64' } |
+            Sort-Object -Property FullName -Descending |
+            Select-Object -First 1
+          if (-not $signTool) {
+            throw "signtool.exe was not found under $sdkBin. Install the Windows 10/11 SDK."
+          }
+          $signTool.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $signTool.FullName /? | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "signtool.exe validation failed with exit code $LASTEXITCODE."
+          }
+          Write-Host "Using Windows SDK tools at $($signTool.DirectoryName)"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          . build/azure-pipelines/win32/exec.ps1
+          $ErrorActionPreference = 'Stop'
+          exec { npm ci }
+          $nativeBindings = @(
+            'node_modules\@vscode\policy-watcher\build\Release\vscode-policy-watcher.node',
+            'node_modules\@vscode\spdlog\build\Release\spdlog.node',
+            'node_modules\@vscode\sqlite3\build\Release\vscode-sqlite3.node',
+            'node_modules\native-keymap\build\Release\keymapping.node',
+            'node_modules\windows-foreground-love\build\Release\foreground_love.node'
+          )
+          if ($nativeBindings.Where({ -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -gt 0) {
+            exec { npm rebuild '@vscode/policy-watcher' '@vscode/spdlog' '@vscode/sqlite3' 'native-keymap' --foreground-scripts }
+            exec { npx --yes node-gyp rebuild --directory node_modules/windows-foreground-love --target=42.6.0 --dist-url=https://electronjs.org/headers --runtime=electron --arch=x64 }
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build bundled OI extensions
+        shell: pwsh
+        run: npm run compile-oi-extensions
+
+      - name: Verify bundled BeCoder compiler archive
+        if: inputs.compiler == 'Include Compiler'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = 'resources\oi-defaults\toolchains\becoder-ucrt64.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or (Get-Item -LiteralPath $archive).Length -lt 100MB) {
+            throw "The Git LFS BeCoder compiler archive is missing or not hydrated: $archive"
+          }
+
+      - name: Exclude bundled BeCoder compiler archive
+        if: inputs.compiler == 'Exclude Compiler'
+        shell: pwsh
+        run: Remove-Item -LiteralPath 'resources\oi-defaults\toolchains\becoder-ucrt64.zip' -Force -ErrorAction SilentlyContinue
+
+      - name: Package BeCoder
+        shell: pwsh
+        run: npm run gulp vscode-win32-x64-min
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Inno updater
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run gulp -- vscode-win32-x64-inno-updater
+          $tools = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64\tools'
+          foreach ($file in @('inno_updater.exe', 'vcruntime140.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $tools $file) -PathType Leaf)) {
+              throw "Required Inno updater file was not produced: $file"
+            }
+          }
+
+      - name: Build Inno Setup installers
+        shell: pwsh
+        run: npm run gulp -- vscode-win32-x64-system-setup vscode-win32-x64-user-setup
+
+      - name: Stage Inno Setup installers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactRoot = Join-Path $env:GITHUB_WORKSPACE '.build\artifacts\inno-setup'
+          $installers = @(
+            @{ Source = '.build\win32-x64\system-setup\VSCodeSetup.exe'; Destination = 'BeCoder-Windows-x64-Setup.exe' },
+            @{ Source = '.build\win32-x64\user-setup\VSCodeSetup.exe'; Destination = 'BeCoder-Windows-x64-User-Setup.exe' }
+          )
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          foreach ($installer in $installers) {
+            if (-not (Test-Path -LiteralPath $installer.Source -PathType Leaf)) {
+              throw "Inno Setup installer was not produced: $($installer.Source)"
+            }
+            Copy-Item -LiteralPath $installer.Source -Destination (Join-Path $artifactRoot $installer.Destination)
+          }
+          Get-ChildItem -LiteralPath $artifactRoot -Filter '*.exe' | ForEach-Object {
+            if ($_.Length -lt 10MB) {
+              throw "Inno Setup installer is unexpectedly small: $($_.FullName)"
+            }
+          }
+
+      - name: Stage Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64'
+          $artifactRoot = Join-Path $env:GITHUB_WORKSPACE '.build\artifacts'
+          $destination = Join-Path $artifactRoot 'VSCode-win32-x64'
+          if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            throw "Packaged application was not found at $source."
+          }
+          New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+          Move-Item -LiteralPath $source -Destination $destination
+          Remove-Item -LiteralPath (Join-Path $destination 'tools') -Recurse -Force -ErrorAction SilentlyContinue
+          $includeCompiler = '${{ inputs.compiler }}' -eq 'Include Compiler'
+          & .\build\azure-pipelines\win32\verify-becoder-package.ps1 `
+            -PackagePath $destination `
+            -IncludeCompiler $includeCompiler
+          Write-Host "Staged Windows package at $destination"
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v7
+        with:
+          name: BeCoder-windows-x64-${{ inputs.compiler == 'Include Compiler' && 'Include-Compiler' || 'Exclude-Compiler' }}
+          path: .build/artifacts/VSCode-win32-x64
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Inno Setup installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: BeCoder-windows-x64-inno-${{ inputs.compiler == 'Include Compiler' && 'Include-Compiler' || 'Exclude-Compiler' }}
+          path: .build/artifacts/inno-setup
+          if-no-files-found: error
+          retention-days: 14

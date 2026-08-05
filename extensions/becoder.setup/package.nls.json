@@ -1,0 +1,20 @@
+{
+	"configuration.title": "BeCoder IDE Features",
+	"configuration.completed": "Whether the first-run setup has been completed.",
+	"configuration.pending": "The configuration selected by the first-run setup before it is applied.",
+	"configuration.executableCleanupDelaySeconds": "Seconds to keep generated executables after they finish running. Set to 0 to delete immediately.",
+	"configuration.newFileDefaultLanguage": "Default language for files created from the New Tab page.",
+	"displayName": "BeCoder IDE Features",
+	"description": "Competitive programming features, settings, and first-run setup for BeCoder IDE.",
+	"command.initializeOiWorkspace": "BeCoder IDE: Initialize OI Workspace Configuration",
+	"command.configure": "BeCoder IDE: Configure Competitive Programming Environment",
+	"command.rerunFirstRun": "BeCoder IDE: Re-run First-Run Setup",
+	"command.openSettings": "BeCoder IDE: Settings",
+	"command.configureCppSnippets": "BeCoder IDE: Configure Code Snippets",
+	"command.configureAutoFormat": "BeCoder IDE: Configure Automatic Formatting",
+	"command.openToolchainDiagnostics": "BeCoder IDE: Toolchain Diagnostics",
+	"command.redetectToolchain": "BeCoder IDE: Re-detect Toolchain",
+	"command.repairToolchain": "BeCoder IDE: Repair Toolchain",
+	"command.showAllFiles": "BeCoder IDE: Show All Files",
+	"command.hideSetupFiles": "BeCoder IDE: Hide Setup Files"
+}

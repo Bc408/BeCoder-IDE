@@ -1,0 +1,20 @@
+{
+	"configuration.title": "BeCoder IDE 功能",
+	"configuration.completed": "首次配置是否已经完成。",
+	"configuration.pending": "首次配置完成前暂存的配置选择。",
+	"configuration.executableCleanupDelaySeconds": "生成的可执行文件运行结束后保留的秒数。设为 0 将立即删除。",
+	"configuration.newFileDefaultLanguage": "从新建标签页创建文件时使用的默认语言。",
+	"displayName": "BeCoder IDE 功能",
+	"description": "为 BeCoder IDE 提供竞赛编程功能、设置和首次环境配置。",
+	"command.initializeOiWorkspace": "BeCoder IDE：初始化 OI 项目配置",
+	"command.configure": "BeCoder IDE：配置竞赛编程环境",
+	"command.rerunFirstRun": "BeCoder IDE：重新运行首次配置",
+	"command.openSettings": "BeCoder IDE：设置",
+	"command.configureCppSnippets": "BeCoder IDE：配置代码模板",
+	"command.configureAutoFormat": "BeCoder IDE：配置自动格式化",
+	"command.openToolchainDiagnostics": "BeCoder IDE：工具链诊断",
+	"command.redetectToolchain": "BeCoder IDE：重新探测工具链",
+	"command.repairToolchain": "BeCoder IDE：修复工具链",
+	"command.showAllFiles": "BeCoder IDE：显示所有文件",
+	"command.hideSetupFiles": "BeCoder IDE：隐藏配置和可执行文件"
+}

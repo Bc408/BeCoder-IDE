@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+	<title>BeCoder</title>
+	<style>
+		:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+		* { box-sizing: border-box; }
+		body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 20% 0%, #25345f 0, transparent 38%), #0f1117; color: #f4f6fb; }
+		main { width: min(960px, calc(100vw - 80px)); }
+		.badge { color: #a8c7ff; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+		h1 { font-size: clamp(42px, 6vw, 72px); margin: 14px 0; letter-spacing: -.04em; }
+		.lead { font-size: 20px; line-height: 1.6; color: #b7bfce; max-width: 680px; }
+		.cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin: 44px 0 26px; }
+		button { appearance: none; font: inherit; color: inherit; cursor: pointer; }
+		.card { text-align: left; min-height: 200px; padding: 28px; border: 1px solid #30394d; border-radius: 18px; background: #171b25; transition: .16s ease; }
+		.card:hover, .card.selected { border-color: #78a9ff; background: #1b2540; transform: translateY(-2px); }
+		.card strong { display: block; font-size: 25px; margin-bottom: 12px; }
+		.card span { color: #b7bfce; line-height: 1.55; }
+		.options { display: none; padding: 22px 0 8px; color: #d9e2f2; }
+		.options.visible { display: grid; gap: 14px; }
+		.source-choice { margin-top: 8px; color: #d9e2f2; }
+		select { margin-left: 10px; padding: 8px 10px; border: 1px solid #30394d; border-radius: 8px; background: #171b25; color: #f4f6fb; font: inherit; }
+		label { display: flex; gap: 12px; align-items: center; font-size: 16px; }
+		input[type="checkbox"] { width: 18px; height: 18px; accent-color: #78a9ff; }
+		input[type="number"] { width: 86px; padding: 8px 10px; border: 1px solid #30394d; border-radius: 8px; background: #171b25; color: #f4f6fb; font: inherit; }
+		input[type="text"] { flex: 1; min-width: 260px; padding: 8px 10px; border: 1px solid #30394d; border-radius: 8px; background: #171b25; color: #f4f6fb; font: inherit; }
+		#workspaceFolder-pick { padding: 8px 12px; border: 1px solid #4d638b; border-radius: 8px; background: #253b64; color: #e8f0ff; font-weight: 600; }
+		#workspaceFolder-pick:hover { background: #304d80; }
+		.actions { display: flex; justify-content: space-between; align-items: center; margin-top: 34px; }
+		.primary { padding: 13px 24px; border: 0; border-radius: 9px; background: #78a9ff; color: #071329; font-weight: 700; }
+		.skip { border: 0; background: transparent; color: #aeb8c9; }
+		.note { color: #8d98aa; font-size: 14px; }
+		[hidden] { display: none !important; }
+		.progress-panel { margin-top: 34px; }
+		.progress-track { height: 10px; overflow: hidden; border-radius: 999px; background: #252d3d; box-shadow: inset 0 1px 2px #070a10; }
+		.progress-bar { width: 38%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #78a9ff, #a8c7ff); animation: progress-indeterminate 1.5s ease-in-out infinite; }
+		.progress-panel.determinate .progress-bar { width: var(--progress); animation: none; }
+		.progress-panel.complete .progress-bar { width: 100%; animation: none; }
+		.progress-panel.error .progress-bar { width: 100%; animation: none; background: #f48771; }
+		.progress-description { min-height: 1.6em; margin: 14px 0 0; color: #b7c8e8; font-size: 14px; line-height: 1.6; }
+		.status { color: #a8c7ff; font-size: 18px; }
+		.drag-region { position: fixed; inset: 0 0 auto; height: 32px; -webkit-app-region: drag; }
+		@keyframes progress-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(290%); } }
+	</style>
+</head>
+<body>
+	<div class="drag-region" aria-hidden="true"></div>
+	<main>
+		<section id="choice-page">
+		<div class="badge">BeCoder</div>
+		<h1 id="choice-title">准备好开始竞赛编程。</h1>
+		<p id="choice-lead" class="lead">先选择一套环境方案。我们会探测编译器、按你的系统提供安装步骤，并把设置写入你的个人配置。完成后会打开你选择的工作目录。</p>
+		<section class="cards">
+			<div class="card selected"><strong id="recommended-label">Recommended</strong><span id="recommended-description">配置 C++ 竞赛环境与编辑体验。缺少 g++ 或 clangd 时提供对应系统的安装步骤。</span></div>
+		</section>
+		<div id="source-choice" class="source-choice" hidden><label><span id="source-label">下载源</span><select id="download-source"></select></label></div>
+		<div class="actions">
+			<button id="skip" class="skip">稍后配置</button>
+			<div><span id="permission-note" class="note">安装需要确认，可能要求管理员权限。</span> <button id="continue" class="primary">继续</button></div>
+		</div>
+		</section>
+		<section id="download-page" hidden>
+			<div class="badge">Toolchain</div>
+			<h1 id="download-title">正在准备编译环境。</h1>
+			<p id="download-status" class="status">正在连接下载源…</p>
+			<div id="progress" class="progress-panel" role="progressbar" aria-label="安装进度" aria-valuetext="正在准备">
+				<div class="progress-track"><div class="progress-bar"></div></div>
+				<p id="progress-description" class="progress-description" aria-live="polite">正在准备安装…</p>
+			</div>
+			<div class="actions"><span class="note">请保持此窗口打开。下载完成后可继续配置。</span><span><button id="retry" class="primary" hidden>重试</button><button id="download-next" class="primary" hidden>下一步</button></span></div>
+		</section>
+		<section id="configure-page" hidden>
+			<div class="badge">Configuration</div>
+			<h1 id="configuration-title">工具链已准备就绪。</h1>
+			<p id="configuration-lead" class="lead">确认要写入的 BeCoder 配置，然后进入工作台。</p>
+			<div id="final-options" class="options visible"></div>
+			<div class="actions"><span class="note">设置写入个人配置，不影响其他编辑器。</span><button id="finish" class="primary">下一步</button></div>
+		</section>
+		<section id="workspace-page" hidden>
+			<div class="badge">Workspace</div>
+			<h1 id="workspace-title">选择工作目录。</h1>
+			<p id="workspace-lead" class="lead">我们会在此目录创建 .clangd，并在完成后直接打开它。</p>
+			<div class="options visible"><label><span id="workspace-label">工作目录</span><input id="workspaceFolder" type="text" readonly><button id="workspaceFolder-pick" type="button">选择目录</button></label></div>
+			<div class="actions"><span class="note">已有 .clangd 不会被覆盖。</span><button id="workspace-finish" class="primary">应用配置并打开工作目录</button></div>
+		</section>
+	</main>
+	<script>
+	(async () => {
+		// BeCoder is Chinese-first. Do not derive this page's language
+		// from Electron's OS locale, which can be English even when the IDE itself
+		// defaults to zh-cn.
+		const language = 'zh-CN';
+		const script = await window.becoderSetup.getScript();
+		const localize = value => typeof value === 'string' ? value : value[language] ?? value.en ?? value['zh-CN'];
+		const pages = script.pages;
+		const sources = Array.isArray(script.downloadSources) ? script.downloadSources : [];
+		const translations = {
+			'en': {
+				choiceTitle: 'Ready for competitive programming.', choiceLead: 'We will detect compilers, provide system-specific installation steps, and save your preferences before opening the IDE.',
+				recommended: 'Configure the C++ toolchain and editor experience.',
+				permission: 'Installation may require confirmation or administrator permission.', skip: 'Configure later', continue: 'Continue', downloadTitle: 'Preparing your toolchain.', configurationTitle: 'Your toolchain is ready.', configurationLead: 'Confirm the BeCoder preferences to save before opening the workbench.', workspaceTitle: 'Choose your workspace folder.', workspaceLead: 'We will create .clangd in this folder and open it when setup is complete.', workspaceLabel: 'Workspace folder', chooseFolder: 'Choose folder', selectWorkspace: 'Select a workspace folder.', preparing: 'Preparing installation…', completed: 'Download complete. Select Next to continue configuration.', alreadyInstalled: 'Toolchain is already installed. Download skipped.', failed: 'Download failed: {message}'
+			},
+			'zh-CN': {
+				choiceTitle: '准备好开始竞赛编程。', choiceLead: '我们会探测编译器、按你的系统提供安装步骤，并把设置写入你的个人配置。完成后会打开你选择的工作目录。',
+				recommended: '配置 C++ 竞赛环境与编辑体验。缺少 g++ 或 clangd 时提供对应系统的安装步骤。',
+				permission: '安装需要确认，可能要求管理员权限。', skip: '稍后配置', continue: '继续', downloadTitle: '正在准备编译环境。', configurationTitle: '工具链已准备就绪。', configurationLead: '确认要写入的 BeCoder 配置，然后进入工作台。', workspaceTitle: '选择工作目录。', workspaceLead: '我们会在此目录创建 .clangd，并在完成后直接打开它。', workspaceLabel: '工作目录', chooseFolder: '选择目录', selectWorkspace: '请选择工作目录。', preparing: '正在准备安装…', completed: '下载完成。点击“下一步”继续配置。', alreadyInstalled: '工具链已安装，已跳过下载。', failed: '下载失败：{message}'
+			}
+		};
+		const t = translations[language];
+		document.documentElement.lang = language;
+		document.getElementById('choice-title').textContent = t.choiceTitle;
+		document.getElementById('choice-lead').textContent = t.choiceLead;
+		document.getElementById('recommended-description').textContent = t.recommended;
+		document.getElementById('permission-note').textContent = t.permission;
+		document.getElementById('skip').textContent = t.skip;
+		document.getElementById('continue').textContent = t.continue;
+		document.getElementById('download-title').textContent = t.downloadTitle;
+		document.getElementById('configuration-title').textContent = t.configurationTitle;
+		document.getElementById('configuration-lead').textContent = t.configurationLead;
+		document.getElementById('workspace-title').textContent = t.workspaceTitle;
+		document.getElementById('workspace-lead').textContent = t.workspaceLead;
+		document.getElementById('workspace-label').textContent = t.workspaceLabel;
+		document.getElementById('workspaceFolder-pick').textContent = t.chooseFolder;
+		document.getElementById('choice-title').textContent = localize(pages[0].title);
+		document.getElementById('choice-lead').textContent = localize(pages[0].text);
+		document.getElementById('recommended-description').textContent = localize(pages[0].selections.Recommended.description);
+		document.getElementById('recommended-label').textContent = localize(pages[0].selections.Recommended.label);
+		const pageById = id => pages.find(page => page.id === id);
+		const toolchainPage = pageById('toolchain') ?? pages.find(page => page.controls === undefined && page !== pages[0]);
+		const xcodePage = pageById('xcode');
+		const homebrewPage = pageById('homebrew');
+		const configurationPage = pageById('configuration') ?? pages.find(page => Array.isArray(page.controls));
+		document.getElementById('download-title').textContent = localize(toolchainPage.title);
+		document.getElementById('download-status').textContent = localize(toolchainPage.text);
+		document.getElementById('configuration-title').textContent = localize(configurationPage.title);
+		document.getElementById('configuration-lead').textContent = localize(configurationPage.text);
+		const sourceChoice = document.getElementById('source-choice');
+		const sourceSelect = document.getElementById('download-source');
+		if (sources.length) {
+			document.getElementById('source-label').textContent = localize(script.downloadSourceLabel);
+			sourceSelect.innerHTML = sources.map(source => `<option value="${source.id}" ${source.unavailable ? 'disabled' : ''}>${localize(source.label)}</option>`).join('');
+			const chineseSource = sources.find(source => source.id === 'tuna');
+			if (language === 'zh-CN' && chineseSource) sourceSelect.value = chineseSource.id;
+			sourceChoice.hidden = false;
+		}
+		let toolchainReady = false;
+		const choicePage = document.getElementById('choice-page');
+		const downloadPage = document.getElementById('download-page');
+		const configurePage = document.getElementById('configure-page');
+		const workspacePage = document.getElementById('workspace-page');
+		const progress = document.getElementById('progress');
+		const progressDescription = document.getElementById('progress-description');
+		const status = document.getElementById('download-status');
+		const setProgressDescription = message => {
+			progressDescription.textContent = message;
+			progress.setAttribute('aria-valuetext', message);
+			const percent = /(?:^|\\s)(\\d{1,3})%/.exec(message)?.[1];
+			if (percent !== undefined) {
+				progress.classList.add('determinate');
+				progress.style.setProperty('--progress', `${Math.min(100, Number(percent))}%`);
+			}
+		};
+		const request = () => ({
+			mode: 'recommended',
+			editor: true,
+			installToolchain: true,
+			fontLigatures: document.getElementById('fontLigatures')?.checked ?? false,
+			fontSize: Math.min(32, Math.max(10, Number(document.getElementById('fontSize')?.value ?? 14) || 14)),
+			autoFormat: document.getElementById('autoFormat')?.checked ?? false,
+			clangdVariableTypeHints: document.getElementById('clangdVariableTypeHints')?.checked ?? true,
+			cppStandard: document.getElementById('cppStandard')?.value ?? 'c++20',
+			workspaceFolder: document.getElementById('workspaceFolder')?.value ?? ''
+		});
+		const showConfiguration = () => {
+			choicePage.hidden = true;
+			downloadPage.hidden = true;
+			configurePage.hidden = false;
+			const target = document.getElementById('final-options');
+			const controls = configurationPage.controls.filter(control => !['editor', 'installToolchain', 'workspaceFolder'].includes(control.key));
+			target.innerHTML = controls.map(control => control.type === 'number'
+				? `<label>${localize(control.label)} <input id="${control.key}" type="number" min="${control.min}" max="${control.max}" value="${control.default}"></label>`
+				: control.type === 'select'
+					? `<label>${localize(control.label)} <select id="${control.key}">${control.options.map(option => `<option value="${option.value}" ${option.value === control.default ? 'selected' : ''}>${localize(option.label)}</option>`).join('')}</select></label>`
+					: control.type === 'folder'
+						? `<label>${localize(control.label)} <input id="${control.key}" type="text" readonly placeholder="${localize(control.placeholder)}"><button id="${control.key}-pick" type="button">${localize(control.buttonLabel)}</button></label>`
+					: `<label><input id="${control.key}" type="checkbox" ${control.default ? 'checked' : ''}>${localize(control.label)}</label>`).join('');
+		};
+		const showWorkspace = () => {
+			configurePage.hidden = true;
+			workspacePage.hidden = false;
+		};
+		document.getElementById('workspaceFolder-pick').addEventListener('click', async () => {
+			const folder = await window.becoderSetup.pickWorkspaceFolder();
+			if (folder) document.getElementById('workspaceFolder').value = folder;
+		});
+		let downloadStage = 'toolchain';
+		const download = async (stage = 'toolchain') => {
+			downloadStage = stage;
+			const page = stage === 'xcode' ? xcodePage : stage === 'homebrew' ? homebrewPage : toolchainPage;
+			choicePage.hidden = true;
+			downloadPage.hidden = false;
+			progress.className = 'progress-panel';
+			progress.style.removeProperty('--progress');
+			setProgressDescription(t.preparing);
+			document.getElementById('download-title').textContent = localize(page.title);
+			status.textContent = localize(page.text);
+			document.getElementById('retry').hidden = true;
+			document.getElementById('download-next').hidden = true;
+			const result = await window.becoderSetup.installToolchain(sourceSelect.value || undefined, stage);
+			if (result.success) {
+				toolchainReady = true;
+				progress.classList.add('complete');
+				const completionMessage = result.message === 'Toolchain is already installed.' ? t.alreadyInstalled : t.completed;
+				status.textContent = completionMessage;
+				setProgressDescription(completionMessage);
+				document.getElementById('download-next').hidden = false;
+			} else {
+				progress.classList.add('error');
+				status.textContent = t.failed.replace('{message}', result.message);
+				setProgressDescription(status.textContent);
+				document.getElementById('retry').hidden = false;
+			}
+		};
+		window.becoderSetup.onProgress(message => setProgressDescription(message));
+		document.getElementById('continue').addEventListener('click', () => download(xcodePage ? 'xcode' : homebrewPage ? 'homebrew' : 'toolchain'));
+		document.getElementById('retry').addEventListener('click', () => download(downloadStage));
+		document.getElementById('download-next').addEventListener('click', () => {
+			if (downloadStage === 'xcode') {
+				download('homebrew');
+			} else if (downloadStage === 'homebrew') {
+				download('toolchain');
+			} else {
+				showConfiguration();
+			}
+		});
+		document.getElementById('finish').addEventListener('click', showWorkspace);
+		document.getElementById('workspace-finish').addEventListener('click', () => {
+			const selectedRequest = request();
+			if (!selectedRequest.workspaceFolder) {
+				window.alert(t.selectWorkspace);
+				return;
+			}
+			window.becoderSetup.complete({ ...selectedRequest, installToolchain: toolchainReady });
+		});
+		document.getElementById('skip').addEventListener('click', () => window.becoderSetup.complete(undefined));
+	})();
+	</script>
+</body>
+</html>

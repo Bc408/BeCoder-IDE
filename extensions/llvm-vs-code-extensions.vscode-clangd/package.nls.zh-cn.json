@@ -1,12 +1,12 @@
 {
   "becoder.001": "C/C++ 补全、导航与代码洞察",
-  "becoder.002": "clangd 可执行文件路径，例如：/usr/bin/clangd。",
-  "becoder.003": "允许该路径指向脚本，例如 clangd.sh。",
-  "becoder.004": "clangd 语言服务器的参数。",
+  "becoder.002": "clangd 可执行文件路径。Windows 版 BeCoder 始终使用内置 clangd。",
+  "becoder.003": "允许该路径指向脚本。Windows 版 BeCoder 会忽略此项。",
+  "becoder.004": "clangd 语言服务器参数。Windows 版 BeCoder 使用托管参数。",
   "becoder.005": "启用 clangd 语义高亮。",
-  "becoder.006": "找不到编译数据库时用于解析文件的额外 clang 参数。",
+  "becoder.006": "用于解析文件的额外 clang 参数。Windows 版 BeCoder 使用内置工具链托管参数。",
   "becoder.007": "clangd 崩溃时自动重启（最多 4 次）。",
-  "becoder.008": "启动时检查语言服务器更新。",
+  "becoder.008": "启动时检查语言服务器更新。Windows 版 BeCoder 仅随内置工具链更新 clangd。",
   "becoder.009": "警告冲突扩展并建议禁用。",
   "becoder.010": "启用语言服务器提供的代码补全",
   "becoder.011": "启用语言服务器提供的悬停提示",
@@ -26,6 +26,6 @@
   "becoder.025": "显示 AST",
   "becoder.026": "关闭 AST 视图",
   "becoder.027": "打开项目配置文件",
-  "becoder.028": "打开用户配置文件",
+  "becoder.028": "打开 BeCoder clangd 配置",
   "becoder.029": "切换内嵌提示"
 }

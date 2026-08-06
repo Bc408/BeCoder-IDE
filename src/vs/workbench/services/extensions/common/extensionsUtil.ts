@@ -3,11 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionIdentifierMap, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
+import { ExtensionIdentifier, ExtensionIdentifierMap, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { localize } from '../../../../nls.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import * as semver from '../../../../base/common/semver/semver.js';
 import { Mutable } from '../../../../base/common/types.js';
+
+const protectedBeCoderBuiltinExtensions = new Set([
+	'llvm-vs-code-extensions.vscode-clangd',
+	'becoder.becoder-setup',
+	'becoder.runner'
+]);
+
+function isProtectedBeCoderBuiltin(extension: IExtensionDescription | undefined): boolean {
+	return Boolean(extension?.isBuiltin && protectedBeCoderBuiltinExtensions.has(ExtensionIdentifier.toKey(extension.identifier)));
+}
 
 // TODO: @sandy081 merge this with deduping in extensionsScannerService.ts
 export function dedupExtensions(system: IExtensionDescription[], user: IExtensionDescription[], workspace: IExtensionDescription[], development: IExtensionDescription[], logService: ILogService): IExtensionDescription[] {
@@ -22,6 +32,10 @@ export function dedupExtensions(system: IExtensionDescription[], user: IExtensio
 	user.forEach((userExtension) => {
 		const extension = result.get(userExtension.identifier);
 		if (extension) {
+			if (isProtectedBeCoderBuiltin(extension)) {
+				logService.warn(`Skipping extension ${userExtension.extensionLocation.path} because BeCoder protects its builtin ${ExtensionIdentifier.toKey(extension.identifier)}.`);
+				return;
+			}
 			if (extension.isBuiltin) {
 				if (semver.gte(extension.version, userExtension.version)) {
 					logService.warn(`Skipping extension ${userExtension.extensionLocation.path} in favour of the builtin extension ${extension.extensionLocation.path}.`);
@@ -41,6 +55,10 @@ export function dedupExtensions(system: IExtensionDescription[], user: IExtensio
 	workspace.forEach(workspaceExtension => {
 		const extension = result.get(workspaceExtension.identifier);
 		if (extension) {
+			if (isProtectedBeCoderBuiltin(extension)) {
+				logService.warn(`Skipping workspace extension ${workspaceExtension.extensionLocation.path} because BeCoder protects its builtin ${ExtensionIdentifier.toKey(extension.identifier)}.`);
+				return;
+			}
 			logService.warn(localize('overwritingWithWorkspaceExtension', "Overwriting {0} with Workspace Extension {1}.", extension.extensionLocation.fsPath, workspaceExtension.extensionLocation.fsPath));
 		}
 		result.set(workspaceExtension.identifier, workspaceExtension);

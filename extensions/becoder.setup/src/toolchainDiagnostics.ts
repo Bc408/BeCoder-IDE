@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
@@ -12,7 +17,7 @@ export function registerToolchainDiagnostics(context: vscode.ExtensionContext): 
 
 async function openToolchainDiagnostics(context: vscode.ExtensionContext): Promise<void> {
 	const panel = vscode.window.createWebviewPanel('becoder.toolchainDiagnostics', 'BeCoder Toolchain Diagnostics', vscode.ViewColumn.Active, { enableScripts: true });
-	const refresh = async () => panel.webview.postMessage({ type: 'state', value: await collectDiagnostics() });
+	const refresh = async () => panel.webview.postMessage({ type: 'state', value: await collectDiagnostics(context) });
 	panel.webview.onDidReceiveMessage(async message => {
 		if (message?.type === 'refresh') {
 			await refresh();
@@ -28,16 +33,32 @@ async function openToolchainDiagnostics(context: vscode.ExtensionContext): Promi
 	await refresh();
 }
 
-async function collectDiagnostics(): Promise<DiagnosticItem[]> {
+async function collectDiagnostics(context: vscode.ExtensionContext): Promise<DiagnosticItem[]> {
 	const configuration = vscode.workspace.getConfiguration();
-	const compiler = configuration.get<string>('becoder.toolchain.compilerPath') ?? '';
-	const clangd = configuration.get<string>('becoder.toolchain.clangdPath') ?? configuration.get<string>('clangd.path') ?? '';
+	const toolchainRoot = getBeCoderToolchainRoot(context);
+	const compiler = process.platform === 'win32'
+		? path.join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe')
+		: configuration.get<string>('becoder.toolchain.compilerPath') ?? '';
+	const clangd = process.platform === 'win32'
+		? path.join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe')
+		: configuration.get<string>('becoder.toolchain.clangdPath') ?? configuration.get<string>('clangd.path') ?? '';
 	return [
 		await executableDiagnostic('BeCoder g++ 14.1.0', compiler, ['--version']),
 		await executableDiagnostic('BeCoder clangd', clangd, ['--version']),
 		{ label: 'C++ semantic service', status: 'ok', detail: 'BeCoder clangd is the only bundled C++ semantic service.' },
 		{ label: 'C++ standard', status: configuration.get<string>('becoder.runner.cppStandard') === 'c++20' ? 'ok' : 'warning', detail: configuration.get<string>('becoder.runner.cppStandard') ?? 'c++20' },
 	];
+}
+
+function getBeCoderToolchainRoot(context: vscode.ExtensionContext): string {
+	const packagedRoot = path.resolve(context.extensionPath, '..', '..', '..', '..', 'data', 'toolchains');
+	if (fs.existsSync(packagedRoot)) {
+		return packagedRoot;
+	}
+	const portableRoot = process.env['VSCODE_PORTABLE'];
+	return portableRoot
+		? path.join(portableRoot, 'toolchains')
+		: path.resolve(context.globalStorageUri.fsPath, '..', '..', '..', 'toolchains');
 }
 
 async function executableDiagnostic(label: string, executable: string, args: string[]): Promise<DiagnosticItem> {

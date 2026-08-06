@@ -8,6 +8,7 @@ import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 import { hostname, release } from 'os';
 import { spawn } from 'child_process';
+import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { Readable } from 'stream';
 import { initWindowsVersionInfo } from '../../base/node/windowsVersion.js';
@@ -19,6 +20,7 @@ import { parse } from '../../base/common/jsonc.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
+import { equals } from '../../base/common/objects.js';
 import { dirname, join, posix } from '../../base/common/path.js';
 import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { assertType } from '../../base/common/types.js';
@@ -827,6 +829,14 @@ export class CodeApplication extends Disposable {
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
 
+		// Portable paths can change between launches. Refresh them before the
+		// workbench starts so clangd never observes stale paths during activation.
+		try {
+			await this.refreshBeCoderWindowsToolchainSettings();
+		} catch (error) {
+			this.logService.error('Unable to refresh BeCoder portable toolchain settings before workbench startup.', error);
+		}
+
 		// The competitive-programming setup is intentionally shown before the
 		// workbench is created, so a first launch never flashes a VS Code window.
 		const onboarding = await this.showBeCoderFirstRun();
@@ -989,14 +999,12 @@ export class CodeApplication extends Disposable {
 			'becoder.runner.cFlags': ['-O2', '-Wall', '-DDEBUG'],
 			'becoder.runner.cleanupExecutable': true,
 			'clangd.path': clangd,
-			'clangd.arguments': ['--background-index'],
+			'clangd.arguments': ['--background-index', '--compile_args_from=lsp'],
 			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler),
 			'clangd.enable': true
 		};
 
-		for (const [key, value] of Object.entries(settings)) {
-			await this.configurationService.updateValue(key, value, ConfigurationTarget.USER);
-		}
+		await this.updateBeCoderSettings(settings);
 		await this.createBeCoderClangdConfig(join(request.workspaceFolder, '.clangd'), compiler, 'c17', 'c++20');
 		if (request.autoFormat) {
 			await this.createBeCoderClangFormatConfig(join(request.workspaceFolder, '.clang-format'));
@@ -1005,9 +1013,49 @@ export class CodeApplication extends Disposable {
 		await this.configurationService.updateValue('becoder.setup.completed', true, ConfigurationTarget.USER);
 	}
 
+	private async refreshBeCoderWindowsToolchainSettings(): Promise<void> {
+		if (!isWindows || !this.configurationService.getValue<boolean>('becoder.setup.completed')) {
+			return;
+		}
+		const toolchainRoot = this.getBeCoderToolchainRoot();
+		const compiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe');
+		const cCompiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'gcc.exe');
+		const clangd = join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe');
+		const missingComponents = [compiler, cCompiler, clangd].filter(candidate => !fs.existsSync(candidate));
+		if (missingComponents.length > 0) {
+			this.logService.warn(`BeCoder portable toolchain is incomplete: ${missingComponents.join(', ')}`);
+		}
+		const settings: Record<string, unknown> = {
+			'becoder.toolchain.compilerPath': compiler,
+			'becoder.toolchain.cCompilerPath': cCompiler,
+			'becoder.toolchain.clangdPath': clangd,
+			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
+			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
+			'clangd.path': clangd,
+			'clangd.arguments': ['--background-index', '--compile_args_from=lsp'],
+			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler)
+		};
+		await this.updateBeCoderSettings(settings);
+	}
+
+	private async updateBeCoderSettings(settings: Record<string, unknown>): Promise<void> {
+		for (const [key, value] of Object.entries(settings)) {
+			if (!equals(this.configurationService.getValue(key), value)) {
+				await this.configurationService.updateValue(key, value, ConfigurationTarget.USER);
+			}
+		}
+	}
+
 	private async createBeCoderClangdConfig(configPath: string, compiler: string, cStandard: 'c11' | 'c17' | 'c23', cppStandard: 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23'): Promise<void> {
-		if (fs.existsSync(configPath)) {
-			const existing = fs.readFileSync(configPath, 'utf8');
+		let existing: string | undefined;
+		try {
+			existing = await fs.promises.readFile(configPath, 'utf8');
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				throw error;
+			}
+		}
+		if (existing !== undefined) {
 			if (!this.isManagedBeCoderClangdConfig(existing) && !this.isLegacyBeCoderClangdConfig(existing)) {
 				return;
 			}
@@ -1016,16 +1064,60 @@ export class CodeApplication extends Disposable {
 			.map(flag => `    - ${JSON.stringify(flag)}`)
 			.join('\n');
 		const cCompiler = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe');
-		const config = `# BeCoder managed clangd configuration.\nCompileFlags:\n  Add:\n${flags}\n  BuiltinHeaders: Clangd\n  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}\n\nCompletion:\n  HeaderInsertion: Never\n\nIndex:\n  Background: Build\n\n---\nIf:\n  PathMatch: '.*\\\\.c$'\nCompileFlags:\n  Add:\n    - "-std=c17"\n  Compiler: ${JSON.stringify(cCompiler.replaceAll('\\', '/'))}\n\n---\nIf:\n  PathMatch: '.*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'\nCompileFlags:\n  Add:\n    - "-std=${cppStandard}"\n  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}\n`;
-		const configWithCStandard = config
-			.replace("PathMatch: '.*\\\\.c$'", "PathMatch: '(?i).*\\\\.c$'")
-			.replace("PathMatch: '.*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'", "PathMatch: '(?i).*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'")
-			.replace('-std=c17', `-std=${cStandard}`);
+		const configBody = [
+			'# BeCoder managed clangd configuration.',
+			'CompileFlags:',
+			'  Add:',
+			flags,
+			'  BuiltinHeaders: Clangd',
+			'',
+			'Completion:',
+			'  HeaderInsertion: Never',
+			'',
+			'Index:',
+			'  Background: Build',
+			'',
+			'---',
+			'If:',
+			'  PathMatch: \'.*\\.[cC]$\'',
+			'CompileFlags:',
+			'  Remove:',
+			'    - "-x"',
+			'    - "-std=*"',
+			'  Add:',
+			'    - "-xc"',
+			`    - "-std=${cStandard}"`,
+			`  Compiler: ${JSON.stringify(cCompiler.replaceAll('\\', '/'))}`,
+			'',
+			'---',
+			'If:',
+			'  PathMatch: \'.*\\.([cC][cC]|[cC][pP]|[cC][pP][pP]|[cC][xX][xX]|[cC]\\+\\+|[hH]|[hH][hH]|[hH][pP][pP]|[hH][xX][xX]|[iI][nN][lL])$\'',
+			'CompileFlags:',
+			'  Remove:',
+			'    - "-x"',
+			'    - "-std=*"',
+			'  Add:',
+			'    - "-xc++"',
+			`    - "-std=${cppStandard}"`,
+			`  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}`,
+			''
+		].join('\n');
+		const signature = createHash('sha256').update(configBody).digest('hex');
+		const configWithCStandard = `${configBody}# BeCoder managed clangd SHA-256: ${signature}\n`;
+		if (existing === configWithCStandard) {
+			return;
+		}
 		await fs.promises.mkdir(dirname(configPath), { recursive: true });
+		if (existing !== undefined) {
+			await fs.promises.writeFile(configPath, configWithCStandard, 'utf8');
+			return;
+		}
 		try {
-			await fs.promises.writeFile(configPath, configWithCStandard, { encoding: 'utf8', flag: 'w' });
+			await fs.promises.writeFile(configPath, configWithCStandard, { encoding: 'utf8', flag: 'wx' });
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+			if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+				await this.createBeCoderClangdConfig(configPath, compiler, cStandard, cppStandard);
+			} else {
 				throw error;
 			}
 		}
@@ -1064,6 +1156,7 @@ export class CodeApplication extends Disposable {
 				join(standardInclude, 'backward'),
 				gccInclude,
 				join(toolchainRoot, 'include'),
+				join(toolchainRoot, 'x86_64-w64-mingw32', 'include'),
 				join(targetInclude, 'bits'),
 				includeFixed
 			]

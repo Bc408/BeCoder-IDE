@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -30,7 +35,11 @@ export type RunnerRequest = {
 };
 
 function setting<T>(key: string, fallback: T): T {
-	return vscode.workspace.getConfiguration().get<T>(key) ?? fallback;
+	const configuration = vscode.workspace.getConfiguration();
+	if (process.platform === 'win32') {
+		return configuration.inspect<T>(key)?.globalValue ?? fallback;
+	}
+	return configuration.get<T>(key) ?? fallback;
 }
 
 function configuredCompiler(source: BeCoderSource): string {

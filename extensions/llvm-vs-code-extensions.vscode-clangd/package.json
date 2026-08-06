@@ -29,6 +29,9 @@
     "onLanguage:objective-c",
     "onLanguage:objective-cpp"
   ],
+  "extensionDependencies": [
+    "becoder.becoder-setup"
+  ],
   "main": "./out/bundle",
   "scripts": {
     "esbuild": "esbuild ./src/extension.ts --bundle --outfile=out/bundle.js --external:@aws-sdk/client-s3 --external:vscode --format=cjs --platform=node",

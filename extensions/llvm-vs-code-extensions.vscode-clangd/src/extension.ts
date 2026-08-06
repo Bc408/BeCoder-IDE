@@ -5,8 +5,13 @@ import {ClangdExtension} from '../api/vscode-clangd';
 import {ClangdExtensionImpl} from './api';
 import {ClangdContext, stopClangdContext} from './clangd-context';
 import {get, update} from './config';
+import {SemanticTokensCache} from './semantic-tokens-cache';
 
 let apiInstance: ClangdExtensionImpl|undefined;
+
+async function isClangdEnabled(): Promise<boolean> {
+  return process.platform === 'win32' || await get<boolean>('enable');
+}
 
 /**
  *  This method is called when the extension is activated. The extension is
@@ -16,6 +21,7 @@ export async function activate(context: vscode.ExtensionContext):
     Promise<ClangdExtension> {
   const outputChannel = vscode.window.createOutputChannel('clangd');
   context.subscriptions.push(outputChannel);
+  const semanticTokensCache = new SemanticTokensCache(context.workspaceState);
 
   let clangdContext: ClangdContext|null = null;
   let restartPromise: Promise<void>|undefined;
@@ -37,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext):
           await restartPromise;
           return;
         }
-        if (!get<boolean>('enable')) {
+        if (!await isClangdEnabled()) {
           vscode.window
               .showInformationMessage(
                   'Language features from Clangd are currently disabled. Would you like to enable them?',
@@ -64,8 +70,9 @@ export async function activate(context: vscode.ExtensionContext):
           if (clangdContext) {
             await stopClangdContext(clangdContext);
           }
+          semanticTokensCache.resetClient();
           clangdContext = await ClangdContext.create(
-              context.globalStoragePath, outputChannel);
+              context.globalStoragePath, outputChannel, semanticTokensCache);
           if (clangdContext) {
             context.subscriptions.push(clangdContext);
           }
@@ -93,9 +100,10 @@ export async function activate(context: vscode.ExtensionContext):
         }
       }));
 
-  if (vscode.workspace.getConfiguration('clangd').get<boolean>('enable')) {
+  if (await isClangdEnabled()) {
+    semanticTokensCache.resetClient();
     clangdContext = await ClangdContext.create(
-        context.globalStoragePath, outputChannel);
+        context.globalStoragePath, outputChannel, semanticTokensCache);
     if (clangdContext) {
       context.subscriptions.push(clangdContext);
     }

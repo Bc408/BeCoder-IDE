@@ -1,6 +1,13 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
+import { createHash } from 'crypto';
+import { isDeepStrictEqual } from 'util';
 import * as vscode from 'vscode';
 import { registerSimpleSettings } from './simpleSettings';
 import { registerToolchainDiagnostics } from './toolchainDiagnostics';
@@ -63,7 +70,7 @@ function clangdArgumentsForCompiler(compiler: string): string[] {
 		];
 	}
 	return process.platform === 'win32'
-		? ['--background-index']
+		? ['--background-index', '--compile_args_from=lsp']
 		: ['--background-index', `--query-driver=${compiler}`];
 }
 
@@ -101,6 +108,7 @@ function windowsClangdIncludeFlags(compiler: string): string[] {
 		path.join(standardInclude, 'backward'),
 		gccInclude,
 		path.join(toolchainRoot, 'include'),
+		path.join(toolchainRoot, 'x86_64-w64-mingw32', 'include'),
 		path.join(targetInclude, 'bits'),
 		includeFixed
 	]
@@ -114,48 +122,60 @@ function defaultClangdProjectConfig(compiler: string, cStandard: CStandard, cppS
 	const flags = clangdFallbackFlagsForCompiler(compiler)
 		.map(flag => `    - ${JSON.stringify(flag)}`)
 		.join('\n');
-	return `# BeCoder managed clangd configuration.
-CompileFlags:
-  Add:
-${flags}
-  BuiltinHeaders: Clangd
-  Compiler: ${JSON.stringify(compilerPath)}
-
-Completion:
-  HeaderInsertion: Never
-
-Index:
-  Background: Build
-
----
-If:
-  PathMatch: '(?i).*\\.c$'
-CompileFlags:
-  Add:
-    - "-std=${cStandard}"
-  Compiler: ${JSON.stringify(cCompilerPath)}
-
----
-If:
-  PathMatch: '(?i).*\\.(cc|cp|cpp|cxx|c\\+\\+|h|hh|hpp|hxx|inl)$'
-CompileFlags:
-  Add:
-    - "-std=${cppStandard}"
-  Compiler: ${JSON.stringify(compilerPath)}
-`;
+	const body = [
+		'# BeCoder managed clangd configuration.',
+		'CompileFlags:',
+		'  Add:',
+		flags,
+		'  BuiltinHeaders: Clangd',
+		'',
+		'Completion:',
+		'  HeaderInsertion: Never',
+		'',
+		'Index:',
+		'  Background: Build',
+		'',
+		'---',
+		'If:',
+		'  PathMatch: \'.*\\.[cC]$\'',
+		'CompileFlags:',
+		'  Remove:',
+		'    - "-x"',
+		'    - "-std=*"',
+		'  Add:',
+		'    - "-xc"',
+		`    - "-std=${cStandard}"`,
+		`  Compiler: ${JSON.stringify(cCompilerPath)}`,
+		'',
+		'---',
+		'If:',
+		'  PathMatch: \'.*\\.([cC][cC]|[cC][pP]|[cC][pP][pP]|[cC][xX][xX]|[cC]\\+\\+|[hH]|[hH][hH]|[hH][pP][pP]|[hH][xX][xX]|[iI][nN][lL])$\'',
+		'CompileFlags:',
+		'  Remove:',
+		'    - "-x"',
+		'    - "-std=*"',
+		'  Add:',
+		'    - "-xc++"',
+		`    - "-std=${cppStandard}"`,
+		`  Compiler: ${JSON.stringify(compilerPath)}`,
+		''
+	].join('\n');
+	const signature = createHash('sha256').update(body).digest('hex');
+	return `${body}# BeCoder managed clangd SHA-256: ${signature}\n`;
 }
 
 function createDefaultClangdConfig(configPath: string, compiler: string, cStandard: CStandard, cppStandard: CppStandard): void {
+	const desired = defaultClangdProjectConfig(compiler, cStandard, cppStandard);
 	if (fs.existsSync(configPath)) {
 		const existing = fs.readFileSync(configPath, 'utf8');
-		if (isManagedClangdConfig(existing) || isLegacyBeCoderClangdConfig(existing)) {
-			fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cStandard, cppStandard), 'utf8');
+		if (existing !== desired && (isManagedClangdConfig(existing) || isLegacyBeCoderClangdConfig(existing))) {
+			fs.writeFileSync(configPath, desired, 'utf8');
 		}
 		return;
 	}
 	fs.mkdirSync(path.dirname(configPath), { recursive: true });
 	try {
-		fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cStandard, cppStandard), { encoding: 'utf8', flag: 'wx' });
+		fs.writeFileSync(configPath, desired, { encoding: 'utf8', flag: 'wx' });
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
 			throw error;
@@ -235,8 +255,15 @@ async function initializeOiWorkspace(context: vscode.ExtensionContext): Promise<
 		return;
 	}
 
+	const preset = loadPreset(context);
 	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
-	const compiler = configuredCompiler || await findPreferredCompiler(loadPreset(context).compilerCandidates) || 'g++';
+	const compiler = preset.portableToolchain
+		? preset.compilerCandidates[0]
+		: configuredCompiler || await findPreferredCompiler(preset.compilerCandidates);
+	if (!compiler) {
+		void vscode.window.showErrorMessage('BeCoder compiler is unavailable. Repair the bundled toolchain first.');
+		return;
+	}
 	createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
 	createDefaultClangFormatConfig(workspaceFolder.uri.fsPath);
 	await context.workspaceState.update(OI_WORKSPACE_INITIALIZATION_DISMISSED, undefined);
@@ -326,6 +353,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	await applyPending();
 	await refreshPortableToolchainSettings(context);
 	await migrateWorkspaceClangdConfig(context);
+	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+		void migrateWorkspaceClangdConfig(context);
+	}));
 	void offerOiWorkspaceInitialization(context);
 }
 
@@ -341,14 +371,19 @@ function isLegacyBeCoderClangdConfig(content: string): boolean {
 }
 
 async function migrateWorkspaceClangdConfig(context: vscode.ExtensionContext): Promise<void> {
-	const workspaceFolder = getSingleLocalWorkspaceFolder();
-	if (!workspaceFolder) {
+	const workspaceFolders = vscode.workspace.workspaceFolders?.filter(folder => folder.uri.scheme === 'file') ?? [];
+	if (workspaceFolders.length === 0) {
 		return;
 	}
+	const preset = loadPreset(context);
 	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
-	const compiler = configuredCompiler || await findPreferredCompiler(loadPreset(context).compilerCandidates);
+	const compiler = preset.portableToolchain
+		? preset.compilerCandidates[0]
+		: configuredCompiler || await findPreferredCompiler(preset.compilerCandidates);
 	if (compiler) {
-		createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
+		for (const workspaceFolder of workspaceFolders) {
+			createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
+		}
 	}
 }
 
@@ -360,8 +395,8 @@ async function refreshPortableToolchainSettings(context: vscode.ExtensionContext
 	if (!preset.portableToolchain) {
 		return;
 	}
-	const compiler = await findPreferredCompiler(preset.compilerCandidates);
-	const clangd = await findFirstExecutable(preset.clangdCandidates);
+	const compiler = preset.compilerCandidates[0];
+	const clangd = preset.clangdCandidates[0];
 	if (!compiler || !clangd) {
 		return;
 	}
@@ -371,10 +406,7 @@ async function refreshPortableToolchainSettings(context: vscode.ExtensionContext
 		'becoder.toolchain.cCompilerPath': compiler.replace(/g\+\+\.exe$/i, 'gcc.exe'),
 		'becoder.toolchain.clangdPath': clangd,
 		'becoder.toolchain.stdIncludePath': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
-		'becoder.toolchain.debuggerHeader': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
-		'clangd.path': clangd,
-		'clangd.arguments': clangdArgumentsForCompiler(compiler),
-		'clangd.fallbackFlags': clangdFallbackFlagsForCompiler(compiler)
+		'becoder.toolchain.debuggerHeader': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h')
 	});
 	await configureClangd(compiler, clangd);
 }
@@ -409,9 +441,7 @@ async function repairToolchain(context: vscode.ExtensionContext): Promise<void> 
 		// and unrelated legacy preferences with the first-run preset.
 		const settings: Record<string, unknown> = {
 			'becoder.toolchain.compilerPath': compiler,
-			'becoder.toolchain.cCompilerPath': compiler.replace(/g\+\+\.exe$/i, 'gcc.exe'),
-			'clangd.path': clangd,
-			'clangd.arguments': clangdArgumentsForCompiler(compiler)
+			'becoder.toolchain.cCompilerPath': compiler.replace(/g\+\+\.exe$/i, 'gcc.exe')
 		};
 		await updateGlobalSettings(settings);
 		await configureClangd(compiler, clangd);
@@ -484,14 +514,9 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 		settings['becoder.runner.cppFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cleanupExecutable'] = true;
-		settings['clangd.fallbackFlags'] = clangdFallbackFlagsForCompiler(compiler);
 		if (firstRunSelection) {
 			createDefaultClangdProjectConfig(firstRunSelection.workspaceFolder, compiler, cStandard, cppStandard);
 		}
-		settings['clangd.arguments'] = clangdArgumentsForCompiler(compiler);
-	}
-	if (clangd) {
-		settings['clangd.path'] = clangd;
 	}
 	for (const key of Object.keys(settings)) {
 		if (key.startsWith('c-cpp-compile-run.')) {
@@ -523,17 +548,23 @@ async function configureClangd(compiler?: string, clangd?: string): Promise<void
 	const configuredCompiler = compiler ?? vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
 	const configuredClangd = clangd ?? vscode.workspace.getConfiguration().get<string>('becoder.toolchain.clangdPath');
 	const settings = vscode.workspace.getConfiguration(undefined, null);
-	const updates: Array<Promise<void>> = [];
-	const updateIfRegistered = (key: string, value: unknown): void => {
-		if (settings.inspect(key)) {
-			updates.push(Promise.resolve(settings.update(key, value, vscode.ConfigurationTarget.Global)));
-		}
+	const desiredSettings: Record<string, unknown> = {
+		'clangd.enable': true,
+		'clangd.path': configuredClangd,
+		'clangd.arguments': configuredCompiler ? clangdArgumentsForCompiler(configuredCompiler) : ['--background-index'],
+		'clangd.fallbackFlags': configuredCompiler ? clangdFallbackFlagsForCompiler(configuredCompiler) : ['-Wno-deprecated-declarations']
 	};
-	updateIfRegistered('clangd.enable', true);
-	updateIfRegistered('clangd.path', configuredClangd);
-	updateIfRegistered('clangd.arguments', configuredCompiler ? clangdArgumentsForCompiler(configuredCompiler) : ['--background-index']);
-	updateIfRegistered('clangd.fallbackFlags', configuredCompiler ? clangdFallbackFlagsForCompiler(configuredCompiler) : ['-Wno-deprecated-declarations']);
-	await Promise.allSettled(updates);
+	let changed = false;
+	for (const [key, value] of Object.entries(desiredSettings)) {
+		const inspected = settings.inspect(key);
+		if (inspected && !isDeepStrictEqual(inspected.globalValue, value)) {
+			await settings.update(key, value, vscode.ConfigurationTarget.Global);
+			changed = true;
+		}
+	}
+	if (!changed) {
+		return;
+	}
 	const clangdExtension = vscode.extensions.getExtension('llvm-vs-code-extensions.vscode-clangd');
 	if (clangdExtension?.isActive) {
 		await vscode.commands.executeCommand('clangd.restart');
@@ -574,6 +605,7 @@ function getPlatformName(): 'windows' | 'mac' | 'linux' {
 function loadPlatformInstaller(context: vscode.ExtensionContext): PlatformInstaller {
 	// Platform installers are plain CommonJS resources so the main-process first-run
 	// window and this extension command execute the exact same platform logic.
+	// eslint-disable-next-line no-restricted-syntax
 	return require(path.join(context.extensionPath, 'resources', `${getPlatformName()}.js`)) as PlatformInstaller;
 }
 
@@ -620,12 +652,15 @@ function getBeCoderToolchainRoot(context: vscode.ExtensionContext): string {
 	const portableRoot = process.env['VSCODE_PORTABLE'];
 	return portableRoot
 		? path.join(portableRoot, 'toolchains')
-		: path.resolve(context.globalStorageUri.fsPath, '..', '..', '..', '..', 'toolchains');
+		: path.resolve(context.globalStorageUri.fsPath, '..', '..', '..', 'toolchains');
 }
 
 async function updateGlobalSettings(settings: Record<string, unknown>): Promise<void> {
 	for (const [key, value] of Object.entries(settings)) {
-		await vscode.workspace.getConfiguration(undefined, null).update(key, value, vscode.ConfigurationTarget.Global);
+		const configuration = vscode.workspace.getConfiguration(undefined, null);
+		if (!isDeepStrictEqual(configuration.inspect(key)?.globalValue, value)) {
+			await configuration.update(key, value, vscode.ConfigurationTarget.Global);
+		}
 	}
 }
 
@@ -641,7 +676,7 @@ function hasBeCoderHiddenFiles(): boolean {
 function addMissingBeCoderFileExcludes(excludes: Record<string, boolean>): Record<string, boolean> {
 	const updatedExcludes = { ...excludes };
 	for (const [pattern, excluded] of Object.entries(beCoderHiddenFiles)) {
-		if (!(pattern in updatedExcludes)) {
+		if (!Object.hasOwn(updatedExcludes, pattern)) {
 			updatedExcludes[pattern] = excluded;
 		}
 	}

@@ -82,6 +82,64 @@ function Get-RequestedCompiler {
 	return $expectedCompiler
 }
 
+function Get-BeCoderCompilerFlags {
+	param($RequestedFlags)
+
+	$flags = @()
+	foreach ($candidate in @($RequestedFlags)) {
+		$flag = [string]$candidate
+		$isWarning = $flag -cmatch '^-W(?:no-)?[A-Za-z0-9][A-Za-z0-9+_.=-]*$' -and
+			$flag -cnotmatch '^-W[alp](?:,|=|$)'
+		$isAllowed = $flag -cmatch '^-O(?:0|1|2|3|g|s|fast)$' -or
+			$isWarning -or
+			$flag -cmatch '^-D[A-Za-z_][A-Za-z0-9_]*(?:=[A-Za-z0-9_+.-]+)?$' -or
+			$flag -cmatch '^-U[A-Za-z_][A-Za-z0-9_]*$' -or
+			$flag -cmatch '^-g(?:0|1|2|3)?$' -or
+			@('-pipe', '-pedantic', '-pedantic-errors', '-pthread') -ccontains $flag
+		if (-not $isAllowed) {
+			throw "TOOLCHAIN_ERROR: Unsupported compiler flag in BeCoder Runner: $flag"
+		}
+		$flags += $flag
+	}
+	return $flags
+}
+
+function Enter-BeCoderChildEnvironment {
+	param([string]$CompilerBin)
+
+	$systemDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::System)
+	if ([string]::IsNullOrWhiteSpace($systemDirectory)) {
+		throw 'TOOLCHAIN_ERROR: Windows system directory is unavailable.'
+	}
+	$variableNames = @(
+		'PATH', 'CPATH', 'CPLUS_INCLUDE_PATH', 'C_INCLUDE_PATH',
+		'OBJC_INCLUDE_PATH', 'GCC_EXEC_PREFIX', 'COMPILER_PATH',
+		'LIBRARY_PATH', 'LIB', 'INCLUDE', 'CFLAGS', 'CXXFLAGS',
+		'CPPFLAGS', 'LDFLAGS', 'GXX_INCLUDE_PATH',
+		'DEPENDENCIES_OUTPUT', 'SUNPRO_DEPENDENCIES'
+	)
+	$state = @{}
+	foreach ($name in $variableNames) {
+		$item = Get-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+		$state[$name] = if ($null -eq $item) { $null } else { [string]$item.Value }
+		Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+	}
+	$env:PATH = "$CompilerBin$([IO.Path]::PathSeparator)$systemDirectory"
+	return $state
+}
+
+function Exit-BeCoderChildEnvironment {
+	param([System.Collections.IDictionary]$State)
+
+	foreach ($name in $State.Keys) {
+		if ($null -eq $State[$name]) {
+			Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+		} else {
+			Set-Item -LiteralPath "Env:$name" -Value ([string]$State[$name])
+		}
+	}
+}
+
 function Invoke-BeCoderRun {
 	param([switch]$WithInput)
 
@@ -109,14 +167,20 @@ function Invoke-BeCoderRun {
 		$tempExecutable = Join-Path $sourceDirectory ".becoder-$baseName-$PID-$([Guid]::NewGuid().ToString('N')).exe"
 		$compiler = Get-RequestedCompiler $request $extension
 		$compilerBin = Split-Path -Parent $compiler
-		$flags = if ($extension -eq '.c') { @($request.cFlags) } else { @($request.cppFlags) }
+		$flags = Get-BeCoderCompilerFlags $(if ($extension -eq '.c') { $request.cFlags } else { $request.cppFlags })
 		$arguments = @()
 		if ($extension -eq '.c') {
 			$standard = if ([string]::IsNullOrWhiteSpace([string]$request.cStandard)) { 'c17' } else { [string]$request.cStandard }
+			if ($standard -notin @('c11', 'c17', 'c23')) {
+				throw "TOOLCHAIN_ERROR: Unsupported BeCoder C standard: $standard"
+			}
 			$arguments += @($flags | ForEach-Object { [string]$_ })
 			$arguments += "-std=$standard"
 		} else {
 			$standard = if ([string]::IsNullOrWhiteSpace([string]$request.cppStandard)) { 'c++20' } else { [string]$request.cppStandard }
+			if ($standard -notin @('c++11', 'c++14', 'c++17', 'c++20', 'c++23')) {
+				throw "TOOLCHAIN_ERROR: Unsupported BeCoder C++ standard: $standard"
+			}
 			$arguments += @($flags | ForEach-Object { [string]$_ })
 			$arguments += "-std=$standard"
 		}
@@ -126,18 +190,17 @@ function Invoke-BeCoderRun {
 		# temporarily receives its private bin directory for GCC DLL/tool lookup.
 		$phase = 'compile'
 		$compileTimer = [Diagnostics.Stopwatch]::StartNew()
-		$previousPath = $env:PATH
+		$environmentState = Enter-BeCoderChildEnvironment $compilerBin
 		try {
-			$env:PATH = "$compilerBin$([IO.Path]::PathSeparator)$previousPath"
 			$compileOutput = @(& $compiler @arguments 2>&1)
+			$compileExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
 		} finally {
-			$env:PATH = $previousPath
+			Exit-BeCoderChildEnvironment $environmentState
 		}
 		$timings.compileMs = [int][math]::Round($compileTimer.Elapsed.TotalMilliseconds)
 		foreach ($line in $compileOutput) {
 			Write-Host ([string]$line)
 		}
-		$compileExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
 		if ($compileExitCode -ne 0 -or -not (Test-Path -LiteralPath $tempExecutable -PathType Leaf)) {
 			Write-RunnerBanner 'Compilation Error' ([ConsoleColor]::Red)
 			$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)
@@ -162,9 +225,8 @@ function Invoke-BeCoderRun {
 		Write-RunnerBanner 'Compilation Successful, Running...'
 		$phase = 'input'
 		$runTimer = [Diagnostics.Stopwatch]::StartNew()
-		$previousPath = $env:PATH
+		$environmentState = Enter-BeCoderChildEnvironment $compilerBin
 		try {
-			$env:PATH = "$compilerBin$([IO.Path]::PathSeparator)$previousPath"
 			$inputPath = [string]$request.inputPath
 			if ($WithInput) {
 				$inputDirectory = if ([string]::IsNullOrWhiteSpace($inputPath)) { '' } else { [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($inputPath)) }
@@ -178,7 +240,7 @@ function Invoke-BeCoderRun {
 				$runExitCode = Invoke-BeCoderProcess $executablePath $sourceDirectory
 			}
 		} finally {
-			$env:PATH = $previousPath
+			Exit-BeCoderChildEnvironment $environmentState
 		}
 		$timings.runMs = [int][math]::Round($runTimer.Elapsed.TotalMilliseconds)
 		$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)

@@ -2,21 +2,30 @@
 // This wraps `@clangd/install` in the VSCode UI. See that package for more.
 
 import * as common from '@clangd/install';
-import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 import * as config from './config';
+import {bundledClangdPath} from './becoder-toolchain';
 
 // Returns the clangd path to be used, or null if clangd is not installed.
 export async function activate(disposables: vscode.Disposable[],
                                globalStoragePath: string):
     Promise<string|null> {
-  const bundledPath = getBundledClangdPath();
-  if (process.platform === 'win32' && !bundledPath) {
-    vscode.window.showErrorMessage(
-        'BeCoder bundled clangd is unavailable. The built-in language service was not started.');
-    return null;
+  if (process.platform === 'win32') {
+    const bundledPath = bundledClangdPath(globalStoragePath);
+    if (!bundledPath) {
+      vscode.window.showErrorMessage(
+          'BeCoder bundled clangd is unavailable. The built-in language service was not started.');
+      return null;
+    }
+    const explainManagedClangd = () => vscode.window.showInformationMessage(
+        'BeCoder manages its bundled clangd independently. Use the BeCoder toolchain repair command to restore it.');
+    disposables.push(vscode.commands.registerCommand(
+        'clangd.install', explainManagedClangd));
+    disposables.push(vscode.commands.registerCommand(
+        'clangd.update', explainManagedClangd));
+    return bundledPath;
   }
   const ui = await UI.create(disposables, globalStoragePath);
   disposables.push(vscode.commands.registerCommand(
@@ -25,27 +34,7 @@ export async function activate(disposables: vscode.Disposable[],
       'clangd.update', async () => common.checkUpdates(true, ui)));
   const status =
       await common.prepare(ui, await config.get<boolean>('checkUpdates'));
-  if (process.platform === 'win32' &&
-      (!status.clangdPath ||
-       path.resolve(status.clangdPath) !== path.resolve(bundledPath!))) {
-    vscode.window.showErrorMessage(
-        'BeCoder refused to start an external clangd. Restore the bundled toolchain and restart.');
-    return null;
-  }
   return status.clangdPath;
-}
-
-function getBundledClangdPath(): string | undefined {
-  const extensionPath =
-      vscode.extensions.getExtension('llvm-vs-code-extensions.vscode-clangd')?.extensionPath;
-  if (!extensionPath) {
-    return undefined;
-  }
-  const packagedRoot = path.resolve(
-      extensionPath, '..', '..', '..', '..', 'data', 'toolchains');
-  const bundledPath = path.join(
-      packagedRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe');
-  return fs.existsSync(bundledPath) ? bundledPath : undefined;
 }
 
 class UI {
@@ -166,13 +155,6 @@ class UI {
 
   async resolveClangdPath() {
     let p = await config.get<string>('path');
-    if (process.platform === 'win32') {
-      const bundledPath = getBundledClangdPath();
-      if (bundledPath) {
-        p = bundledPath;
-        await config.update('path', p, vscode.ConfigurationTarget.Global);
-      }
-    }
     // Backwards compatibility: if it's a relative path with a slash, interpret
     // relative to project root.
     if (!path.isAbsolute(p) && p.includes(path.sep) &&

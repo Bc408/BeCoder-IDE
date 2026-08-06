@@ -62,7 +62,7 @@ export function activate(context: ClangdContext) {
 
   context.subscriptions.push(
       vscode.commands.registerCommand('clangd.userConfig', () => {
-        const file = getUserConfigFile();
+        const file = context.userConfigPath ?? getUserConfigFile();
         if (file) {
           openConfigFile(vscode.Uri.file(file));
         } else {

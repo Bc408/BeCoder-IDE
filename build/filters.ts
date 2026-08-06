@@ -64,9 +64,12 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/**/snippets/**',
 	'!extensions/**/colorize-fixtures/**',
 	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
+	// This file contains localized UI text and generated configuration comments.
+	'!extensions/becoder.setup/src/extension.ts',
 	'!extensions/becoder.setup/src/simpleSettings.ts',
 
-	// extensions/copilot has its own code style
+	// These bundled upstream extensions have their own code style
+	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 
 	'!src/vs/base/browser/dompurify/**',
@@ -139,7 +142,8 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!extensions/**/themes/**',
 	'!extensions/**/colorize-fixtures/**',
 
-	// extensions/copilot has its own code style
+	// These bundled upstream extensions have their own code style
+	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 
 	// except specific file types
@@ -225,7 +229,8 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!src/vs/base/common/lit-html/**',
 	'!src/vs/base/common/signals-core/**',
 
-	// extensions/copilot has its own code style
+	// These bundled upstream extensions have their own code style
+	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 ]);
 
@@ -248,7 +253,8 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
 
-	// extensions/copilot has its own code style
+	// These bundled upstream extensions have their own code style
+	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 ]);
 

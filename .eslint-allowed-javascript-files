@@ -23,6 +23,9 @@ extensions/aadityanarayan.code-snap/webview/src/code.js
 extensions/aadityanarayan.code-snap/webview/src/index.js
 extensions/aadityanarayan.code-snap/webview/src/snap.js
 extensions/aadityanarayan.code-snap/webview/src/util.js
+extensions/becoder.setup/resources/linux.js
+extensions/becoder.setup/resources/mac.js
+extensions/becoder.setup/resources/windows.js
 extensions/copilot/.mocha-multi-reporters.js
 extensions/copilot/.mocharc.js
 extensions/copilot/.vscode-test.mjs

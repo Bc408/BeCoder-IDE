@@ -1,5 +1,5 @@
 // Entry point for all tests.
-// Spawns VSCode with our extension, and then runs *.test.ts in that context.
+// Spawns VSCode with our extension, and then runs compiled *.test.js files.
 
 import {runTests} from '@vscode/test-electron';
 import {glob} from 'glob';
@@ -11,14 +11,17 @@ export async function run(): Promise<void> {
   const mocha = new Mocha({ui: 'tdd', color: true});
   const testsRoot = path.resolve(__dirname, '..');
 
-  const files = await glob('**/**.test.ts', {cwd: testsRoot});
+  const files = await glob('**/*.test.js', {cwd: testsRoot});
   files.forEach(f => mocha.addFile(path.resolve(testsRoot, f)));
 
-  // Run the mocha test
-  mocha.run(failures => {
-    if (failures > 0) {
-      throw new Error(`${failures} tests failed.`);
-    }
+  await new Promise<void>((resolve, reject) => {
+    mocha.run(failures => {
+      if (failures > 0) {
+        reject(new Error(`${failures} tests failed.`));
+      } else {
+        resolve();
+      }
+    });
   });
 }
 

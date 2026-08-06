@@ -38,6 +38,15 @@ foreach ($relativePath in $requiredFiles) {
 	}
 }
 
+$clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'
+$clangdArchivePath = Join-Path $PackagePath $clangdArchiveRelativePath
+if (-not (Test-Path -LiteralPath $clangdArchivePath -PathType Leaf)) {
+	throw "The Windows package is missing the bundled BeCoder clangd archive: $clangdArchiveRelativePath"
+}
+if ((Get-Item -LiteralPath $clangdArchivePath).Length -lt 10MB) {
+	throw "The bundled BeCoder clangd archive is unexpectedly small: $clangdArchiveRelativePath"
+}
+
 $compilerRelativePath = 'resources\app\resources\oi-defaults\toolchains\becoder-ucrt64.zip'
 $compilerPath = Join-Path $PackagePath $compilerRelativePath
 if ($IncludeCompiler) {
@@ -53,6 +62,7 @@ if ($IncludeCompiler) {
 
 $forbiddenPaths = @(
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\debugger.js',
+	'resources\app\extensions\jeff-hykin.better-cpp-syntax',
 	'resources\app\resources\oi-defaults\toolchains\gdb.exe',
 	'resources\app\resources\oi-defaults\toolchains\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3.zip'
 )

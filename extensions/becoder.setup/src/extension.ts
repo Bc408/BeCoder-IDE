@@ -6,7 +6,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
-import { createHash } from 'crypto';
 import { isDeepStrictEqual } from 'util';
 import * as vscode from 'vscode';
 import { registerSimpleSettings } from './simpleSettings';
@@ -28,9 +27,6 @@ type PlatformInstaller = {
 };
 
 type SetupSelection = 'recommended';
-type CStandard = 'c11' | 'c17' | 'c23';
-type CppStandard = 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23';
-
 type FirstRunSelection = {
 	mode: SetupSelection;
 	editor: boolean;
@@ -38,255 +34,24 @@ type FirstRunSelection = {
 	fontLigatures: boolean;
 	fontSize: number;
 	autoFormat: boolean;
-	clangdVariableTypeHints: boolean;
 	workspaceFolder: string;
 };
 
 const SETUP_COMPLETE = 'becoder.setupComplete';
-const OI_WORKSPACE_INITIALIZATION_DISMISSED = 'becoder.oiWorkspaceInitializationDismissed';
-
 const beCoderHiddenFiles: Record<string, boolean> = {
-	'**/.clang-format': true,
-	'**/.clangd': true,
 	'**/*.exe': true,
 	'**/*.bin': true,
 	'**/*.bin.dSYM': true,
-	'**/*.dSYM': true,
-	'**/.*': true
+	'**/*.dSYM': true
 };
 
-const FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v3';
-
-function clangdArgumentsForCompiler(compiler: string): string[] {
-	// Homebrew exposes GCC through multiple symlinked paths, for example both
-	// /opt/homebrew/bin/g++-16 and /opt/homebrew/opt/gcc/bin/g++-16. clangd
-	// matches --query-driver against the path in its CompileFlags config before
-	// resolving that symlink, so allowing only the selected path can leave GCC's
-	// libstdc++ headers (including bits/stdc++.h) undiscovered.
-	if (process.platform === 'darwin') {
-		return [
-			'--background-index',
-			'--query-driver=/opt/homebrew/**/g++-*,/usr/local/**/g++-*'
-		];
-	}
-	return process.platform === 'win32'
-		? ['--background-index', '--compile_args_from=lsp']
-		: ['--background-index', `--query-driver=${compiler}`];
-}
-
-function clangdFallbackFlagsForCompiler(compiler: string): string[] {
-	// clangd applies fallbackFlags to both C and C++ documents. Keep this list
-	// language-neutral; the Runner still enforces the selected C++ standard.
-	const flags = [
-		'--target=x86_64-w64-windows-gnu',
-		'-DDEBUG',
-		'-Wall',
-		'-Wextra',
-		'-Wno-deprecated-declarations',
-		'-Drsize_t=size_t',
-		'-D__STDC_WANT_LIB_EXT1__=1',
-		'-D__float128=long double',
-		'-U__SIZEOF_FLOAT128__'
-	];
-	if (process.platform === 'win32') {
-		flags.push(...windowsClangdIncludeFlags(compiler));
-	} else if (process.platform === 'darwin') {
-		flags.push('-I/opt/homebrew/include');
-	}
-	return flags;
-}
-
-function windowsClangdIncludeFlags(compiler: string): string[] {
-	const toolchainRoot = path.dirname(path.dirname(compiler));
-	const standardInclude = path.join(toolchainRoot, 'include', 'c++', '14.1.0');
-	const targetInclude = path.join(standardInclude, 'x86_64-w64-mingw32');
-	const gccInclude = path.join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include');
-	const includeFixed = path.join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include-fixed');
-	return [
-		standardInclude,
-		targetInclude,
-		path.join(standardInclude, 'backward'),
-		gccInclude,
-		path.join(toolchainRoot, 'include'),
-		path.join(toolchainRoot, 'x86_64-w64-mingw32', 'include'),
-		path.join(targetInclude, 'bits'),
-		includeFixed
-	]
-		.filter(includePath => fs.existsSync(includePath))
-		.map(includePath => `-isystem${includePath}`);
-}
-
-function defaultClangdProjectConfig(compiler: string, cStandard: CStandard, cppStandard: CppStandard): string {
-	const compilerPath = compiler.replaceAll('\\', '/');
-	const cCompilerPath = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe').replaceAll('\\', '/');
-	const flags = clangdFallbackFlagsForCompiler(compiler)
-		.map(flag => `    - ${JSON.stringify(flag)}`)
-		.join('\n');
-	const body = [
-		'# BeCoder managed clangd configuration.',
-		'CompileFlags:',
-		'  Add:',
-		flags,
-		'  BuiltinHeaders: Clangd',
-		'',
-		'Completion:',
-		'  HeaderInsertion: Never',
-		'',
-		'Index:',
-		'  Background: Build',
-		'',
-		'---',
-		'If:',
-		'  PathMatch: \'.*\\.[cC]$\'',
-		'CompileFlags:',
-		'  Remove:',
-		'    - "-x"',
-		'    - "-std=*"',
-		'  Add:',
-		'    - "-xc"',
-		`    - "-std=${cStandard}"`,
-		`  Compiler: ${JSON.stringify(cCompilerPath)}`,
-		'',
-		'---',
-		'If:',
-		'  PathMatch: \'.*\\.([cC][cC]|[cC][pP]|[cC][pP][pP]|[cC][xX][xX]|[cC]\\+\\+|[hH]|[hH][hH]|[hH][pP][pP]|[hH][xX][xX]|[iI][nN][lL])$\'',
-		'CompileFlags:',
-		'  Remove:',
-		'    - "-x"',
-		'    - "-std=*"',
-		'  Add:',
-		'    - "-xc++"',
-		`    - "-std=${cppStandard}"`,
-		`  Compiler: ${JSON.stringify(compilerPath)}`,
-		''
-	].join('\n');
-	const signature = createHash('sha256').update(body).digest('hex');
-	return `${body}# BeCoder managed clangd SHA-256: ${signature}\n`;
-}
-
-function createDefaultClangdConfig(configPath: string, compiler: string, cStandard: CStandard, cppStandard: CppStandard): void {
-	const desired = defaultClangdProjectConfig(compiler, cStandard, cppStandard);
-	if (fs.existsSync(configPath)) {
-		const existing = fs.readFileSync(configPath, 'utf8');
-		if (existing !== desired && (isManagedClangdConfig(existing) || isLegacyBeCoderClangdConfig(existing))) {
-			fs.writeFileSync(configPath, desired, 'utf8');
-		}
-		return;
-	}
-	fs.mkdirSync(path.dirname(configPath), { recursive: true });
-	try {
-		fs.writeFileSync(configPath, desired, { encoding: 'utf8', flag: 'wx' });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-			throw error;
-		}
-	}
-}
-
-function createDefaultClangdProjectConfig(workspaceFolder: string, compiler: string, cStandard: CStandard, cppStandard: CppStandard): void {
-	createDefaultClangdConfig(path.join(workspaceFolder, '.clangd'), compiler, cStandard, cppStandard);
-}
-
-const defaultClangFormatConfig = `BasedOnStyle: Google
-
-# --- 行为：尽量允许一行写完 ---
-AllowShortIfStatementsOnASingleLine: AllIfsAndElse
-AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: true
-AllowShortFunctionsOnASingleLine: Inline
-
-# --- 行长（核心关键，不然上面全白给） ---
-ColumnLimit: 0
-
-# --- 缩进 ---
-IndentWidth: 4
-TabWidth: 4
-UseTab: Never
-
-# --- 访问修饰符 ---
-AccessModifierOffset: -2
-
-# --- 大括号风格 ---
-BreakBeforeBraces: Attach
-AlwaysBreakTemplateDeclarations: No
-
-# --- 指针与注释 ---
-PointerAlignment: Left
-SpacesBeforeTrailingComments: 4
-
-# --- 代码块间距 ---
-SeparateDefinitionBlocks: Always
-
-# --- 语言标准 ---
-Standard: Latest
-`;
-
-function createDefaultClangFormatConfig(workspaceFolder: string): void {
-	const configPath = path.join(workspaceFolder, '.clang-format');
-	if (fs.existsSync(configPath)) {
-		return;
-	}
-	try {
-		fs.writeFileSync(configPath, defaultClangFormatConfig, { encoding: 'utf8', flag: 'wx' });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-			throw error;
-		}
-	}
-}
-
-function getSingleLocalWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
-	const workspaceFolders = vscode.workspace.workspaceFolders;
-	if (workspaceFolders?.length !== 1 || workspaceFolders[0].uri.scheme !== 'file') {
-		return undefined;
-	}
-	return workspaceFolders[0];
-}
-
-function hasOiWorkspaceConfig(workspaceFolder: vscode.WorkspaceFolder): boolean {
-	return fs.existsSync(path.join(workspaceFolder.uri.fsPath, '.clangd'))
-		|| fs.existsSync(path.join(workspaceFolder.uri.fsPath, '.clang-format'));
-}
-
-async function initializeOiWorkspace(context: vscode.ExtensionContext): Promise<void> {
-	const workspaceFolder = getSingleLocalWorkspaceFolder();
-	if (!workspaceFolder) {
-		void vscode.window.showInformationMessage('请先打开一个本地文件夹，再初始化 OI 项目配置。');
-		return;
-	}
-
-	const preset = loadPreset(context);
-	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
-	const compiler = preset.portableToolchain
-		? preset.compilerCandidates[0]
-		: configuredCompiler || await findPreferredCompiler(preset.compilerCandidates);
-	if (!compiler) {
-		void vscode.window.showErrorMessage('BeCoder compiler is unavailable. Repair the bundled toolchain first.');
-		return;
-	}
-	createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
-	createDefaultClangFormatConfig(workspaceFolder.uri.fsPath);
-	await context.workspaceState.update(OI_WORKSPACE_INITIALIZATION_DISMISSED, undefined);
-	void vscode.window.showInformationMessage(`已在“${workspaceFolder.name}”中创建 .clangd 和 .clang-format。`);
-}
-
-async function offerOiWorkspaceInitialization(context: vscode.ExtensionContext): Promise<void> {
-	const workspaceFolder = getSingleLocalWorkspaceFolder();
-	if (!workspaceFolder || hasOiWorkspaceConfig(workspaceFolder) || context.workspaceState.get<boolean>(OI_WORKSPACE_INITIALIZATION_DISMISSED)) {
-		return;
-	}
-
-	const action = await vscode.window.showInformationMessage(
-		`“${workspaceFolder.name}”尚未包含 OI 项目配置。要创建 .clangd 和 .clang-format 吗？`,
-		'初始化 OI 配置',
-		'暂不初始化'
-	);
-	if (action === '初始化 OI 配置') {
-		await initializeOiWorkspace(context);
-	} else {
-		await context.workspaceState.update(OI_WORKSPACE_INITIALIZATION_DISMISSED, true);
-	}
-}
+const FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v4';
+const CLANGD_SETTINGS_MIGRATION = 'becoder.clangdSettings.v1';
+const obsoleteBeCoderHiddenFiles = [
+	'**/.clang-format',
+	'**/.clangd',
+	'**/.*'
+];
 
 const editorSettings: Record<string, unknown> = {
 	'editor.fontLigatures': false,
@@ -297,9 +62,8 @@ const editorSettings: Record<string, unknown> = {
 	'editor.cursorBlinking': 'smooth',
 	'editor.fontSize': 14,
 	'files.autoSave': 'onFocusChange',
-	'editor.formatOnSave': true,
-	'editor.formatOnPaste': true,
-	'editor.inlayHints.enabled': 'on',
+	'editor.formatOnSave': false,
+	'editor.formatOnPaste': false,
 	// Competitive-programming comments commonly contain Chinese text. Treat
 	// non-ASCII characters as ordinary source content instead of highlighting
 	// them as suspicious Unicode.
@@ -323,12 +87,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.redetectToolchain', () => runSetup(context)));
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.repairToolchain', () => repairToolchain(context)));
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.rerunFirstRunSetup', () => rerunFirstRunSetup()));
-	context.subscriptions.push(vscode.commands.registerCommand('becoder.initializeOiWorkspace', () => initializeOiWorkspace(context)));
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.showAllFiles', toggleHiddenFiles));
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.hideSetupFiles', toggleHiddenFiles));
 	if (!context.globalState.get<boolean>(FILE_EXCLUDES_MIGRATION)) {
 		await ensureBeCoderFileExcludes();
 		await context.globalState.update(FILE_EXCLUDES_MIGRATION, true);
+	}
+	if (!context.globalState.get<boolean>(CLANGD_SETTINGS_MIGRATION)) {
+		await removeLegacyClangdSettings();
+		await context.globalState.update(CLANGD_SETTINGS_MIGRATION, true);
 	}
 	const updateHiddenFilesContext = () => {
 		void vscode.commands.executeCommand('setContext', 'becoder.showAllFiles', !hasBeCoderHiddenFiles());
@@ -352,39 +119,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}));
 	await applyPending();
 	await refreshPortableToolchainSettings(context);
-	await migrateWorkspaceClangdConfig(context);
-	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
-		void migrateWorkspaceClangdConfig(context);
-	}));
-	void offerOiWorkspaceInitialization(context);
-}
-
-function isManagedClangdConfig(content: string): boolean {
-	return content.includes('# BeCoder managed clangd configuration.');
-}
-
-function isLegacyBeCoderClangdConfig(content: string): boolean {
-	const compiler = /^\s*Compiler:\s*["']?([^"'\r\n]+)["']?\s*$/mi.exec(content)?.[1] ?? '';
-	return content.includes('BuiltinHeaders: QueryDriver')
-		&& content.includes('HeaderInsertion: Never')
-		&& (/^(?:g\+\+|clang\+\+)$/i.test(compiler) || /(?:portable_stage|portable_test|becoder-stage)/i.test(compiler));
-}
-
-async function migrateWorkspaceClangdConfig(context: vscode.ExtensionContext): Promise<void> {
-	const workspaceFolders = vscode.workspace.workspaceFolders?.filter(folder => folder.uri.scheme === 'file') ?? [];
-	if (workspaceFolders.length === 0) {
-		return;
-	}
-	const preset = loadPreset(context);
-	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
-	const compiler = preset.portableToolchain
-		? preset.compilerCandidates[0]
-		: configuredCompiler || await findPreferredCompiler(preset.compilerCandidates);
-	if (compiler) {
-		for (const workspaceFolder of workspaceFolders) {
-			createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
-		}
-	}
 }
 
 async function refreshPortableToolchainSettings(context: vscode.ExtensionContext): Promise<void> {
@@ -404,11 +138,9 @@ async function refreshPortableToolchainSettings(context: vscode.ExtensionContext
 	await updateGlobalSettings({
 		'becoder.toolchain.compilerPath': compiler,
 		'becoder.toolchain.cCompilerPath': compiler.replace(/g\+\+\.exe$/i, 'gcc.exe'),
-		'becoder.toolchain.clangdPath': clangd,
 		'becoder.toolchain.stdIncludePath': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
 		'becoder.toolchain.debuggerHeader': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h')
 	});
-	await configureClangd(compiler, clangd);
 }
 
 async function rerunFirstRunSetup(): Promise<void> {
@@ -444,7 +176,6 @@ async function repairToolchain(context: vscode.ExtensionContext): Promise<void> 
 			'becoder.toolchain.cCompilerPath': compiler.replace(/g\+\+\.exe$/i, 'gcc.exe')
 		};
 		await updateGlobalSettings(settings);
-		await configureClangd(compiler, clangd);
 		return;
 	}
 	// A configured Apple Clang fallback is usable, but "repair" means install
@@ -499,35 +230,24 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 			settings['editor.fontSize'] = firstRunSelection.fontSize;
 			settings['editor.formatOnSave'] = firstRunSelection.autoFormat;
 			settings['editor.formatOnPaste'] = firstRunSelection.autoFormat;
-			settings['editor.inlayHints.enabled'] = firstRunSelection.clangdVariableTypeHints ? 'on' : 'off';
 		}
 	}
 	settings['files.exclude'] = addMissingBeCoderFileExcludes(getGlobalFileExcludes());
-	const cStandard: CStandard = 'c17';
-	const cppStandard: CppStandard = 'c++20';
 	if (compiler) {
 		settings['becoder.toolchain.compilerPath'] = compiler;
 		settings['becoder.toolchain.cCompilerPath'] = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe');
-		settings['becoder.toolchain.clangdPath'] = clangd;
 		settings['becoder.toolchain.stdIncludePath'] = path.join(path.dirname(path.dirname(compiler)), 'include', 'c++', '14.1.0');
 		settings['becoder.toolchain.debuggerHeader'] = path.join(path.dirname(path.dirname(compiler)), 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h');
 		settings['becoder.runner.cppFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cleanupExecutable'] = true;
-		if (firstRunSelection) {
-			createDefaultClangdProjectConfig(firstRunSelection.workspaceFolder, compiler, cStandard, cppStandard);
-		}
 	}
 	for (const key of Object.keys(settings)) {
 		if (key.startsWith('c-cpp-compile-run.')) {
 			delete settings[key];
 		}
 	}
-	if (firstRunSelection?.autoFormat) {
-		createDefaultClangFormatConfig(firstRunSelection.workspaceFolder);
-	}
 	await updateGlobalSettings(settings);
-	await configureClangd(compiler, clangd);
 	if (firstRunSelection) {
 		const firstRunConfiguration = vscode.workspace.getConfiguration('becoder.setup');
 		await firstRunConfiguration.update('pending', undefined, vscode.ConfigurationTarget.Global);
@@ -544,33 +264,6 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 	}
 }
 
-async function configureClangd(compiler?: string, clangd?: string): Promise<void> {
-	const configuredCompiler = compiler ?? vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
-	const configuredClangd = clangd ?? vscode.workspace.getConfiguration().get<string>('becoder.toolchain.clangdPath');
-	const settings = vscode.workspace.getConfiguration(undefined, null);
-	const desiredSettings: Record<string, unknown> = {
-		'clangd.enable': true,
-		'clangd.path': configuredClangd,
-		'clangd.arguments': configuredCompiler ? clangdArgumentsForCompiler(configuredCompiler) : ['--background-index'],
-		'clangd.fallbackFlags': configuredCompiler ? clangdFallbackFlagsForCompiler(configuredCompiler) : ['-Wno-deprecated-declarations']
-	};
-	let changed = false;
-	for (const [key, value] of Object.entries(desiredSettings)) {
-		const inspected = settings.inspect(key);
-		if (inspected && !isDeepStrictEqual(inspected.globalValue, value)) {
-			await settings.update(key, value, vscode.ConfigurationTarget.Global);
-			changed = true;
-		}
-	}
-	if (!changed) {
-		return;
-	}
-	const clangdExtension = vscode.extensions.getExtension('llvm-vs-code-extensions.vscode-clangd');
-	if (clangdExtension?.isActive) {
-		await vscode.commands.executeCommand('clangd.restart');
-	}
-}
-
 function isFirstRunSelection(candidate: unknown): candidate is FirstRunSelection {
 	if (!candidate || typeof candidate !== 'object') {
 		return false;
@@ -582,7 +275,6 @@ function isFirstRunSelection(candidate: unknown): candidate is FirstRunSelection
 		&& typeof value.fontLigatures === 'boolean'
 		&& typeof value.fontSize === 'number'
 		&& typeof value.autoFormat === 'boolean'
-		&& typeof value.clangdVariableTypeHints === 'boolean'
 		&& typeof value.workspaceFolder === 'string'
 		&& path.isAbsolute(value.workspaceFolder);
 }
@@ -683,13 +375,45 @@ function addMissingBeCoderFileExcludes(excludes: Record<string, boolean>): Recor
 	return updatedExcludes;
 }
 
+function migrateBeCoderFileExcludes(excludes: Record<string, boolean>): Record<string, boolean> {
+	const updatedExcludes = addMissingBeCoderFileExcludes(excludes);
+	for (const pattern of obsoleteBeCoderHiddenFiles) {
+		delete updatedExcludes[pattern];
+	}
+	return updatedExcludes;
+}
+
 async function ensureBeCoderFileExcludes(): Promise<void> {
 	const excludes = getGlobalFileExcludes();
-	const updatedExcludes = addMissingBeCoderFileExcludes(excludes);
-	if (Object.keys(updatedExcludes).length === Object.keys(excludes).length) {
+	const updatedExcludes = migrateBeCoderFileExcludes(excludes);
+	if (isDeepStrictEqual(updatedExcludes, excludes)) {
 		return;
 	}
 	await vscode.workspace.getConfiguration('files', null).update('exclude', updatedExcludes, vscode.ConfigurationTarget.Global);
+}
+
+async function removeLegacyClangdSettings(): Promise<void> {
+	const configuration = vscode.workspace.getConfiguration(undefined, null);
+	for (const key of [
+		'becoder.toolchain.clangdPath',
+		'clangd.arguments',
+		'clangd.checkUpdates',
+		'clangd.enable',
+		'clangd.enableCodeCompletion',
+		'clangd.enableHover',
+		'clangd.fallbackFlags',
+		'clangd.onConfigChanged',
+		'clangd.onConfigChangedForceEnable',
+		'clangd.path',
+		'clangd.restartAfterCrash',
+		'clangd.serverCompletionRanking',
+		'clangd.trace',
+		'clangd.useScriptAsExecutable'
+	]) {
+		if (configuration.inspect(key)?.globalValue !== undefined) {
+			await configuration.update(key, undefined, vscode.ConfigurationTarget.Global);
+		}
+	}
 }
 
 async function toggleHiddenFiles(): Promise<void> {

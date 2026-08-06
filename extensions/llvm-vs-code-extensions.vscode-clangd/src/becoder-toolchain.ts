@@ -22,8 +22,9 @@ export function bundledClangdPath(
     globalStoragePath?: string): string|undefined {
   const toolchainRoot = bundledToolchainRoot(globalStoragePath);
   if (!toolchainRoot) return undefined;
+  const executable = process.platform === 'win32' ? 'clangd.exe' : 'clangd';
   const clangdPath = path.join(
-      toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe');
+      toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', executable);
   return fs.existsSync(clangdPath) ? clangdPath : undefined;
 }
 
@@ -35,36 +36,12 @@ export function bundledCompilerPath(clangdPath: string): string {
 
 export function managedClangdArguments(): string[] {
   return [
-    '--background-index',
     '--compile_args_from=lsp',
-    '--enable-config=true'
+    '--enable-config=false',
+    '--fallback-style=Google',
+    '--header-insertion=never',
+    '--clang-tidy=false'
   ];
-}
-
-export function managedClangdUserConfigPath(
-    globalStoragePath: string): string {
-  return path.join(
-      globalStoragePath, 'clangd-user', 'AppData', 'Local', 'clangd',
-      'config.yaml');
-}
-
-export function clangdUserConfigPath(
-    globalStoragePath: string): string|undefined {
-  if (process.platform === 'win32') {
-    return managedClangdUserConfigPath(globalStoragePath);
-  }
-  if (process.platform === 'darwin') {
-    return process.env['HOME']
-        ? path.join(process.env['HOME'], 'Library', 'Preferences', 'clangd',
-                    'config.yaml')
-        : undefined;
-  }
-  const configurationRoot = process.env['XDG_CONFIG_HOME'] ??
-      (process.env['HOME'] ? path.join(process.env['HOME'], '.config')
-                           : undefined);
-  return configurationRoot
-      ? path.join(configurationRoot, 'clangd', 'config.yaml')
-      : undefined;
 }
 
 export function managedClangdFallbackFlags(compilerPath: string): string[] {
@@ -102,4 +79,35 @@ export function managedClangdFallbackFlags(compilerPath: string): string[] {
     '-U__SIZEOF_FLOAT128__',
     ...includeFlags
   ];
+}
+
+export interface ManagedClangdCompileCommand {
+  workingDirectory: string;
+  compilationCommand: string[];
+}
+
+export function managedClangdCompileCommand(
+    filePath: string, languageId: string,
+    compilerPath: string,
+    baseFlags: readonly string[] = managedClangdFallbackFlags(compilerPath)):
+    ManagedClangdCompileCommand {
+  const isC = languageId === 'c' || languageId === 'objective-c';
+  const compiler = isC
+      ? compilerPath
+            .replace(/g\+\+(-\d+)?(\.exe)?$/i, 'gcc$1$2')
+            .replace(/clang\+\+(-\d+)?(\.exe)?$/i, 'clang$1$2')
+      : compilerPath;
+  const language = languageId === 'objective-c'
+      ? 'objective-c'
+      : languageId === 'objective-cpp' ? 'objective-c++' : isC ? 'c' : 'c++';
+  return {
+    workingDirectory: path.dirname(filePath),
+    compilationCommand: [
+      compiler,
+      ...baseFlags,
+      `-x${language}`,
+      isC ? '-std=c17' : '-std=c++20',
+      filePath
+    ]
+  };
 }

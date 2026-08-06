@@ -8,7 +8,6 @@ import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 import { hostname, release } from 'os';
 import { spawn } from 'child_process';
-import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { Readable } from 'stream';
 import { initWindowsVersionInfo } from '../../base/node/windowsVersion.js';
@@ -21,7 +20,7 @@ import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
 import { equals } from '../../base/common/objects.js';
-import { dirname, join, posix } from '../../base/common/path.js';
+import { join, posix } from '../../base/common/path.js';
 import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { assertType } from '../../base/common/types.js';
 import { URI } from '../../base/common/uri.js';
@@ -162,7 +161,6 @@ interface IBeCoderSetupRequest {
 	readonly fontLigatures: boolean;
 	readonly fontSize: number;
 	readonly autoFormat: boolean;
-	readonly clangdVariableTypeHints: boolean;
 	readonly workspaceFolder: string;
 }
 
@@ -224,7 +222,6 @@ function isBeCoderSetupRequest(candidate: unknown): candidate is IBeCoderSetupRe
 		&& typeof value.fontLigatures === 'boolean'
 		&& typeof value.fontSize === 'number'
 		&& typeof value.autoFormat === 'boolean'
-		&& typeof value.clangdVariableTypeHints === 'boolean'
 		&& typeof value.workspaceFolder === 'string'
 		&& isAbsolute(value.workspaceFolder);
 }
@@ -960,7 +957,6 @@ export class CodeApplication extends Disposable {
 	private async applyBeCoderWindowsSetup(request: IBeCoderSetupRequest): Promise<void> {
 		const toolchainRoot = this.getBeCoderToolchainRoot();
 		const compiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe');
-		const clangd = join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe');
 		const existingFileExcludes = this.configurationService.getValue<Record<string, boolean>>('files.exclude') ?? {};
 		const settings: Record<string, unknown> = {
 			'editor.fontLigatures': request.fontLigatures,
@@ -973,7 +969,6 @@ export class CodeApplication extends Disposable {
 			'files.autoSave': 'onFocusChange',
 			'editor.formatOnSave': request.autoFormat,
 			'editor.formatOnPaste': request.autoFormat,
-			'editor.inlayHints.enabled': request.clangdVariableTypeHints ? 'on' : 'off',
 			'editor.mouseWheelZoom': true,
 			'window.systemColorTheme': 'auto',
 			'window.titleBarStyle': 'custom',
@@ -985,30 +980,19 @@ export class CodeApplication extends Disposable {
 			'workbench.statusBar.visible': false,
 			'files.exclude': {
 				...existingFileExcludes,
-				'**/.clang-format': true,
-				'**/.clangd': true,
 				'**/*.exe': true,
-				'**/.*': true
+				'**/*.bin': true
 			},
 			'becoder.toolchain.compilerPath': compiler,
 			'becoder.toolchain.cCompilerPath': join(toolchainRoot, 'becoder-ucrt64', 'bin', 'gcc.exe'),
-			'becoder.toolchain.clangdPath': clangd,
 			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
 			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
 			'becoder.runner.cppFlags': ['-O2', '-Wall', '-DDEBUG'],
 			'becoder.runner.cFlags': ['-O2', '-Wall', '-DDEBUG'],
-			'becoder.runner.cleanupExecutable': true,
-			'clangd.path': clangd,
-			'clangd.arguments': ['--background-index', '--compile_args_from=lsp'],
-			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler),
-			'clangd.enable': true
+			'becoder.runner.cleanupExecutable': true
 		};
 
 		await this.updateBeCoderSettings(settings);
-		await this.createBeCoderClangdConfig(join(request.workspaceFolder, '.clangd'), compiler, 'c17', 'c++20');
-		if (request.autoFormat) {
-			await this.createBeCoderClangFormatConfig(join(request.workspaceFolder, '.clang-format'));
-		}
 		await this.configurationService.updateValue('becoder.setup.pending', undefined, ConfigurationTarget.USER);
 		await this.configurationService.updateValue('becoder.setup.completed', true, ConfigurationTarget.USER);
 	}
@@ -1028,12 +1012,8 @@ export class CodeApplication extends Disposable {
 		const settings: Record<string, unknown> = {
 			'becoder.toolchain.compilerPath': compiler,
 			'becoder.toolchain.cCompilerPath': cCompiler,
-			'becoder.toolchain.clangdPath': clangd,
 			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
-			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
-			'clangd.path': clangd,
-			'clangd.arguments': ['--background-index', '--compile_args_from=lsp'],
-			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler)
+			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h')
 		};
 		await this.updateBeCoderSettings(settings);
 	}
@@ -1042,172 +1022,6 @@ export class CodeApplication extends Disposable {
 		for (const [key, value] of Object.entries(settings)) {
 			if (!equals(this.configurationService.getValue(key), value)) {
 				await this.configurationService.updateValue(key, value, ConfigurationTarget.USER);
-			}
-		}
-	}
-
-	private async createBeCoderClangdConfig(configPath: string, compiler: string, cStandard: 'c11' | 'c17' | 'c23', cppStandard: 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23'): Promise<void> {
-		let existing: string | undefined;
-		try {
-			existing = await fs.promises.readFile(configPath, 'utf8');
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-				throw error;
-			}
-		}
-		if (existing !== undefined) {
-			if (!this.isManagedBeCoderClangdConfig(existing) && !this.isLegacyBeCoderClangdConfig(existing)) {
-				return;
-			}
-		}
-		const flags = this.beCoderClangdFallbackFlags(compiler)
-			.map(flag => `    - ${JSON.stringify(flag)}`)
-			.join('\n');
-		const cCompiler = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe');
-		const configBody = [
-			'# BeCoder managed clangd configuration.',
-			'CompileFlags:',
-			'  Add:',
-			flags,
-			'  BuiltinHeaders: Clangd',
-			'',
-			'Completion:',
-			'  HeaderInsertion: Never',
-			'',
-			'Index:',
-			'  Background: Build',
-			'',
-			'---',
-			'If:',
-			'  PathMatch: \'.*\\.[cC]$\'',
-			'CompileFlags:',
-			'  Remove:',
-			'    - "-x"',
-			'    - "-std=*"',
-			'  Add:',
-			'    - "-xc"',
-			`    - "-std=${cStandard}"`,
-			`  Compiler: ${JSON.stringify(cCompiler.replaceAll('\\', '/'))}`,
-			'',
-			'---',
-			'If:',
-			'  PathMatch: \'.*\\.([cC][cC]|[cC][pP]|[cC][pP][pP]|[cC][xX][xX]|[cC]\\+\\+|[hH]|[hH][hH]|[hH][pP][pP]|[hH][xX][xX]|[iI][nN][lL])$\'',
-			'CompileFlags:',
-			'  Remove:',
-			'    - "-x"',
-			'    - "-std=*"',
-			'  Add:',
-			'    - "-xc++"',
-			`    - "-std=${cppStandard}"`,
-			`  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}`,
-			''
-		].join('\n');
-		const signature = createHash('sha256').update(configBody).digest('hex');
-		const configWithCStandard = `${configBody}# BeCoder managed clangd SHA-256: ${signature}\n`;
-		if (existing === configWithCStandard) {
-			return;
-		}
-		await fs.promises.mkdir(dirname(configPath), { recursive: true });
-		if (existing !== undefined) {
-			await fs.promises.writeFile(configPath, configWithCStandard, 'utf8');
-			return;
-		}
-		try {
-			await fs.promises.writeFile(configPath, configWithCStandard, { encoding: 'utf8', flag: 'wx' });
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-				await this.createBeCoderClangdConfig(configPath, compiler, cStandard, cppStandard);
-			} else {
-				throw error;
-			}
-		}
-	}
-
-	private isManagedBeCoderClangdConfig(content: string): boolean {
-		return content.includes('# BeCoder managed clangd configuration.');
-	}
-
-	private isLegacyBeCoderClangdConfig(content: string): boolean {
-		const compiler = /^\s*Compiler:\s*["']?([^"'\r\n]+)["']?\s*$/mi.exec(content)?.[1] ?? '';
-		return content.includes('BuiltinHeaders: QueryDriver')
-			&& content.includes('HeaderInsertion: Never')
-			&& (/^(?:g\+\+|clang\+\+)$/i.test(compiler) || /(?:portable_stage|portable_test|becoder-stage)/i.test(compiler));
-	}
-
-	private beCoderClangdFallbackFlags(compiler: string): string[] {
-		const toolchainRoot = dirname(dirname(compiler));
-		const standardInclude = join(toolchainRoot, 'include', 'c++', '14.1.0');
-		const targetInclude = join(standardInclude, 'x86_64-w64-mingw32');
-		const gccInclude = join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include');
-		const includeFixed = join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include-fixed');
-		return [
-			'--target=x86_64-w64-windows-gnu',
-			'-DDEBUG',
-			'-Wall',
-			'-Wextra',
-			'-Wno-deprecated-declarations',
-			'-Drsize_t=size_t',
-			'-D__STDC_WANT_LIB_EXT1__=1',
-			'-D__float128=long double',
-			'-U__SIZEOF_FLOAT128__',
-			...[
-				standardInclude,
-				targetInclude,
-				join(standardInclude, 'backward'),
-				gccInclude,
-				join(toolchainRoot, 'include'),
-				join(toolchainRoot, 'x86_64-w64-mingw32', 'include'),
-				join(targetInclude, 'bits'),
-				includeFixed
-			]
-				.filter(includePath => fs.existsSync(includePath))
-				.map(includePath => `-isystem${includePath}`)
-		];
-	}
-
-	private async createBeCoderClangFormatConfig(configPath: string): Promise<void> {
-		if (fs.existsSync(configPath)) {
-			return;
-		}
-		const config = `BasedOnStyle: Google
-
-# --- Prefer compact single-line constructs ---
-AllowShortIfStatementsOnASingleLine: AllIfsAndElse
-AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: true
-AllowShortFunctionsOnASingleLine: Inline
-
-# --- Line length ---
-ColumnLimit: 0
-
-# --- Indentation ---
-IndentWidth: 4
-TabWidth: 4
-UseTab: Never
-
-# --- Access modifiers ---
-AccessModifierOffset: -2
-
-# --- Brace style ---
-BreakBeforeBraces: Attach
-AlwaysBreakTemplateDeclarations: No
-
-# --- Pointers and comments ---
-PointerAlignment: Left
-SpacesBeforeTrailingComments: 4
-
-# --- Definition spacing ---
-SeparateDefinitionBlocks: Always
-
-# --- Language standard ---
-Standard: Latest
-`;
-		await fs.promises.mkdir(dirname(configPath), { recursive: true });
-		try {
-			await fs.promises.writeFile(configPath, config, { encoding: 'utf8', flag: 'wx' });
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-				throw error;
 			}
 		}
 	}
@@ -1231,16 +1045,8 @@ Standard: Latest
 					controls.push({
 						key: 'autoFormat',
 						type: 'boolean',
-						default: true,
+						default: false,
 						label: { en: 'Enable automatic formatting', 'zh-CN': '\u542f\u7528\u81ea\u52a8\u683c\u5f0f\u5316' }
-					});
-				}
-				if (controls && !controls.some(control => control.key === 'clangdVariableTypeHints')) {
-					controls.push({
-						key: 'clangdVariableTypeHints',
-						type: 'boolean',
-						default: true,
-						label: { en: 'Show clangd variable type hints', 'zh-CN': '\u663e\u793a clangd \u53d8\u91cf\u7c7b\u578b\u63d0\u793a' }
 					});
 				}
 				return { ...page, controls };

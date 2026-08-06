@@ -41,7 +41,7 @@ async function collectDiagnostics(context: vscode.ExtensionContext): Promise<Dia
 		: configuration.get<string>('becoder.toolchain.compilerPath') ?? '';
 	const clangd = process.platform === 'win32'
 		? path.join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe')
-		: configuration.get<string>('becoder.toolchain.clangdPath') ?? configuration.get<string>('clangd.path') ?? '';
+		: path.join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd');
 	return [
 		await executableDiagnostic('BeCoder g++ 14.1.0', compiler, ['--version']),
 		await executableDiagnostic('BeCoder clangd', clangd, ['--version']),

@@ -22,6 +22,8 @@ $requiredFiles = @(
 	'resources\app\extensions\cpp\better-cpp-syntax-license.txt',
 	'resources\app\extensions\cpp\syntaxes\cpp.tmLanguage.json',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\extension.js',
+	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\package.json',
+	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\README.md',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\out\bundle.js',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty.node',
@@ -99,6 +101,77 @@ if ($grammarOwners.Count -ne 1 -or
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
 if (-not (@($product.onboardingThemes) | Where-Object { $_.id -eq 'becoder-one-monokai' -and $_.themeId -eq 'BeCoder One Monokai' })) {
 	throw 'The packaged onboarding themes do not contain BeCoder One Monokai.'
+}
+
+$clangdExtensionPath = Join-Path $appPath 'extensions\llvm-vs-code-extensions.vscode-clangd'
+$clangdManifest = Get-Content -LiteralPath (Join-Path $clangdExtensionPath 'package.json') -Raw | ConvertFrom-Json
+foreach ($contribution in @('configuration', 'commands', 'keybindings', 'menus', 'views', 'colors')) {
+	if ($clangdManifest.contributes.PSObject.Properties.Name -contains $contribution) {
+		throw "The packaged clangd extension still exposes the forbidden '$contribution' contribution."
+	}
+}
+$clangdDefaults = $clangdManifest.contributes.configurationDefaults.'[c][cpp][cuda-cpp][objective-c][objective-cpp]'
+if ($clangdDefaults.'editor.defaultFormatter' -ne 'llvm-vs-code-extensions.vscode-clangd' -or
+	$clangdDefaults.'editor.formatOnSave' -ne $false -or
+	$clangdDefaults.'editor.formatOnType' -ne $false) {
+	throw 'The packaged clangd formatter defaults are invalid.'
+}
+if ($clangdManifest.dependencies.PSObject.Properties.Name -contains '@clangd/install' -or
+	$clangdManifest.devDependencies.PSObject.Properties.Name -contains 'clang-format') {
+	throw 'The packaged clangd manifest still depends on a downloader or separate clang-format package.'
+}
+
+$clangdBundle = Get-Content -LiteralPath (Join-Path $clangdExtensionPath 'out\bundle.js') -Raw
+foreach ($argument in @(
+	'--compile_args_from=lsp',
+	'--enable-config=false',
+	'--fallback-style=Google',
+	'--header-insertion=never',
+	'--clang-tidy=false'
+)) {
+	if (-not $clangdBundle.Contains($argument)) {
+		throw "The packaged clangd bundle is missing managed argument: $argument"
+	}
+}
+foreach ($compileBoundary in @('compilationDatabaseChanges', '-std=c17', '-std=c++20')) {
+	if (-not $clangdBundle.Contains($compileBoundary)) {
+		throw "The packaged clangd bundle is missing its LSP compile-command boundary: $compileBoundary"
+	}
+}
+foreach ($argument in @('--background-index', '--enable-config=true', '--query-driver', '--compile-commands-dir')) {
+	if ($clangdBundle.Contains($argument)) {
+		throw "The packaged clangd bundle contains a forbidden argument: $argument"
+	}
+}
+
+foreach ($module in @(
+	'ast.js',
+	'config-file-watcher.js',
+	'config.js',
+	'file-status.js',
+	'memory-usage.js',
+	'open-config.js',
+	'switch-source-header.js',
+	'type-hierarchy.js'
+)) {
+	if (Test-Path -LiteralPath (Join-Path $clangdExtensionPath "out\$module")) {
+		throw "The packaged clangd extension contains a removed module: $module"
+	}
+}
+if (Get-ChildItem -LiteralPath $appPath -Filter 'clang-format.exe' -File -Recurse | Select-Object -First 1) {
+	throw 'The packaged application contains a forbidden separate clang-format.exe.'
+}
+if (Test-Path -LiteralPath (Join-Path $clangdExtensionPath 'api')) {
+	throw 'The packaged clangd extension still exposes the removed raw LanguageClient API.'
+}
+if (Test-Path -LiteralPath (Join-Path $clangdExtensionPath 'doc-assets')) {
+	throw 'The packaged clangd extension still contains screenshots for removed features.'
+}
+$clangdReadme = Get-Content -LiteralPath (Join-Path $clangdExtensionPath 'README.md') -Raw
+if (-not $clangdReadme.Contains("Visible C/C++ diagnostics belong to BeCoder's bundled GCC") -or
+	$clangdReadme.Contains('You will be prompted to download it') -or
+	$clangdReadme.Contains('Format on Type')) {
+	throw 'The packaged clangd README does not describe the BeCoder capability boundary.'
 }
 
 $clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'

@@ -4,6 +4,6 @@ export function registerSimpleSettings(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('becoder.openSettings', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:becoder.runner')),
 		vscode.commands.registerCommand('becoder.configureCppSnippets', () => vscode.commands.executeCommand('workbench.action.openSnippets', 'cpp')),
-		vscode.commands.registerCommand('becoder.configureAutoFormat', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:llvm-vs-code-extensions.vscode-clangd format')),
+		vscode.commands.registerCommand('becoder.configureAutoFormat', () => vscode.commands.executeCommand('workbench.action.openSettings', '@id:editor.formatOnSave')),
 	);
 }

@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. Earlier stage numbers are historical labels only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.1** is the active implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,9 +9,9 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4`
-- Active baseline commit: `a8ac68f` (`feat(stage10): optimize highlighting and isolate toolchains`)
-- Latest remote checkpoint with the same commit: `origin/codex/stage_next`
+- Active development branch: `codex/stage4.1`
+- Active baseline commit: `ada9c46` (`feat(stage4): establish TextMate visual system`)
+- Latest remote checkpoint with the same commit: `origin/stage4`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
@@ -58,7 +58,7 @@ Core product requirements:
 
 ## 3. Stage 4 Management Rules
 
-Stage 4 is one continuous product stage. Work is tracked by named feature areas, not by new numbered substages.
+Stage 4 is one continuous product stage. Stage 4.1 is a development checkpoint label; requirements and completion are still tracked by named feature areas rather than treating the checkpoint as an independent product release.
 
 Feature statuses are:
 
@@ -425,8 +425,8 @@ The consolidated Stage 4 acceptance matrix includes:
 | Stage 4 specification consolidation | Source validated | The authoritative document is consolidated and structurally checked; commit and project-owner confirmation remain pending. |
 | Better C++ Syntax single grammar | Archived | The pinned `071dd6e` snapshot is token-scope equivalent to ShortestPath's effective 1.27.1 grammar; the package contains one accepted `source.cpp` owner. |
 | BeCoder One Monokai | Archived | The protected MIT-licensed `becoder.one-monokai` system extension is the accepted first-launch default. |
-| clangd capability reduction | In progress | Semantic tokens, semantic-token caching, inlay hints, and inactive-region decorations are removed and package-validated; diagnostics, code actions, indexing, and other non-approved capabilities remain for later Stage 4 work. |
-| Google formatting | Planned | Register document/range formatting through clangd with Google fallback style. |
+| clangd capability reduction | Archived | Stage 4.1 exposes only completion, signature help, hover, definition, references, rename, and document/range formatting; source, package, and project-owner acceptance passed. |
+| Google formatting | Archived | Stage 4.1 uses clangd's embedded ClangFormat with Google fallback, accepts only a physical workspace `.clang-format` override, and ships no separate `clang-format.exe`; source, package, and project-owner acceptance passed. |
 | GCC diagnostics | Planned | Design and implement the private latest-only diagnostic worker and structured parser. |
 | Runner and BC panel | Planned | Replace the generic terminal model with the closed BC interaction and robust cancellation state machine. |
 | Run performance | Planned | Instrument phases and meet the approximate two-second compile-to-run-start target. |
@@ -445,7 +445,30 @@ The consolidated Stage 4 acceptance matrix includes:
 - Package validation: the final post-review `gulp vscode-win32-x64-min` and enhanced `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The verifier parsed the packaged theme identity and defaults, grammar commit and unique owner, onboarding entry, and both upstream licenses. Two rounds of independent read-only review passed after the first round's four findings were fixed.
 - User acceptance: passed. The project owner confirmed that first-launch theme selection, theme persistence after switching and restart, and opening `bits/stdc++.h` files without delayed secondary coloring all match the required behavior.
 
+### Stage 4.1 clangd and formatting build checkpoint (2026-08-07)
+
+- Capability boundary: the bundled client now exposes only completion, signature help, hover, definition, references, prepare rename/rename, document formatting, and range formatting. Diagnostics, semantic tokens, inlay hints, inactive regions, code actions, clang-tidy, workspace symbols, background indexing, AST/memory/type-hierarchy UI, header switching, formatting on type, configuration UI/watchers, downloads, updates, external paths, and the public raw client API are removed or blocked.
+- Managed process: BeCoder starts only its bundled clangd with `--compile_args_from=lsp`, `--enable-config=false`, `--fallback-style=Google`, `--header-insertion=never`, and `--clang-tidy=false`. C17/C++20 compilation commands are sent through the LSP boundary before each document is opened; completion cannot insert include directives.
+- Configuration ownership: BeCoder no longer creates, reads, hides, migrates, rewrites, or deletes workspace `.clangd` files and does not consume `compile_commands.json`. Legacy BeCoder-owned private-profile settings and obsolete hide rules receive a one-time migration without deleting user project assets or later user-created exclusions.
+- Formatting boundary: formatting uses clangd's embedded ClangFormat engine and ships no standalone `clang-format.exe`. Google is the fallback; only a readable physical `.clang-format` inside the opened workspace may override it. `_clang-format`, escaping symlinks, ancestor/system/profile configuration, and `InheritParentConfig` are rejected, and no configuration file or directory is generated.
+- Source validation: clangd `npm run check-ts` and `npm run test-compile`, 234 build-script tests, the lockfile orphan check, `git diff --check`, the package-verifier parser check, and a raw bundled-clangd C++20 LSP probe passed. The standard `npm run typecheck-client` and `npm run compile-oi-extensions` checks also passed. `test-compile` compiled the extension-host tests but did not execute them.
+- Review: three independent read-only review rounds completed; the third round confirmed all previously reported findings were closed.
+- Package validation: `npm run gulp vscode-win32-x64-min` completed in approximately 2 minutes 13 seconds, then `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`.
+- User acceptance: passed on 2026-08-07. The project owner confirmed satisfaction with the retained clangd intelligence, Google formatting, and absence of the removed clangd diagnostic and visual features, and judged that Stage 4.1 fully met its target. No agent-run GUI acceptance is claimed.
+- Remaining work: GCC-owned diagnostics, the BC Runner/panel, Run performance, Explorer `input` ordering, extension cleanup, workbench cleanup, and toolchain slimming remain separate Stage 4 feature areas.
+
 ## 9. Feature Archive
+
+### Stage 4.1 clangd intelligence and Google formatting
+
+- Requirement: reduce bundled clangd to the approved code-intelligence and formatting closed set, remove clangd diagnostics and visual authority, isolate it from project/system configuration, and provide Google-style document and selection formatting without a separate formatter executable.
+- User-visible result: BeCoder retains completion, signature help, hover, definition, references, rename, and explicit formatting; clangd no longer contributes diagnostics, semantic recoloring, inlay hints, inactive regions, code actions, indexing UI, or configuration surfaces. Workspace `.clangd` files remain untouched and ignored, while an explicit workspace-contained `.clang-format` may override the Google fallback.
+- Source ownership: `extensions/llvm-vs-code-extensions.vscode-clangd`, `extensions/becoder.setup`, the Electron-main legacy migration, build boundary tests, package verification, and first-run documentation.
+- Commit/PR: the containing Stage 4.1 backup commit, pushed directly to `origin/stage4.1`; no PR was requested.
+- Source validation: clangd `check-ts` and `test-compile`, 234 build-script tests, lockfile orphan validation, client typecheck, OI extension compilation, a raw bundled-clangd C++20 LSP probe, and three independent read-only review rounds passed. The extension-host tests were compiled but not executed.
+- Package/build validation: `gulp vscode-win32-x64-min` and `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`.
+- User acceptance: passed on 2026-08-07; the project owner reported that the result perfectly met the Stage 4.1 target.
+- Remaining risks or follow-up: GCC diagnostics, Runner/BC panel work, Run performance, Explorer `input` ordering, extension/workbench cleanup, and toolchain slimming remain separate Stage 4 work. No agent-run GUI or extension-host test execution is claimed.
 
 ### Stage 4 C/C++ visual system
 

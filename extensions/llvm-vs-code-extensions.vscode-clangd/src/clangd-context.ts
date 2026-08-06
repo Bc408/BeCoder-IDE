@@ -1,24 +1,19 @@
-import * as vscode from 'vscode';
-import * as vscodelc from 'vscode-languageclient/node';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
+import * as vscodelc from 'vscode-languageclient/node';
 
-import * as ast from './ast';
-import * as config from './config';
-import * as configFileWatcher from './config-file-watcher';
-import * as fileStatus from './file-status';
-import * as install from './install';
-import * as memoryUsage from './memory-usage';
-import * as openConfig from './open-config';
 import {
   bundledCompilerPath,
-  clangdUserConfigPath,
   managedClangdArguments,
-  managedClangdFallbackFlags,
-  managedClangdUserConfigPath
+  managedClangdCompileCommand,
+  managedClangdFallbackFlags
 } from './becoder-toolchain';
-import * as switchSourceHeader from './switch-source-header';
-import * as typeHierarchy from './type-hierarchy';
+import {
+  provideDocumentFormattingEdits,
+  provideDocumentRangeFormattingEdits
+} from './formatting';
+import * as install from './install';
 
 export const clangdDocumentSelector = [
   {scheme: 'file', language: 'c'},
@@ -28,29 +23,50 @@ export const clangdDocumentSelector = [
   {scheme: 'file', language: 'objective-cpp'},
 ];
 
-function beCoderCompilerPath(clangdPath: string): string | undefined {
+export const approvedTextDocumentFeatureMethods = new Set([
+  'textDocument/didOpen',
+  'textDocument/didChange',
+  'textDocument/didClose',
+  'textDocument/didSave',
+  'textDocument/completion',
+  'textDocument/signatureHelp',
+  'textDocument/hover',
+  'textDocument/definition',
+  'textDocument/references',
+  'textDocument/rename',
+  'textDocument/formatting',
+  'textDocument/rangeFormatting'
+]);
+
+export const approvedStaticFeatureNames = new Set([
+  'EnableEditsNearCursorFeature',
+  'ProgressFeature'
+]);
+
+function beCoderCompilerPath(clangdPath: string): string|undefined {
   if (process.platform === 'win32') {
     return bundledCompilerPath(clangdPath);
   }
-  const configuration = vscode.workspace.getConfiguration('becoder.toolchain');
-  return configuration.get<string>('compilerPath') || undefined;
+  return vscode.workspace.getConfiguration('becoder.toolchain')
+      .get<string>('compilerPath') || undefined;
 }
 
 function managedClangdEnvironment(
-    clangdPath: string, compilerPath: string | undefined,
-    globalStoragePath: string): Record<string, string> | undefined {
+    clangdPath: string, compilerPath: string|undefined,
+    globalStoragePath: string): Record<string, string>|undefined {
   if (process.platform !== 'win32') {
     return undefined;
   }
 
   const systemRoot = process.env['SystemRoot'] ?? process.env['windir'];
-  if (!systemRoot) throw new Error('Windows SystemRoot is unavailable.');
+  if (!systemRoot) {
+    throw new Error('Windows SystemRoot is unavailable.');
+  }
 
   const environment: Record<string, string> = {};
   for (const name of [
-    'SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'USERPROFILE',
-    'HOMEDRIVE', 'HOMEPATH', 'LOCALAPPDATA', 'APPDATA', 'ProgramData',
-    'OS', 'PATHEXT', 'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS'
+    'SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'OS', 'PATHEXT',
+    'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS'
   ]) {
     const value = process.env[name];
     if (value) {
@@ -62,12 +78,13 @@ function managedClangdEnvironment(
   const managedUserRoot = path.join(globalStoragePath, 'clangd-user');
   const managedLocalAppData = path.join(managedUserRoot, 'AppData', 'Local');
   const managedAppData = path.join(managedUserRoot, 'AppData', 'Roaming');
-  fs.mkdirSync(managedLocalAppData, {recursive: true});
-  fs.mkdirSync(managedAppData, {recursive: true});
-  fs.mkdirSync(path.join(managedUserRoot, '.config'), {recursive: true});
-  fs.mkdirSync(path.dirname(managedClangdUserConfigPath(globalStoragePath)),
-               {recursive: true});
-  fs.mkdirSync(temporaryDirectory, {recursive: true});
+  const managedConfig = path.join(managedUserRoot, '.config');
+  for (const directory of [
+    temporaryDirectory, managedLocalAppData, managedAppData, managedConfig
+  ]) {
+    fs.mkdirSync(directory, {recursive: true});
+  }
+
   environment['TEMP'] = temporaryDirectory;
   environment['TMP'] = temporaryDirectory;
   environment['USERPROFILE'] = managedUserRoot;
@@ -76,66 +93,13 @@ function managedClangdEnvironment(
   environment['LOCALAPPDATA'] = managedLocalAppData;
   environment['APPDATA'] = managedAppData;
   environment['HOME'] = managedUserRoot;
-  environment['XDG_CONFIG_HOME'] = path.join(managedUserRoot, '.config');
-
-  const pathEntries = [
+  environment['XDG_CONFIG_HOME'] = managedConfig;
+  environment['PATH'] = [
     path.dirname(clangdPath),
     compilerPath ? path.dirname(compilerPath) : undefined,
     path.join(systemRoot, 'System32')
-  ].filter((entry): entry is string => Boolean(entry));
-  environment['PATH'] = [...new Set(pathEntries)].join(path.delimiter);
+  ].filter((entry): entry is string => Boolean(entry)).join(path.delimiter);
   return environment;
-}
-
-export function isClangdDocument(document: vscode.TextDocument) {
-  if (vscode.languages.match(clangdDocumentSelector, document)) {
-    return true;
-  }
-  return document.uri.scheme === 'file' &&
-      /\.(c|m|cc|cp|cpp|cxx|c\+\+|h|hh|hpp|hxx|inl|cu|mm)$/i.test(
-          path.extname(document.uri.fsPath));
-}
-
-function isCompetitiveToolchainHeader(uri: vscode.Uri): boolean {
-  return /[\\/]include[\\/]c\+\+[\\/]14\.1\.0[\\/]/i.test(uri.fsPath);
-}
-
-function isKnownGccHeaderFalsePositive(uri: vscode.Uri,
-                                       diagnostic: vscode.Diagnostic): boolean {
-  const code = typeof diagnostic.code === 'string' ? diagnostic.code : '';
-  if (code !== 'typecheck_expression_not_modifiable_lvalue' &&
-      code !== 'clang(typecheck_expression_not_modifiable_lvalue)')
-    return false;
-
-  if (isCompetitiveToolchainHeader(uri))
-    return true;
-
-  // clangd may publish an "In included file" diagnostic on the user's source
-  // line and put the actual GCC header location in relatedInformation.
-  return diagnostic.relatedInformation?.some(info =>
-      isCompetitiveToolchainHeader(info.location.uri)) ?? false;
-}
-
-function isCxxSourceUri(uri: vscode.Uri): boolean {
-  return /\.(cc|cp|cpp|cxx|c\+\+|hh|hpp|hxx|inl)$/i.test(
-      path.extname(uri.fsPath));
-}
-
-function isGccVlaExtensionDiagnostic(uri: vscode.Uri,
-                                     diagnostic: vscode.Diagnostic): boolean {
-  if (!isCxxSourceUri(uri)) {
-    return false;
-  }
-  const code = typeof diagnostic.code === 'string'
-      ? diagnostic.code
-      : typeof diagnostic.code === 'object' && diagnostic.code !== null &&
-          'value' in diagnostic.code
-        ? String(diagnostic.code.value)
-        : '';
-  return code === '-Wvla-extension' ||
-      code === '-Wvla-cxx-extension' ||
-      code === 'clang(-Wvla-extension)' ||
-      code === 'clang(-Wvla-cxx-extension)';
 }
 
 export class ClangdLanguageClient extends vscodelc.LanguageClient {
@@ -144,60 +108,62 @@ export class ClangdLanguageClient extends vscodelc.LanguageClient {
     const registrationMethod =
         (feature as {registrationType?: {method?: string}})
             .registrationType?.method;
-    if (registrationMethod === 'textDocument/semanticTokens' ||
-        registrationMethod === 'textDocument/inlayHint') {
+    if (!registrationMethod &&
+        !approvedStaticFeatureNames.has(feature.constructor.name)) {
+      return;
+    }
+    if (registrationMethod?.startsWith('textDocument/') &&
+        !approvedTextDocumentFeatureMethods.has(registrationMethod)) {
+      return;
+    }
+    if (registrationMethod?.startsWith('workspace/') ||
+        registrationMethod?.startsWith('notebookDocument/')) {
       return;
     }
     super.registerFeature(feature);
-  }
-
-  // Override the default implementation for failed requests. The default
-  // behavior is just to log failures in the output panel, however output panel
-  // is designed for extension debugging purpose, normal users will not open it,
-  // thus when the failure occurs, normal users doesn't know that.
-  //
-  // For user-interactive operations (e.g. applyFixIt, applyTweaks), we will
-  // prompt up the failure to users.
-
-  handleFailedRequest<T>(type: vscodelc.MessageSignature,
-                         token: vscode.CancellationToken|undefined, error: any,
-                         defaultValue: T): T {
-    if (error instanceof vscodelc.ResponseError &&
-        type.method === 'workspace/executeCommand')
-      vscode.window.showErrorMessage(error.message);
-
-    return super.handleFailedRequest(type, token, error, defaultValue);
   }
 }
 
 class EnableEditsNearCursorFeature implements vscodelc.StaticFeature {
   initialize() {}
   fillClientCapabilities(capabilities: vscodelc.ClientCapabilities): void {
-    const extendedCompletionCapabilities: any =
-        capabilities.textDocument?.completion;
-    extendedCompletionCapabilities.editsNearCursor = true;
+    const completionCapabilities: any = capabilities.textDocument?.completion;
+    completionCapabilities.editsNearCursor = true;
   }
   getState(): vscodelc.FeatureState { return {kind: 'static'}; }
   clear() {}
 }
 
-const contextsWithFeatures = new WeakSet<object>();
-const stopHandlers = new WeakMap<object, () => Promise<void>>();
-const pendingStops = new WeakMap<object, Promise<void>>();
-const startPromises = new WeakMap<ClangdContext, Promise<void>>();
-const stoppingContexts = new WeakSet<ClangdContext>();
+const stopHandlers = new WeakMap<ClangdContext, () => Promise<void>>();
+const pendingStops = new WeakMap<ClangdContext, Promise<void>>();
 
-async function waitForClangdStart(context: ClangdContext): Promise<void> {
-  await startPromises.get(context);
+interface ManagedDocumentConfiguration {
+  settings: {
+    compilationDatabaseChanges: Record<string, {
+      workingDirectory: string;
+      compilationCommand: string[];
+    }>;
+  };
 }
 
-interface ClangdRuntimeConfiguration {
-  clangdPath: string;
-  useScriptAsExecutable: boolean;
-  arguments: string[];
-  fallbackFlags: string[];
-  compilerPath: string|undefined;
-  userConfigPath: string|undefined;
+export async function configureManagedDocumentBeforeOpen(
+    document: Pick<vscode.TextDocument, 'uri'|'languageId'>,
+    compilerPath: string|undefined, fallbackFlags: readonly string[],
+    sendConfiguration: (configuration: ManagedDocumentConfiguration) =>
+        Promise<void>,
+    openDocument: () => Promise<void>): Promise<void> {
+  if (compilerPath && document.uri.scheme === 'file') {
+    await sendConfiguration({
+      settings: {
+        compilationDatabaseChanges: {
+          [document.uri.fsPath]: managedClangdCompileCommand(
+              document.uri.fsPath, document.languageId, compilerPath,
+              fallbackFlags)
+        }
+      }
+    });
+  }
+  await openDocument();
 }
 
 export async function stopClangdContext(context: ClangdContext): Promise<void> {
@@ -208,7 +174,6 @@ export async function stopClangdContext(context: ClangdContext): Promise<void> {
   }
   const stop = stopHandlers.get(context);
   if (!stop) {
-    context.dispose();
     return;
   }
   const stopping = stop();
@@ -217,268 +182,117 @@ export async function stopClangdContext(context: ClangdContext): Promise<void> {
 }
 
 export class ClangdContext implements vscode.Disposable {
-  subscriptions: vscode.Disposable[];
-  client: ClangdLanguageClient;
-
   static async create(globalStoragePath: string,
                       outputChannel: vscode.OutputChannel):
       Promise<ClangdContext|null> {
-    const subscriptions: vscode.Disposable[] = [];
-    const clangdPath = await install.activate(subscriptions, globalStoragePath);
+    const clangdPath = install.activate(globalStoragePath);
     if (!clangdPath) {
-      subscriptions.forEach((d) => { d.dispose(); });
       return null;
     }
-
     const compilerPath = beCoderCompilerPath(clangdPath);
     if (process.platform === 'win32' &&
         (!fs.existsSync(clangdPath) || !compilerPath ||
          !fs.existsSync(compilerPath))) {
-      subscriptions.forEach((d) => { d.dispose(); });
       vscode.window.showErrorMessage(
           'BeCoder bundled clangd or GCC is unavailable. The built-in language service was not started.');
       return null;
     }
-    const runtimeConfiguration: ClangdRuntimeConfiguration = {
-      clangdPath,
-      useScriptAsExecutable: process.platform === 'win32'
-          ? false
-          : await config.get<boolean>('useScriptAsExecutable'),
-      arguments: process.platform === 'win32'
-          ? managedClangdArguments()
-          : [...await config.get<string[]>('arguments')],
-      fallbackFlags: process.platform === 'win32' && compilerPath
-          ? managedClangdFallbackFlags(compilerPath)
-          : [...await config.get<string[]>('fallbackFlags')],
-      compilerPath,
-      userConfigPath: clangdUserConfigPath(globalStoragePath)
-    };
-    const client = await ClangdContext.createClient(
-        runtimeConfiguration, outputChannel, globalStoragePath);
-    const context = new ClangdContext(
-        subscriptions, client, runtimeConfiguration.userConfigPath);
-    await waitForClangdStart(context);
+
+    const client = ClangdContext.createClient(
+        clangdPath, compilerPath, outputChannel, globalStoragePath);
+    const context = new ClangdContext(client);
+    await client.start();
     return context;
   }
 
-  private static async createClient(
-                                    runtimeConfiguration:
-                                        ClangdRuntimeConfiguration,
-                                    outputChannel: vscode.OutputChannel,
-                                    globalStoragePath: string):
-      Promise<ClangdLanguageClient> {
-    let clangdPath = runtimeConfiguration.clangdPath;
-    const useScriptAsExecutable = runtimeConfiguration.useScriptAsExecutable;
-    const clangdArguments = [...runtimeConfiguration.arguments];
-    const compilerPath = runtimeConfiguration.compilerPath;
+  private static createClient(
+      clangdPath: string, compilerPath: string|undefined,
+      outputChannel: vscode.OutputChannel,
+      globalStoragePath: string): ClangdLanguageClient {
     const environment = managedClangdEnvironment(
         clangdPath, compilerPath, globalStoragePath);
-    if (useScriptAsExecutable) {
-      let quote = (str: string) => { return `"${str}"`; };
-      clangdPath = quote(clangdPath)
-      for (var i = 0; i < clangdArguments.length; i++) {
-        clangdArguments[i] = quote(clangdArguments[i]);
-      }
-    }
-    const clangd: vscodelc.Executable = {
+    const serverOptions: vscodelc.ServerOptions = {
       command: clangdPath,
-      args: clangdArguments,
+      args: managedClangdArguments(),
       options: {
         cwd: vscode.workspace.rootPath || process.cwd(),
-        shell: useScriptAsExecutable,
         ...(environment ? {env: environment} : {})
       }
     };
-    const traceFile = process.platform === 'win32'
-        ? undefined
-        : await config.get<string>('trace');
-    if (!!traceFile) {
-      const trace = {CLANGD_TRACE: traceFile};
-      const options = clangd.options ?? {};
-      clangd.options = {
-        ...options,
-        env: {...options.env, ...trace}
-      };
-    }
-    const serverOptions: vscodelc.ServerOptions = clangd;
+    const fallbackFlags = process.platform === 'win32' && compilerPath
+        ? managedClangdFallbackFlags(compilerPath)
+        : ['-Wall', '-Wextra', '-Wno-deprecated-declarations'];
 
+    let client: ClangdLanguageClient;
     const clientOptions: vscodelc.LanguageClientOptions = {
-      // Register the single server for all c-family and cuda files.
       documentSelector: clangdDocumentSelector,
-      initializationOptions: {
-        clangdFileStatus: true,
-        fallbackFlags: runtimeConfiguration.fallbackFlags
-      },
-      outputChannel: outputChannel,
-      // Do not switch to output window when clangd returns output.
+      initializationOptions: {fallbackFlags},
+      outputChannel,
       revealOutputChannelOn: vscodelc.RevealOutputChannelOn.Never,
-
-      // We hack up the completion items a bit to prevent VSCode from re-ranking
-      // and throwing away all our delicious signals like type information.
-      //
-      // VSCode sorts by (fuzzymatch(prefix, item.filterText), item.sortText)
-      // By adding the prefix to the beginning of the filterText, we get a
-      // perfect
-      // fuzzymatch score for every item.
-      // The sortText (which reflects clangd ranking) breaks the tie.
-      // This also prevents VSCode from filtering out any results due to the
-      // differences in how fuzzy filtering is applies, e.g. enable dot-to-arrow
-      // fixes in completion.
-      //
-      // We also mark the list as incomplete to force retrieving new rankings.
-      // See https://github.com/microsoft/language-server-protocol/issues/898
       middleware: {
-        // GCC 14.1.0's unicode.h contains a construct that clangd 22 reports
-        // as non-modifiable only while parsing the bundled libstdc++ headers.
-        // Keep real diagnostics in user files visible. BeCoder's GCC-based OI
-        // profile intentionally accepts the narrow C++ VLA extension used by
-        // the bundled compiler, while C and all other diagnostics remain strict.
-        handleDiagnostics: (uri, diagnostics, next) => {
-          next(uri, diagnostics.filter(diagnostic =>
-              !isKnownGccHeaderFalsePositive(uri, diagnostic) &&
-              !isGccVlaExtensionDiagnostic(uri, diagnostic)));
-        },
+        didOpen: (document, next) => configureManagedDocumentBeforeOpen(
+            document, compilerPath, fallbackFlags,
+            configuration => client.sendNotification(
+                vscodelc.DidChangeConfigurationNotification.type,
+                configuration),
+            () => next(document)),
+        handleDiagnostics: (uri, _diagnostics, next) => next(uri, []),
         provideCompletionItem: async (document, position, context, token,
                                       next) => {
-          if (!await config.get<boolean>('enableCodeCompletion'))
-            return new vscode.CompletionList([], /*isIncomplete=*/ false);
-          let list = await next(document, position, context, token);
-          if (!await config.get<boolean>('serverCompletionRanking'))
-            return list;
-          let items = (!list ? [] : Array.isArray(list) ? list : list.items);
-          items = items.map(item => {
-            // Gets the prefix used by VSCode when doing fuzzymatch.
-            // item.range is either a Range or {inserting, replacing} (see
-            // CompletionItem in the VS Code API); narrow before using.
+          const provided = await next(document, position, context, token);
+          const items = !provided ? [] :
+              Array.isArray(provided) ? provided : provided.items;
+          for (const item of items) {
             let prefix = '';
             if (item.range) {
               const start = item.range instanceof vscode.Range
-                                ? item.range.start
-                                : item.range.inserting.start;
+                  ? item.range.start
+                  : item.range.inserting.start;
               prefix = document.getText(new vscode.Range(start, position));
             }
-            if (prefix)
-              item.filterText = prefix + '_' + item.filterText;
-            // Workaround for https://github.com/clangd/vscode-clangd/issues/357
-            // clangd's used of commit-characters was well-intentioned, but
-            // overall UX is poor. Due to vscode-languageclient bugs, we didn't
-            // notice until the behavior was in several releases, so we need
-            // to override it on the client.
+            if (prefix) {
+              item.filterText = `${prefix}_${item.filterText ?? item.label}`;
+            }
             item.commitCharacters = [];
-            // VSCode won't automatically trigger signature help when entering
-            // a placeholder, e.g. if the completion inserted brackets and
-            // placed the cursor inside them.
-            // https://github.com/microsoft/vscode/issues/164310
-            // They say a plugin should trigger this, but LSP has no mechanism.
-            // https://github.com/microsoft/language-server-protocol/issues/274
-            // (This workaround is incomplete, and only helps the first param).
+            item.additionalTextEdits = undefined;
             if (item.insertText instanceof vscode.SnippetString &&
                 !item.command &&
-                item.insertText.value.match(/[([{<,] ?\$\{?[01]\D/))
+                item.insertText.value.match(/[([{<,] ?\$\{?[01]\D/)) {
               item.command = {
                 title: 'Signature help',
                 command: 'editor.action.triggerParameterHints'
               };
-            return item;
-          })
+            }
+          }
           return new vscode.CompletionList(items, /*isIncomplete=*/ true);
         },
-        provideHover: async (document, position, token, next) => {
-          if (!await config.get<boolean>('enableHover'))
-            return null;
-          return next(document, position, token);
-        },
-        // VSCode applies fuzzy match only on the symbol name, thus it throws
-        // away all results if query token is a prefix qualified name.
-        // By adding the containerName to the symbol name, it prevents VSCode
-        // from filtering out any results, e.g. enable workspaceSymbols for
-        // qualified symbols.
-        provideWorkspaceSymbols: async (query, token, next) => {
-          let symbols = await next(query, token);
-          return symbols?.map(symbol => {
-            // Only make this adjustment if the query is in fact qualified.
-            // Otherwise, we get a suboptimal ordering of results because
-            // including the name's qualifier (if it has one) in symbol.name
-            // means vscode can no longer tell apart exact matches from
-            // partial matches.
-            if (query.includes('::')) {
-              if (symbol.containerName)
-                symbol.name = `${symbol.containerName}::${symbol.name}`;
-              // results from clangd strip the leading '::', so vscode fuzzy
-              // match will filter out all results unless we add prefix back in
-              if (query.startsWith('::')) {
-                symbol.name = `::${symbol.name}`;
-              }
-              // Clean the containerName to avoid displaying it twice.
-              symbol.containerName = '';
-            }
-            return symbol;
-          })
-        },
-      },
+        provideDocumentFormattingEdits: (...args) =>
+            provideDocumentFormattingEdits(client, ...args),
+        provideDocumentRangeFormattingEdits: (...args) =>
+            provideDocumentRangeFormattingEdits(client, ...args)
+      }
     };
 
-    const client = new ClangdLanguageClient(
-        'Clang Language Server', serverOptions, clientOptions);
-    client.clientOptions.errorHandler = client.createDefaultErrorHandler(
-        // max restart count
-        process.platform === 'win32' ||
-            await config.get<boolean>('restartAfterCrash') ? /*default*/ 4 : 0);
+    client = new ClangdLanguageClient(
+        'BeCoder C/C++ Intelligence', serverOptions, clientOptions);
+    client.clientOptions.errorHandler = client.createDefaultErrorHandler(4);
     client.registerFeature(new EnableEditsNearCursorFeature);
     return client;
   }
 
-  private constructor(subscriptions: vscode.Disposable[],
-                      client: ClangdLanguageClient,
-                      readonly userConfigPath: string|undefined) {
-    this.subscriptions = subscriptions;
-    this.client = client;
-    contextsWithFeatures.add(this);
-    const startPromise = this.startClient();
-    startPromises.set(this, startPromise);
+  private stopping = false;
+
+  private constructor(readonly client: ClangdLanguageClient) {
     stopHandlers.set(this, async () => {
-      stoppingContexts.add(this);
-      this.subscriptions.forEach(d => d.dispose());
-      this.subscriptions = [];
-      await startPromises.get(this)?.catch(() => undefined);
+      if (this.stopping) {
+        return;
+      }
+      this.stopping = true;
       await this.client.stop();
     });
   }
 
-  async startClient(): Promise<void> {
-    if (stoppingContexts.has(this)) {
-      return;
-    }
-    if (contextsWithFeatures.has(this)) {
-      typeHierarchy.activate(this);
-      memoryUsage.activate(this);
-      ast.activate(this);
-      openConfig.activate(this);
-      await configFileWatcher.activate(this);
-      fileStatus.activate(this);
-      switchSourceHeader.activate(this);
-    }
-    if (stoppingContexts.has(this)) {
-      return;
-    }
-    await this.client.start();
-    console.log('Clang Language Server is now active!');
-  }
-
-  get visibleClangdEditors(): vscode.TextEditor[] {
-    return vscode.window.visibleTextEditors.filter(
-        (e) => isClangdDocument(e.document));
-  }
-
-  clientIsStarting() {
-    return this.client && this.client.state == vscodelc.State.Starting;
-  }
-
-  clientIsRunning() {
-    return this.client && this.client.state == vscodelc.State.Running;
-  }
-
-  dispose() {
+  dispose(): void {
     void stopClangdContext(this);
   }
 }

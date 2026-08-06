@@ -62,12 +62,6 @@
 					"scope": "window",
 					"description": "Absolute C compiler path used by BeCoder Runner."
 				},
-				"becoder.toolchain.clangdPath": {
-					"type": "string",
-					"default": "",
-					"scope": "window",
-					"description": "Absolute clangd path bundled by BeCoder."
-				},
 				"becoder.toolchain.stdIncludePath": {
 					"type": "string",
 					"default": "",
@@ -83,10 +77,6 @@
 			}
 		},
 		"commands": [
-			{
-				"command": "becoder.initializeOiWorkspace",
-				"title": "%command.initializeOiWorkspace%"
-			},
 			{
 				"command": "becoder.setupEnvironment",
 				"title": "%command.configure%"

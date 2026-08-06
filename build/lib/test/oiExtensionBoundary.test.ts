@@ -11,6 +11,9 @@ import { suite, test } from 'node:test';
 interface IExtensionManifest {
 	readonly name?: string;
 	readonly publisher?: string;
+	readonly categories?: readonly string[];
+	readonly dependencies?: Record<string, string>;
+	readonly devDependencies?: Record<string, string>;
 	readonly contributes?: {
 		readonly grammars?: readonly {
 			readonly path?: string;
@@ -26,6 +29,9 @@ interface IExtensionManifest {
 		};
 		readonly colors?: readonly { readonly id?: string }[];
 		readonly commands?: readonly { readonly command?: string }[];
+		readonly keybindings?: readonly unknown[];
+		readonly menus?: Record<string, unknown>;
+		readonly views?: Record<string, unknown>;
 	};
 }
 
@@ -106,22 +112,83 @@ suite('OI extension boundary', () => {
 		assert.match(onboardingSource, /selectedThemeId = 'becoder-one-monokai'/);
 	});
 
-	test('keeps clangd out of the visual coloring pipeline', () => {
+	test('keeps clangd inside the approved Stage 4.1 capability boundary', () => {
 		const extensionPath = path.join(extensionsRoot, 'llvm-vs-code-extensions.vscode-clangd');
 		const manifest = readJson<IExtensionManifest>(path.join(extensionPath, 'package.json'));
 		const properties = manifest.contributes?.configuration?.properties ?? {};
-		assert.ok(!('clangd.semanticHighlighting' in properties));
-		assert.ok(!('clangd.inactiveRegions.useBackgroundHighlight' in properties));
-		assert.ok(!('clangd.inactiveRegions.opacity' in properties));
-		assert.ok(!(manifest.contributes?.colors ?? []).some(color => color.id === 'clangd.inactiveRegions.background'));
-		assert.ok(!(manifest.contributes?.commands ?? []).some(command => command.command === 'clangd.inlayHints.toggle'));
+		assert.deepStrictEqual(properties, {});
+		assert.deepStrictEqual(manifest.contributes?.commands ?? [], []);
+		assert.deepStrictEqual(manifest.contributes?.colors ?? [], []);
+		assert.deepStrictEqual(manifest.contributes?.keybindings ?? [], []);
+		assert.deepStrictEqual(manifest.contributes?.menus ?? {}, {});
+		assert.deepStrictEqual(manifest.contributes?.views ?? {}, {});
+		assert.ok(!manifest.categories?.includes('Linters'));
+		assert.ok(!('@clangd/install' in (manifest.dependencies ?? {})));
+		assert.ok(!('clang-format' in (manifest.devDependencies ?? {})));
+		assert.deepStrictEqual(
+			manifest.contributes?.configurationDefaults?.['[c][cpp][cuda-cpp][objective-c][objective-cpp]'],
+			{
+				'editor.defaultFormatter': 'llvm-vs-code-extensions.vscode-clangd',
+				'editor.formatOnSave': false,
+				'editor.formatOnType': false
+			});
 
-		for (const file of ['semantic-tokens-cache.ts', 'inactive-regions.ts', 'inlay-hints.ts']) {
+		for (const file of [
+			'ast.ts',
+			'config-file-watcher.ts',
+			'config.ts',
+			'file-status.ts',
+			'inactive-regions.ts',
+			'inlay-hints.ts',
+			'memory-usage.ts',
+			'open-config.ts',
+			'semantic-tokens-cache.ts',
+			'switch-source-header.ts',
+			'type-hierarchy.ts'
+		]) {
 			assert.ok(!fs.existsSync(path.join(extensionPath, 'src', file)));
 		}
 		const contextSource = fs.readFileSync(path.join(extensionPath, 'src', 'clangd-context.ts'), 'utf8');
-		assert.match(contextSource, /registrationMethod === 'textDocument\/semanticTokens'/);
-		assert.match(contextSource, /registrationMethod === 'textDocument\/inlayHint'/);
+		assert.match(contextSource, /approvedTextDocumentFeatureMethods/);
+		assert.match(contextSource, /approvedStaticFeatureNames/);
+		assert.match(contextSource, /compilationDatabaseChanges/);
+		assert.match(contextSource, /configureManagedDocumentBeforeOpen/);
+		assert.match(contextSource, /handleDiagnostics: \(uri, _diagnostics, next\) => next\(uri, \[\]\)/);
 		assert.doesNotMatch(contextSource, /provideDocumentSemanticTokens/);
+		const formattingSource = fs.readFileSync(path.join(extensionPath, 'src', 'formatting.ts'), 'utf8');
+		assert.match(formattingSource, /return `0:\$\{path\.sep\}`/);
+		assert.doesNotMatch(formattingSource, /writeFile|mkdir/);
+		const toolchainSource = fs.readFileSync(path.join(extensionPath, 'src', 'becoder-toolchain.ts'), 'utf8');
+		assert.match(toolchainSource, /'-std=c17'/);
+		assert.match(toolchainSource, /'-std=c\+\+20'/);
+		for (const apiFile of [
+			path.join(extensionPath, 'src', 'api.ts'),
+			path.join(extensionPath, 'api', 'vscode-clangd.d.ts'),
+			path.join(extensionPath, 'api', 'package.json')
+		]) {
+			assert.ok(!fs.existsSync(apiFile));
+		}
+		const readme = fs.readFileSync(path.join(extensionPath, 'README.md'), 'utf8');
+		assert.match(readme, /Visible C\/C\+\+ diagnostics belong to BeCoder's bundled GCC/);
+		assert.doesNotMatch(readme, /download it|compile_commands\.json file|Format on Type/);
+		const lockfile = readJson<{ packages?: Record<string, unknown> }>(
+			path.join(extensionPath, 'package-lock.json'));
+		assert.ok(!('node_modules/@clangd/install' in (lockfile.packages ?? {})));
+		assert.ok(!('node_modules/clang-format' in (lockfile.packages ?? {})));
+		const compatibilityDependencies = (lockfile as { dependencies?: Record<string, unknown> }).dependencies ?? {};
+		assert.ok(!('@clangd/install' in compatibilityDependencies));
+		assert.ok(!('clang-format' in compatibilityDependencies));
+		const vscodeIgnore = fs.readFileSync(path.join(extensionPath, '.vscodeignore'), 'utf8');
+		assert.doesNotMatch(vscodeIgnore, /!\*\.png|!doc-assets/);
+
+		const setupSource = fs.readFileSync(path.join(extensionsRoot, 'becoder.setup', 'src', 'extension.ts'), 'utf8');
+		assert.doesNotMatch(setupSource, /createDefaultClangdConfig|createDefaultClangFormatConfig|migrateWorkspaceClangdConfig/);
+		assert.doesNotMatch(setupSource, /function configureClangd/);
+		assert.match(setupSource, /removeLegacyClangdSettings/);
+		const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
+		assert.doesNotMatch(mainSource, /createBeCoderClangdConfig|createBeCoderClangFormatConfig/);
+		assert.doesNotMatch(mainSource, /'clangd\.(?:path|arguments|fallbackFlags|enable)'/);
+		const firstRunSource = fs.readFileSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'first-run.html'), 'utf8');
+		assert.doesNotMatch(firstRunSource, /create \.clangd|创建 \.clangd|clangdVariableTypeHints/);
 	});
 });

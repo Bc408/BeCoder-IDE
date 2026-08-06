@@ -1,7 +1,5 @@
 **
-!*.md
-!*.png
-!doc-assets/**
+!README.md
 !icon.png
 !LICENSE
 !out/bundle.js

@@ -6,7 +6,6 @@
 	"configuration.newFileDefaultLanguage": "Default language for files created from the New Tab page.",
 	"displayName": "BeCoder IDE Features",
 	"description": "Competitive programming features, settings, and first-run setup for BeCoder IDE.",
-	"command.initializeOiWorkspace": "BeCoder IDE: Initialize OI Workspace Configuration",
 	"command.configure": "BeCoder IDE: Configure Competitive Programming Environment",
 	"command.rerunFirstRun": "BeCoder IDE: Re-run First-Run Setup",
 	"command.openSettings": "BeCoder IDE: Settings",

@@ -6,7 +6,7 @@ improve C/C++ code by providing:
  - code completion
  - compile errors and warnings
  - go-to-definition and cross references
- - hover information and inlay hints
+ - hover information
  - include management
  - code formatting
  - simple refactorings
@@ -68,14 +68,9 @@ index.
 
 Press `Ctrl-P #` to quickly navigate to a symbol by name.
 
-### Hover and inlay hints
+### Hover
 
 Clangd can describe almost any entity if you hover the mouse (or press Ctrl-KI).
-
-![Hover and inlay hints](doc-assets/hover.png)
-
-Inlay hints for parameters and deduced types can be shown temporarily or
-permanently (the `editor.inlayHints.enabled` setting controls this).
 
 ### Include management
 

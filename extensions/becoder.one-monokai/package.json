@@ -1,0 +1,33 @@
+{
+	"name": "one-monokai",
+	"displayName": "BeCoder One Monokai",
+	"description": "BeCoder's built-in One Monokai visual theme.",
+	"version": "1.0.0",
+	"publisher": "becoder",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": [
+		"Themes"
+	],
+	"contributes": {
+		"themes": [
+			{
+				"id": "BeCoder One Monokai",
+				"label": "BeCoder One Monokai",
+				"uiTheme": "vs-dark",
+				"path": "./themes/OneMonokai-color-theme.json"
+			}
+		],
+		"configurationDefaults": {
+			"[c][cpp][cuda-cpp]": {
+				"editor.semanticHighlighting.enabled": false
+			}
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Bc408/BeCoder.git"
+	}
+}

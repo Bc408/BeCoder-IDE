@@ -423,9 +423,9 @@ The consolidated Stage 4 acceptance matrix includes:
 | Feature area | Status | Current handoff point |
 | --- | --- | --- |
 | Stage 4 specification consolidation | Source validated | The authoritative document is consolidated and structurally checked; commit and project-owner confirmation remain pending. |
-| Better C++ Syntax single grammar | Planned | Compare effective ShortestPath grammar, select a snapshot, then vendor it into `extensions/cpp`. |
-| BeCoder One Monokai | Planned | Add a protected MIT-licensed built-in system theme and make it the first-launch default. |
-| clangd capability reduction | Planned | Preserve seven approved capabilities and remove diagnostics/semantic/decorative/indexing paths. |
+| Better C++ Syntax single grammar | Archived | The pinned `071dd6e` snapshot is token-scope equivalent to ShortestPath's effective 1.27.1 grammar; the package contains one accepted `source.cpp` owner. |
+| BeCoder One Monokai | Archived | The protected MIT-licensed `becoder.one-monokai` system extension is the accepted first-launch default. |
+| clangd capability reduction | In progress | Semantic tokens, semantic-token caching, inlay hints, and inactive-region decorations are removed and package-validated; diagnostics, code actions, indexing, and other non-approved capabilities remain for later Stage 4 work. |
 | Google formatting | Planned | Register document/range formatting through clangd with Google fallback style. |
 | GCC diagnostics | Planned | Design and implement the private latest-only diagnostic worker and structured parser. |
 | Runner and BC panel | Planned | Replace the generic terminal model with the closed BC interaction and robust cancellation state machine. |
@@ -436,7 +436,27 @@ The consolidated Stage 4 acceptance matrix includes:
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
 | Toolchain slimming and release | Planned | Begin only after retained compiler/language-service behavior is stable and measurable. |
 
+### Visual system build checkpoint (2026-08-07)
+
+- Grammar decision: Code - OSS registers built-in extensions in sorted path order, so ShortestPath's separate `jeff-hykin.better-cpp-syntax` extension overrides its earlier `extensions/cpp` registration. Structural comparison showed that its 1.27.1 grammar differs from BeCoder's pinned grammar only in generated metadata. Tokenizing eight representative OI C++ files (45,236 bytes, including `bits/stdc++.h`) produced the same token count and scope hash for both snapshots, so BeCoder retained the traceable `071dd6ecc9eda347bd84c8aa0e0b557396cb6a40` snapshot instead of adding or replacing an owner.
+- Theme result: `becoder.one-monokai` owns the vendored One Monokai 0.5.0 theme and license, contributes `BeCoder One Monokai`, disables semantic highlighting in the theme and by default for C/C++/CUDA C++, and is protected from normal user/workspace replacement while extension-development overrides remain available.
+- clangd visual boundary: the client no longer registers standard semantic-token or inlay-hint protocol features; custom semantic-token persistence, delta reconstruction, refresh, inactive-region decoration, and inlay-hint implementations and settings were removed. clangd remains otherwise unchanged until the later capability-reduction and GCC-diagnostics work.
+- Source validation: clangd `check-ts` (including compilation of the real-client visual-feature registration test), 234 build-script tests, `typecheck-client`, and `compile-oi-extensions` passed. The focused workbench Node test could not run because this checkout intentionally has no generated `out/` test module, and the new clangd behavior test was not launched in an Electron extension-test host; no forbidden `npm run compile` was used.
+- Package validation: the final post-review `gulp vscode-win32-x64-min` and enhanced `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The verifier parsed the packaged theme identity and defaults, grammar commit and unique owner, onboarding entry, and both upstream licenses. Two rounds of independent read-only review passed after the first round's four findings were fixed.
+- User acceptance: passed. The project owner confirmed that first-launch theme selection, theme persistence after switching and restart, and opening `bits/stdc++.h` files without delayed secondary coloring all match the required behavior.
+
 ## 9. Feature Archive
+
+### Stage 4 C/C++ visual system
+
+- Requirement: make a single Better C++ Syntax TextMate grammar and BeCoder One Monokai the complete C/C++ coloring authority, with no delayed clangd recolor.
+- User-visible result: clean profiles use BeCoder One Monokai; C/C++ colors remain stable after file open; theme switching persists; semantic tokens, inlay hints, and inactive-region decorations do not alter the editor later.
+- Source ownership: `extensions/cpp`, `extensions/becoder.one-monokai`, the clangd client visual boundary, theme defaults, onboarding theme selection, and package verification.
+- Commit/PR: the containing Stage 4 backup commit, pushed directly to `origin/stage4`; no PR was requested.
+- Source validation: clangd `check-ts`, 234 build-script tests, `typecheck-client`, `compile-oi-extensions`, focused boundary tests, and two independent read-only reviews passed.
+- Package/build validation: `gulp vscode-win32-x64-min` and the enhanced Include Compiler package verifier passed.
+- User acceptance: passed on 2026-08-07.
+- Remaining risks or follow-up: the broader clangd capability reduction and GCC diagnostic migration remain active Stage 4 work and are not part of this archived visual feature.
 
 ### Baseline: Runner, toolchain, and language isolation
 

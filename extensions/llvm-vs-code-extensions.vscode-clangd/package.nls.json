@@ -3,7 +3,6 @@
   "becoder.002": "The path to clangd executable. BeCoder for Windows always uses its bundled clangd.",
   "becoder.003": "Allows the path to be a script. Ignored by BeCoder for Windows.",
   "becoder.004": "Arguments for clangd server. BeCoder for Windows uses managed arguments.",
-  "becoder.005": "Enable semantic highlighting in clangd.",
   "becoder.006": "Extra clang flags used to parse files. BeCoder for Windows uses managed bundled-toolchain flags.",
   "becoder.007": "Auto restart clangd (up to 4 times) if it crashes.",
   "becoder.008": "Check for language server updates on startup. BeCoder for Windows updates clangd only with its bundled toolchain.",
@@ -25,6 +24,5 @@
   "becoder.025": "Show AST",
   "becoder.026": "Close AST view",
   "becoder.027": "Open project configuration file",
-  "becoder.028": "Open BeCoder clangd configuration",
-  "becoder.029": "Toggle inlay hints"
+  "becoder.028": "Open BeCoder clangd configuration"
 }

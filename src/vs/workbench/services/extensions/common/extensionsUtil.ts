@@ -12,7 +12,8 @@ import { Mutable } from '../../../../base/common/types.js';
 const protectedBeCoderBuiltinExtensions = new Set([
 	'llvm-vs-code-extensions.vscode-clangd',
 	'becoder.becoder-setup',
-	'becoder.runner'
+	'becoder.runner',
+	'becoder.one-monokai'
 ]);
 
 function isProtectedBeCoderBuiltin(extension: IExtensionDescription | undefined): boolean {

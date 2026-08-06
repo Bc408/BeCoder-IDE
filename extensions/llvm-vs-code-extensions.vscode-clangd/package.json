@@ -121,12 +121,6 @@
           "type": "string",
           "description": "Names a file that clangd should log a performance trace to, in chrome trace-viewer JSON format."
         },
-        "clangd.semanticHighlighting": {
-          "type": "boolean",
-          "default": true,
-          "description": "%becoder.005%",
-          "deprecationMessage": "Legacy semanticHighlights is no longer supported. Please use `editor.semanticHighlighting.enabled` instead."
-        },
         "clangd.fallbackFlags": {
           "type": "array",
           "default": [
@@ -178,16 +172,6 @@
           "default": false,
           "description": "Force enable of \"On Config Changed\" option regardless of clangd version."
         },
-        "clangd.inactiveRegions.useBackgroundHighlight": {
-          "type": "boolean",
-          "default": false,
-          "description": "Use a background highlight rather than opacity to identify inactive preprocessor regions."
-        },
-        "clangd.inactiveRegions.opacity": {
-          "type": "number",
-          "default": 0.55,
-          "description": "Opacity of inactive regions (used only if clangd.inactiveRegions.useBackgroundHighlight=false)"
-        },
         "clangd.enableCodeCompletion": {
           "type": "boolean",
           "default": true,
@@ -205,17 +189,6 @@
         }
       }
     },
-    "colors": [
-      {
-        "id": "clangd.inactiveRegions.background",
-        "description": "Background color of inactive code regions (used only if clangd.inactiveRegions.useBackgroundHighlight=true)",
-        "defaults": {
-          "dark": "#1212124C",
-          "light": "#DCDCDC4C",
-          "highContrast": "#FCFCFC4C"
-        }
-      }
-    ],
     "commands": [
       {
         "command": "clangd.switchheadersource",
@@ -310,12 +283,6 @@
         "category": "clangd",
         "title": "%becoder.028%",
         "icon": "$(gear)"
-      },
-      {
-        "command": "clangd.inlayHints.toggle",
-        "category": "clangd",
-        "title": "%becoder.029%",
-        "enablement": "clangd.inlayHints.supported"
       }
     ],
     "keybindings": [

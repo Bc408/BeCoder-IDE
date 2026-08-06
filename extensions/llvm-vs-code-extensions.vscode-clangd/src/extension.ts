@@ -5,7 +5,6 @@ import {ClangdExtension} from '../api/vscode-clangd';
 import {ClangdExtensionImpl} from './api';
 import {ClangdContext, stopClangdContext} from './clangd-context';
 import {get, update} from './config';
-import {SemanticTokensCache} from './semantic-tokens-cache';
 
 let apiInstance: ClangdExtensionImpl|undefined;
 
@@ -21,7 +20,6 @@ export async function activate(context: vscode.ExtensionContext):
     Promise<ClangdExtension> {
   const outputChannel = vscode.window.createOutputChannel('clangd');
   context.subscriptions.push(outputChannel);
-  const semanticTokensCache = new SemanticTokensCache(context.workspaceState);
 
   let clangdContext: ClangdContext|null = null;
   let restartPromise: Promise<void>|undefined;
@@ -70,9 +68,8 @@ export async function activate(context: vscode.ExtensionContext):
           if (clangdContext) {
             await stopClangdContext(clangdContext);
           }
-          semanticTokensCache.resetClient();
           clangdContext = await ClangdContext.create(
-              context.globalStoragePath, outputChannel, semanticTokensCache);
+              context.globalStoragePath, outputChannel);
           if (clangdContext) {
             context.subscriptions.push(clangdContext);
           }
@@ -101,9 +98,8 @@ export async function activate(context: vscode.ExtensionContext):
       }));
 
   if (await isClangdEnabled()) {
-    semanticTokensCache.resetClient();
     clangdContext = await ClangdContext.create(
-        context.globalStoragePath, outputChannel, semanticTokensCache);
+        context.globalStoragePath, outputChannel);
     if (clangdContext) {
       context.subscriptions.push(clangdContext);
     }

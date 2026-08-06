@@ -140,9 +140,9 @@
 	],
 	"onboardingThemes": [
 		{
-			"id": "dark-2026",
-			"label": "Dark 2026",
-			"themeId": "Dark 2026",
+			"id": "becoder-one-monokai",
+			"label": "BeCoder One Monokai",
+			"themeId": "BeCoder One Monokai",
 			"type": "dark"
 		},
 		{

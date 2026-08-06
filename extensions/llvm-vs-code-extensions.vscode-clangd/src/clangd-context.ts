@@ -7,8 +7,6 @@ import * as ast from './ast';
 import * as config from './config';
 import * as configFileWatcher from './config-file-watcher';
 import * as fileStatus from './file-status';
-import * as inactiveRegions from './inactive-regions';
-import * as inlayHints from './inlay-hints';
 import * as install from './install';
 import * as memoryUsage from './memory-usage';
 import * as openConfig from './open-config';
@@ -19,10 +17,6 @@ import {
   managedClangdFallbackFlags,
   managedClangdUserConfigPath
 } from './becoder-toolchain';
-import {
-  SemanticTokensCache,
-  SemanticTokensRuntimeConfiguration
-} from './semantic-tokens-cache';
 import * as switchSourceHeader from './switch-source-header';
 import * as typeHierarchy from './type-hierarchy';
 
@@ -40,24 +34,6 @@ function beCoderCompilerPath(clangdPath: string): string | undefined {
   }
   const configuration = vscode.workspace.getConfiguration('becoder.toolchain');
   return configuration.get<string>('compilerPath') || undefined;
-}
-
-function beCoderCCompilerPath(clangdPath: string): string | undefined {
-  if (process.platform === 'win32') {
-    return bundledCompilerPath(clangdPath).replace(/g\+\+\.exe$/i, 'gcc.exe');
-  }
-  const configuration = vscode.workspace.getConfiguration('becoder.toolchain');
-  return configuration.get<string>('cCompilerPath') || undefined;
-}
-
-function beCoderStandardIncludePath(clangdPath: string): string | undefined {
-  if (process.platform === 'win32') {
-    const compilerPath = bundledCompilerPath(clangdPath);
-    return path.join(
-        path.dirname(path.dirname(compilerPath)), 'include', 'c++', '14.1.0');
-  }
-  const configuration = vscode.workspace.getConfiguration('becoder.toolchain');
-  return configuration.get<string>('stdIncludePath') || undefined;
 }
 
 function managedClangdEnvironment(
@@ -162,7 +138,19 @@ function isGccVlaExtensionDiagnostic(uri: vscode.Uri,
       code === 'clang(-Wvla-cxx-extension)';
 }
 
-class ClangdLanguageClient extends vscodelc.LanguageClient {
+export class ClangdLanguageClient extends vscodelc.LanguageClient {
+  override registerFeature(
+      feature: vscodelc.StaticFeature|vscodelc.DynamicFeature<any>): void {
+    const registrationMethod =
+        (feature as {registrationType?: {method?: string}})
+            .registrationType?.method;
+    if (registrationMethod === 'textDocument/semanticTokens' ||
+        registrationMethod === 'textDocument/inlayHint') {
+      return;
+    }
+    super.registerFeature(feature);
+  }
+
   // Override the default implementation for failed requests. The default
   // behavior is just to log failures in the output panel, however output panel
   // is designed for extension debugging purpose, normal users will not open it,
@@ -203,22 +191,13 @@ async function waitForClangdStart(context: ClangdContext): Promise<void> {
   await startPromises.get(context);
 }
 
-function bindSemanticTokensCache(
-    context: ClangdContext, cache: SemanticTokensCache): void {
-  const bind = (document: vscode.TextDocument): boolean => {
-    if (!isClangdDocument(document)) return false;
-    const feature = context.client.getFeature(
-        vscodelc.SemanticTokensRegistrationType.method);
-    const provider = feature?.getProvider(document);
-    if (!provider) return false;
-    cache.setRefreshEmitter(provider.onDidChangeSemanticTokensEmitter);
-    return true;
-  };
-  if (vscode.workspace.textDocuments.some(bind)) return;
-  const listener = vscode.workspace.onDidOpenTextDocument(document => {
-    if (bind(document)) listener.dispose();
-  });
-  context.subscriptions.push(listener);
+interface ClangdRuntimeConfiguration {
+  clangdPath: string;
+  useScriptAsExecutable: boolean;
+  arguments: string[];
+  fallbackFlags: string[];
+  compilerPath: string|undefined;
+  userConfigPath: string|undefined;
 }
 
 export async function stopClangdContext(context: ClangdContext): Promise<void> {
@@ -242,8 +221,7 @@ export class ClangdContext implements vscode.Disposable {
   client: ClangdLanguageClient;
 
   static async create(globalStoragePath: string,
-                      outputChannel: vscode.OutputChannel,
-                      semanticTokensCache: SemanticTokensCache):
+                      outputChannel: vscode.OutputChannel):
       Promise<ClangdContext|null> {
     const subscriptions: vscode.Disposable[] = [];
     const clangdPath = await install.activate(subscriptions, globalStoragePath);
@@ -261,7 +239,7 @@ export class ClangdContext implements vscode.Disposable {
           'BeCoder bundled clangd or GCC is unavailable. The built-in language service was not started.');
       return null;
     }
-    const runtimeConfiguration: SemanticTokensRuntimeConfiguration = {
+    const runtimeConfiguration: ClangdRuntimeConfiguration = {
       clangdPath,
       useScriptAsExecutable: process.platform === 'win32'
           ? false
@@ -273,27 +251,21 @@ export class ClangdContext implements vscode.Disposable {
           ? managedClangdFallbackFlags(compilerPath)
           : [...await config.get<string[]>('fallbackFlags')],
       compilerPath,
-      cCompilerPath: beCoderCCompilerPath(clangdPath),
-      standardIncludePath: beCoderStandardIncludePath(clangdPath),
       userConfigPath: clangdUserConfigPath(globalStoragePath)
     };
     const client = await ClangdContext.createClient(
-        runtimeConfiguration, outputChannel, globalStoragePath,
-        semanticTokensCache);
-    semanticTokensCache.setRuntimeConfiguration(runtimeConfiguration);
+        runtimeConfiguration, outputChannel, globalStoragePath);
     const context = new ClangdContext(
         subscriptions, client, runtimeConfiguration.userConfigPath);
     await waitForClangdStart(context);
-    bindSemanticTokensCache(context, semanticTokensCache);
     return context;
   }
 
   private static async createClient(
                                     runtimeConfiguration:
-                                        SemanticTokensRuntimeConfiguration,
+                                        ClangdRuntimeConfiguration,
                                     outputChannel: vscode.OutputChannel,
-                                    globalStoragePath: string,
-                                    semanticTokensCache: SemanticTokensCache):
+                                    globalStoragePath: string):
       Promise<ClangdLanguageClient> {
     let clangdPath = runtimeConfiguration.clangdPath;
     const useScriptAsExecutable = runtimeConfiguration.useScriptAsExecutable;
@@ -366,14 +338,6 @@ export class ClangdContext implements vscode.Disposable {
               !isKnownGccHeaderFalsePositive(uri, diagnostic) &&
               !isGccVlaExtensionDiagnostic(uri, diagnostic)));
         },
-        provideDocumentSemanticTokens:
-            (document, token, next) =>
-                semanticTokensCache.provideDocumentSemanticTokens(
-                    document, token, next),
-        provideDocumentSemanticTokensEdits:
-            (document, previousResultId, token, next) =>
-                semanticTokensCache.provideDocumentSemanticTokensEdits(
-                    document, previousResultId, token, next),
         provideCompletionItem: async (document, position, context, token,
                                       next) => {
           if (!await config.get<boolean>('enableCodeCompletion'))
@@ -487,11 +451,9 @@ export class ClangdContext implements vscode.Disposable {
     }
     if (contextsWithFeatures.has(this)) {
       typeHierarchy.activate(this);
-      inlayHints.activate(this);
       memoryUsage.activate(this);
       ast.activate(this);
       openConfig.activate(this);
-      inactiveRegions.activate(this);
       await configFileWatcher.activate(this);
       fileStatus.activate(this);
       switchSourceHeader.activate(this);

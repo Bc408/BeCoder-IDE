@@ -16,6 +16,11 @@ $requiredFiles = @(
 	'BeCoder.exe',
 	'data\toolchains\.gitkeep',
 	'resources\app\extensions\becoder.setup\out\extension.js',
+	'resources\app\extensions\becoder.one-monokai\package.json',
+	'resources\app\extensions\becoder.one-monokai\themes\OneMonokai-color-theme.json',
+	'resources\app\extensions\becoder.one-monokai\LICENSE',
+	'resources\app\extensions\cpp\better-cpp-syntax-license.txt',
+	'resources\app\extensions\cpp\syntaxes\cpp.tmLanguage.json',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\extension.js',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\out\bundle.js',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
@@ -36,6 +41,64 @@ foreach ($relativePath in $requiredFiles) {
 	if ((Get-Item -LiteralPath $path).Length -eq 0) {
 		throw "Required Windows package file is empty: $relativePath"
 	}
+}
+
+$appPath = Join-Path $PackagePath 'resources\app'
+$themeExtensionPath = Join-Path $appPath 'extensions\becoder.one-monokai'
+$themeManifest = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'package.json') -Raw | ConvertFrom-Json
+if ("$($themeManifest.publisher).$($themeManifest.name)" -ne 'becoder.one-monokai') {
+	throw 'The packaged One Monokai extension has an unexpected identity.'
+}
+$themeContribution = @($themeManifest.contributes.themes)
+if ($themeContribution.Count -ne 1 -or
+	$themeContribution[0].id -ne 'BeCoder One Monokai' -or
+	$themeContribution[0].path -ne './themes/OneMonokai-color-theme.json') {
+	throw 'The packaged One Monokai theme contribution is invalid.'
+}
+$languageDefaults = $themeManifest.contributes.configurationDefaults.'[c][cpp][cuda-cpp]'
+if ($languageDefaults.'editor.semanticHighlighting.enabled' -ne $false) {
+	throw 'The packaged C/C++ language defaults do not disable semantic highlighting.'
+}
+$theme = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'themes\OneMonokai-color-theme.json') -Raw | ConvertFrom-Json
+if ($theme.semanticHighlighting -ne $false) {
+	throw 'The packaged One Monokai theme does not disable semantic highlighting.'
+}
+$themeLicense = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'LICENSE') -Raw
+if (-not $themeLicense.Contains('Copyright (c) 2018 Joshua Azemoh')) {
+	throw 'The packaged One Monokai license is missing its upstream copyright notice.'
+}
+
+$cppExtensionPath = Join-Path $appPath 'extensions\cpp'
+$cppGrammar = Get-Content -LiteralPath (Join-Path $cppExtensionPath 'syntaxes\cpp.tmLanguage.json') -Raw | ConvertFrom-Json
+$expectedGrammarVersion = 'https://github.com/jeff-hykin/better-cpp-syntax/commit/071dd6ecc9eda347bd84c8aa0e0b557396cb6a40'
+if ($cppGrammar.version -ne $expectedGrammarVersion) {
+	throw 'The packaged C++ grammar is not the selected Better C++ Syntax snapshot.'
+}
+$grammarLicense = Get-Content -LiteralPath (Join-Path $cppExtensionPath 'better-cpp-syntax-license.txt') -Raw
+if (-not $grammarLicense.Contains('Copyright (c) 2019 Jeff Hykin')) {
+	throw 'The packaged Better C++ Syntax license is missing its upstream copyright notice.'
+}
+
+$grammarOwners = @()
+Get-ChildItem -LiteralPath (Join-Path $appPath 'extensions') -Directory | ForEach-Object {
+	$extensionDirectoryName = $_.Name
+	$manifestPath = Join-Path $_.FullName 'package.json'
+	if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+		$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+		@($manifest.contributes.grammars) | Where-Object { $_.scopeName -eq 'source.cpp' } | ForEach-Object {
+			$grammarOwners += [PSCustomObject]@{ Extension = $extensionDirectoryName; GrammarPath = $_.path }
+		}
+	}
+}
+if ($grammarOwners.Count -ne 1 -or
+	$grammarOwners[0].Extension -ne 'cpp' -or
+	$grammarOwners[0].GrammarPath -ne './syntaxes/cpp.tmLanguage.json') {
+	throw "The packaged application must contain exactly one source.cpp owner in extensions/cpp. Found: $($grammarOwners | ConvertTo-Json -Compress)"
+}
+
+$product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
+if (-not (@($product.onboardingThemes) | Where-Object { $_.id -eq 'becoder-one-monokai' -and $_.themeId -eq 'BeCoder One Monokai' })) {
+	throw 'The packaged onboarding themes do not contain BeCoder One Monokai.'
 }
 
 $clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'

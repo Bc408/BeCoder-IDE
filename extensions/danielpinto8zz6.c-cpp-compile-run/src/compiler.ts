@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
 export type BeCoderSource = {
@@ -13,11 +14,13 @@ export type BeCoderSource = {
 export type RunnerMode = 'run' | 'runWithInput' | 'compile';
 
 export type RunnerRequest = {
+	readonly requestId: string;
 	readonly mode: RunnerMode;
 	readonly sourcePath: string;
 	readonly toolchainRoot: string;
 	readonly compilerPath: string;
 	readonly cCompilerPath: string;
+	readonly cStandard: string;
 	readonly cppStandard: string;
 	readonly cppFlags: string[];
 	readonly cFlags: string[];
@@ -92,16 +95,24 @@ export async function getActiveSource(): Promise<BeCoderSource | undefined> {
 	};
 }
 
-export async function writeRunnerRequest(context: vscode.ExtensionContext, source: BeCoderSource, mode: RunnerMode, inputPath?: string): Promise<string> {
+export type RunnerRequestHandle = {
+	readonly resultPath: string;
+	readonly requestId: string;
+};
+
+export async function writeRunnerRequest(context: vscode.ExtensionContext, source: BeCoderSource, mode: RunnerMode, inputPath?: string): Promise<RunnerRequestHandle> {
 	const directory = context.globalStorageUri.fsPath;
 	await fs.promises.mkdir(directory, { recursive: true });
 	const resultPath = path.join(directory, 'runner-result.json');
+	const requestId = crypto.randomUUID();
 	const request: RunnerRequest = {
+		requestId,
 		mode,
 		sourcePath: source.path,
 		toolchainRoot: integratedToolchainRoot(context),
 		compilerPath: integratedCompiler(context, source),
 		cCompilerPath: integratedCompiler(context, { ...source, language: 'c' }),
+		cStandard: setting('becoder.runner.cStandard', 'c17'),
 		cppStandard: setting('becoder.runner.cppStandard', 'c++20'),
 		cppFlags: setting('becoder.runner.cppFlags', ['-O2', '-Wall', '-DDEBUG']),
 		cFlags: setting('becoder.runner.cFlags', ['-O2', '-Wall', '-DDEBUG']),
@@ -111,7 +122,7 @@ export async function writeRunnerRequest(context: vscode.ExtensionContext, sourc
 	};
 	await fs.promises.unlink(resultPath).catch((): void => { /* There may be no previous result. */ });
 	await fs.promises.writeFile(path.join(directory, 'runner-request.json'), JSON.stringify(request), 'utf8');
-	return resultPath;
+	return { resultPath, requestId };
 }
 
 export function runnerStatePath(context: vscode.ExtensionContext): string {

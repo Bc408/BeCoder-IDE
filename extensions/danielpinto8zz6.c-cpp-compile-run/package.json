@@ -33,6 +33,7 @@
 		"configuration": {
 			"title": "BeCoder Runner",
 			"properties": {
+				"becoder.runner.cStandard": { "type": "string", "enum": ["c11", "c17", "c23"], "default": "c17", "description": "C standard used by BeCoder Runner." },
 				"becoder.runner.cppStandard": { "type": "string", "enum": ["c++11", "c++14", "c++17", "c++20", "c++23"], "default": "c++20", "description": "C++ standard used by BeCoder Runner." },
 				"becoder.runner.cppFlags": { "type": "array", "items": { "type": "string" }, "default": ["-O2", "-Wall", "-DDEBUG"], "description": "Additional C++ compiler flags used by BeCoder Runner." },
 				"becoder.runner.cFlags": { "type": "array", "items": { "type": "string" }, "default": ["-O2", "-Wall", "-DDEBUG"], "description": "Additional C compiler flags used by BeCoder Runner." },
@@ -44,6 +45,9 @@
 		"compile": "webpack",
 		"package": "webpack --mode production --devtool hidden-source-map",
 		"vscode:prepublish": "npm run package"
+	},
+	"dependencies": {
+		"find-process": "^2.0.0"
 	},
 	"devDependencies": {
 		"@types/vscode": "^1.109.0",

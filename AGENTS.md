@@ -26,6 +26,7 @@ Before tests, follow `.github/copilot-instructions.md`: use the build watch task
 - A non-zero exit code or an external timeout is a failed step. Stop the workflow and report the command and output; do not retry automatically or continue to packaging and runtime checks.
 - A build-only request authorizes only the requested build and its direct validation. Do not clean caches, delete artifacts, initialize Git, stage files, commit, push, or change user environment variables unless explicitly requested.
 - After a successful Windows package build, the BeCoder package verifier may be run against the produced package with `-IncludeCompiler $true`. Runtime GUI verification is a separate step and must not be claimed from a successful Gulp build alone.
+- After the requested source checks, package build, and direct package verification succeed, stop and hand the package to the user for manual portable acceptance. Do not launch the package, click through onboarding, run Run/Run With Input, or claim runtime acceptance unless the user explicitly requests agent-run verification in a later instruction.
 - `node_modules/`, `.build/`, `out/`, `out-build/`, and `out-vscode-min/` are local dependencies or generated build data. They are ignored by Git and must not be added to the repository or removed during a normal build.
 - The bundled archives under `resources/oi-defaults/toolchains/` are intentional release assets. They are tracked with Git LFS and must be preserved; do not replace them with extracted toolchain directories in the source tree.
 

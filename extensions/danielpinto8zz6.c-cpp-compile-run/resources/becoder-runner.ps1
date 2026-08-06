@@ -10,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 function Write-RunnerResult {
 	param(
 		[string]$Path,
+		[string]$RequestId,
 		[string]$Status,
 		[int]$ExitCode = 0,
 		[string]$Message = '',
@@ -26,6 +27,7 @@ function Write-RunnerResult {
 			[IO.Directory]::CreateDirectory($parent) | Out-Null
 		}
 		$result = [ordered]@{
+			requestId = $RequestId
 			status = $Status
 			exitCode = $ExitCode
 			message = $Message
@@ -85,6 +87,7 @@ function Invoke-BeCoderRun {
 
 	$request = $null
 	$tempExecutable = $null
+	$phase = 'setup'
 	$timings = [ordered]@{}
 	$totalTimer = [Diagnostics.Stopwatch]::StartNew()
 	try {
@@ -100,7 +103,6 @@ function Invoke-BeCoderRun {
 			throw 'BeCoder Runner supports only C and C++ source files.'
 		}
 		$sourceDirectory = Split-Path -Parent $sourcePath
-		Set-Location -LiteralPath $sourceDirectory
 
 		$baseName = [IO.Path]::GetFileNameWithoutExtension($sourcePath)
 		$executablePath = Join-Path $sourceDirectory "$baseName.exe"
@@ -109,15 +111,20 @@ function Invoke-BeCoderRun {
 		$compilerBin = Split-Path -Parent $compiler
 		$flags = if ($extension -eq '.c') { @($request.cFlags) } else { @($request.cppFlags) }
 		$arguments = @()
-		if ($extension -ne '.c') {
+		if ($extension -eq '.c') {
+			$standard = if ([string]::IsNullOrWhiteSpace([string]$request.cStandard)) { 'c17' } else { [string]$request.cStandard }
+			$arguments += @($flags | ForEach-Object { [string]$_ })
+			$arguments += "-std=$standard"
+		} else {
 			$standard = if ([string]::IsNullOrWhiteSpace([string]$request.cppStandard)) { 'c++20' } else { [string]$request.cppStandard }
+			$arguments += @($flags | ForEach-Object { [string]$_ })
 			$arguments += "-std=$standard"
 		}
-		$arguments += @($flags | ForEach-Object { [string]$_ })
 		$arguments += @($sourcePath, '-o', $tempExecutable)
 
 		# Keep the interactive Runner PATH minimal. The compiler child process
 		# temporarily receives its private bin directory for GCC DLL/tool lookup.
+		$phase = 'compile'
 		$compileTimer = [Diagnostics.Stopwatch]::StartNew()
 		$previousPath = $env:PATH
 		try {
@@ -132,12 +139,13 @@ function Invoke-BeCoderRun {
 		}
 		$compileExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
 		if ($compileExitCode -ne 0 -or -not (Test-Path -LiteralPath $tempExecutable -PathType Leaf)) {
-			Write-RunnerBanner 'Syntax Error' ([ConsoleColor]::Red)
+			Write-RunnerBanner 'Compilation Error' ([ConsoleColor]::Red)
 			$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)
-			Write-RunnerResult $request.resultPath 'compile-error' $compileExitCode 'Compiler rejected the source file.' -Timings $timings
-			return
+			Write-RunnerResult -Path $request.resultPath -RequestId ([string]$request.requestId) -Status 'compile-error' -ExitCode $compileExitCode -Message 'Compiler rejected the source file.' -Timings $timings
+			return 1
 		}
 
+		$phase = 'publish'
 		if (Test-Path -LiteralPath $executablePath -PathType Leaf) {
 			Remove-Item -LiteralPath $executablePath -Force
 		}
@@ -147,11 +155,12 @@ function Invoke-BeCoderRun {
 		if ([string]$request.mode -eq 'compile') {
 			Write-RunnerBanner 'Compilation Successful'
 			$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)
-			Write-RunnerResult $request.resultPath 'compiled' 0 'Compilation completed.' -Timings $timings
-			return
+			Write-RunnerResult -Path $request.resultPath -RequestId ([string]$request.requestId) -Status 'compiled' -ExitCode 0 -Message 'Compilation completed.' -Timings $timings
+			return 0
 		}
 
 		Write-RunnerBanner 'Compilation Successful, Running...'
+		$phase = 'input'
 		$runTimer = [Diagnostics.Stopwatch]::StartNew()
 		$previousPath = $env:PATH
 		try {
@@ -159,13 +168,14 @@ function Invoke-BeCoderRun {
 			$inputPath = [string]$request.inputPath
 			if ($WithInput) {
 				$inputDirectory = if ([string]::IsNullOrWhiteSpace($inputPath)) { '' } else { [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($inputPath)) }
-				if ([string]::IsNullOrWhiteSpace($inputPath) -or -not (Test-Path -LiteralPath $inputPath -PathType Leaf) -or [IO.Path]::GetFileName($inputPath) -ne 'input' -or $inputDirectory -ne $sourceDirectory) {
-					throw 'Run With File requires one ordinary file named input beside the source file.'
+				if ([string]::IsNullOrWhiteSpace($inputPath) -or -not (Test-Path -LiteralPath $inputPath -PathType Leaf) -or -not [string]::Equals([IO.Path]::GetFileName($inputPath), 'input', [StringComparison]::Ordinal) -or -not [string]::Equals($inputDirectory, $sourceDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+					throw 'INPUT_ERROR: Run With File requires one ordinary file named input beside the source file.'
 				}
+				$phase = 'run'
 				$runExitCode = Invoke-BeCoderInput $executablePath $inputPath $sourceDirectory
 			} else {
-				& $executablePath
-				$runExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+				$phase = 'run'
+				$runExitCode = Invoke-BeCoderProcess $executablePath $sourceDirectory
 			}
 		} finally {
 			$env:PATH = $previousPath
@@ -173,25 +183,39 @@ function Invoke-BeCoderRun {
 		$timings.runMs = [int][math]::Round($runTimer.Elapsed.TotalMilliseconds)
 		$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)
 		Write-RunnerBanner 'Run Complete' ($(if ($runExitCode -eq 0) { [ConsoleColor]::Green } else { [ConsoleColor]::Yellow }))
-		Write-RunnerResult $request.resultPath 'completed' $runExitCode 'Program execution completed.' -Timings $timings
+		Write-RunnerResult -Path $request.resultPath -RequestId ([string]$request.requestId) -Status 'completed' -ExitCode $runExitCode -Message 'Program execution completed.' -Timings $timings
 
 		if ([bool]$request.cleanupExecutable) {
 			Remove-Item -LiteralPath $executablePath -Force
 			Write-RunnerBanner 'Executable Program Removed'
 		}
+		return [int]$runExitCode
 	} catch {
 		$message = $_.Exception.Message
+		$status = 'runner-error'
 		if ($message.StartsWith('TOOLCHAIN_ERROR:')) {
 			$message = $message.Substring('TOOLCHAIN_ERROR:'.Length).Trim()
+			$status = 'toolchain-error'
 			Write-RunnerBanner 'BeCoder Toolchain Error' ([ConsoleColor]::Red)
+		} elseif ($message.StartsWith('INPUT_ERROR:')) {
+			$message = $message.Substring('INPUT_ERROR:'.Length).Trim()
+			$status = 'input-error'
+			Write-RunnerBanner 'Input Error' ([ConsoleColor]::Red)
+		} elseif ($phase -eq 'compile') {
+			$status = 'compile-error'
+			Write-RunnerBanner 'Compilation Error' ([ConsoleColor]::Red)
+		} elseif ($phase -eq 'run') {
+			$status = 'runtime-error'
+			Write-RunnerBanner 'Runtime Error' ([ConsoleColor]::Red)
 		} else {
-			Write-RunnerBanner 'Syntax Error' ([ConsoleColor]::Red)
+			Write-RunnerBanner 'Runner Error' ([ConsoleColor]::Red)
 		}
 		Write-Host $message -ForegroundColor Red
 		if ($request) {
 			$timings.totalMs = [int][math]::Round($totalTimer.Elapsed.TotalMilliseconds)
-			Write-RunnerResult $request.resultPath 'error' 1 $message -Timings $timings
+			Write-RunnerResult -Path $request.resultPath -RequestId ([string]$request.requestId) -Status $status -ExitCode 1 -Message $message -Timings $timings
 		}
+		return 1
 	} finally {
 		if ($tempExecutable -and (Test-Path -LiteralPath $tempExecutable -PathType Leaf)) {
 			Remove-Item -LiteralPath $tempExecutable -Force -ErrorAction SilentlyContinue
@@ -219,6 +243,27 @@ function Invoke-BeCoderInput {
 	$process.StandardInput.Close()
 	$process.WaitForExit()
 	return $process.ExitCode
+}
+
+function Invoke-BeCoderProcess {
+	param(
+		[string]$ExecutablePath,
+		[string]$WorkingDirectory
+	)
+
+	$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+	$startInfo.FileName = $ExecutablePath
+	$startInfo.WorkingDirectory = $WorkingDirectory
+	$startInfo.UseShellExecute = $false
+	$process = New-Object System.Diagnostics.Process
+	$process.StartInfo = $startInfo
+	try {
+		[void]$process.Start()
+		$process.WaitForExit()
+		return $process.ExitCode
+	} finally {
+		$process.Dispose()
+	}
 }
 
 function run {

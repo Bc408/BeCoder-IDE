@@ -107,8 +107,7 @@
         "clangd.arguments": {
           "type": "array",
           "default": [
-            "--background-index",
-            "--enable-config=false"
+            "--background-index"
           ],
           "items": {
             "type": "string"
@@ -128,7 +127,6 @@
         "clangd.fallbackFlags": {
           "type": "array",
           "default": [
-            "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Wno-deprecated-declarations",

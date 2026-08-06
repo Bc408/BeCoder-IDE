@@ -161,7 +161,6 @@ interface IBeCoderSetupRequest {
 	readonly fontSize: number;
 	readonly autoFormat: boolean;
 	readonly clangdVariableTypeHints: boolean;
-	readonly cppStandard: 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23';
 	readonly workspaceFolder: string;
 }
 
@@ -224,7 +223,6 @@ function isBeCoderSetupRequest(candidate: unknown): candidate is IBeCoderSetupRe
 		&& typeof value.fontSize === 'number'
 		&& typeof value.autoFormat === 'boolean'
 		&& typeof value.clangdVariableTypeHints === 'boolean'
-		&& (value.cppStandard === 'c++11' || value.cppStandard === 'c++14' || value.cppStandard === 'c++17' || value.cppStandard === 'c++20' || value.cppStandard === 'c++23')
 		&& typeof value.workspaceFolder === 'string'
 		&& isAbsolute(value.workspaceFolder);
 }
@@ -987,20 +985,19 @@ export class CodeApplication extends Disposable {
 			'becoder.toolchain.clangdPath': clangd,
 			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
 			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
-			'becoder.runner.cppStandard': request.cppStandard,
 			'becoder.runner.cppFlags': ['-O2', '-Wall', '-DDEBUG'],
 			'becoder.runner.cFlags': ['-O2', '-Wall', '-DDEBUG'],
 			'becoder.runner.cleanupExecutable': true,
 			'clangd.path': clangd,
-			'clangd.arguments': ['--background-index', '--enable-config=false'],
-			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler, request.cppStandard),
+			'clangd.arguments': ['--background-index'],
+			'clangd.fallbackFlags': this.beCoderClangdFallbackFlags(compiler),
 			'clangd.enable': true
 		};
 
 		for (const [key, value] of Object.entries(settings)) {
 			await this.configurationService.updateValue(key, value, ConfigurationTarget.USER);
 		}
-		await this.createBeCoderClangdConfig(join(request.workspaceFolder, '.clangd'), compiler, request.cppStandard);
+		await this.createBeCoderClangdConfig(join(request.workspaceFolder, '.clangd'), compiler, 'c17', 'c++20');
 		if (request.autoFormat) {
 			await this.createBeCoderClangFormatConfig(join(request.workspaceFolder, '.clang-format'));
 		}
@@ -1008,20 +1005,25 @@ export class CodeApplication extends Disposable {
 		await this.configurationService.updateValue('becoder.setup.completed', true, ConfigurationTarget.USER);
 	}
 
-	private async createBeCoderClangdConfig(configPath: string, compiler: string, cppStandard: IBeCoderSetupRequest['cppStandard']): Promise<void> {
+	private async createBeCoderClangdConfig(configPath: string, compiler: string, cStandard: 'c11' | 'c17' | 'c23', cppStandard: 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23'): Promise<void> {
 		if (fs.existsSync(configPath)) {
 			const existing = fs.readFileSync(configPath, 'utf8');
 			if (!this.isManagedBeCoderClangdConfig(existing) && !this.isLegacyBeCoderClangdConfig(existing)) {
 				return;
 			}
 		}
-		const flags = this.beCoderClangdFallbackFlags(compiler, cppStandard)
+		const flags = this.beCoderClangdFallbackFlags(compiler)
 			.map(flag => `    - ${JSON.stringify(flag)}`)
 			.join('\n');
-		const config = `# BeCoder managed clangd configuration.\nCompileFlags:\n  Add:\n${flags}\n  BuiltinHeaders: Clangd\n  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}\n\nCompletion:\n  HeaderInsertion: Never\n\nIndex:\n  Background: Build\n\nDiagnostics:\n  Suppress:\n    - typecheck_expression_not_modifiable_lvalue\n`;
+		const cCompiler = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe');
+		const config = `# BeCoder managed clangd configuration.\nCompileFlags:\n  Add:\n${flags}\n  BuiltinHeaders: Clangd\n  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}\n\nCompletion:\n  HeaderInsertion: Never\n\nIndex:\n  Background: Build\n\n---\nIf:\n  PathMatch: '.*\\\\.c$'\nCompileFlags:\n  Add:\n    - "-std=c17"\n  Compiler: ${JSON.stringify(cCompiler.replaceAll('\\', '/'))}\n\n---\nIf:\n  PathMatch: '.*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'\nCompileFlags:\n  Add:\n    - "-std=${cppStandard}"\n  Compiler: ${JSON.stringify(compiler.replaceAll('\\', '/'))}\n`;
+		const configWithCStandard = config
+			.replace("PathMatch: '.*\\\\.c$'", "PathMatch: '(?i).*\\\\.c$'")
+			.replace("PathMatch: '.*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'", "PathMatch: '(?i).*\\\\.(cc|cp|cpp|cxx|c\\\\+\\\\+|h|hh|hpp|hxx|inl)$'")
+			.replace('-std=c17', `-std=${cStandard}`);
 		await fs.promises.mkdir(dirname(configPath), { recursive: true });
 		try {
-			await fs.promises.writeFile(configPath, config, { encoding: 'utf8', flag: 'w' });
+			await fs.promises.writeFile(configPath, configWithCStandard, { encoding: 'utf8', flag: 'w' });
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
 				throw error;
@@ -1040,14 +1042,13 @@ export class CodeApplication extends Disposable {
 			&& (/^(?:g\+\+|clang\+\+)$/i.test(compiler) || /(?:portable_stage|portable_test|becoder-stage)/i.test(compiler));
 	}
 
-	private beCoderClangdFallbackFlags(compiler: string, cppStandard: IBeCoderSetupRequest['cppStandard']): string[] {
+	private beCoderClangdFallbackFlags(compiler: string): string[] {
 		const toolchainRoot = dirname(dirname(compiler));
 		const standardInclude = join(toolchainRoot, 'include', 'c++', '14.1.0');
 		const targetInclude = join(standardInclude, 'x86_64-w64-mingw32');
 		const gccInclude = join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include');
 		const includeFixed = join(toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0', 'include-fixed');
 		return [
-			`-std=${cppStandard}`,
 			'--target=x86_64-w64-windows-gnu',
 			'-DDEBUG',
 			'-Wall',

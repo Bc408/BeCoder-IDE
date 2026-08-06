@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import {ClangdExtension} from '../api/vscode-clangd';
 
 import {ClangdExtensionImpl} from './api';
-import {ClangdContext} from './clangd-context';
+import {ClangdContext, stopClangdContext} from './clangd-context';
 import {get, update} from './config';
 
 let apiInstance: ClangdExtensionImpl|undefined;
@@ -18,17 +18,25 @@ export async function activate(context: vscode.ExtensionContext):
   context.subscriptions.push(outputChannel);
 
   let clangdContext: ClangdContext|null = null;
+  let restartPromise: Promise<void>|undefined;
+
+  const isClangdStartingOrRunning = (): boolean =>
+      Boolean(clangdContext &&
+          (clangdContext.clientIsStarting() || clangdContext.clientIsRunning()));
 
   context.subscriptions.push(
       vscode.commands.registerCommand('clangd.activate', async () => {
-        if (clangdContext && (clangdContext.clientIsStarting() ||
-                              clangdContext.clientIsRunning())) {
+        if (isClangdStartingOrRunning()) {
           return;
         }
         vscode.commands.executeCommand('clangd.restart');
       }));
   context.subscriptions.push(
       vscode.commands.registerCommand('clangd.restart', async () => {
+        if (restartPromise) {
+          await restartPromise;
+          return;
+        }
         if (!get<boolean>('enable')) {
           vscode.window
               .showInformationMessage(
@@ -49,33 +57,48 @@ export async function activate(context: vscode.ExtensionContext):
         // stop/start cycle in this situation is pointless, and doesn't work
         // anyways because the client can't be stop()-ped when it's still in the
         // Starting state).
-        if (clangdContext && clangdContext.clientIsStarting()) {
+        if (clangdContext?.clientIsStarting()) {
           return;
         }
-        if (clangdContext)
-          clangdContext.dispose();
-        clangdContext = await ClangdContext.create(context.globalStoragePath,
-                                                   outputChannel);
-        if (clangdContext)
-          context.subscriptions.push(clangdContext);
-        if (apiInstance) {
-          apiInstance.client = clangdContext?.client;
+        restartPromise = (async () => {
+          if (clangdContext) {
+            await stopClangdContext(clangdContext);
+          }
+          clangdContext = await ClangdContext.create(
+              context.globalStoragePath, outputChannel);
+          if (clangdContext) {
+            context.subscriptions.push(clangdContext);
+          }
+          if (apiInstance) {
+            apiInstance.client = clangdContext?.client;
+          }
+        })();
+        try {
+          await restartPromise;
+        } finally {
+          restartPromise = undefined;
         }
       }));
   context.subscriptions.push(
       vscode.commands.registerCommand('clangd.shutdown', async () => {
-        if (clangdContext && clangdContext.clientIsStarting()) {
+        if (clangdContext?.clientIsStarting()) {
           return;
         }
-        if (clangdContext)
-          clangdContext.dispose();
+        if (clangdContext) {
+          await stopClangdContext(clangdContext);
+          clangdContext = null;
+        }
+        if (apiInstance) {
+          apiInstance.client = undefined;
+        }
       }));
 
   if (vscode.workspace.getConfiguration('clangd').get<boolean>('enable')) {
-    clangdContext =
-        await ClangdContext.create(context.globalStoragePath, outputChannel);
-    if (clangdContext)
+    clangdContext = await ClangdContext.create(
+        context.globalStoragePath, outputChannel);
+    if (clangdContext) {
       context.subscriptions.push(clangdContext);
+    }
   }
 
   apiInstance = new ClangdExtensionImpl(clangdContext?.client);

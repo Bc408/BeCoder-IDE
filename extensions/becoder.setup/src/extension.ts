@@ -21,6 +21,8 @@ type PlatformInstaller = {
 };
 
 type SetupSelection = 'recommended';
+type CStandard = 'c11' | 'c17' | 'c23';
+type CppStandard = 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23';
 
 type FirstRunSelection = {
 	mode: SetupSelection;
@@ -30,7 +32,6 @@ type FirstRunSelection = {
 	fontSize: number;
 	autoFormat: boolean;
 	clangdVariableTypeHints: boolean;
-	cppStandard: 'c++11' | 'c++14' | 'c++17' | 'c++20' | 'c++23';
 	workspaceFolder: string;
 };
 
@@ -62,13 +63,14 @@ function clangdArgumentsForCompiler(compiler: string): string[] {
 		];
 	}
 	return process.platform === 'win32'
-		? ['--background-index', '--enable-config=false']
+		? ['--background-index']
 		: ['--background-index', `--query-driver=${compiler}`];
 }
 
-function clangdFallbackFlagsForCompiler(compiler: string, cppStandard: FirstRunSelection['cppStandard']): string[] {
+function clangdFallbackFlagsForCompiler(compiler: string): string[] {
+	// clangd applies fallbackFlags to both C and C++ documents. Keep this list
+	// language-neutral; the Runner still enforces the selected C++ standard.
 	const flags = [
-		`-std=${cppStandard}`,
 		'--target=x86_64-w64-windows-gnu',
 		'-DDEBUG',
 		'-Wall',
@@ -106,9 +108,10 @@ function windowsClangdIncludeFlags(compiler: string): string[] {
 		.map(includePath => `-isystem${includePath}`);
 }
 
-function defaultClangdProjectConfig(compiler: string, cppStandard: FirstRunSelection['cppStandard']): string {
+function defaultClangdProjectConfig(compiler: string, cStandard: CStandard, cppStandard: CppStandard): string {
 	const compilerPath = compiler.replaceAll('\\', '/');
-	const flags = clangdFallbackFlagsForCompiler(compiler, cppStandard)
+	const cCompilerPath = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe').replaceAll('\\', '/');
+	const flags = clangdFallbackFlagsForCompiler(compiler)
 		.map(flag => `    - ${JSON.stringify(flag)}`)
 		.join('\n');
 	return `# BeCoder managed clangd configuration.
@@ -124,24 +127,35 @@ Completion:
 Index:
   Background: Build
 
-Diagnostics:
-  Suppress:
-    - typecheck_expression_not_modifiable_lvalue
-    - 'clang(typecheck_expression_not_modifiable_lvalue)'
+---
+If:
+  PathMatch: '(?i).*\\.c$'
+CompileFlags:
+  Add:
+    - "-std=${cStandard}"
+  Compiler: ${JSON.stringify(cCompilerPath)}
+
+---
+If:
+  PathMatch: '(?i).*\\.(cc|cp|cpp|cxx|c\\+\\+|h|hh|hpp|hxx|inl)$'
+CompileFlags:
+  Add:
+    - "-std=${cppStandard}"
+  Compiler: ${JSON.stringify(compilerPath)}
 `;
 }
 
-function createDefaultClangdConfig(configPath: string, compiler: string, cppStandard: FirstRunSelection['cppStandard']): void {
+function createDefaultClangdConfig(configPath: string, compiler: string, cStandard: CStandard, cppStandard: CppStandard): void {
 	if (fs.existsSync(configPath)) {
 		const existing = fs.readFileSync(configPath, 'utf8');
 		if (isManagedClangdConfig(existing) || isLegacyBeCoderClangdConfig(existing)) {
-			fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cppStandard), 'utf8');
+			fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cStandard, cppStandard), 'utf8');
 		}
 		return;
 	}
 	fs.mkdirSync(path.dirname(configPath), { recursive: true });
 	try {
-		fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cppStandard), { encoding: 'utf8', flag: 'wx' });
+		fs.writeFileSync(configPath, defaultClangdProjectConfig(compiler, cStandard, cppStandard), { encoding: 'utf8', flag: 'wx' });
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
 			throw error;
@@ -149,8 +163,8 @@ function createDefaultClangdConfig(configPath: string, compiler: string, cppStan
 	}
 }
 
-function createDefaultClangdProjectConfig(workspaceFolder: string, compiler: string, cppStandard: FirstRunSelection['cppStandard']): void {
-	createDefaultClangdConfig(path.join(workspaceFolder, '.clangd'), compiler, cppStandard);
+function createDefaultClangdProjectConfig(workspaceFolder: string, compiler: string, cStandard: CStandard, cppStandard: CppStandard): void {
+	createDefaultClangdConfig(path.join(workspaceFolder, '.clangd'), compiler, cStandard, cppStandard);
 }
 
 const defaultClangFormatConfig = `BasedOnStyle: Google
@@ -223,7 +237,7 @@ async function initializeOiWorkspace(context: vscode.ExtensionContext): Promise<
 
 	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
 	const compiler = configuredCompiler || await findPreferredCompiler(loadPreset(context).compilerCandidates) || 'g++';
-	createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c++20');
+	createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
 	createDefaultClangFormatConfig(workspaceFolder.uri.fsPath);
 	await context.workspaceState.update(OI_WORKSPACE_INITIALIZATION_DISMISSED, undefined);
 	void vscode.window.showInformationMessage(`已在“${workspaceFolder.name}”中创建 .clangd 和 .clang-format。`);
@@ -334,7 +348,7 @@ async function migrateWorkspaceClangdConfig(context: vscode.ExtensionContext): P
 	const configuredCompiler = vscode.workspace.getConfiguration().get<string>('becoder.toolchain.compilerPath');
 	const compiler = configuredCompiler || await findPreferredCompiler(loadPreset(context).compilerCandidates);
 	if (compiler) {
-		createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c++20');
+		createDefaultClangdProjectConfig(workspaceFolder.uri.fsPath, compiler, 'c17', 'c++20');
 	}
 }
 
@@ -351,7 +365,6 @@ async function refreshPortableToolchainSettings(context: vscode.ExtensionContext
 	if (!compiler || !clangd) {
 		return;
 	}
-	const cppStandard = vscode.workspace.getConfiguration('becoder.runner').get<FirstRunSelection['cppStandard']>('cppStandard') ?? 'c++20';
 	const toolchainRoot = getBeCoderToolchainRoot(context);
 	await updateGlobalSettings({
 		'becoder.toolchain.compilerPath': compiler,
@@ -361,7 +374,7 @@ async function refreshPortableToolchainSettings(context: vscode.ExtensionContext
 		'becoder.toolchain.debuggerHeader': path.join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
 		'clangd.path': clangd,
 		'clangd.arguments': clangdArgumentsForCompiler(compiler),
-		'clangd.fallbackFlags': clangdFallbackFlagsForCompiler(compiler, cppStandard)
+		'clangd.fallbackFlags': clangdFallbackFlagsForCompiler(compiler)
 	});
 	await configureClangd(compiler, clangd);
 }
@@ -460,20 +473,20 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 		}
 	}
 	settings['files.exclude'] = addMissingBeCoderFileExcludes(getGlobalFileExcludes());
-	const cppStandard = firstRunSelection?.cppStandard ?? 'c++20';
+	const cStandard: CStandard = 'c17';
+	const cppStandard: CppStandard = 'c++20';
 	if (compiler) {
 		settings['becoder.toolchain.compilerPath'] = compiler;
 		settings['becoder.toolchain.cCompilerPath'] = compiler.replace(/g\+\+\.exe$/i, 'gcc.exe');
 		settings['becoder.toolchain.clangdPath'] = clangd;
 		settings['becoder.toolchain.stdIncludePath'] = path.join(path.dirname(path.dirname(compiler)), 'include', 'c++', '14.1.0');
 		settings['becoder.toolchain.debuggerHeader'] = path.join(path.dirname(path.dirname(compiler)), 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h');
-		settings['becoder.runner.cppStandard'] = cppStandard;
 		settings['becoder.runner.cppFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cFlags'] = ['-O2', '-Wall', '-DDEBUG'];
 		settings['becoder.runner.cleanupExecutable'] = true;
-		settings['clangd.fallbackFlags'] = clangdFallbackFlagsForCompiler(compiler, cppStandard);
+		settings['clangd.fallbackFlags'] = clangdFallbackFlagsForCompiler(compiler);
 		if (firstRunSelection) {
-			createDefaultClangdProjectConfig(firstRunSelection.workspaceFolder, compiler, cppStandard);
+			createDefaultClangdProjectConfig(firstRunSelection.workspaceFolder, compiler, cStandard, cppStandard);
 		}
 		settings['clangd.arguments'] = clangdArgumentsForCompiler(compiler);
 	}
@@ -519,7 +532,7 @@ async function configureClangd(compiler?: string, clangd?: string): Promise<void
 	updateIfRegistered('clangd.enable', true);
 	updateIfRegistered('clangd.path', configuredClangd);
 	updateIfRegistered('clangd.arguments', configuredCompiler ? clangdArgumentsForCompiler(configuredCompiler) : ['--background-index']);
-	updateIfRegistered('clangd.fallbackFlags', configuredCompiler ? clangdFallbackFlagsForCompiler(configuredCompiler, 'c++20') : ['-std=c++20', '-Wno-deprecated-declarations']);
+	updateIfRegistered('clangd.fallbackFlags', configuredCompiler ? clangdFallbackFlagsForCompiler(configuredCompiler) : ['-Wno-deprecated-declarations']);
 	await Promise.allSettled(updates);
 	const clangdExtension = vscode.extensions.getExtension('llvm-vs-code-extensions.vscode-clangd');
 	if (clangdExtension?.isActive) {
@@ -539,7 +552,6 @@ function isFirstRunSelection(candidate: unknown): candidate is FirstRunSelection
 		&& typeof value.fontSize === 'number'
 		&& typeof value.autoFormat === 'boolean'
 		&& typeof value.clangdVariableTypeHints === 'boolean'
-		&& (value.cppStandard === 'c++11' || value.cppStandard === 'c++14' || value.cppStandard === 'c++17' || value.cppStandard === 'c++20' || value.cppStandard === 'c++23')
 		&& typeof value.workspaceFolder === 'string'
 		&& path.isAbsolute(value.workspaceFolder);
 }

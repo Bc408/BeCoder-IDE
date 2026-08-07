@@ -1,7 +1,7 @@
 {
   "name": "One Monokai",
   "type": "dark",
-  "semanticHighlighting": false,
+  "semanticHighlighting": true,
   "colors": {
     "activityBar.background": "#2F333D",
     "activityBar.foreground": "#D7DAE0",
@@ -76,6 +76,59 @@
     "titleBar.activeForeground": "#9da5b4",
     "titleBar.inactiveBackground": "#282C34",
     "titleBar.inactiveForeground": "#6B717D"
+  },
+  "semanticTokenColors": {
+    "function:c": "#98c379",
+    "function:cpp": "#98c379",
+    "function:cuda-cpp": "#98c379",
+    "method:c": "#98c379",
+    "method:cpp": "#98c379",
+    "method:cuda-cpp": "#98c379",
+    "macro:c": "#98c379",
+    "macro:cpp": "#98c379",
+    "macro:cuda-cpp": "#98c379",
+    "type:c": "#61afef",
+    "type:cpp": "#61afef",
+    "type:cuda-cpp": "#61afef",
+    "class:c": "#61afef",
+    "class:cpp": "#61afef",
+    "class:cuda-cpp": "#61afef",
+    "interface:c": "#61afef",
+    "interface:cpp": "#61afef",
+    "interface:cuda-cpp": "#61afef",
+    "struct:c": "#61afef",
+    "struct:cpp": "#61afef",
+    "struct:cuda-cpp": "#61afef",
+    "enum:c": "#61afef",
+    "enum:cpp": "#61afef",
+    "enum:cuda-cpp": "#61afef",
+    "typeParameter:c": "#61afef",
+    "typeParameter:cpp": "#61afef",
+    "typeParameter:cuda-cpp": "#61afef",
+    "concept:c": "#61afef",
+    "concept:cpp": "#61afef",
+    "concept:cuda-cpp": "#61afef",
+    "parameter:c": {
+      "foreground": "#d19a66",
+      "fontStyle": "italic"
+    },
+    "parameter:cpp": {
+      "foreground": "#d19a66",
+      "fontStyle": "italic"
+    },
+    "parameter:cuda-cpp": {
+      "foreground": "#d19a66",
+      "fontStyle": "italic"
+    },
+    "variable:c": "#abb2bf",
+    "variable:cpp": "#abb2bf",
+    "variable:cuda-cpp": "#abb2bf",
+    "property:c": "#abb2bf",
+    "property:cpp": "#abb2bf",
+    "property:cuda-cpp": "#abb2bf",
+    "variable.defaultLibrary:c": "#61afef",
+    "variable.defaultLibrary:cpp": "#61afef",
+    "variable.defaultLibrary:cuda-cpp": "#61afef"
   },
   "tokenColors": [
     {

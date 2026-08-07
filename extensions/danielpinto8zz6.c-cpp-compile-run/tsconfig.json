@@ -7,6 +7,9 @@
 		],
 		"sourceMap": true,
 		"rootDir": "src",
+		"types": [
+			"node"
+		],
 		"strict": true,
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
@@ -16,6 +19,11 @@
 	},
 	"exclude": [
 		"node_modules",
-		".vscode-test"
+		".vscode-test",
+		"out-test",
+		"test"
+	],
+	"include": [
+		"src/**/*"
 	]
 }

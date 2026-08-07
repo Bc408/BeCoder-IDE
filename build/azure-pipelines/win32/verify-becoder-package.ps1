@@ -23,6 +23,7 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.one-monokai\LICENSE',
 	'resources\app\extensions\cpp\better-cpp-syntax-license.txt',
 	'resources\app\extensions\cpp\syntaxes\cpp.tmLanguage.json',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\package.json',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\extension.js',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\package.json',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\README.md',
@@ -63,6 +64,45 @@ foreach ($requiredBoundary in @('-fsyntax-only', '-O2', '-x', '-std=c17', '-std=
 		throw "The packaged GCC diagnostics extension is missing boundary argument: $requiredBoundary"
 	}
 }
+
+$runnerPath = Join-Path $appPath 'extensions\danielpinto8zz6.c-cpp-compile-run'
+$runnerManifest = Get-Content -LiteralPath (Join-Path $runnerPath 'package.json') -Raw | ConvertFrom-Json
+if ("$($runnerManifest.publisher).$($runnerManifest.name)" -ne 'becoder.runner' -or
+	$runnerManifest.main -ne './dist/extension.js') {
+	throw 'The packaged Runner extension has an unexpected identity or entry point.'
+}
+if (-not (@($runnerManifest.extensionDependencies) -contains 'becoder.becoder-setup') -or
+	$runnerManifest.capabilities.untrustedWorkspaces.supported -ne $false) {
+	throw 'The packaged Runner does not enforce toolchain readiness and workspace trust.'
+}
+$runnerCommands = @($runnerManifest.contributes.commands | ForEach-Object { $_.command })
+if (($runnerCommands -join ',') -ne 'becoder.runner.openPanel,becoder.runner.run,becoder.runner.runWithInput') {
+	throw "The packaged Runner exposes an unexpected command set: $($runnerCommands -join ',')"
+}
+$runnerEditorActions = @($runnerManifest.contributes.menus.'editor/title' | ForEach-Object { $_.command })
+if (($runnerEditorActions -join ',') -ne 'becoder.runner.run,becoder.runner.runWithInput') {
+	throw "The packaged editor title must contain exactly the two BC Run actions: $($runnerEditorActions -join ',')"
+}
+$runnerBundle = Get-Content -LiteralPath (Join-Path $runnerPath 'dist\extension.js') -Raw
+foreach ($requiredBoundary in @('BeCoder Runner Trace', '-Wall', '-DDEBUG', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always', 'taskkill.exe', 'runtime-error', 'Compilation Successful, Running', 'Run Complete', 'Runtime Error', 'Executable Program Removed', '===== ', ']633;')) {
+	if (-not $runnerBundle.Contains($requiredBoundary)) {
+		throw "The packaged Runner extension is missing boundary content: $requiredBoundary"
+	}
+}
+foreach ($requiredDiagnosticBoundary in @('-DDEBUGER_H', 'diagnostic-include')) {
+	if (-not $gccDiagnosticsBundle.Contains($requiredDiagnosticBoundary)) {
+		throw "The packaged GCC diagnostics extension is missing namespace-isolation content: $requiredDiagnosticBoundary"
+	}
+}
+$diagnosticDebuggerHeader = Join-Path $gccDiagnosticsPath 'resources\diagnostic-include\bits\debugger.h'
+if (-not (Test-Path -LiteralPath $diagnosticDebuggerHeader -PathType Leaf)) {
+	throw 'The packaged GCC diagnostics extension is missing its debugger isolation header.'
+}
+foreach ($obsoleteRunnerFile in @('becoder-runner.ps1', 'runner-init.ps1', 'run.cmd')) {
+	if (Get-ChildItem -LiteralPath $runnerPath -Filter $obsoleteRunnerFile -File -Recurse | Select-Object -First 1) {
+		throw "The packaged Runner still contains obsolete shell infrastructure: $obsoleteRunnerFile"
+	}
+}
 foreach ($forbiddenBoundary in @('-Wall', '-Werror', '-pedantic')) {
 	if ($gccDiagnosticsBundle.Contains($forbiddenBoundary)) {
 		throw "The packaged GCC diagnostics extension contains forbidden warning argument: $forbiddenBoundary"
@@ -80,16 +120,29 @@ if ($themeContribution.Count -ne 1 -or
 	throw 'The packaged One Monokai theme contribution is invalid.'
 }
 $languageDefaults = $themeManifest.contributes.configurationDefaults.'[c][cpp][cuda-cpp]'
-if ($languageDefaults.'editor.semanticHighlighting.enabled' -ne $false) {
-	throw 'The packaged C/C++ language defaults do not disable semantic highlighting.'
+if ($languageDefaults.'editor.semanticHighlighting.enabled' -ne $true) {
+	throw 'The packaged C/C++ language defaults do not enable semantic refinement.'
 }
 $theme = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'themes\OneMonokai-color-theme.json') -Raw | ConvertFrom-Json
-if ($theme.semanticHighlighting -ne $false) {
-	throw 'The packaged One Monokai theme does not disable semantic highlighting.'
+if ($theme.semanticHighlighting -ne $true -or
+	$theme.semanticTokenColors.'function:cpp' -ne '#98c379' -or
+	$theme.semanticTokenColors.'type:cpp' -ne '#61afef' -or
+	$theme.semanticTokenColors.'parameter:cpp'.foreground -ne '#d19a66' -or
+	$theme.semanticTokenColors.'parameter:cpp'.fontStyle -ne 'italic' -or
+	$theme.semanticTokenColors.'variable:cpp' -ne '#abb2bf') {
+	throw 'The packaged One Monokai theme does not contain the bounded C/C++ semantic refinement.'
 }
 $themeLicense = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'LICENSE') -Raw
 if (-not $themeLicense.Contains('Copyright (c) 2018 Joshua Azemoh')) {
 	throw 'The packaged One Monokai license is missing its upstream copyright notice.'
+}
+
+$setupManifest = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\package.json') -Raw | ConvertFrom-Json
+$setupDefaults = $setupManifest.contributes.configurationDefaults
+if ($setupDefaults.'editor.unicodeHighlight.nonBasicASCII' -ne $false -or
+	$setupDefaults.'editor.unicodeHighlight.ambiguousCharacters' -ne $false -or
+	$setupDefaults.'editor.unicodeHighlight.invisibleCharacters' -ne $true) {
+	throw 'The packaged BeCoder Unicode highlighting defaults are invalid.'
 }
 
 $cppExtensionPath = Join-Path $appPath 'extensions\cpp'
@@ -220,6 +273,9 @@ if ($IncludeCompiler) {
 
 $forbiddenPaths = @(
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\debugger.js',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\becoder-runner.ps1',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\runner-init.ps1',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\run.cmd',
 	'resources\app\extensions\jeff-hykin.better-cpp-syntax',
 	'resources\app\resources\oi-defaults\toolchains\gdb.exe',
 	'resources\app\resources\oi-defaults\toolchains\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3.zip'

@@ -64,10 +64,6 @@ const editorSettings: Record<string, unknown> = {
 	'files.autoSave': 'onFocusChange',
 	'editor.formatOnSave': false,
 	'editor.formatOnPaste': false,
-	// Competitive-programming comments commonly contain Chinese text. Treat
-	// non-ASCII characters as ordinary source content instead of highlighting
-	// them as suspicious Unicode.
-	'editor.unicodeHighlight.nonBasicASCII': false,
 	'editor.mouseWheelZoom': true,
 	'window.systemColorTheme': 'auto',
 	'window.titleBarStyle': 'custom',

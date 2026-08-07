@@ -34,6 +34,7 @@ export const approvedTextDocumentFeatureMethods = new Set([
   'textDocument/definition',
   'textDocument/references',
   'textDocument/rename',
+  'textDocument/semanticTokens',
   'textDocument/formatting',
   'textDocument/rangeFormatting'
 ]);

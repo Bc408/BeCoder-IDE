@@ -81,7 +81,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(registration?.license, 'MIT');
 	});
 
-	test('owns One Monokai as a TextMate-only BeCoder theme', () => {
+	test('owns One Monokai with bounded C/C++ semantic refinement', () => {
 		const extensionPath = path.join(extensionsRoot, 'becoder.one-monokai');
 		const manifest = readJson<IExtensionManifest>(path.join(extensionPath, 'package.json'));
 		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.one-monokai');
@@ -93,11 +93,25 @@ suite('OI extension boundary', () => {
 		}]);
 		assert.strictEqual(
 			manifest.contributes?.configurationDefaults?.['[c][cpp][cuda-cpp]']?.['editor.semanticHighlighting.enabled'],
-			false);
+			true);
 
-		const theme = readJson<{ semanticHighlighting?: boolean }>(
+		const theme = readJson<{
+			semanticHighlighting?: boolean;
+			semanticTokenColors?: Record<string, unknown>;
+		}>(
 			path.join(extensionPath, 'themes', 'OneMonokai-color-theme.json'));
-		assert.strictEqual(theme.semanticHighlighting, false);
+		assert.strictEqual(theme.semanticHighlighting, true);
+		assert.strictEqual(theme.semanticTokenColors?.['function:cpp'], '#98c379');
+		assert.strictEqual(theme.semanticTokenColors?.['type:cpp'], '#61afef');
+		assert.deepStrictEqual(theme.semanticTokenColors?.['parameter:cpp'], {
+			foreground: '#d19a66',
+			fontStyle: 'italic'
+		});
+		assert.strictEqual(theme.semanticTokenColors?.['variable:cpp'], '#abb2bf');
+		assert.strictEqual(theme.semanticTokenColors?.['variable.defaultLibrary:cpp'], '#61afef');
+		for (const forbiddenType of ['keyword', 'operator', 'number', 'string', 'comment']) {
+			assert.ok(!Object.keys(theme.semanticTokenColors ?? {}).some(selector => selector.startsWith(`${forbiddenType}:`)));
+		}
 		assert.ok(fs.statSync(path.join(extensionPath, 'LICENSE')).size > 0);
 
 		const themeServiceSource = fs.readFileSync(
@@ -185,6 +199,15 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(setupSource, /createDefaultClangdConfig|createDefaultClangFormatConfig|migrateWorkspaceClangdConfig/);
 		assert.doesNotMatch(setupSource, /function configureClangd/);
 		assert.match(setupSource, /removeLegacyClangdSettings/);
+		assert.doesNotMatch(setupSource, /editor\.unicodeHighlight/);
+		const setupManifest = readJson<{
+			contributes?: { configurationDefaults?: Record<string, unknown> };
+		}>(path.join(extensionsRoot, 'becoder.setup', 'package.json'));
+		assert.deepStrictEqual(setupManifest.contributes?.configurationDefaults, {
+			'editor.unicodeHighlight.nonBasicASCII': false,
+			'editor.unicodeHighlight.ambiguousCharacters': false,
+			'editor.unicodeHighlight.invisibleCharacters': true
+		});
 		const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
 		assert.doesNotMatch(mainSource, /createBeCoderClangdConfig|createBeCoderClangFormatConfig/);
 		assert.doesNotMatch(mainSource, /'clangd\.(?:path|arguments|fallbackFlags|enable)'/);
@@ -211,6 +234,8 @@ suite('OI extension boundary', () => {
 			"'-x'",
 			"'-std=c17'",
 			"'-std=c++20'",
+			"'-DDEBUGER_H'",
+			"'-I'",
 			"'-fdiagnostics-format=json'",
 			"'-fdiagnostics-color=never'",
 			"'-iquote'"
@@ -218,6 +243,7 @@ suite('OI extension boundary', () => {
 			assert.ok(runnerSource.includes(argument), `Missing GCC diagnostics argument ${argument}`);
 		}
 		assert.doesNotMatch(runnerSource, /['"]-(?:Wall|Werror|pedantic)['"]/);
+		assert.ok(fs.existsSync(path.join(extensionPath, 'resources', 'diagnostic-include', 'bits', 'debugger.h')));
 		assert.match(runnerSource, /spawn\(compilerPath/);
 		assert.match(runnerSource, /shell: false/);
 
@@ -225,5 +251,62 @@ suite('OI extension boundary', () => {
 		assert.match(extensionSource, /createDiagnosticCollection\(diagnosticSource\)/);
 		assert.match(extensionSource, /DiagnosticSeverity\.Error/);
 		assert.doesNotMatch(extensionSource, /createTerminal|showErrorMessage|showWarningMessage|showInformationMessage/);
+	});
+
+	test('owns Stage 4.3 Runner as a shell-free BC pseudoterminal', () => {
+		const extensionPath = path.join(extensionsRoot, 'danielpinto8zz6.c-cpp-compile-run');
+		const manifest = readJson<{
+			name?: string;
+			publisher?: string;
+			extensionDependencies?: readonly string[];
+			capabilities?: { untrustedWorkspaces?: { supported?: boolean } };
+			contributes?: {
+				commands?: readonly { command?: string }[];
+				menus?: Record<string, readonly { command?: string }[]>;
+			};
+		}>(path.join(extensionPath, 'package.json'));
+		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.runner');
+		assert.deepStrictEqual(manifest.extensionDependencies, ['becoder.becoder-setup']);
+		assert.strictEqual(manifest.capabilities?.untrustedWorkspaces?.supported, false);
+		assert.deepStrictEqual(manifest.contributes?.commands?.map(command => command.command), [
+			'becoder.runner.openPanel',
+			'becoder.runner.run',
+			'becoder.runner.runWithInput'
+		]);
+		assert.deepStrictEqual(manifest.contributes?.menus?.['editor/title']?.map(item => item.command), [
+			'becoder.runner.run',
+			'becoder.runner.runWithInput'
+		]);
+
+		const terminalSource = fs.readFileSync(path.join(extensionPath, 'src', 'bcTerminal.ts'), 'utf8');
+		assert.match(terminalSource, /implements vscode\.Pseudoterminal/);
+		assert.match(terminalSource, /osc633CommandFinished/);
+		assert.match(terminalSource, /renderBcCommand/);
+		const managerSource = fs.readFileSync(path.join(extensionPath, 'src', 'compile-run-manager.ts'), 'utf8');
+		assert.match(managerSource, /createTerminal\(\{[\s\S]*pty: pseudoterminal/);
+		assert.match(managerSource, /panelReadyMs = await pseudoterminal\.waitForOpen\(panelStartedAt\)/);
+		assert.match(managerSource, /request\.exitCode = 1;[\s\S]*await this\.executor\.cancel\(\)/);
+		assert.doesNotMatch(managerSource, /sendText|createTerminal\([^\{]/);
+		const processSource = fs.readFileSync(path.join(extensionPath, 'src', 'runnerProcess.ts'), 'utf8');
+		assert.match(processSource, /shell: false/);
+		for (const argument of ['-O2', '-Wall', '-DDEBUG', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always']) {
+			assert.ok(processSource.includes(argument), `Missing Runner compiler argument ${argument}`);
+		}
+		assert.doesNotMatch(processSource, /powershell(?:\.exe)?|cmd(?:\.exe)?/i);
+		assert.match(processSource, /'runtime-error'/);
+		assert.match(processSource, /new Osc633Filter\(\)/);
+		assert.match(fs.readFileSync(path.join(extensionPath, 'src', 'terminalVisuals.ts'), 'utf8'), /===== \$\{message\} =====/);
+		for (const obsoleteFile of [
+			'resources/becoder-runner.ps1',
+			'resources/runner-init.ps1',
+			'resources/run.cmd'
+		]) {
+			assert.ok(!fs.existsSync(path.join(extensionPath, obsoleteFile)));
+		}
+
+		const explorerSource = fs.readFileSync(path.join(
+			repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'files', 'browser', 'views', 'explorerViewer.ts'), 'utf8');
+		assert.ok(explorerSource.indexOf('comparePinnedInput(statA, statB)') < explorerSource.indexOf('const reverse ='));
+		assert.match(explorerSource, /stat\.name === 'input' && !stat\.isDirectory && !stat\.isSymbolicLink && !stat\.isUnknown/);
 	});
 });

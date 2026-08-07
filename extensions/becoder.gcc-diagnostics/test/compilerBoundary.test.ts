@@ -25,6 +25,10 @@ suite('bundled GCC boundary', () => {
 		assert.deepStrictEqual(arguments_.slice(arguments_.indexOf('-x'), arguments_.indexOf('-x') + 2), ['-x', 'c++']);
 		assert.ok(arguments_.includes('-std=c++20'));
 		assert.ok(arguments_.includes('-DDEBUG'));
+		assert.ok(arguments_.includes('-DDEBUGER_H'));
+		assert.deepStrictEqual(arguments_.slice(arguments_.indexOf('-I'), arguments_.indexOf('-I') + 2), [
+			'-I', path.join('C:\\private', 'diagnostic-include')
+		]);
 		assert.ok(arguments_.includes('-fdiagnostics-format=json'));
 		assert.ok(arguments_.includes('-fdiagnostics-color=never'));
 		assert.ok(arguments_.includes('-iquote'));
@@ -57,7 +61,10 @@ suite('bundled GCC boundary', () => {
 			language: 'c',
 			text: ''
 		};
-		assert.ok(diagnosticArguments(target, 'C:\\private\\main.c', 'C:\\private').includes('-std=c17'));
+		const arguments_ = diagnosticArguments(target, 'C:\\private\\main.c', 'C:\\private');
+		assert.ok(arguments_.includes('-std=c17'));
+		assert.ok(!arguments_.includes('-DDEBUGER_H'));
+		assert.ok(!arguments_.includes('-I'));
 	});
 
 	test('prefers packaged and portable BeCoder toolchain roots', () => {

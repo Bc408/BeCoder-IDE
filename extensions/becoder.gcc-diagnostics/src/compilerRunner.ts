@@ -36,8 +36,16 @@ export interface CompilerRun {
 	readonly metrics: CompilerMetrics;
 }
 
-export function diagnosticArguments(target: DiagnosticTarget, mirrorPath: string, requestDirectory: string): string[] {
+export function diagnosticArguments(
+	target: DiagnosticTarget,
+	mirrorPath: string,
+	requestDirectory: string,
+	debuggerIncludeRoot: string = path.join(requestDirectory, 'diagnostic-include')
+): string[] {
 	const sourceDirectory = path.dirname(target.filePath);
+	const debuggerIsolation = target.language === 'cpp'
+		? ['-DDEBUGER_H', '-I', debuggerIncludeRoot]
+		: [];
 	return [
 		'-fsyntax-only',
 		'-O2',
@@ -45,6 +53,7 @@ export function diagnosticArguments(target: DiagnosticTarget, mirrorPath: string
 		target.language === 'c' ? 'c' : 'c++',
 		target.language === 'c' ? '-std=c17' : '-std=c++20',
 		'-DDEBUG',
+		...debuggerIsolation,
 		'-finput-charset=UTF-8',
 		'-fexec-charset=UTF-8',
 		'-fdiagnostics-format=json',
@@ -100,7 +109,12 @@ export class CompilerRunner implements vscode.Disposable {
 			}
 			const processOutput = await this.runCompilerProcess(
 				compilerPath,
-				diagnosticArguments(target, mirrorPath, requestDirectory),
+				diagnosticArguments(
+					target,
+					mirrorPath,
+					requestDirectory,
+					path.join(this.context.extensionPath, 'resources', 'diagnostic-include')
+				),
 				path.dirname(target.filePath),
 				environment,
 				signal

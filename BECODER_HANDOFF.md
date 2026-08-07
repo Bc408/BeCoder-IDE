@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.2** is the active implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.3** is the latest archived implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,9 +9,9 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.2`
-- Active baseline commit: `43b35f9` (`feat(stage4.1): narrow clangd and add Google formatting`)
-- Latest remote checkpoint with the same commit: `origin/stage4.1`
+- Active development branch: `codex/stage4.3`
+- Active baseline commit: `555e5d4` (`feat(stage4.2): add bundled GCC editor diagnostics`)
+- Latest remote backup target: `origin/stage4.3`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
@@ -38,7 +38,7 @@ The resulting ownership boundary is strict:
 | --- | --- |
 | Native PowerShell | User system environment and arbitrary user commands |
 | BeCoder Runner and BC panel | BeCoder-owned compile/run workflow only |
-| C/C++ visual highlighting | One built-in TextMate grammar and BeCoder One Monokai |
+| C/C++ visual highlighting | Immediate built-in TextMate coloring plus bounded clangd semantic refinement owned by BeCoder One Monokai |
 | C/C++ code intelligence | Private bundled clangd with a closed feature set |
 | C/C++ diagnostics | Private bundled GCC only |
 | C/C++ formatting | clangd's embedded ClangFormat engine with Google fallback style |
@@ -58,7 +58,7 @@ Core product requirements:
 
 ## 3. Stage 4 Management Rules
 
-Stage 4 is one continuous product stage. Stage 4.2 is a development checkpoint label; requirements and completion are still tracked by named feature areas rather than treating the checkpoint as an independent product release.
+Stage 4 is one continuous product stage. Stage 4.3 is an archived development checkpoint label; remaining requirements are still tracked by named feature areas rather than treating the checkpoint as an independent product release.
 
 Feature statuses are:
 
@@ -84,7 +84,7 @@ After every feature is completed, update the Stage 4 work register and append a 
 
 ### C/C++ Visual System
 
-The accepted visual architecture is **Better C++ Syntax grammar content plus BeCoder One Monokai, with TextMate as the final and only coloring authority**.
+The accepted visual architecture is **Better C++ Syntax grammar content for immediate first paint, followed by one bounded clangd semantic refinement owned by BeCoder One Monokai**. This Stage 4.3 decision supersedes the earlier rule that TextMate must remain the final and only coloring authority; the earlier archived checkpoint remains below as historical evidence of what was previously built and accepted.
 
 Grammar requirements:
 
@@ -106,18 +106,25 @@ Theme requirements:
 
 Semantic-coloring boundary:
 
-- Set `semanticHighlighting` to `false` in the BeCoder One Monokai theme.
-- Default `editor.semanticHighlighting.enabled` to `false` for `c`, `cpp`, and `cuda-cpp`.
-- Do not register or request clangd semantic tokens.
+- Set `semanticHighlighting` to `true` in the BeCoder One Monokai theme and default `editor.semanticHighlighting.enabled` to `true` for `c`, `cpp`, and `cuda-cpp`. A user setting still takes precedence.
+- Register only the standard language-client semantic-token provider. Do not restore custom persistence, fingerprinting, invalidation, delta reconstruction, cross-session caches, or a second BeCoder-owned token pipeline.
+- Limit material semantic recoloring to functions/methods/macros in green, types/classes/interfaces/enums/type parameters/concepts in blue, parameters in italic orange, ordinary variables/properties in light gray, and default-library variables such as `cin`, `cout`, and `cerr` in blue.
+- Do not add semantic theme rules for keywords, operators, brackets, numbers, strings, or comments; their established TextMate/One Monokai appearance remains the visual baseline.
 - Remove the existing semantic-token persistence, fingerprint, invalidation, delta reconstruction, and background refresh paths.
-- Opening a file must reach its final visual coloring through TextMate without a later clangd recolor.
-- A file containing `#include <bits/stdc++.h>` must not have a visible wait for a second "complete" highlighting state.
+- Opening a file must show complete readable TextMate coloring immediately. clangd may apply one stable semantic refinement after AST preparation, with an approximate visual target of no more than two seconds on the accepted machine.
+- A file containing `#include <bits/stdc++.h>` must never remain blank, partially highlighted, or blocked while clangd prepares the semantic refinement.
+
+Unicode-highlight defaults:
+
+- BeCoder contributes `editor.unicodeHighlight.nonBasicASCII: false`, `editor.unicodeHighlight.ambiguousCharacters: false`, and `editor.unicodeHighlight.invisibleCharacters: true` as product defaults.
+- These are extension-contributed defaults, not global-setting migrations: an existing profile without an explicit value inherits them, while an explicit user value such as `ambiguousCharacters: true` wins.
+- Do not read or modify system VS Code settings. All BeCoder settings and data remain under BeCoder-owned directories.
 
 Visual acceptance must include templates, macros, lambdas, structured bindings, concepts, STL types, `bits/stdc++.h`, `debugger.h`, C17 code, and large source files. Compare token scopes and screenshots against `C:\Users\Bc\Desktop\BeCoder\shortestpath-ide-Release-v0.2.8` and the approved reference image.
 
 ### clangd Code Intelligence and Google Formatting
 
-clangd remains bundled, but it is no longer a diagnostic or visual-highlighting authority.
+clangd remains bundled. It is not a diagnostic authority, but its standard semantic-token provider is the bounded second-stage visual refinement described above.
 
 The only clangd capabilities BeCoder exposes are:
 
@@ -127,14 +134,15 @@ The only clangd capabilities BeCoder exposes are:
 - definition;
 - references;
 - prepare rename and rename;
+- semantic tokens for bounded C/C++ visual refinement;
 - document formatting and range formatting.
 
-clangd must still preprocess includes and build an AST/Sema representation internally because the retained intelligence features require it. Existing optimizations that reduce startup, toolchain discovery, and header-analysis cost remain useful. This internal work must not trigger a second visual-highlighting phase.
+clangd must still preprocess includes and build an AST/Sema representation internally because the retained intelligence and semantic-refinement features require it. Existing optimizations that reduce startup, toolchain discovery, and header-analysis cost remain useful. This internal work must not block TextMate first paint or create repeated semantic recoloring.
 
 Disable or remove the client paths for:
 
 - diagnostics display and diagnostic false-positive filters;
-- semantic tokens and semantic-token caches;
+- custom semantic-token caches, persistence, delta reconstruction, and refresh pipelines beyond the standard language-client provider;
 - inlay hints;
 - inactive-region decorations;
 - code actions and clang-tidy integration;
@@ -167,7 +175,7 @@ Formatting requirements:
 - Do not generate a `.clang-format` file.
 - If the opened workspace explicitly contains `.clang-format`, treat it as a user project asset and allow it to override the Google fallback.
 - Do not let a `.clang-format` outside the opened workspace, a user profile, or another system location affect BeCoder formatting. The workspace-contained `.clang-format` is the only approved project-level formatting override and is not an exception to the `.clangd` ban.
-- Formatting must not enable clangd diagnostics, semantic tokens, or general code actions.
+- Formatting must not enable clangd diagnostics, broaden the approved semantic-token surface, or enable general code actions.
 
 ### Bundled GCC Editor Error Diagnostics
 
@@ -300,6 +308,11 @@ BC panel contract:
 - `Esc` clears the current input or cancels input editing; it does not cancel a running program.
 - Reuse one BC panel instead of creating a new terminal window for each request.
 - Preserve relative source paths in the visible command flow.
+- Render the `BC <cwd>>` prompt in the terminal's default gray, normalize a Windows drive letter to uppercase for display, keep accepted BC command names such as `run` in bright yellow, render the source-file argument in bright white, and render `-WithInput` in the default foreground. Illegal command text becomes red only after it is clearly outside the closed grammar.
+- Use the parser-owned ranged tokenizer for both execution and coloring so quoted paths, command history, button-injected commands, and typed commands cannot disagree visually or semantically.
+- Emit native terminal OSC 633 prompt/command lifecycle markers so the BC transcript receives PowerShell-like command decorations and left-side success/error circles. Strip OSC 633 sequences from compiler and program output across chunk boundaries while preserving ordinary ANSI GCC color output.
+- Frame Runner lifecycle messages as `===== <Message> =====`. After successful compilation and actual program spawn, print green `===== Compilation Successful, Running =====`. Print green `===== Run Complete =====` for exit code zero, red `===== Runtime Error (exit code N) =====` for a nonzero program exit, and green `===== Executable Program Removed =====` only after cleanup actually succeeds. Do not add the historical yellow Chinese warning banner.
+- Compilation failures retain GCC's colored output and do not print `Runtime Error`. Active-command `Ctrl+C` emits no synthetic `^C` line, finishes the OSC 633 command with a nonzero status so its left-side circle becomes red, and must not be classified as a runtime error.
 
 History and clearing:
 
@@ -317,6 +330,33 @@ Runner process and environment requirements:
 - Restore the Runner host environment after each child process.
 - Do not modify system/user environment variables.
 - Do not couple Runner cancellation to clangd, native PowerShell, or the GCC diagnostic worker's terminal state.
+
+Stage 4.3 implementation boundary:
+
+- Replace the generic integrated-PowerShell host with a BeCoder-owned `Pseudoterminal`. The BC panel may look and edit like PowerShell, but it must never start or embed PowerShell, `cmd`, another shell, or a user profile.
+- Spawn the bundled compiler and compiled program directly from the Runner extension with `shell: false`. Remove the PowerShell request file, result polling, terminal-startup wait, and command-script chain from the active implementation.
+- Keep one process-local controller and one reusable BC panel. The controller owns command history across panel trash/reopen, while a BeCoder process restart naturally clears it.
+- Route editor buttons and typed BC commands through the same parser and single-active-request gate. Busy requests are rejected immediately and are never queued or retained as pending work.
+- Stream GCC ANSI output and program output directly into the BC panel. Keep `-Wall`, `-DDEBUG`, UTF-8 input/execution charsets, and always-colored diagnostics in the Runner compile command without publishing warning diagnostics to the editor.
+- Keep interactive Run stdin inside the BC panel and redirect the exact same-directory `input` file only for Run With Input. `Ctrl+C` owns only the active Runner compiler/program tree; `Esc` owns only line editing.
+- Measure panel readiness, save, compiler spawn/compile, program spawn, compile-to-run-start, runtime, and cleanup without printing development metrics into the normal BC transcript.
+- Pin an exact ordinary file named `input` before every other item in its Explorer folder regardless of the configured name/type/directory/reverse sort mode. No other spelling is pinned.
+- Stage 4.3 source validation must cover command parsing, arbitrary-command rejection, line editing and history, strict busy rejection/no queue, cancellation retirement before reuse, exact input validation, private compiler arguments/environment, timing records, and Explorer ordering. Portable GUI acceptance remains project-owner owned.
+
+Stage 4.3 source and package checkpoint on 2026-08-07 through 2026-08-08:
+
+- The Runner now owns a shell-free `Pseudoterminal`, a closed `run`/`run -WithInput`/`clear`/`help` parser, process-local command history, immediate busy rejection without a queue, direct compiler/program spawning, streamed ANSI output and interactive stdin, and Runner-only process-tree cancellation. The former PowerShell scripts, JSON polling, startup delay, Promise queue, and obsolete configuration path are removed from the active extension.
+- Compiler policy keeps fixed `-O2`, `-Wall`, `-DDEBUG`, UTF-8 charset, and colored-diagnostic arguments authoritative. Additional flags cannot replace optimization, diagnostics, plugin, linker, compiler-driver, or external path controls; compiler and program children receive a private allowlisted environment.
+- Exact same-directory ordinary-file validation owns Run With Input. The Explorer comparator pins only an exact ordinary file named `input` before every sibling in all supported sort and reverse modes.
+- The visual closeout keeps Better C++ Syntax/TextMate as the immediate first paint and restores only clangd's standard semantic-token provider for one bounded refinement. BeCoder One Monokai owns the semantic colors; clangd diagnostics, inlay hints, inactive regions, code actions, custom token persistence, delta reconstruction, and refresh machinery remain absent.
+- BeCoder-local configuration defaults disable non-basic and ambiguous Unicode highlighting while retaining invisible-character highlighting. Explicit user settings still win, and no system VS Code setting is read or changed.
+- The BC panel now uses parser-owned command coloring, PowerShell-style prompt coloring, uppercase Windows drive display, and OSC 633 command lifecycle markers. Compiler and program output cannot inject OSC 633 across chunk, C1, or mixed-introducer boundaries, while normal GCC ANSI diagnostics remain colored. Successful runs, runtime failures, compilation failures, cancellation, missing executables, and cleanup each retain distinct status behavior.
+- GCC editor diagnostics use `-DDEBUGER_H` plus an extension-owned `diagnostic-include/bits/debugger.h` compatibility override. This prevents the bundled debug header from injecting `using namespace std` while preserving `debug(value)` and direct or repeated `bits/debugger.h` inclusion. The correctness-first path deliberately invalidates the bundled C++ PCH and measured approximately 1.5 seconds in the focused raw-GCC probe; replacing the toolchain PCH is a later optimization, not a correctness blocker.
+- Focused validation passed: Runner strict TypeScript checking, production webpack compilation, Runner tests 38/38, GCC diagnostics tests 24/24, bundled GCC C/C++ namespace and debugger-header matrix, client TypeScript checking, build tests 236/236, clangd `check-ts` and `test-compile`, `compile-oi-extensions`, and the existing Stage 4.3 Explorer Electron tests 5/5.
+- The independent read-only review completed four post-acceptance detail rounds. It drove fixes for debugger-header direct/repeated inclusion, package verification of the namespace-isolation header and bundle arguments, Ctrl+C coverage, and non-drive prompt-path coverage; the final round passed with no findings.
+- The replacement `npm run gulp vscode-win32-x64-min` build passed on 2026-08-08 in 145.5 seconds. Direct `verify-becoder-package.ps1 -IncludeCompiler $true` verification then passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`, including the Runner bundle, diagnostics override header, and bundled compiler.
+- User acceptance: passed on 2026-08-08. The project owner confirmed that the complete Stage 4.3 behavior meets the requirements and approved the checkpoint for archive.
+- Status: archived. Source checks, independent review, replacement build, direct package verification, and project-owner portable GUI acceptance are complete; no agent-run GUI acceptance is claimed.
 
 ### Native PowerShell
 
@@ -339,8 +379,8 @@ Run performance target:
 
 Editor and language-service targets:
 
-- TextMate must provide the final visible C/C++ coloring immediately, including files with `bits/stdc++.h`.
-- clangd may continue preparing completion and navigation data in the background, but that work must not recolor the editor.
+- TextMate must provide complete readable C/C++ coloring immediately, including files with `bits/stdc++.h`.
+- clangd may apply one bounded semantic refinement after AST preparation; target approximately two seconds or less on the accepted machine and avoid repeated or broad visual churn.
 - Measure first completion, signature help, hover, definition, references, and rename readiness separately from visual completion.
 - Avoid unnecessary competition between clangd parsing, GCC diagnostics, and Runner compilation.
 
@@ -357,7 +397,7 @@ Core built-in policy:
 
 - Maintain an explicit built-in allowlist and conflict/protection list.
 - BeCoder Setup, BeCoder Runner, the managed clangd client, BeCoder One Monokai, and CodeSnap are protected core extensions.
-- Preserve the current bundled CodeSnap extension at `extensions/aadityanarayan.code-snap` with extension ID `adpyke.codesnap`. CodeSnap is a BeCoder-distributed core capability at the same management level as BeCoder One Monokai, not a dependency to remove and reinstall from the extension marketplace.
+- Preserve the current bundled CodeSnap extension at `extensions/aadityanarayan.code-snap` with extension ID `adpyke.codesnap`. CodeSnap is an archived BeCoder-distributed core capability at the same management level as BeCoder One Monokai, not a dependency to remove and reinstall from the extension marketplace.
 - Protect the built-in `adpyke.codesnap` identity from replacement by user or workspace extensions in normal packaged use while preserving extension-development overrides, and add focused deduplication and package-verifier coverage for that contract.
 - Better C++ Syntax grammar content belongs to the built-in `extensions/cpp` language extension, not a second installed extension.
 - User/workspace extensions must not replace protected core IDs in normal packaged use; extension-development instances remain usable for source debugging.
@@ -382,6 +422,9 @@ Use `C:\Users\Bc\Desktop\BeCoder\vscode-1.130.0` as the interaction and visual r
 - Preserve ordinary editing, terminal, build, extension, and language-service behavior after cleanup.
 - Keep the requested terminal status visuals, including the left status indicator and red cancellation mark after `Ctrl+C`.
 - Remove the first-run custom configuration page and start directly in the prepared BeCoder default state.
+- On a clean BeCoder profile, the first launch must show generated `.exe` files and dot-prefixed configuration files/folders in the left Explorer by default so beginning competitive programmers can see the executable produced by compilation.
+- The Explorer action named `Hide Configuration and Executable Files` must hide both dot-prefixed files/folders such as `.vscode`, `.clangd`, and `.clang-format` through `**/.*`, and BeCoder-managed executable/binary artifacts such as `**/*.exe`. The paired `Show All Files` action must remove only those BeCoder-managed hide patterns and preserve unrelated user exclusions.
+- BeCoder Setup must not add these hide patterns during first launch or ordinary setup. Hiding begins only after the user explicitly invokes the Explorer action, and the action state must remain consistent with the effective BeCoder-managed patterns.
 
 ### Toolchain Slimming and Packaging
 
@@ -483,15 +526,16 @@ The consolidated Stage 4 acceptance matrix includes:
 
 - clean-profile startup directly into BeCoder defaults;
 - automatic private toolchain extraction;
-- final TextMate/One Monokai coloring without delayed semantic recolor;
+- immediate TextMate/One Monokai first paint followed by one bounded clangd semantic refinement;
 - retained clangd completion, signature help, hover, definition/references, rename, and Google fallback formatting;
-- no clangd diagnostics, semantic tokens, inactive regions, or inlay hints;
+- no clangd diagnostics, inactive regions, inlay hints, or semantic-token persistence/custom refresh machinery;
 - GCC-only valid/invalid C17 and C++20 diagnostics, with red error markers and Problems entries but no Stage 4.2 warning markers;
 - workspace `.clangd` left untouched and ignored by BeCoder;
 - Run, Run With Input, cancellation, rerun, and no request queue;
 - approximately two-second compile-to-run-start target;
 - BC history, trash/reopen behavior, arbitrary-command rejection, and closed command set;
 - exact `input` validation and default explorer pinning;
+- generated `.exe` files and dot-prefixed configuration items visible in Explorer by default on a clean first launch, with the explicit hide/show action correctly toggling both groups;
 - native PowerShell retaining the user's environment and arbitrary-command behavior;
 - marketplace and local `.vsix` behavior without protected-extension replacement;
 - CodeSnap remaining bundled, functional, and protected from normal user/workspace replacement without marketplace reinstallation;
@@ -503,16 +547,18 @@ The consolidated Stage 4 acceptance matrix includes:
 
 | Feature area | Status | Current handoff point |
 | --- | --- | --- |
-| Stage 4 specification consolidation | Source validated | The authoritative document is consolidated and structurally checked; commit and project-owner confirmation remain pending. |
+| Stage 4 specification consolidation | Archived | The authoritative Stage 4 requirements and ownership boundaries are consolidated, committed, and accepted by the project owner. |
 | Better C++ Syntax single grammar | Archived | The pinned `071dd6e` snapshot is token-scope equivalent to ShortestPath's effective 1.27.1 grammar; the package contains one accepted `source.cpp` owner. |
 | BeCoder One Monokai | Archived | The protected MIT-licensed `becoder.one-monokai` system extension is the accepted first-launch default. |
-| CodeSnap core retention | Planned | Preserve bundled `adpyke.codesnap`, elevate it to the same protected built-in level as BeCoder One Monokai, and exclude it from marketplace migration and extension cleanup; implementation is separate from Stage 4.2. |
+| CodeSnap core retention | Archived | Bundled `adpyke.codesnap` remains a BeCoder-distributed core capability and is excluded from marketplace migration or non-core cleanup. Marketplace-era same-ID replacement protection remains owned by that future feature. |
 | clangd capability reduction | Archived | Stage 4.1 exposes only completion, signature help, hover, definition, references, rename, and document/range formatting; source, package, and project-owner acceptance passed. |
 | Google formatting | Archived | Stage 4.1 uses clangd's embedded ClangFormat with Google fallback, accepts only a physical workspace `.clang-format` override, and ships no separate `clang-format.exe`; source, package, and project-owner acceptance passed. |
 | GCC editor error diagnostics | Archived | Stage 4.2 source, focused tests, raw bundled-GCC matrix, standard Windows build, direct package verification, package/source hash comparison, independent review, and project-owner portable GUI acceptance passed. |
-| Runner and BC panel | Planned | Replace the generic terminal model with the closed BC interaction and robust cancellation state machine. |
-| Run performance | Planned | Instrument phases and meet the approximate two-second compile-to-run-start target. |
-| Explorer `input` ordering | Planned | Pin an exact `input` item to the top of each folder by default. |
+| Runner and BC panel | Archived | The accepted replacement package contains the shell-free BC panel, framed lifecycle messages, PowerShell-aligned prompt and command colors, uppercase Windows drive display, and Ctrl+C command decorations. |
+| Run performance | Archived | Stage 4.3 removes terminal startup/result polling from the hot path, records phase metrics, and passed project-owner portable acceptance. |
+| Explorer `input` ordering | Archived | Stage 4.3 source, Electron tests, and project-owner acceptance prove that only an exact ordinary file named `input` is pinned above every sibling under all Explorer sort modes. |
+| Stage 4.3 visual closeout | Archived | The accepted visual architecture, BC detail refinements, and GCC namespace-isolation correction passed focused validation, final read-only review, replacement build, direct package verification, and project-owner acceptance. |
+| Explorer visibility toggle | Planned | Default to showing `.exe` and dot-prefixed configuration items; make `Hide Configuration and Executable Files` hide both groups and `Show All Files` restore them without changing unrelated user exclusions. |
 | Marketplace and extension cleanup | Planned | Add Marketplace/VSIX support, define allowlists, preserve protected CodeSnap, and remove only non-core bundled extensions. |
 | AI/debug/GDB removal | Planned | Remove complete contribution and persisted-state chains after dependency tracing. |
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
@@ -526,10 +572,11 @@ The consolidated Stage 4 acceptance matrix includes:
 - Source validation: clangd `check-ts` (including compilation of the real-client visual-feature registration test), 234 build-script tests, `typecheck-client`, and `compile-oi-extensions` passed. The focused workbench Node test could not run because this checkout intentionally has no generated `out/` test module, and the new clangd behavior test was not launched in an Electron extension-test host; no forbidden `npm run compile` was used.
 - Package validation: the final post-review `gulp vscode-win32-x64-min` and enhanced `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The verifier parsed the packaged theme identity and defaults, grammar commit and unique owner, onboarding entry, and both upstream licenses. Two rounds of independent read-only review passed after the first round's four findings were fixed.
 - User acceptance: passed. The project owner confirmed that first-launch theme selection, theme persistence after switching and restart, and opening `bits/stdc++.h` files without delayed secondary coloring all match the required behavior.
+- Later decision: Stage 4.3 intentionally reintroduces only the standard clangd semantic-token provider for a bounded second-stage refinement. This does not invalidate the archived first-paint, theme, grammar, or no-custom-cache results, but it supersedes the archived prohibition on all delayed semantic recoloring.
 
 ### Stage 4.1 clangd and formatting build checkpoint (2026-08-07)
 
-- Capability boundary: the bundled client now exposes only completion, signature help, hover, definition, references, prepare rename/rename, document formatting, and range formatting. Diagnostics, semantic tokens, inlay hints, inactive regions, code actions, clang-tidy, workspace symbols, background indexing, AST/memory/type-hierarchy UI, header switching, formatting on type, configuration UI/watchers, downloads, updates, external paths, and the public raw client API are removed or blocked.
+- Capability boundary at this checkpoint: the bundled client exposed only completion, signature help, hover, definition, references, prepare rename/rename, document formatting, and range formatting. Stage 4.3 later adds only standard semantic tokens; diagnostics, inlay hints, inactive regions, code actions, clang-tidy, workspace symbols, background indexing, AST/memory/type-hierarchy UI, header switching, formatting on type, configuration UI/watchers, downloads, updates, external paths, and the public raw client API remain removed or blocked.
 - Managed process: BeCoder starts only its bundled clangd with `--compile_args_from=lsp`, `--enable-config=false`, `--fallback-style=Google`, `--header-insertion=never`, and `--clang-tidy=false`. C17/C++20 compilation commands are sent through the LSP boundary before each document is opened; completion cannot insert include directives.
 - Configuration ownership: BeCoder no longer creates, reads, hides, migrates, rewrites, or deletes workspace `.clangd` files and does not consume `compile_commands.json`. Legacy BeCoder-owned private-profile settings and obsolete hide rules receive a one-time migration without deleting user project assets or later user-created exclusions.
 - Formatting boundary: formatting uses clangd's embedded ClangFormat engine and ships no standalone `clang-format.exe`. Google is the fallback; only a readable physical `.clang-format` inside the opened workspace may override it. `_clang-format`, escaping symlinks, ancestor/system/profile configuration, and `InheritParentConfig` are rejected, and no configuration file or directory is generated.
@@ -540,6 +587,28 @@ The consolidated Stage 4 acceptance matrix includes:
 - Remaining work: GCC-owned diagnostics, the BC Runner/panel, Run performance, Explorer `input` ordering, extension cleanup, workbench cleanup, and toolchain slimming remain separate Stage 4 feature areas.
 
 ## 9. Feature Archive
+
+### Stage 4 specification consolidation
+
+- Requirement: replace conflicting historical stage directions with one authoritative Stage 4 product definition, ownership boundary, work register, acceptance matrix, and archive process.
+- User-visible result: subsequent work has one stable source of truth for visual authority, clangd, GCC diagnostics, Runner/BC, native PowerShell, extensions, workbench cleanup, and packaging.
+- Source ownership: `BECODER_HANDOFF.md` and `AGENTS.md`.
+- Commit/PR: specification consolidation commit `e9d4a25`, followed by accepted Stage 4, Stage 4.1, and Stage 4.2 checkpoints; no PR was requested for the direct backup branches.
+- Source validation: the document was structurally reviewed and then used to complete and archive the visual, clangd/formatting, and GCC diagnostic feature areas.
+- Package/build validation: not independently applicable to a documentation-only feature; subsequent Stage 4 package builds validated the governed implementation boundaries.
+- User acceptance: explicitly approved for archive by the project owner on 2026-08-07.
+- Remaining risks or follow-up: keep the work register and archive entries current as Stage 4.3 and later features complete.
+
+### CodeSnap core retention policy
+
+- Requirement: retain bundled CodeSnap as a BeCoder core capability at the same distribution level as BeCoder One Monokai, rather than removing it for marketplace reinstallation.
+- User-visible result: `adpyke.codesnap` remains bundled and available in BeCoder without a marketplace install.
+- Source ownership: `extensions/aadityanarayan.code-snap`; future normal-install replacement protection belongs to the Marketplace and extension-cleanup feature.
+- Commit/PR: CodeSnap is present from source baseline commit `58816f2`; the retention decision is recorded in the Stage 4 handoff and requires no Stage 4.3 source rewrite.
+- Source validation: current source and package policy retain the bundled extension; future Marketplace validation must prove that a user/workspace copy cannot replace the protected built-in identity.
+- Package/build validation: prior accepted portable packages include the bundled CodeSnap extension.
+- User acceptance: explicitly approved for archive by the project owner on 2026-08-07.
+- Remaining risks or follow-up: implement and test same-ID protection before Marketplace installation is enabled; do not classify that work as part of this archived retention decision.
 
 ### Stage 4.1 clangd intelligence and Google formatting
 
@@ -562,6 +631,18 @@ The consolidated Stage 4 acceptance matrix includes:
 - Package/build validation: `gulp vscode-win32-x64-min` and the enhanced Include Compiler package verifier passed.
 - User acceptance: passed on 2026-08-07.
 - Remaining risks or follow-up: the broader clangd capability reduction and GCC diagnostic migration remain active Stage 4 work and are not part of this archived visual feature.
+- Superseding follow-up: Stage 4.3 preserves this archived TextMate first-paint and One Monokai ownership, but replaces the historical "no semantic recolor" rule with one bounded standard clangd semantic refinement. No custom token persistence or cache is restored.
+
+### Stage 4.3 Runner, visual refinement, diagnostics correction, and Explorer ordering
+
+- Requirement: deliver the shell-free BC command panel and direct bundled-compiler process path; preserve immediate TextMate coloring with one bounded clangd semantic refinement; isolate GCC editor diagnostics from the bundled debugger header's global namespace import; and pin an exact ordinary `input` file first in Explorer.
+- User-visible result: Run and Run With Input are immediate, single-request BC operations with process-local history, PowerShell-aligned command decorations and colors, uppercase Windows drive display, framed lifecycle messages, correct runtime-error and Ctrl+C behavior, and no arbitrary shell execution. Editor diagnostics require normal namespace qualification, while valid debugger-header use remains supported. Explorer pins only the exact ordinary `input` file.
+- Source ownership: `extensions/danielpinto8zz6.c-cpp-compile-run`, `extensions/becoder.gcc-diagnostics`, `extensions/becoder.one-monokai`, the reduced clangd semantic-token boundary, `extensions/becoder.setup`, the Explorer comparator and tests, build boundary tests, and package verification.
+- Commit/PR: the containing Stage 4.3 backup commit is pushed directly to `origin/stage4.3`; no PR or release workflow was requested.
+- Source validation: Runner tests 38/38, GCC diagnostics tests 24/24, bundled GCC C/C++ namespace/debugger-header matrix, build tests 236/236, Explorer Electron tests 5/5, client typecheck, OI extension compilation, clangd checks, Runner production bundling, `git diff --check`, and four final independent read-only review rounds passed.
+- Package/build validation: the replacement Windows portable build passed on 2026-08-08 in 145.5 seconds, followed by successful `verify-becoder-package.ps1 -IncludeCompiler $true` verification for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`.
+- User acceptance: passed on 2026-08-08; the project owner reported that Stage 4.3 fully meets the requirements and approved it for archive.
+- Remaining risks or follow-up: the GCC namespace-isolation path deliberately invalidates the bundled C++ PCH and measured approximately 1.5 seconds in the focused probe. The Explorer visibility toggle is newly planned: first launch shows `.exe` and dot-prefixed items, while the explicit hide action must hide both groups. Marketplace cleanup, AI/debug removal, broader Workbench alignment, and toolchain slimming remain separate Stage 4 work.
 
 ### Baseline: Runner, toolchain, and language isolation
 

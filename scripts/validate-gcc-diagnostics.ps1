@@ -17,6 +17,7 @@ foreach ($compiler in @($cppCompiler, $cCompiler)) {
 $validationRoot = Join-Path ([IO.Path]::GetTempPath()) ("becoder-gcc-diagnostics-validation-" + [Guid]::NewGuid().ToString('N'))
 $sourceRoot = Join-Path $validationRoot 'source'
 $mirrorRoot = Join-Path $validationRoot 'mirror'
+$overlayRoot = Join-Path $PSScriptRoot '..\extensions\becoder.gcc-diagnostics\resources\diagnostic-include'
 [IO.Directory]::CreateDirectory($sourceRoot) | Out-Null
 [IO.Directory]::CreateDirectory($mirrorRoot) | Out-Null
 
@@ -59,6 +60,11 @@ function Invoke-GccDiagnostic(
 	[string[]]$AdditionalArguments = @()
 ) {
 	$mirrorPath = Join-Path $mirrorRoot $SourceName
+	$debuggerIsolationArguments = if ($Language -eq 'c++') {
+		@('-DDEBUGER_H', '-I', $overlayRoot)
+	} else {
+		@()
+	}
 	$arguments = @(
 		'-fsyntax-only',
 		'-O2',
@@ -73,7 +79,7 @@ function Invoke-GccDiagnostic(
 		'-fdiagnostics-column-unit=byte',
 		'-iquote', $sourceRoot,
 		"-fmacro-prefix-map=$mirrorRoot=$sourceRoot"
-	) + $AdditionalArguments + @($mirrorPath)
+	) + $debuggerIsolationArguments + $AdditionalArguments + @($mirrorPath)
 
 	$startInfo = [Diagnostics.ProcessStartInfo]::new()
 	$startInfo.FileName = $Compiler
@@ -159,6 +165,31 @@ int main(void) { int n = 1; int values[n]; return scanf("%d", &values[0]) < 0; }
 
 	Write-Utf8File (Join-Path $mirrorRoot 'syntax.cpp') 'int main() { return missing_name }'
 	Assert-HasError (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'syntax.cpp') 'syntax and undeclared identifier'
+
+	Write-Utf8File (Join-Path $mirrorRoot 'namespace.cpp') @'
+#include <bits/stdc++.h>
+int main() { int value; cin >> value; vector<int> values; return value; }
+'@
+	Assert-HasError (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'namespace.cpp') 'explicit standard namespace'
+
+	Write-Utf8File (Join-Path $mirrorRoot 'qualified.cpp') @'
+#include <bits/stdc++.h>
+int main() { int value; std::cin >> value; std::vector<int> values; return value; }
+'@
+	Assert-Clean (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'qualified.cpp') 'qualified standard namespace'
+
+	Write-Utf8File (Join-Path $mirrorRoot 'debugger.cpp') @'
+#include <bits/debugger.h>
+int main() { std::vector<int> values{1}; debug(values); dout.sp("ok"); return 0; }
+'@
+	Assert-Clean (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'debugger.cpp') 'direct debugger header'
+
+	Write-Utf8File (Join-Path $mirrorRoot 'repeated-debugger.cpp') @'
+#include <bits/stdc++.h>
+#include <bits/debugger.h>
+int main() { std::vector<int> values{1}; debug(values); dout.sp("ok"); return 0; }
+'@
+	Assert-Clean (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'repeated-debugger.cpp') 'repeated debugger header'
 
 	Write-Utf8File (Join-Path $mirrorRoot 'type.cpp') 'int main() { int value = "text"; return value; }'
 	Assert-HasError (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'type.cpp') 'type mismatch'

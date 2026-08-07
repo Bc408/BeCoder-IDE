@@ -20,6 +20,7 @@ suite('BeCoder clangd capability boundary', () => {
       vscodelc.DefinitionRequest.method,
       vscodelc.ReferencesRequest.method,
       vscodelc.RenameRequest.method,
+      vscodelc.SemanticTokensRegistrationType.method,
       vscodelc.DocumentFormattingRequest.method,
       vscodelc.DocumentRangeFormattingRequest.method
     ]) {
@@ -40,7 +41,6 @@ suite('BeCoder clangd capability boundary', () => {
       vscodelc.FoldingRangeRequest.method,
       vscodelc.SelectionRangeRequest.method,
       vscodelc.CallHierarchyPrepareRequest.method,
-      vscodelc.SemanticTokensRegistrationType.method,
       vscodelc.LinkedEditingRangeRequest.method,
       vscodelc.TypeHierarchyPrepareRequest.method,
       vscodelc.InlineValueRequest.method,

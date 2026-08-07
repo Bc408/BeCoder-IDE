@@ -599,7 +599,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 }
 
 function hasAuthenticodeSignature(filePath: string): Promise<boolean> {
-	return new Promise((resolve, reject) => {
+	return new Promise(resolve => {
 		const proc = cp.spawn('signtool.exe', ['verify', '/pa', filePath]);
 		// Local portable builds do not require Authenticode signing. If the
 		// Windows SDK is absent, leave the binaries unsigned and continue.

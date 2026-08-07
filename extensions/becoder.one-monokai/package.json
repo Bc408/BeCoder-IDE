@@ -22,7 +22,7 @@
 		],
 		"configurationDefaults": {
 			"[c][cpp][cuda-cpp]": {
-				"editor.semanticHighlighting.enabled": false
+				"editor.semanticHighlighting.enabled": true
 			}
 		}
 	},

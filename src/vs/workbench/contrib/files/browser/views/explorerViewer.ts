@@ -1460,6 +1460,11 @@ export class FileSorter implements ITreeSorter<ExplorerItem> {
 			return 1;
 		}
 
+		const pinnedInputComparison = comparePinnedInput(statA, statB);
+		if (pinnedInputComparison !== undefined) {
+			return pinnedInputComparison;
+		}
+
 		const sortOrder = this.explorerService.sortOrderConfiguration.sortOrder;
 		const lexicographicOptions = this.explorerService.sortOrderConfiguration.lexicographicOptions;
 		const reverse = this.explorerService.sortOrderConfiguration.reverse;
@@ -1566,6 +1571,22 @@ export class FileSorter implements ITreeSorter<ExplorerItem> {
 				return compareFileNames(statA.name, statB.name);
 		}
 	}
+}
+
+export function comparePinnedInput(
+	statA: Pick<ExplorerItem, 'name' | 'isDirectory' | 'isSymbolicLink' | 'isUnknown'>,
+	statB: Pick<ExplorerItem, 'name' | 'isDirectory' | 'isSymbolicLink' | 'isUnknown'>
+): number | undefined {
+	const firstIsInput = isPinnedInput(statA);
+	const secondIsInput = isPinnedInput(statB);
+	if (firstIsInput === secondIsInput) {
+		return undefined;
+	}
+	return firstIsInput ? -1 : 1;
+}
+
+function isPinnedInput(stat: Pick<ExplorerItem, 'name' | 'isDirectory' | 'isSymbolicLink' | 'isUnknown'>): boolean {
+	return stat.name === 'input' && !stat.isDirectory && !stat.isSymbolicLink && !stat.isUnknown;
 }
 
 export class FileDragAndDrop implements ITreeDragAndDrop<ExplorerItem> {

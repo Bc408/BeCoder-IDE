@@ -21,6 +21,11 @@
 		"vscode:prepublish": "npm run compile"
 	},
 	"contributes": {
+		"configurationDefaults": {
+			"editor.unicodeHighlight.nonBasicASCII": false,
+			"editor.unicodeHighlight.ambiguousCharacters": false,
+			"editor.unicodeHighlight.invisibleCharacters": true
+		},
 		"configuration": {
 			"title": "%configuration.title%",
 			"properties": {

@@ -9,7 +9,7 @@ import { ensureNoDisposablesAreLeakedInTestSuite, toResource } from '../../../..
 import { ExplorerItem } from '../../common/explorerModel.js';
 import { getContext } from '../../browser/views/explorerView.js';
 import { listInvalidItemForeground } from '../../../../../platform/theme/common/colorRegistry.js';
-import { CompressedNavigationController } from '../../browser/views/explorerViewer.js';
+import { CompressedNavigationController, comparePinnedInput } from '../../browser/views/explorerViewer.js';
 import * as dom from '../../../../../base/browser/dom.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { provideDecorations } from '../../browser/views/explorerDecorationsProvider.js';
@@ -43,6 +43,33 @@ suite('Files - ExplorerView', () => {
 		assert.deepStrictEqual(getContext([s1], [s3, s1, s4], false, noNavigationController), [s1]);
 		assert.deepStrictEqual(getContext([], [s3, s1, s4], false, noNavigationController), []);
 		assert.deepStrictEqual(getContext([], [s3, s1, s4], true, noNavigationController), [s3, s1, s4]);
+	});
+
+	test('pins only an exact ordinary input file before every sibling', function () {
+		const ordinaryInput = createStat.call(this, '/input', 'input', false, false, 0, 0);
+		const source = createStat.call(this, '/main.cpp', 'main.cpp', false, false, 0, 0);
+		const folder = createStat.call(this, '/folder', 'folder', true, false, 0, 0);
+		const inputFolder = createStat.call(this, '/input-folder', 'input', true, false, 0, 0);
+		const inputSymlink = createStat.call(this, '/input-link', 'input', false, false, 0, 0, true);
+		const upperInput = createStat.call(this, '/Input', 'Input', false, false, 0, 0);
+
+		assert.deepStrictEqual({
+			beforeFile: comparePinnedInput(ordinaryInput, source),
+			beforeFolder: comparePinnedInput(ordinaryInput, folder),
+			afterInput: comparePinnedInput(source, ordinaryInput),
+			inputFolder: comparePinnedInput(inputFolder, source),
+			inputSymlink: comparePinnedInput(inputSymlink, source),
+			caseSensitive: comparePinnedInput(upperInput, source),
+			twoOrdinaryFiles: comparePinnedInput(source, folder)
+		}, {
+			beforeFile: -1,
+			beforeFolder: -1,
+			afterInput: 1,
+			inputFolder: undefined,
+			inputSymlink: undefined,
+			caseSensitive: undefined,
+			twoOrdinaryFiles: undefined
+		});
 	});
 
 	test('decoration provider', async function () {

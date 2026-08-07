@@ -1,0 +1,39 @@
+{
+	"name": "gcc-diagnostics",
+	"displayName": "BeCoder GCC Diagnostics",
+	"description": "BeCoder's private bundled-GCC error diagnostics for C and C++.",
+	"version": "0.1.0",
+	"publisher": "becoder",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.129.0"
+	},
+	"categories": [
+		"Programming Languages",
+		"Linters"
+	],
+	"activationEvents": [
+		"onLanguage:c",
+		"onLanguage:cpp"
+	],
+	"extensionDependencies": [
+		"becoder.becoder-setup"
+	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": false,
+			"description": "GCC diagnostics parse source files and their local includes."
+		}
+	},
+	"main": "./out/extension.js",
+	"scripts": {
+		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true }); require('fs').rmSync('out-test', { recursive: true, force: true })\"",
+		"compile": "npm run clean && node ../../node_modules/typescript/bin/tsc6 -p ./",
+		"test": "npm run clean && node ../../node_modules/typescript/bin/tsc6 -p ./tsconfig.test.json && node --test out-test/test/*.test.js",
+		"vscode:prepublish": "npm run compile"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Bc408/BeCoder.git"
+	}
+}

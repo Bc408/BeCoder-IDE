@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.1** is the active implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.2** is the active implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,9 +9,9 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.1`
-- Active baseline commit: `ada9c46` (`feat(stage4): establish TextMate visual system`)
-- Latest remote checkpoint with the same commit: `origin/stage4`
+- Active development branch: `codex/stage4.2`
+- Active baseline commit: `43b35f9` (`feat(stage4.1): narrow clangd and add Google formatting`)
+- Latest remote checkpoint with the same commit: `origin/stage4.1`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
@@ -58,7 +58,7 @@ Core product requirements:
 
 ## 3. Stage 4 Management Rules
 
-Stage 4 is one continuous product stage. Stage 4.1 is a development checkpoint label; requirements and completion are still tracked by named feature areas rather than treating the checkpoint as an independent product release.
+Stage 4 is one continuous product stage. Stage 4.2 is a development checkpoint label; requirements and completion are still tracked by named feature areas rather than treating the checkpoint as an independent product release.
 
 Feature statuses are:
 
@@ -169,9 +169,9 @@ Formatting requirements:
 - Do not let a `.clang-format` outside the opened workspace, a user profile, or another system location affect BeCoder formatting. The workspace-contained `.clang-format` is the only approved project-level formatting override and is not an exception to the `.clangd` ban.
 - Formatting must not enable clangd diagnostics, semantic tokens, or general code actions.
 
-### Bundled GCC Diagnostics
+### Bundled GCC Editor Error Diagnostics
 
-Bundled GCC is the sole authority for visible C/C++ syntax and type diagnostics.
+Bundled GCC is the sole authority for visible C/C++ syntax, preprocessing, and type errors in the editor.
 
 Required diagnostic flow:
 
@@ -180,27 +180,93 @@ latest editor content
   -> BeCoder-private temporary mirror
   -> bundled gcc/g++ -fsyntax-only
   -> structured GCC diagnostics
-  -> Problems, squiggles, and editor diagnostics
+  -> filter error and fatal error records
+  -> Problems, red squiggles, file badges, and overview-ruler markers
 ```
 
 Requirements:
 
 - Use bundled `gcc` with C17 for C and bundled `g++` with C++20 for C++.
 - Use structured, color-free compiler output, preferring GCC JSON diagnostics where supported.
+- Use `-DDEBUG`, `-finput-charset=UTF-8`, and `-fexec-charset=UTF-8` to match the accepted competitive-programming source semantics. Use `-fdiagnostics-color=never` because Stage 4.2 consumes JSON rather than rendering terminal text.
+- Do not enable `-Wall`, extended warning flags, `-Werror`, or `-pedantic` in the Stage 4.2 background diagnostic command. Warning selection and colored compiler output belong to the later Runner/BC panel work.
+- Publish only GCC `error` and `fatal error` records as `DiagnosticSeverity.Error`. GCC `warning` records must not enter the Stage 4.2 `DiagnosticCollection`, Problems, editor decorations, file badges, or counters. Notes may be attached only as related information to a published error and must not create their own markers.
+- Publish valid structured errors even when GCC exits nonzero. A clean exit with no error records clears the current file's errors. Process exit code alone must never be converted into a source-code diagnostic.
 - Never invoke a compiler through shell lookup, user `PATH`, registry discovery, or download fallback.
 - Keep temporary diagnostic files under BeCoder data or temp storage, not in the user project.
 - Preserve same-directory quoted-include behavior and map temporary-file locations back to the original document.
 - Use a debounce and one active diagnostic request. A newer edit cancels the older diagnostic process; requests do not queue.
-- Clear or mark stale diagnostics when content changes so old squiggles do not appear current.
+- Keep the last successfully accepted diagnostics while newer content is pending, then replace the complete owned result atomically. A canceled, stale, malformed, timed-out, or failed request must not clear or partially replace the accepted result.
 - Run and diagnostic compilation are separate processes. Starting a real Run may cancel the lower-priority diagnostic process to avoid compiler contention, but must not share terminal or `Ctrl+C` state.
 - Successful Run compilation results may replace the current diagnostic result for that source file.
-- Syntax and type errors are required. The final warning policy remains an explicit product decision and must not be guessed during implementation.
+- Syntax, preprocessing, and type errors are required editor diagnostics. Compiler and linker output, including all warnings, belongs to the later Runner/BC panel and is outside Stage 4.2.
 
-Regression cases must cover valid C17 VLAs, `stdio.h`, `scanf`, valid C++20 concepts, `bits/stdc++.h`, `debugger.h`, an undeclared identifier, a type mismatch, a syntax error, relative includes, stale-result cancellation, and compiler-process failure.
+The Run-to-diagnostic cancellation bridge and successful-Run result reuse are broader Stage 4 options, not Stage 4.2 implementation requirements. Stage 4.2 must remain independently correct without modifying or importing Runner state.
+
+Regression cases must cover valid C17 VLAs, `stdio.h`, `scanf`, valid C++20 concepts, `bits/stdc++.h`, `debugger.h`, a missing include, an undeclared identifier, a type mismatch, a syntax error, error exit code nonzero, relative includes, stale-result cancellation, and compiler-process failure. Warning-only cases such as an unused variable and signed/unsigned comparison must prove that Stage 4.2 publishes no warning diagnostics.
+
+Stage 4.2 implementation boundary:
+
+- Implement diagnostics as a dedicated protected built-in extension, provisionally `extensions/becoder.gcc-diagnostics`; do not place the diagnostic state machine in BeCoder Setup, Runner, clangd, native PowerShell, or workbench core.
+- BeCoder Setup remains responsible only for making the private toolchain available. The diagnostic extension resolves the packaged Windows compiler from BeCoder-owned data paths and must not trust a workspace setting, user compiler path, `PATH`, registry entry, or extension-marketplace toolchain.
+- Activate for saved file-backed C and C++ source documents. Diagnose the latest in-memory document text rather than the last saved disk contents; untitled documents and standalone header-as-translation-unit diagnostics are outside the first Stage 4.2 acceptance boundary.
+- Own one `vscode.DiagnosticCollection` with source label `BeCoder GCC`. Publish only red errors after the matching request completes successfully; canceled, stale, malformed, and failed compiler requests must never overwrite a newer result.
+- Use a short edit debounce and one global active compiler process. A newer eligible edit cancels the active process tree and replaces the pending debounce target. The latest target may become ready while the canceled process is retiring, but it must not start until the old process has actually closed. There is no FIFO queue and no retained pending history.
+- Keep the entire diagnostic pipeline asynchronous. File open, TextMate coloring, typing, save, clangd startup, and editor readiness must never await GCC diagnostics; `bits/stdc++.h` may make a diagnostic result slower but must not reintroduce a visible highlighting wait or second coloring phase.
+- Create one unique private temporary directory per request, write an exact text mirror, compile with `-fsyntax-only`, `-O2`, explicit `-x c` or `-x c++`, `-fdiagnostics-format=json`, `-fdiagnostics-color=never`, `-DDEBUG`, UTF-8 input/output charsets, C17 or C++20, `-iquote <source-directory>`, and private-to-source macro path mapping, then remove only that request's temporary directory after the process closes. `-O2` is required because the bundled `stdc++.h.gch` was built with that option and is rejected without it; explicit `-x` prevents mirror filename casing from changing GCC's language choice.
+- Preserve same-directory quoted includes through the explicit `-iquote` path. Map only the temporary mirror path back to the original document URI; keep real included-header locations intact when GCC reports them.
+- Parse GCC JSON as structured data. Convert GCC's one-based byte/display columns and inclusive ranges to VS Code's zero-based UTF-16 ranges, including non-ASCII source lines; attach compiler notes as related information to errors instead of creating unrelated primary squiggles. Filter by the structured `kind` field and do not infer severity from text, color, or process exit code. For a non-target included file, use only the disk text GCC actually read; suppress that location while its open editor buffer is dirty so disk byte columns are never mapped against different in-memory text.
+- Spawn without a shell, with a BeCoder-private environment and temporary roots. Scrub compiler-affecting variables including `CPATH`, `CPLUS_INCLUDE_PATH`, `C_INCLUDE_PATH`, `COMPILER_PATH`, `GCC_EXEC_PREFIX`, `LIBRARY_PATH`, and `INCLUDE`.
+- Keep diagnostic cancellation independent from Runner `Ctrl+C`, the BC panel, clangd, and native PowerShell. Stage 4.2 does not change Runner behavior; any later Run-to-diagnostic cancellation bridge must be one-way and must not share process or terminal state.
+- Preserve the edited document's last accepted diagnostics during debounce and compilation so markers do not flicker; atomically replace them only when the matching latest request succeeds. Clear owned diagnostics when the document closes or becomes ineligible. Toolchain/process failures are logged without popup repetition and leave the last accepted result intact.
+- Record `debounceWaitMs`, `compilerSpawnMs`, `gccMs`, `parseMs`, `publishMs`, cancellation count, and total edit-to-diagnostic latency in a developer-facing trace. Measure cold and warm valid files, `bits/stdc++.h`, error input, continuous typing, cancellation, and cross-file replacement before attempting optimization.
+- Stage 4.2 guarantees syntax, preprocessing, and type errors only. It creates no terminal and publishes no warning diagnostics. The later Runner/BC panel work owns compiler warning flags, colored terminal presentation, compile-command interaction, and linker/runtime output.
+
+Stage 4.2 user-visible contract:
+
+- Mark each GCC source error with the native red editor squiggle at the mapped range. Do not draw custom decorations that compete with VS Code's marker service.
+- Populate Problems with source `BeCoder GCC`, message, file, line, and column. Selecting a Problems entry must navigate to the reported range.
+- Let the native marker service provide the red editor-tab count, Explorer file/folder problem count, minimap/overview-ruler marker, and Problems badge as in the accepted VS Code reference image.
+- Do not force-open or focus the Problems panel. The user may keep Terminal or another panel active while the Problems badge and editor markers remain current.
+- When the latest content has no GCC errors, remove all Stage 4.2 markers for that document. A warning-only document is error-clean and therefore has no Stage 4.2 marker or count.
+- Do not create a terminal, print compiler output, show colored GCC text, or alter the BC panel/native PowerShell. Those visible compile results belong to the later Runner/BC panel work.
+
+Stage 4.2 document-event contract:
+
+| Event | Required behavior |
+| --- | --- |
+| Open an eligible saved `.c`, `.cc`, `.cpp`, or `.cxx` document | Schedule asynchronous error analysis after 1000 ms without delaying editor readiness. |
+| Change eligible document text | Preserve the last accepted markers, schedule the latest content after 800 ms, replace the pending debounce target, and cancel an older active GCC process tree. |
+| Save the document | Diagnose the saved version immediately when no identical current-version request has already completed or is active. A save replaces a pending debounce for the same version. |
+| Switch to another eligible open document | Make the newly active document the latest diagnostic target; do not queue the previous target. Previously completed errors for an unchanged document may remain visible. |
+| Close, delete, or rename a document | Cancel an owned request for the old URI and clear all owned markers for that URI. |
+| Toolchain is not ready | Publish no synthetic source error, log the unavailable state once, preserve the last accepted markers, and retry the active eligible document when BeCoder Setup reports compiler readiness. |
+| Extension deactivation or window shutdown | Cancel the compiler process tree, dispose the collection, and clean only diagnostic-owned temporary directories. |
+
+A result may publish only when all of these remain true after GCC closes: the request is the latest request, it was not canceled, the document URI and version still match, the document remains eligible, the JSON is structurally valid, and the collection is still alive. Parse all top-level records but create primary markers only for `error` and `fatal error`; deduplicate identical file/range/message errors and attach their notes as related information.
+
+Stage 4.2 validation must include parser fixtures for Windows paths, spaces, UTF-8 text, multi-location ranges, include stacks, error-associated notes, warning filtering, malformed output, and process failure; deterministic coordinator tests for debounce, replacement, process-tree cancellation, no queue, stale suppression, and per-request cleanup; raw bundled-GCC error probes; package verification for the new built-in extension; the standard Windows source/build sequence; independent read-only review; and project-owner portable GUI acceptance.
+
+Stage 4.2 planning probe: the packaged bundled GCC 14.1.0 emitted a structured JSON error for an undeclared identifier with exit code 1. A separate warning probe confirmed that warnings are structurally distinguishable, so Stage 4.2 can reject them explicitly rather than relying on text parsing or exit status. `bits/stdc++.h` testing proved that omitting `-O2` invalidates the bundled PCH, while the exact Stage 4.2 arguments including `-O2` and `-fmacro-prefix-map` preserve it; a warm valid check completed in approximately 483 ms on the development machine.
+
+Stage 4.2 archived checkpoint on 2026-08-07:
+
+- Implemented the protected built-in `becoder.gcc-diagnostics` extension with a private mirrored-source GCC pipeline, strict latest-only single-process coordination, atomic result replacement, native error diagnostics, warning filtering, UTF-8 byte-to-UTF-16 mapping, cross-TU diagnostic ownership, bounded toolchain-readiness retry, and dependency-forced source rechecks after header save/delete/rename.
+- Focused extension tests pass 24/24, including debounce/latest replacement, strict retirement before replacement start, forced same-version dependency invalidation, shared-header ownership, Windows/UTF-8 JSON parsing, fixed compiler arguments, abort plus dispose, timeout, output overflow, and spawn failure.
+- `scripts/validate-gcc-diagnostics.ps1` passes against bundled GCC 14.1.0 for C17 VLA/`stdio.h`/`scanf`, C++20 concepts/`bits/stdc++.h`/`debugger.h`, syntax and undeclared-name errors, type mismatch, missing and relative includes, a clean warning-only Stage 4.2 invocation, and a separately structured `-Wall` warning probe.
+- Final validation passes: OI extension boundary 5/5, `npm run typecheck-client`, `npm run compile-oi-extensions`, `npm run gulp vscode-win32-x64-min`, and `verify-becoder-package.ps1 -IncludeCompiler $true`. Packaged GCC diagnostic JavaScript SHA-256 values match the current extension output.
+- The same independent read-only reviewer completed three review rounds. Two rounds found and drove fixes for process overlap, dependency invalidation, process termination idempotence, dirty-header mapping, file lifecycle, toolchain retry, and test realism; the third round passed with no remaining source blocker.
+- Current portable package: `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The project owner completed portable GUI acceptance and fully accepted the Stage 4.2 delivery on 2026-08-07.
 
 ### BeCoder Runner and BC Command Panel
 
 BeCoder Runner is a dedicated Run and Run With Input surface. It is not a general shell and must remain isolated from native PowerShell.
+
+Future BC panel compiler-output contract:
+
+- Warning and compiler-output presentation is owned by the Runner/BC panel stage, not Stage 4.2.
+- Follow the established `crd` experience: generally compile with `-Wall -DDEBUG -finput-charset=UTF-8 -fexec-charset=UTF-8 -fdiagnostics-color=always`, merge stderr into the BC panel output, and preserve GCC's familiar colored terminal formatting.
+- Do not add the Stage 4.2 background diagnostic JSON stream to the BC panel, and do not make BC panel warning output create editor warning markers unless the project owner later requests that behavior.
 
 Runner execution contract:
 
@@ -290,10 +356,12 @@ Marketplace requirements:
 Core built-in policy:
 
 - Maintain an explicit built-in allowlist and conflict/protection list.
-- BeCoder Setup, BeCoder Runner, the managed clangd client, and BeCoder One Monokai are protected core extensions.
+- BeCoder Setup, BeCoder Runner, the managed clangd client, BeCoder One Monokai, and CodeSnap are protected core extensions.
+- Preserve the current bundled CodeSnap extension at `extensions/aadityanarayan.code-snap` with extension ID `adpyke.codesnap`. CodeSnap is a BeCoder-distributed core capability at the same management level as BeCoder One Monokai, not a dependency to remove and reinstall from the extension marketplace.
+- Protect the built-in `adpyke.codesnap` identity from replacement by user or workspace extensions in normal packaged use while preserving extension-development overrides, and add focused deduplication and package-verifier coverage for that contract.
 - Better C++ Syntax grammar content belongs to the built-in `extensions/cpp` language extension, not a second installed extension.
 - User/workspace extensions must not replace protected core IDs in normal packaged use; extension-development instances remain usable for source debugging.
-- Remove CodeSnap, JavaScript Debugger (`js-debug`), Mermaid, and other non-core prebundled extensions unless the project owner explicitly adds them to the allowlist.
+- Remove JavaScript Debugger (`js-debug`), Mermaid, and other non-core prebundled extensions unless the project owner explicitly adds them to the allowlist. CodeSnap is explicitly excluded from this cleanup.
 - Do not restore ShortestPath login, online submission, network OJ services, or GDB.
 
 Complete AI removal means removing the full feature chain, not merely hiding a panel:
@@ -344,6 +412,12 @@ clangd:
 - `extensions/llvm-vs-code-extensions.vscode-clangd/src/clangd-context.ts`
 - `extensions/llvm-vs-code-extensions.vscode-clangd/package.json`
 
+GCC diagnostics:
+
+- Active owner: `extensions/becoder.gcc-diagnostics`
+- Toolchain readiness reference only: `extensions/becoder.setup`
+- Packaged compiler-location reference: `extensions/danielpinto8zz6.c-cpp-compile-run/src/compiler.ts`
+
 C/C++ visual system:
 
 - `extensions/cpp/package.json`
@@ -351,6 +425,12 @@ C/C++ visual system:
 - `extensions/cpp/syntaxes/cpp.embedded.macro.tmLanguage.json`
 - Planned built-in theme location: `extensions/becoder.one-monokai`
 - ShortestPath reference: `C:\Users\Bc\Desktop\BeCoder\shortestpath-ide-Release-v0.2.8`
+
+Protected built-in extensions:
+
+- `extensions/aadityanarayan.code-snap`
+- `src/vs/workbench/services/extensions/common/extensionsUtil.ts`
+- `src/vs/workbench/services/extensions/test/common/extensionsUtil.test.ts`
 
 Build and package verification:
 
@@ -406,7 +486,7 @@ The consolidated Stage 4 acceptance matrix includes:
 - final TextMate/One Monokai coloring without delayed semantic recolor;
 - retained clangd completion, signature help, hover, definition/references, rename, and Google fallback formatting;
 - no clangd diagnostics, semantic tokens, inactive regions, or inlay hints;
-- GCC-only valid/invalid C17 and C++20 diagnostics;
+- GCC-only valid/invalid C17 and C++20 diagnostics, with red error markers and Problems entries but no Stage 4.2 warning markers;
 - workspace `.clangd` left untouched and ignored by BeCoder;
 - Run, Run With Input, cancellation, rerun, and no request queue;
 - approximately two-second compile-to-run-start target;
@@ -414,6 +494,7 @@ The consolidated Stage 4 acceptance matrix includes:
 - exact `input` validation and default explorer pinning;
 - native PowerShell retaining the user's environment and arbitrary-command behavior;
 - marketplace and local `.vsix` behavior without protected-extension replacement;
+- CodeSnap remaining bundled, functional, and protected from normal user/workspace replacement without marketplace reinstallation;
 - absence of AI, debug/GDB, ShortestPath network services, and removed non-core bundled extensions;
 - BeCoder branding, Help entries, Settings gear, and terminal cancellation visuals;
 - comparison with `portable_stage2_4_verified`, ShortestPath visual behavior, and the VS Code 1.130 reference where applicable.
@@ -425,13 +506,14 @@ The consolidated Stage 4 acceptance matrix includes:
 | Stage 4 specification consolidation | Source validated | The authoritative document is consolidated and structurally checked; commit and project-owner confirmation remain pending. |
 | Better C++ Syntax single grammar | Archived | The pinned `071dd6e` snapshot is token-scope equivalent to ShortestPath's effective 1.27.1 grammar; the package contains one accepted `source.cpp` owner. |
 | BeCoder One Monokai | Archived | The protected MIT-licensed `becoder.one-monokai` system extension is the accepted first-launch default. |
+| CodeSnap core retention | Planned | Preserve bundled `adpyke.codesnap`, elevate it to the same protected built-in level as BeCoder One Monokai, and exclude it from marketplace migration and extension cleanup; implementation is separate from Stage 4.2. |
 | clangd capability reduction | Archived | Stage 4.1 exposes only completion, signature help, hover, definition, references, rename, and document/range formatting; source, package, and project-owner acceptance passed. |
 | Google formatting | Archived | Stage 4.1 uses clangd's embedded ClangFormat with Google fallback, accepts only a physical workspace `.clang-format` override, and ships no separate `clang-format.exe`; source, package, and project-owner acceptance passed. |
-| GCC diagnostics | Planned | Design and implement the private latest-only diagnostic worker and structured parser. |
+| GCC editor error diagnostics | Archived | Stage 4.2 source, focused tests, raw bundled-GCC matrix, standard Windows build, direct package verification, package/source hash comparison, independent review, and project-owner portable GUI acceptance passed. |
 | Runner and BC panel | Planned | Replace the generic terminal model with the closed BC interaction and robust cancellation state machine. |
 | Run performance | Planned | Instrument phases and meet the approximate two-second compile-to-run-start target. |
 | Explorer `input` ordering | Planned | Pin an exact `input` item to the top of each folder by default. |
-| Marketplace and extension cleanup | Planned | Add Marketplace/VSIX support, define allowlists, and remove non-core bundled extensions. |
+| Marketplace and extension cleanup | Planned | Add Marketplace/VSIX support, define allowlists, preserve protected CodeSnap, and remove only non-core bundled extensions. |
 | AI/debug/GDB removal | Planned | Remove complete contribution and persisted-state chains after dependency tracing. |
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
 | Toolchain slimming and release | Planned | Begin only after retained compiler/language-service behavior is stable and measurable. |

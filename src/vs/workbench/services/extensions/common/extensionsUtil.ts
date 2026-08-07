@@ -13,7 +13,8 @@ const protectedBeCoderBuiltinExtensions = new Set([
 	'llvm-vs-code-extensions.vscode-clangd',
 	'becoder.becoder-setup',
 	'becoder.runner',
-	'becoder.one-monokai'
+	'becoder.one-monokai',
+	'becoder.gcc-diagnostics'
 ]);
 
 function isProtectedBeCoderBuiltin(extension: IExtensionDescription | undefined): boolean {

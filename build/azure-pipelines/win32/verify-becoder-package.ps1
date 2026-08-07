@@ -16,6 +16,8 @@ $requiredFiles = @(
 	'BeCoder.exe',
 	'data\toolchains\.gitkeep',
 	'resources\app\extensions\becoder.setup\out\extension.js',
+	'resources\app\extensions\becoder.gcc-diagnostics\package.json',
+	'resources\app\extensions\becoder.gcc-diagnostics\out\extension.js',
 	'resources\app\extensions\becoder.one-monokai\package.json',
 	'resources\app\extensions\becoder.one-monokai\themes\OneMonokai-color-theme.json',
 	'resources\app\extensions\becoder.one-monokai\LICENSE',
@@ -46,6 +48,26 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $appPath = Join-Path $PackagePath 'resources\app'
+$gccDiagnosticsPath = Join-Path $appPath 'extensions\becoder.gcc-diagnostics'
+$gccDiagnosticsManifest = Get-Content -LiteralPath (Join-Path $gccDiagnosticsPath 'package.json') -Raw | ConvertFrom-Json
+if ("$($gccDiagnosticsManifest.publisher).$($gccDiagnosticsManifest.name)" -ne 'becoder.gcc-diagnostics' -or
+	$gccDiagnosticsManifest.main -ne './out/extension.js') {
+	throw 'The packaged GCC diagnostics extension has an unexpected identity or entry point.'
+}
+if (-not (@($gccDiagnosticsManifest.extensionDependencies) -contains 'becoder.becoder-setup')) {
+	throw 'The packaged GCC diagnostics extension does not depend on BeCoder Setup toolchain readiness.'
+}
+$gccDiagnosticsBundle = Get-Content -LiteralPath (Join-Path $gccDiagnosticsPath 'out\compilerRunner.js') -Raw
+foreach ($requiredBoundary in @('-fsyntax-only', '-O2', '-x', '-std=c17', '-std=c++20', '-fdiagnostics-format=json', '-fdiagnostics-color=never', '-iquote')) {
+	if (-not $gccDiagnosticsBundle.Contains($requiredBoundary)) {
+		throw "The packaged GCC diagnostics extension is missing boundary argument: $requiredBoundary"
+	}
+}
+foreach ($forbiddenBoundary in @('-Wall', '-Werror', '-pedantic')) {
+	if ($gccDiagnosticsBundle.Contains($forbiddenBoundary)) {
+		throw "The packaged GCC diagnostics extension contains forbidden warning argument: $forbiddenBoundary"
+	}
+}
 $themeExtensionPath = Join-Path $appPath 'extensions\becoder.one-monokai'
 $themeManifest = Get-Content -LiteralPath (Join-Path $themeExtensionPath 'package.json') -Raw | ConvertFrom-Json
 if ("$($themeManifest.publisher).$($themeManifest.name)" -ne 'becoder.one-monokai') {

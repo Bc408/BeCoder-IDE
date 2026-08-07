@@ -58,6 +58,15 @@ suite('dedupExtensions - BeCoder protected builtins', () => {
 		assert.strictEqual(result[0].extensionLocation.fsPath, builtin.extensionLocation.fsPath);
 	});
 
+	test('keeps bundled GCC diagnostics over user and workspace extensions', () => {
+		const builtin = extension('becoder.gcc-diagnostics', '0.1.0', true, '/builtin/gcc-diagnostics');
+		const user = extension('becoder.gcc-diagnostics', '99.0.0', false, '/user/gcc-diagnostics');
+		const workspace = extension('becoder.gcc-diagnostics', '99.0.0', false, '/workspace/gcc-diagnostics');
+		const result = dedupExtensions([builtin], [user], [workspace], [], new NullLogService());
+		assert.strictEqual(result.length, 1);
+		assert.strictEqual(result[0].extensionLocation.fsPath, builtin.extensionLocation.fsPath);
+	});
+
 	test('still allows an extension under development to replace a protected builtin', () => {
 		const builtin = extension('becoder.becoder-setup', '0.1.0', true, '/builtin/setup');
 		const development = extension('becoder.becoder-setup', '0.1.0', false, '/development/setup');

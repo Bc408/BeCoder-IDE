@@ -191,4 +191,39 @@ suite('OI extension boundary', () => {
 		const firstRunSource = fs.readFileSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'first-run.html'), 'utf8');
 		assert.doesNotMatch(firstRunSource, /create \.clangd|创建 \.clangd|clangdVariableTypeHints/);
 	});
+
+	test('owns Stage 4.2 diagnostics in a private bundled GCC extension', () => {
+		const extensionPath = path.join(extensionsRoot, 'becoder.gcc-diagnostics');
+		const manifest = readJson<{
+			name?: string;
+			publisher?: string;
+			main?: string;
+			extensionDependencies?: readonly string[];
+		}>(path.join(extensionPath, 'package.json'));
+		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.gcc-diagnostics');
+		assert.strictEqual(manifest.main, './out/extension.js');
+		assert.deepStrictEqual(manifest.extensionDependencies, ['becoder.becoder-setup']);
+
+		const runnerSource = fs.readFileSync(path.join(extensionPath, 'src', 'compilerRunner.ts'), 'utf8');
+		for (const argument of [
+			"'-fsyntax-only'",
+			"'-O2'",
+			"'-x'",
+			"'-std=c17'",
+			"'-std=c++20'",
+			"'-fdiagnostics-format=json'",
+			"'-fdiagnostics-color=never'",
+			"'-iquote'"
+		]) {
+			assert.ok(runnerSource.includes(argument), `Missing GCC diagnostics argument ${argument}`);
+		}
+		assert.doesNotMatch(runnerSource, /['"]-(?:Wall|Werror|pedantic)['"]/);
+		assert.match(runnerSource, /spawn\(compilerPath/);
+		assert.match(runnerSource, /shell: false/);
+
+		const extensionSource = fs.readFileSync(path.join(extensionPath, 'src', 'extension.ts'), 'utf8');
+		assert.match(extensionSource, /createDiagnosticCollection\(diagnosticSource\)/);
+		assert.match(extensionSource, /DiagnosticSeverity\.Error/);
+		assert.doesNotMatch(extensionSource, /createTerminal|showErrorMessage|showWarningMessage|showInformationMessage/);
+	});
 });

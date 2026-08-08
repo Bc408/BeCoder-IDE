@@ -1,0 +1,52 @@
+# Maintainer: Alexey Pavlov <alexpux@gmail.com>
+# Contributor: Renato Silva <br.renatosilva@gmail.com>
+
+_realname=expat
+pkgbase=mingw-w64-${_realname}
+pkgname="${MINGW_PACKAGE_PREFIX}-${_realname}"
+pkgver=2.6.2
+pkgrel=1
+pkgdesc="An XML parser library (mingw-w64)"
+arch=('any')
+mingw_arch=('mingw32' 'mingw64' 'ucrt64' 'clang64' 'clang32' 'clangarm64')
+url="https://libexpat.github.io/"
+msys2_repository_url="https://github.com/libexpat/libexpat"
+license=('spdx:MIT')
+makedepends=("${MINGW_PACKAGE_PREFIX}-cc" "${MINGW_PACKAGE_PREFIX}-autotools")
+options=('strip' 'staticlibs')
+source=("https://github.com/libexpat/libexpat/releases/download/R_${pkgver//./_}/expat-${pkgver}.tar.xz"{,.asc})
+sha256sums=('ee14b4c5d8908b1bec37ad937607eab183d4d9806a08adee472c3c3121d27364'
+            'SKIP')
+validpgpkeys=('3176EF7DB2367F1FCA4F306B1F9B0E909AF37285') # Sebastian Pipping
+
+prepare() {
+  cd "${srcdir}/${_realname}-${pkgver}"
+
+  ./buildconf.sh -f
+}
+
+build() {
+  [[ -d "${srcdir}/build-${MSYSTEM}" ]] && rm -rf "${srcdir}/build-${MSYSTEM}"
+  mkdir -p "${srcdir}/build-${MSYSTEM}" && cd "${srcdir}/build-${MSYSTEM}"
+
+  ../${_realname}-${pkgver}/configure \
+    --prefix=${MINGW_PREFIX} \
+    --build=${MINGW_CHOST} \
+    --host=${MINGW_CHOST} \
+    --target=${MINGW_CHOST} \
+    --enable-shared \
+    --enable-static
+
+  make
+}
+
+check() {
+  cd "${srcdir}/build-${MSYSTEM}"
+  make check
+}
+
+package() {
+  cd "${srcdir}/build-${MSYSTEM}"
+  make DESTDIR="${pkgdir}" install
+  install -Dm644 "${srcdir}/${_realname}-${pkgver}/COPYING" "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING"
+}

@@ -1,0 +1,126 @@
+# Maintainer: Alexey Pavlov <Alexpux@gmail.com>
+
+_realname=openssl
+pkgbase=mingw-w64-${_realname}
+pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
+pkgver=3.3.1
+pkgrel=1
+pkgdesc="The Open Source toolkit for Secure Sockets Layer and Transport Layer Security (mingw-w64)"
+arch=('any')
+mingw_arch=('mingw32' 'mingw64' 'ucrt64' 'clang64' 'clang32' 'clangarm64')
+url='https://www.openssl.org/'
+msys2_repository_url="https://github.com/openssl/openssl"
+msys2_references=(
+  'archlinux: openssl'
+  "cpe: cpe:/a:openssl:openssl"
+)
+license=("spdx:Apache-2.0")
+optdepends=("${MINGW_PACKAGE_PREFIX}-ca-certificates")
+makedepends=("${MINGW_PACKAGE_PREFIX}-cc"
+             "${MINGW_PACKAGE_PREFIX}-autotools")
+options=('!buildflags')
+source=("https://github.com/openssl/openssl/releases/download/openssl-${pkgver}/openssl-${pkgver}.tar.gz"{,.asc}
+        '001-support-aarch64.patch'
+        '002-relocation.patch'
+        'pathtools.c'
+        'pathtools.h')
+sha256sums=('777cd596284c883375a2a7a11bf5d2786fc5413255efab20c50d6ffe6d020b7e'
+            'SKIP'
+            '21b96771b401442570e885c2d5689a359a91e86dcbf5511db3667202b6c1fa8a'
+            '8a2d91826bd1a8fd6d3a981d2a71cfb3170060f64a053eafd8e3b32f6a30ac3b'
+            'ebf471173f5ee9c4416c10a78760cea8afaf1a4a6e653977321e8547ce7bf3c0'
+            '1585ef1b61cf53a2ca27049c11d49e0834683dfda798f03547761375df482a90')
+
+# https://www.openssl.org/community/otc.html
+validpgpkeys=(
+  '8657ABB260F056B1E5190839D9C4D26D0E604491' # Matt Caswell <matt@openssl.org>
+  '7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C' # Richard Levitte <richard@levitte.org>
+  'A21FAB74B0088AA361152586B8EF1A6BA9DA2D5C' # Tomáš Mráz <tm@t8m.info>
+  'B7C1C14360F353A36862E4D5231C84CDDCC69C45' # Paul Dale <pauli@openssl.org>
+  'EFC0A467D613CB83C7ED6D30D894E2CE8B3D79F5' # OpenSSL security team <openssl-security@openssl.org>
+)
+
+# Helper macros to help make tasks easier #
+apply_patch_with_msg() {
+  for _patch in "$@"
+  do
+    msg2 "Applying $_patch"
+    patch -Nbp1 -i "${srcdir}/$_patch"
+  done
+}
+# =========================================== #
+
+prepare() {
+  cd ${srcdir}/${_realname}-${pkgver}
+
+  apply_patch_with_msg \
+     001-support-aarch64.patch \
+     002-relocation.patch
+
+  test ! -d "${startdir}/../mingw-w64-pathtools" || {
+    cmp "${startdir}/../mingw-w64-pathtools/pathtools.c" "${srcdir}/pathtools.c" &&
+    cmp "${startdir}/../mingw-w64-pathtools/pathtools.h" "${srcdir}/pathtools.h"
+  } || exit 1
+
+  cp -fHv "${srcdir}"/pathtools.c crypto/
+  cp -fHv "${srcdir}"/pathtools.h ./
+}
+
+build() {
+  mkdir -p "${srcdir}/build-${MSYSTEM}" && cd "${srcdir}/build-${MSYSTEM}"
+
+  # Use mingw cflags instead of hardcoded ones
+  sed -i -e '/^"mingw"/ s/-fomit-frame-pointer -O3 -Wall/-O2 -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions --param=ssp-buffer-size=4/' \
+    ${srcdir}/${_realname}-${pkgver}/Configurations/10-main.conf
+
+  case "${CARCH}" in
+    i?86)
+      _mingw=mingw
+      ;;
+    x86_64)
+      _mingw=mingw64
+      ;;
+    aarch64)
+      _mingw=mingwarm64
+      ;;
+  esac
+
+  MSYS2_ARG_CONV_EXCL="--prefix=" \
+  /usr/bin/perl ../"${_realname}-${pkgver}"/Configure \
+    --prefix="${MINGW_PREFIX}" \
+    --libdir=lib \
+    --openssldir=etc/ssl \
+    ${_mingw} \
+    shared \
+    zlib-dynamic \
+    enable-camellia \
+    enable-capieng \
+    enable-idea \
+    enable-mdc2 \
+    enable-rc5  \
+    enable-rfc3779 \
+    -DOPENSSLBIN=\"\\\"${MINGW_PREFIX}/bin\\\"\"
+
+  MSYS2_ARG_CONV_EXCL="-DENGINESDIR=;-DMODULESDIR=;-DOPENSSLDIR=;-DINSTALLTOP=;-DOPENSSLBIN=" \
+  make
+}
+
+check() {
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  make VERBOSE=1 test
+}
+
+package() {
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  make install DESTDIR="${pkgdir}"
+
+  # https://github.com/openssl/openssl/issues/24298
+  for pcfile in "${pkgdir}${MINGW_PREFIX}"/lib/pkgconfig/*.pc; do
+    sed -s "s|${MINGW_PREFIX}|\${prefix}|g" -i "${pcfile}"
+    sed -i "1s|^|prefix=${MINGW_PREFIX}\\n|" "${pcfile}"
+  done
+
+  install -Dm644 "${srcdir}/${_realname}-${pkgver}/LICENSE.txt" "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/LICENSE"
+}

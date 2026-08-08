@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { distinct } from '../../../base/common/arrays.js';
+import { Sequencer } from '../../../base/common/async.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import * as semver from '../../../base/common/semver/semver.js';
 import { IStringDictionary } from '../../../base/common/collections.js';
@@ -140,6 +141,49 @@ interface ICriterium {
 }
 
 const DefaultPageSize = 10;
+
+export function isProtectedExtensionId(extensionId: string, protectedExtensions: readonly string[] | undefined): boolean {
+	return protectedExtensions?.some(protectedExtension => protectedExtension.toLowerCase() === extensionId.toLowerCase()) ?? false;
+}
+
+export async function createFilteredExtensionPager<T>(
+	firstPage: readonly T[],
+	rawTotal: number,
+	excludedTotal: number,
+	pageSize: number,
+	getRawPage: (pageIndex: number, token: CancellationToken) => Promise<readonly T[]>,
+	token: CancellationToken,
+): Promise<IPager<T>> {
+	const total = Math.max(0, rawTotal - excludedTotal);
+	const visibleItems = [...firstPage];
+	const rawPageCount = Math.ceil(rawTotal / pageSize);
+	const sequencer = new Sequencer();
+	let nextRawPage = 1;
+
+	const loadUntil = async (targetCount: number, cancellationToken: CancellationToken): Promise<void> => {
+		while (visibleItems.length < targetCount && nextRawPage < rawPageCount) {
+			if (cancellationToken.isCancellationRequested) {
+				throw new CancellationError();
+			}
+			const page = await getRawPage(nextRawPage, cancellationToken);
+			visibleItems.push(...page);
+			nextRawPage++;
+		}
+	};
+
+	await loadUntil(Math.min(pageSize, total), token);
+	return {
+		firstPage: visibleItems.slice(0, pageSize),
+		total,
+		pageSize,
+		getPage: (pageIndex, cancellationToken) => sequencer.queue(async () => {
+			const start = pageIndex * pageSize;
+			const end = Math.min(start + pageSize, total);
+			await loadUntil(end, cancellationToken);
+			return visibleItems.slice(start, end);
+		})
+	};
+}
 
 interface IQueryState {
 	readonly pageNumber: number;
@@ -641,6 +685,11 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 	getExtensions(extensionInfos: ReadonlyArray<IExtensionInfo>, token: CancellationToken): Promise<IGalleryExtension[]>;
 	getExtensions(extensionInfos: ReadonlyArray<IExtensionInfo>, options: IExtensionQueryOptions, token: CancellationToken): Promise<IGalleryExtension[]>;
 	async getExtensions(extensionInfos: ReadonlyArray<IExtensionInfo>, arg1: CancellationToken | IExtensionQueryOptions, arg2?: CancellationToken): Promise<IGalleryExtension[]> {
+		extensionInfos = extensionInfos.filter(extension => !isProtectedExtensionId(extension.id, this.productService.protectedExtensions));
+		if (!extensionInfos.length) {
+			return [];
+		}
+
 		const extensionGalleryManifest = await this.extensionGalleryManifestService.getExtensionGalleryManifest();
 		if (!extensionGalleryManifest) {
 			throw new Error('No extension gallery service configured.');
@@ -1154,10 +1203,11 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 
 			const result: IGalleryExtension[] = [];
 			let defaultChatAgentExtension: IGalleryExtension | undefined;
+			const defaultChatAgentExtensionId = this.productService.defaultChatAgent?.extensionId;
 			for (let index = 0; index < extensions.length; index++) {
 				const extension = extensions[index];
 				setTelemetry(extension, ((query.pageNumber - 1) * query.pageSize) + index, options.source);
-				if (areSameExtensions(extension.identifier, { id: this.productService.defaultChatAgent.extensionId, })) {
+				if (defaultChatAgentExtensionId && areSameExtensions(extension.identifier, { id: defaultChatAgentExtensionId })) {
 					defaultChatAgentExtension = extension;
 				} else {
 					result.push(extension);
@@ -1169,16 +1219,32 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 
 			return { extensions: result, total };
 		};
-		const { extensions, total } = await runQuery(query, token);
-		const getPage = async (pageIndex: number, ct: CancellationToken) => {
-			if (ct.isCancellationRequested) {
-				throw new CancellationError();
+		const protectedExtensionIds = this.productService.protectedExtensions ?? [];
+		const countMatchingProtectedExtensions = async (): Promise<number> => {
+			if (!protectedExtensionIds.length) {
+				return 0;
 			}
-			const { extensions } = await runQuery(query.withPage(pageIndex + 1), ct);
-			return extensions;
+			const protectedQuery = query
+				.withPage(1, protectedExtensionIds.length)
+				.withFilter(FilterType.ExtensionName, ...protectedExtensionIds);
+			const { galleryExtensions } = await this.queryRawGalleryExtensions(protectedQuery, extensionGalleryManifest, token);
+			return new Set(galleryExtensions
+				.map(extension => getGalleryExtensionId(extension.publisher.publisherName, extension.extensionName).toLowerCase())
+				.filter(extensionId => isProtectedExtensionId(extensionId, protectedExtensionIds))).size;
 		};
 
-		return { firstPage: extensions, total, pageSize: query.pageSize, getPage };
+		const [{ extensions, total }, protectedTotal] = await Promise.all([
+			runQuery(query, token),
+			countMatchingProtectedExtensions(),
+		]);
+		return createFilteredExtensionPager(
+			extensions,
+			total,
+			protectedTotal,
+			query.pageSize,
+			async (pageIndex, ct) => (await runQuery(query.withPage(pageIndex + 1), ct)).extensions,
+			token,
+		);
 	}
 
 	private async queryGalleryExtensions(query: Query, criteria: ExtensionsCriteria, extensionGalleryManifest: IExtensionGalleryManifest, token: CancellationToken): Promise<{ extensions: IGalleryExtension[]; total: number }> {
@@ -1217,6 +1283,9 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 			for (const rawGalleryExtension of rawGalleryExtensions) {
 				const allTargetPlatforms = getAllTargetPlatforms(rawGalleryExtension);
 				const extensionIdentifier = { id: getGalleryExtensionId(rawGalleryExtension.publisher.publisherName, rawGalleryExtension.extensionName), uuid: rawGalleryExtension.extensionId };
+				if (isProtectedExtensionId(extensionIdentifier.id, this.productService.protectedExtensions)) {
+					continue;
+				}
 				const includePreRelease = isBoolean(criteria.includePreRelease) ? criteria.includePreRelease : !!criteria.includePreRelease.find(extensionIdentifierWithPreRelease => areSameExtensions(extensionIdentifierWithPreRelease, extensionIdentifier))?.includePreRelease;
 				const rawGalleryExtensionVersion = await this.getValidRawGalleryExtensionVersion(
 					rawGalleryExtension,
@@ -1242,6 +1311,9 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 		for (let index = 0; index < rawGalleryExtensions.length; index++) {
 			const rawGalleryExtension = rawGalleryExtensions[index];
 			const extensionIdentifier = { id: getGalleryExtensionId(rawGalleryExtension.publisher.publisherName, rawGalleryExtension.extensionName), uuid: rawGalleryExtension.extensionId };
+			if (isProtectedExtensionId(extensionIdentifier.id, this.productService.protectedExtensions)) {
+				continue;
+			}
 			const includePreRelease = isBoolean(criteria.includePreRelease) ? criteria.includePreRelease : !!criteria.includePreRelease.find(extensionIdentifierWithPreRelease => areSameExtensions(extensionIdentifierWithPreRelease, extensionIdentifier))?.includePreRelease;
 			const allTargetPlatforms = getAllTargetPlatforms(rawGalleryExtension);
 			if (criteria.compatible) {
@@ -1795,6 +1867,10 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 	}
 
 	private async getVersions(extensionIdentifier: IExtensionIdentifier, onlyCompatible?: { version: VersionKind; targetPlatform: TargetPlatform }): Promise<IGalleryExtensionVersion[]> {
+		if (isProtectedExtensionId(extensionIdentifier.id, this.productService.protectedExtensions)) {
+			return [];
+		}
+
 		const extensionGalleryManifest = await this.extensionGalleryManifestService.getExtensionGalleryManifest();
 		if (!extensionGalleryManifest) {
 			throw new Error('No extension gallery service configured.');
@@ -1867,6 +1943,10 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 	}
 
 	private async getAsset(extension: string, asset: IGalleryExtensionAsset, assetType: string, extensionVersion: string, callSite: string, options: Omit<IRequestOptions, 'callSite'> = {}, token: CancellationToken = CancellationToken.None): Promise<IRequestContext> {
+		if (isProtectedExtensionId(extension, this.productService.protectedExtensions)) {
+			throw new ExtensionGalleryError(`Gallery resources are unavailable for protected BeCoder extension ${extension}.`, ExtensionGalleryErrorCode.ClientError);
+		}
+
 		const commonHeaders = await this.commonHeadersPromise;
 		const baseOptions = { type: 'GET' };
 		const headers = { ...commonHeaders, ...(options.headers || {}) };
@@ -1989,15 +2069,18 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 			}
 		}
 
-		deprecated[this.productService.defaultChatAgent.extensionId.toLowerCase()] = {
-			disallowInstall: true,
-			extension: {
-				id: this.productService.defaultChatAgent.chatExtensionId,
-				displayName: 'GitHub Copilot Chat',
-				autoMigrate: { storage: false, donotDisable: true },
-				preRelease: this.productService.quality !== 'stable'
-			}
-		};
+		const defaultChatAgent = this.productService.defaultChatAgent;
+		if (defaultChatAgent) {
+			deprecated[defaultChatAgent.extensionId.toLowerCase()] = {
+				disallowInstall: true,
+				extension: {
+					id: defaultChatAgent.chatExtensionId,
+					displayName: 'GitHub Copilot Chat',
+					autoMigrate: { storage: false, donotDisable: true },
+					preRelease: this.productService.quality !== 'stable'
+				}
+			};
+		}
 
 		return { malicious, deprecated, search, autoUpdate };
 	}

@@ -33,17 +33,27 @@
 	"licenseFileName": "LICENSE",
 	"reportIssueUrl": "https://github.com/KevinHuangIsLearning/BeCoder/issues/new",
 	"extensionsGallery": {
-		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
-		"servicePPEUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
-		"resourceUrlTemplate": "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}",
-		"itemUrl": "https://marketplace.visualstudio.com/items",
-		"publisherUrl": "https://marketplace.visualstudio.com/publishers",
-		"controlUrl": "https://az764295.vo.msecnd.net/extensions/marketplace.json",
-		"nlsBaseUrl": "https://www.vscode-unpkg.net/_lp/"
+		"serviceUrl": "https://open-vsx.org/vscode/gallery",
+		"itemUrl": "https://open-vsx.org/vscode/item",
+		"latestUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest",
+		"controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
 	},
 	"extensionBlacklist": [
 		"ms-vscode.cpptools",
 		"ms-vscode.cpptools-extension-pack"
+	],
+	"protectedExtensions": [
+		"becoder.becoder-setup",
+		"becoder.runner",
+		"becoder.gcc-diagnostics",
+		"becoder.one-monokai",
+		"llvm-vs-code-extensions.vscode-clangd",
+		"adpyke.codesnap",
+		"vscode.cpp",
+		"ms-ceintl.vscode-language-pack-zh-hans"
+	],
+	"linkProtectionTrustedDomains": [
+		"https://open-vsx.org"
 	],
 	"nodejsArtifactFeed": "",
 	"electronArtifactFeed": "",
@@ -51,56 +61,7 @@
 	"trustedExtensionProtocolHandlers": [],
 	"agentsTelemetryAppName": "agents",
 	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
-	"builtInExtensions": [
-		{
-			"name": "ms-vscode.js-debug-companion",
-			"version": "1.1.3",
-			"sha256": "7380a890787452f14b2db7835dfa94de538caf358ebc263f9d46dd68ac52de93",
-			"repo": "https://github.com/microsoft/vscode-js-debug-companion",
-			"metadata": {
-				"id": "99cb0b7f-7354-4278-b8da-6cc79972169d",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		},
-		{
-			"name": "ms-vscode.js-debug",
-			"version": "1.117.0",
-			"sha256": "854eeb8a785b1f41ba2bd02d7ccd4fdbe10021b61473293973c7e96d036c7fb8",
-			"repo": "https://github.com/microsoft/vscode-js-debug",
-			"metadata": {
-				"id": "25629058-ddac-4e17-abba-74678e126c5d",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		},
-		{
-			"name": "ms-vscode.vscode-js-profile-table",
-			"version": "1.0.10",
-			"sha256": "7361748ddf9fd09d8a2ed1f2a2d7376a2cf9aae708692820b799708385c38e08",
-			"repo": "https://github.com/microsoft/vscode-js-profile-visualizer",
-			"metadata": {
-				"id": "7e52b41b-71ad-457b-ab7e-0620f1fc4feb",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		}
-	],
+	"builtInExtensions": [],
 	"onboardingKeymaps": [
 		{
 			"id": "vscode",

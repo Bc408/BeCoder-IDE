@@ -30,6 +30,7 @@ export class AllowedExtensionsService extends Disposable implements IAllowedExte
 
 	private readonly publisherOrgs: string[];
 	private readonly extensionBlacklist: ReadonlySet<string>;
+	private readonly protectedExtensions: ReadonlySet<string>;
 
 	private _allowedExtensionsConfigValue: AllowedExtensionsConfigValueType | undefined;
 	get allowedExtensionsConfigValue(): AllowedExtensionsConfigValueType | undefined {
@@ -45,6 +46,7 @@ export class AllowedExtensionsService extends Disposable implements IAllowedExte
 		super();
 		this.publisherOrgs = productService.extensionPublisherOrgs?.map(p => p.toLowerCase()) ?? [];
 		this.extensionBlacklist = new Set(productService.extensionBlacklist?.map(id => id.toLowerCase()) ?? []);
+		this.protectedExtensions = new Set(productService.protectedExtensions?.map(id => id.toLowerCase()) ?? []);
 		this._allowedExtensionsConfigValue = this.getAllowedExtensionsValue();
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(AllowedExtensionsConfigKey)) {
@@ -94,6 +96,12 @@ export class AllowedExtensionsService extends Disposable implements IAllowedExte
 
 		if (this.extensionBlacklist.has(id)) {
 			return new MarkdownString(nls.localize('extension blocked by product', "This extension is blocked by BeCoder."));
+		}
+		if (this.protectedExtensions.has(id)) {
+			if (isIExtension(extension) && extension.type === ExtensionType.System) {
+				return true;
+			}
+			return new MarkdownString(nls.localize('extension protected by product', "This extension ID is reserved for a built-in BeCoder component."));
 		}
 
 		if (!this._allowedExtensionsConfigValue) {

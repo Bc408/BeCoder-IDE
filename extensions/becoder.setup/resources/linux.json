@@ -39,5 +39,6 @@
 	"portableToolchain": false,
 	"compilerCandidates": ["g++-16", "g++-15", "g++"],
 	"clangdCandidates": ["{{TOOLCHAIN_ROOT}}/clangd/clangd_22.1.6/bin/clangd", "clangd"],
-	"installDescription": "Use a system g++ compiler and portable clangd"
+	"installDescription": "Use a system g++ compiler and portable clangd",
+	"installDescriptionZh": "使用系统 g++ 编译器和便携 clangd"
 }

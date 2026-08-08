@@ -67,6 +67,17 @@ suite('dedupExtensions - BeCoder protected builtins', () => {
 		assert.strictEqual(result[0].extensionLocation.fsPath, builtin.extensionLocation.fsPath);
 	});
 
+	test('keeps every remaining protected content extension over user copies', () => {
+		for (const id of ['adpyke.codesnap', 'vscode.cpp', 'ms-ceintl.vscode-language-pack-zh-hans']) {
+			const builtin = extension(id, '1.0.0', true, `/builtin/${id}`);
+			const user = extension(id, '99.0.0', false, `/user/${id}`);
+			const workspace = extension(id, '99.0.0', false, `/workspace/${id}`);
+			const result = dedupExtensions([builtin], [user], [workspace], [], new NullLogService());
+			assert.strictEqual(result.length, 1);
+			assert.strictEqual(result[0].extensionLocation.fsPath, builtin.extensionLocation.fsPath);
+		}
+	});
+
 	test('still allows an extension under development to replace a protected builtin', () => {
 		const builtin = extension('becoder.becoder-setup', '0.1.0', true, '/builtin/setup');
 		const development = extension('becoder.becoder-setup', '0.1.0', false, '/development/setup');

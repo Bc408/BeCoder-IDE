@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { suite, test } from 'node:test';
@@ -42,7 +43,243 @@ function readJson<T>(filePath: string): T {
 	return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }
 
+function assertSameLocalizationKeys(extensionFolder: string): void {
+	const english = readJson<Record<string, string>>(path.join(extensionsRoot, extensionFolder, 'package.nls.json'));
+	const chinese = readJson<Record<string, string>>(path.join(extensionsRoot, extensionFolder, 'package.nls.zh-cn.json'));
+	assert.deepStrictEqual(Object.keys(chinese).sort(), Object.keys(english).sort(), `${extensionFolder} localization keys differ`);
+}
+
+function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativePath: string, contents: Buffer) => Buffer): string {
+	const files: string[] = [];
+	const collectFiles = (directory: string): void => {
+		for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+			const entryPath = path.join(directory, entry.name);
+			if (entry.isDirectory()) {
+				collectFiles(entryPath);
+			} else if (entry.isFile()) {
+				files.push(path.relative(directoryPath, entryPath).split(path.sep).join('/'));
+			}
+		}
+	};
+	collectFiles(directoryPath);
+	files.sort();
+
+	const manifest = files.map(relativePath => {
+		const contents = fs.readFileSync(path.join(directoryPath, relativePath));
+		const fileHash = createHash('sha256').update(transform?.(relativePath, contents) ?? contents).digest('hex');
+		return `${relativePath}\t${fileHash}\n`;
+	}).join('');
+	return createHash('sha256').update(manifest, 'utf8').digest('hex');
+}
+
 suite('OI extension boundary', () => {
+	test('uses only Open VSX and protects the complete BeCoder core set', () => {
+		const productPath = path.join(repositoryRoot, 'product.json');
+		const productText = fs.readFileSync(productPath, 'utf8');
+		const product = JSON.parse(productText) as {
+			extensionsGallery?: Record<string, string>;
+			extensionBlacklist?: readonly string[];
+			protectedExtensions?: readonly string[];
+			builtInExtensions?: readonly { name?: string }[];
+			linkProtectionTrustedDomains?: readonly string[];
+		};
+		assert.deepStrictEqual(product.extensionsGallery, {
+			serviceUrl: 'https://open-vsx.org/vscode/gallery',
+			itemUrl: 'https://open-vsx.org/vscode/item',
+			latestUrlTemplate: 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
+			controlUrl: 'https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json'
+		});
+		assert.deepStrictEqual(product.extensionBlacklist, [
+			'ms-vscode.cpptools',
+			'ms-vscode.cpptools-extension-pack'
+		]);
+		assert.deepStrictEqual(product.protectedExtensions, [
+			'becoder.becoder-setup',
+			'becoder.runner',
+			'becoder.gcc-diagnostics',
+			'becoder.one-monokai',
+			'llvm-vs-code-extensions.vscode-clangd',
+			'adpyke.codesnap',
+			'vscode.cpp',
+			'ms-ceintl.vscode-language-pack-zh-hans'
+		]);
+		assert.deepStrictEqual(product.linkProtectionTrustedDomains, ['https://open-vsx.org']);
+		assert.deepStrictEqual(product.builtInExtensions, []);
+		for (const endpoint of ['marketplace.visualstudio.com', 'marketplace.vsallin.net', 'vscode-unpkg.net', 'az764295.vo.msecnd.net']) {
+			assert.ok(!productText.includes(endpoint), `Microsoft Marketplace endpoint remains in product.json: ${endpoint}`);
+		}
+
+		const extensionBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'extensions.ts'), 'utf8');
+		assert.match(extensionBuildSource, /excludedForOIDistribution[\s\S]*'mermaid-markdown-features'/);
+		const packageBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
+		assert.match(packageBuildSource, /const beCoderOnboarding = gulp\.src\(\[[\s\S]*'resources\/oi-defaults\/\*\*',[\s\S]*'!resources\/oi-defaults\/portable-data\/\*\*'[\s\S]*\], \{ base: '\.' \}\);/);
+		assert.match(packageBuildSource, /const beCoderRecipeDotfiles = gulp\.src\('resources\/oi-defaults\/toolchains\/ucrt64-sources\/recipes\/\*\*\/\.gitignore', \{ base: '\.', dot: true \}\);/);
+
+		const gallerySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'common', 'extensionGalleryService.ts'), 'utf8');
+		assert.match(gallerySource, /defaultChatAgentExtensionId = this\.productService\.defaultChatAgent\?\.extensionId/);
+		assert.match(gallerySource, /if \(defaultChatAgent\) \{[\s\S]*deprecated\[defaultChatAgent\.extensionId\.toLowerCase\(\)\]/);
+		assert.match(gallerySource, /countMatchingProtectedExtensions[\s\S]*createFilteredExtensionPager/);
+		assert.match(gallerySource, /private async getVersions[\s\S]*isProtectedExtensionId\(extensionIdentifier\.id/);
+		assert.match(gallerySource, /private async getAsset[\s\S]*Gallery resources are unavailable for protected BeCoder extension/);
+
+		const extensionManagementSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'node', 'extensionManagementService.ts'), 'utf8');
+		assert.match(extensionManagementSource, /installExtensionsFromProfile[\s\S]*allowedExtensionsService\.isAllowed\(extension\)[\s\S]*addExtensionsToProfile/);
+	});
+
+	test('pins bundled component licenses and toolchain provenance', () => {
+		const inventory = readJson<{
+			components?: readonly {
+				id?: string;
+				version?: string;
+				source?: string;
+				modificationStatus?: string;
+				spdxIdentifier?: string;
+				copyrightNotice?: string;
+				archive?: string;
+				sha256?: string;
+				contentSha256?: string;
+				packagedContentSha256?: string;
+				licensePath?: string;
+				archiveLicenseEntry?: string;
+				packageInventory?: string;
+				correspondingSource?: string;
+			}[];
+		}>(path.join(repositoryRoot, 'resources', 'oi-defaults', 'BUNDLED-COMPONENTS.json'));
+		const components = inventory.components ?? [];
+		assert.deepStrictEqual(components.map(component => component.id), [
+			'code-oss',
+			'becoder.runner',
+			'becoder.becoder-setup',
+			'becoder.gcc-diagnostics',
+			'llvm-vs-code-extensions.vscode-clangd',
+			'adpyke.codesnap',
+			'becoder.one-monokai',
+			'vscode.cpp',
+			'ms-ceintl.vscode-language-pack-zh-hans',
+			'clangd-windows',
+			'becoder-ucrt64'
+		]);
+		for (const component of components) {
+			assert.ok(component.id && component.version && component.source);
+			assert.ok(component.modificationStatus && component.spdxIdentifier && component.copyrightNotice, `Incomplete redistribution metadata for ${component.id}`);
+			if (component.licensePath) {
+				const licensePath = path.join(repositoryRoot, component.licensePath);
+				const licenseStat = fs.statSync(licensePath);
+				assert.ok(licenseStat.isDirectory() ? fs.readdirSync(licensePath).length > 0 : licenseStat.size > 0, `Missing license for ${component.id}`);
+			}
+		}
+		const clangd = components.find(component => component.id === 'clangd-windows');
+		assert.strictEqual(clangd?.sha256, 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1');
+		assert.strictEqual(clangd?.archiveLicenseEntry, 'clangd_22.1.6/LICENSE.TXT');
+		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
+		assert.strictEqual(ucrt64?.sha256, '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2');
+		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
+		assert.ok(ucrt64?.correspondingSource);
+		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
+		assert.strictEqual(languagePack?.version, '1.130.2026072017');
+		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
+		assert.strictEqual(languagePack?.contentSha256, 'b673f15a9e308edca466da2b3fce216b13a855a852cdfa91288b2c0d7b5ace1e');
+		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
+		assert.strictEqual(languagePack?.packagedContentSha256, 'a9fabbecb50d14fb17abb91dd8905c7ba4e459247d910ad79da537fe5a914426');
+		assert.strictEqual(computeDirectoryFilesSha256(
+			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
+			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
+		), languagePack?.packagedContentSha256);
+		const gitAttributes = fs.readFileSync(path.join(repositoryRoot, '.gitattributes'), 'utf8');
+		assert.match(gitAttributes, /^extensions\/MS-CEINTL\.vscode-language-pack-zh-hans\/\*\* -text whitespace=-trailing-space$/m);
+		const languagePackManifest = readJson<{ version?: string; engines?: { vscode?: string } }>(path.join(repositoryRoot, 'extensions', 'MS-CEINTL.vscode-language-pack-zh-hans', 'package.json'));
+		assert.strictEqual(languagePackManifest.version, languagePack?.version);
+		assert.strictEqual(languagePackManifest.engines?.vscode, '^1.130.0');
+
+		const packages = readJson<{
+			archiveSha256?: string;
+			licenseFilesRoot?: string;
+			recipeFilesRoot?: string;
+			evidence?: { retainedLicenseFileCount?: number; retainedRecipeFileCount?: number };
+			packages?: readonly { name?: string; version?: string; license?: string; recipe?: string }[];
+			auxiliaryPackageSources?: readonly { name?: string; version?: string; license?: string; recipe?: string }[];
+			licenseMappings?: Record<string, readonly string[]>;
+			recipes?: Record<string, { commit?: string; pkgbuildSha256?: string; filesSha256?: string }>;
+			unownedArchiveEntries?: readonly string[];
+		}>(path.join(repositoryRoot, 'resources', 'oi-defaults', 'toolchains', 'ucrt64-packages.json'));
+		assert.strictEqual(packages.archiveSha256, ucrt64?.sha256);
+		assert.strictEqual(packages.licenseFilesRoot, 'resources/oi-defaults/toolchains/ucrt64-licenses');
+		const retainedLicenseFiles = fs.readdirSync(path.join(repositoryRoot, packages.licenseFilesRoot), { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
+		assert.strictEqual(retainedLicenseFiles.length, packages.evidence?.retainedLicenseFileCount);
+		assert.ok(retainedLicenseFiles.length >= 63);
+		assert.strictEqual(packages.recipeFilesRoot, 'resources/oi-defaults/toolchains/ucrt64-sources/recipes');
+		const retainedRecipeFiles = fs.readdirSync(path.join(repositoryRoot, packages.recipeFilesRoot), { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
+		assert.strictEqual(retainedRecipeFiles.length, packages.evidence?.retainedRecipeFileCount);
+		assert.ok(retainedRecipeFiles.length >= 290);
+		assert.strictEqual(packages.packages?.length, 36);
+		assert.strictEqual(packages.auxiliaryPackageSources?.length, 2);
+		assert.strictEqual(new Set(packages.packages?.map(pkg => pkg.name)).size, 36);
+		const recipeRoot = path.join(repositoryRoot, packages.recipeFilesRoot);
+		const recipeDirectoryNames = fs.readdirSync(recipeRoot, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
+		assert.deepStrictEqual(recipeDirectoryNames, Object.keys(packages.recipes ?? {}).sort());
+		for (const [recipeName, recipe] of Object.entries(packages.recipes ?? {})) {
+			assert.match(recipe.filesSha256 ?? '', /^[0-9a-f]{64}$/);
+			assert.strictEqual(computeDirectoryFilesSha256(path.join(recipeRoot, recipeName)), recipe.filesSha256, `Retained recipe files changed for ${recipeName}`);
+		}
+		for (const pkg of [...(packages.packages ?? []), ...(packages.auxiliaryPackageSources ?? [])]) {
+			assert.ok(pkg.name && pkg.version && pkg.license && pkg.recipe);
+			const recipe = packages.recipes?.[pkg.recipe];
+			assert.match(recipe?.commit ?? '', /^[0-9a-f]{40}$/);
+			assert.match(recipe?.pkgbuildSha256 ?? '', /^[0-9a-f]{64}$/);
+			const pkgbuildPath = path.join(recipeRoot, pkg.recipe, 'PKGBUILD');
+			assert.strictEqual(createHash('sha256').update(fs.readFileSync(pkgbuildPath)).digest('hex'), recipe?.pkgbuildSha256);
+			const licensePaths = packages.licenseMappings?.[pkg.name];
+			assert.ok(licensePaths?.length, `Missing license mapping for ${pkg.name}`);
+			for (const relativeLicensePath of licensePaths) {
+				assert.ok(fs.statSync(path.join(repositoryRoot, packages.licenseFilesRoot, relativeLicensePath)).size > 0, `Missing mapped license for ${pkg.name}: ${relativeLicensePath}`);
+			}
+		}
+		assert.ok(packages.unownedArchiveEntries?.includes('include/c++/14.1.0/x86_64-w64-mingw32/bits/debugger.h'));
+		assert.ok(packages.unownedArchiveEntries?.includes('include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h.gch'));
+
+		const notices = fs.readFileSync(path.join(repositoryRoot, 'ThirdPartyNotices.txt'), 'utf8');
+		assert.match(notices, /BeCoder Runner 0\.3\.0/);
+		assert.match(notices, /CodeSnap 1\.3\.4[\s\S]*Copyright \(c\) 2019 Adrien Pyke/);
+		assert.match(notices, /clangd 22\.1\.6 Windows binary bundle/);
+		assert.match(notices, /BeCoder UCRT64 GCC 14\.1\.0 bundle/);
+	});
+
+	test('bundles protected Simplified Chinese and keeps BeCoder UI bilingual', () => {
+		const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main.ts'), 'utf8');
+		assert.match(mainSource, /resolveUserLocale\(args\['locale'\], argvConfig\.locale, 'zh-cn'\)/);
+
+		const nlsSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'base', 'node', 'nls.ts'), 'utf8');
+		assert.match(nlsSource, /MS-CEINTL\.vscode-language-pack-zh-hans/);
+		assert.match(nlsSource, /languagePacks\['zh-cn'\] = builtInPack/);
+
+		const setupManifest = readJson<{
+			contributes?: { configuration?: { properties?: Record<string, { default?: unknown; enum?: unknown; scope?: unknown; order?: unknown }> } };
+		}>(path.join(extensionsRoot, 'becoder.setup', 'package.json'));
+		const displayLanguage = setupManifest.contributes?.configuration?.properties?.['becoder.displayLanguage'];
+		assert.deepStrictEqual(displayLanguage?.enum, ['zh-cn', 'en']);
+		assert.strictEqual(displayLanguage?.default, 'zh-cn');
+		assert.strictEqual(displayLanguage?.scope, 'application');
+		assert.strictEqual(displayLanguage?.order, 0);
+
+		for (const extensionFolder of ['becoder.setup', 'danielpinto8zz6.c-cpp-compile-run', 'becoder.gcc-diagnostics']) {
+			assertSameLocalizationKeys(extensionFolder);
+		}
+
+		const setupSettingsSource = fs.readFileSync(path.join(extensionsRoot, 'becoder.setup', 'src', 'simpleSettings.ts'), 'utf8');
+		assert.match(setupSettingsSource, /@ext:becoder\.becoder-setup/);
+		const displayLanguageSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'becoder', 'electron-browser', 'beCoderDisplayLanguage.contribution.ts'), 'utf8');
+		assert.match(displayLanguageSource, /ConfigurationTarget\.USER_LOCAL/);
+		assert.match(displayLanguageSource, /BeCoderSimplifiedChineseLanguagePackId/);
+		assert.match(displayLanguageSource, /setLocale\(languagePack, false, \(\) => this\.controller\.isLatestRequest\(language\)\)/);
+
+		const localeServiceSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'localization', 'electron-browser', 'localeService.ts'), 'utf8');
+		assert.match(localeServiceSource, /cancelButton: localize\('later', "Later"\)/);
+		assert.ok(localeServiceSource.indexOf('writeLocaleValue(locale)') < localeServiceSource.indexOf('showRestartDialog(languagePackItem.label)'));
+
+		const gallerySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'common', 'extensionGalleryService.ts'), 'utf8');
+		assert.match(gallerySource, /isProtectedExtensionId\(extensionIdentifier\.id, this\.productService\.protectedExtensions\)/);
+	});
+
 	test('keeps a single C++ TextMate grammar owner', () => {
 		const contributors: Array<{ extension: string; grammarPath: string | undefined }> = [];
 

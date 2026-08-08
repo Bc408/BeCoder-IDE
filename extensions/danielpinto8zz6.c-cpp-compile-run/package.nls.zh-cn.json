@@ -1,0 +1,13 @@
+{
+	"displayName": "BeCoder Runner",
+	"description": "使用 BeCoder 内置工具链编译并运行 C/C++ 文件。",
+	"command.openPanel": "BeCoder：打开 BC 面板",
+	"command.run": "BeCoder：运行",
+	"command.runWithInput": "BeCoder：使用输入文件运行",
+	"configuration.title": "BeCoder Runner",
+	"configuration.cStandard": "BeCoder Runner 使用的 C 语言标准。",
+	"configuration.cppStandard": "BeCoder Runner 使用的 C++ 语言标准。",
+	"configuration.cppFlags": "在必需的 -O2、-Wall 和 -DDEBUG 参数之后附加的 C++ 编译参数。",
+	"configuration.cFlags": "在必需的 -O2、-Wall 和 -DDEBUG 参数之后附加的 C 编译参数。",
+	"configuration.cleanupExecutable": "程序退出后删除源码同目录下生成的可执行文件。"
+}

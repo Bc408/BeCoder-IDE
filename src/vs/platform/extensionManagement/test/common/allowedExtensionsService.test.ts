@@ -194,6 +194,22 @@ suite('AllowedExtensionsService', () => {
 		assert.strictEqual(testObject.isAllowed(aLocalExtension('pub.name')) === true, true);
 	});
 
+	test('should block BeCoder blacklisted extensions from every source', () => {
+		const testObject = disposables.add(new AllowedExtensionsService(aProductService(undefined, ['ms-vscode.cpptools']), configurationService));
+		assert.notStrictEqual(testObject.isAllowed({ id: 'MS-VSCODE.CPPTOOLS', publisherDisplayName: undefined }), true);
+		assert.notStrictEqual(testObject.isAllowed(aGalleryExtension('cpptools', { publisher: 'ms-vscode' })), true);
+		assert.notStrictEqual(testObject.isAllowed(aLocalExtension('ms-vscode.cpptools')), true);
+		assert.notStrictEqual(testObject.isAllowed(aLocalExtension('ms-vscode.cpptools', {}, { type: ExtensionType.System })), true);
+	});
+
+	test('should reserve protected IDs for BeCoder system extensions', () => {
+		const testObject = disposables.add(new AllowedExtensionsService(aProductService(undefined, undefined, ['becoder.runner']), configurationService));
+		assert.notStrictEqual(testObject.isAllowed({ id: 'BeCoder.Runner', publisherDisplayName: undefined }), true);
+		assert.notStrictEqual(testObject.isAllowed(aGalleryExtension('runner', { publisher: 'becoder' })), true);
+		assert.notStrictEqual(testObject.isAllowed(aLocalExtension('becoder.runner')), true);
+		assert.strictEqual(testObject.isAllowed(aLocalExtension('becoder.runner', {}, { type: ExtensionType.System })), true);
+	});
+
 	test('should trigger change event when allowed list change', async () => {
 		configurationService.setUserConfiguration(AllowedExtensionsConfigKey, { '*': false });
 		const testObject = disposables.add(new AllowedExtensionsService(aProductService(), configurationService));
@@ -202,10 +218,12 @@ suite('AllowedExtensionsService', () => {
 		await promise;
 	});
 
-	function aProductService(extensionPublisherOrgs?: string[]): IProductService {
+	function aProductService(extensionPublisherOrgs?: string[], extensionBlacklist?: string[], protectedExtensions?: string[]): IProductService {
 		return {
 			_serviceBrand: undefined,
-			extensionPublisherOrgs
+			extensionPublisherOrgs,
+			extensionBlacklist,
+			protectedExtensions
 		} as IProductService;
 	}
 

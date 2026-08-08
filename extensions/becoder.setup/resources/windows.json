@@ -32,5 +32,6 @@
 	"downloadSources": [],
 	"compilerCandidates": ["{{TOOLCHAIN_ROOT}}\\becoder-ucrt64\\bin\\g++.exe"],
 	"clangdCandidates": ["{{TOOLCHAIN_ROOT}}\\clangd\\clangd_22.1.6\\bin\\clangd.exe"],
-	"installDescription": "Extract the bundled UCRT64 GCC 14.1.0 and clangd into BeCoder's portable data."
+	"installDescription": "Extract the bundled UCRT64 GCC 14.1.0 and clangd into BeCoder's portable data",
+	"installDescriptionZh": "将内置的 UCRT64 GCC 14.1.0 和 clangd 解压到 BeCoder 的便携数据目录"
 }

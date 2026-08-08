@@ -42,5 +42,6 @@
 	"portableToolchain": false,
 	"compilerCandidates": [],
 	"clangdCandidates": ["/opt/homebrew/opt/llvm/bin/clangd", "/usr/local/opt/llvm/bin/clangd", "clangd"],
-	"installDescription": "Install GCC and LLVM (clangd) with Homebrew"
+	"installDescription": "Install GCC and LLVM (clangd) with Homebrew",
+	"installDescriptionZh": "使用 Homebrew 安装 GCC 和 LLVM（clangd）"
 }

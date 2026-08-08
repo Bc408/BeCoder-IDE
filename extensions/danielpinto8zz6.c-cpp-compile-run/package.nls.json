@@ -1,0 +1,13 @@
+{
+	"displayName": "BeCoder Runner",
+	"description": "Compile and run C/C++ files with BeCoder's integrated toolchain.",
+	"command.openPanel": "BeCoder: Open BC Panel",
+	"command.run": "BeCoder: Run",
+	"command.runWithInput": "BeCoder: Run With Input",
+	"configuration.title": "BeCoder Runner",
+	"configuration.cStandard": "C standard used by BeCoder Runner.",
+	"configuration.cppStandard": "C++ standard used by BeCoder Runner.",
+	"configuration.cppFlags": "Additional C++ compiler flags used by BeCoder Runner after its required -O2, -Wall, and -DDEBUG flags.",
+	"configuration.cFlags": "Additional C compiler flags used by BeCoder Runner after its required -O2, -Wall, and -DDEBUG flags.",
+	"configuration.cleanupExecutable": "Delete the source-adjacent executable after the program exits."
+}

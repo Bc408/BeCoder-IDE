@@ -122,6 +122,7 @@ import './contrib/files/electron-browser/fileActions.contribution.js';
 
 // CodeEditor Contributions
 import './contrib/codeEditor/electron-browser/codeEditor.contribution.js';
+import './contrib/becoder/electron-browser/beCoderDisplayLanguage.contribution.js';
 
 // Debug
 import './contrib/debug/electron-browser/extensionHostDebugService.js';

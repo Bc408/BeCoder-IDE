@@ -40,6 +40,22 @@ const copyrightHeaders = [
 	],
 ] as const;
 
+const approvedOpenVSXGallery = {
+	serviceUrl: 'https://open-vsx.org/vscode/gallery',
+	itemUrl: 'https://open-vsx.org/vscode/item',
+	latestUrlTemplate: 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
+	controlUrl: 'https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json',
+} as const;
+
+function hasApprovedOpenVSXGallery(candidate: unknown): boolean {
+	if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+		return false;
+	}
+	const gallery = candidate as Record<string, unknown>;
+	return Object.keys(gallery).length === Object.keys(approvedOpenVSXGallery).length
+		&& Object.entries(approvedOpenVSXGallery).every(([key, value]) => gallery[key] === value);
+}
+
 export function hasAcceptedCopyrightHeader(lines: readonly string[]): boolean {
 	return copyrightHeaders.some(header => header.every((line, index) => lines[index] === line));
 }
@@ -115,8 +131,8 @@ export function hygiene(some: NodeJS.ReadWriteStream | string[] | undefined, run
 	const productJson = es.through(function (file: VinylFile) {
 		const product = JSON.parse(file.contents!.toString('utf8'));
 
-		if (product.extensionsGallery) {
-			console.error(`product.json: Contains 'extensionsGallery'`);
+		if (!hasApprovedOpenVSXGallery(product.extensionsGallery)) {
+			console.error(`product.json: 'extensionsGallery' must contain only the approved Open VSX endpoints`);
 			errorCount++;
 		}
 

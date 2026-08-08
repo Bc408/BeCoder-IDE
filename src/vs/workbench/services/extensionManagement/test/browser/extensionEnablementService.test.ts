@@ -105,7 +105,7 @@ export class TestExtensionEnablementService extends ExtensionEnablementService {
 			chatEntitlementService ?? new TestChatEntitlementService(),
 			instantiationService,
 			new NullLogService(),
-			productService
+			instantiationService.get(IProductService)
 		);
 		this._register(disposables);
 	}
@@ -146,7 +146,7 @@ suite('ExtensionEnablementService Test', () => {
 		installed.splice(0, installed.length);
 		instantiationService = disposableStore.add(new TestInstantiationService());
 		instantiationService.stub(IFileService, disposableStore.add(new FileService(new NullLogService())));
-		instantiationService.stub(IProductService, TestProductService);
+		instantiationService.stub(IProductService, { ...TestProductService, extensionBlacklist: ['ms-vscode.cpptools', 'ms-vscode.cpptools-extension-pack'] });
 		const testConfigurationService = new TestConfigurationService();
 		testConfigurationService.setUserConfiguration(AllowedExtensionsConfigKey, { '*': true, 'unallowed': false });
 		instantiationService.stub(IConfigurationService, testConfigurationService);
@@ -1220,6 +1220,16 @@ suite('ExtensionEnablementService Test', () => {
 	test('test extension is disabled by allowed list', async () => {
 		const target = aLocalExtension2('unallowed.extension');
 		assert.strictEqual(testObject.getEnablementState(target), EnablementState.DisabledByAllowlist);
+	});
+
+	test('test product-blacklisted system extension is disabled', () => {
+		const target = aLocalExtension('ms-vscode.cpptools', undefined, ExtensionType.System);
+		assert.strictEqual(testObject.getEnablementState(target), EnablementState.DisabledByAllowlist);
+	});
+
+	test('test user allowlist does not disable other system extensions', () => {
+		const target = aLocalExtension('unallowed.extension', undefined, ExtensionType.System);
+		assert.strictEqual(testObject.getEnablementState(target), EnablementState.EnabledGlobally);
 	});
 
 	test('test extension is disabled by malicious', async () => {

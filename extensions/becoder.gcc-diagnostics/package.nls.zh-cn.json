@@ -1,0 +1,4 @@
+{
+	"displayName": "BeCoder GCC 诊断",
+	"description": "使用 BeCoder 私有内置 GCC 为 C 和 C++ 提供错误诊断。"
+}

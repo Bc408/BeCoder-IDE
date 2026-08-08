@@ -11,12 +11,13 @@ import { FilterType, SortBy } from './extensionManagement.js';
 
 type ExtensionGalleryConfig = {
 	readonly serviceUrl: string;
-	readonly itemUrl: string;
-	readonly publisherUrl: string;
-	readonly resourceUrlTemplate: string;
-	readonly extensionUrlTemplate: string;
+	readonly itemUrl?: string;
+	readonly latestUrlTemplate?: string;
+	readonly publisherUrl?: string;
+	readonly resourceUrlTemplate?: string;
+	readonly extensionUrlTemplate?: string;
 	readonly controlUrl: string;
-	readonly nlsBaseUrl: string;
+	readonly nlsBaseUrl?: string;
 };
 
 export class ExtensionGalleryManifestService extends Disposable implements IExtensionGalleryManifestService {
@@ -47,7 +48,7 @@ export class ExtensionGalleryManifestService extends Disposable implements IExte
 				type: ExtensionGalleryResourceType.ExtensionQueryService
 			},
 			{
-				id: `${extensionsGallery.serviceUrl}/vscode/{publisher}/{name}/latest`,
+				id: extensionsGallery.latestUrlTemplate ?? `${extensionsGallery.serviceUrl}/vscode/{publisher}/{name}/latest`,
 				type: ExtensionGalleryResourceType.ExtensionLatestVersionUri
 			},
 			{

@@ -15,8 +15,19 @@ if (-not (Test-Path -LiteralPath $PackagePath -PathType Container)) {
 $requiredFiles = @(
 	'BeCoder.exe',
 	'data\toolchains\.gitkeep',
+	'resources\app\ThirdPartyNotices.txt',
+	'resources\app\licenses\MIT-VSCode.txt',
+	'resources\app\product.json',
+	'resources\app\extensions\aadityanarayan.code-snap\package.json',
+	'resources\app\extensions\aadityanarayan.code-snap\LICENSE',
+	'resources\app\extensions\becoder.setup\LICENSE',
+	'resources\app\extensions\becoder.setup\package.nls.json',
+	'resources\app\extensions\becoder.setup\package.nls.zh-cn.json',
 	'resources\app\extensions\becoder.setup\out\extension.js',
+	'resources\app\extensions\becoder.gcc-diagnostics\LICENSE',
 	'resources\app\extensions\becoder.gcc-diagnostics\package.json',
+	'resources\app\extensions\becoder.gcc-diagnostics\package.nls.json',
+	'resources\app\extensions\becoder.gcc-diagnostics\package.nls.zh-cn.json',
 	'resources\app\extensions\becoder.gcc-diagnostics\out\extension.js',
 	'resources\app\extensions\becoder.one-monokai\package.json',
 	'resources\app\extensions\becoder.one-monokai\themes\OneMonokai-color-theme.json',
@@ -24,10 +35,24 @@ $requiredFiles = @(
 	'resources\app\extensions\cpp\better-cpp-syntax-license.txt',
 	'resources\app\extensions\cpp\syntaxes\cpp.tmLanguage.json',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\package.json',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\package.nls.json',
+	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\package.nls.zh-cn.json',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\dist\extension.js',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\package.json',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\README.md',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\out\bundle.js',
+	'resources\app\resources\oi-defaults\BUNDLED-COMPONENTS.json',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-packages.json',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\gcc-libs\COPYING3',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\gmp\COPYING.LESSERv3',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\isl\LICENSE',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpc\COPYING.LESSER',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpdecimal\COPYRIGHT.txt',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpfr\COPYING.LESSER',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python\LICENSE.txt',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python-fonttools\LICENSE',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python-pip\LICENSE.txt',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\tk\license.terms',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty_console_list.node',
@@ -49,6 +74,17 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $appPath = Join-Path $PackagePath 'resources\app'
+$packagedNotices = Get-Content -LiteralPath (Join-Path $appPath 'ThirdPartyNotices.txt') -Raw
+foreach ($requiredNotice in @(
+	'BeCoder Runner 0.3.0',
+	'CodeSnap 1.3.4',
+	'clangd 22.1.6 Windows binary bundle',
+	'BeCoder UCRT64 GCC 14.1.0 bundle'
+)) {
+	if (-not $packagedNotices.Contains($requiredNotice)) {
+		throw "The packaged third-party notices are missing the required entry: $requiredNotice"
+	}
+}
 $gccDiagnosticsPath = Join-Path $appPath 'extensions\becoder.gcc-diagnostics'
 $gccDiagnosticsManifest = Get-Content -LiteralPath (Join-Path $gccDiagnosticsPath 'package.json') -Raw | ConvertFrom-Json
 if ("$($gccDiagnosticsManifest.publisher).$($gccDiagnosticsManifest.name)" -ne 'becoder.gcc-diagnostics' -or
@@ -144,6 +180,13 @@ if ($setupDefaults.'editor.unicodeHighlight.nonBasicASCII' -ne $false -or
 	$setupDefaults.'editor.unicodeHighlight.invisibleCharacters' -ne $true) {
 	throw 'The packaged BeCoder Unicode highlighting defaults are invalid.'
 }
+$displayLanguage = $setupManifest.contributes.configuration.properties.'becoder.displayLanguage'
+if ($displayLanguage.default -ne 'zh-cn' -or
+	(@($displayLanguage.enum) -join ',') -ne 'zh-cn,en' -or
+	$displayLanguage.scope -ne 'application' -or
+	$displayLanguage.order -ne 0) {
+	throw 'The packaged BeCoder display-language setting is invalid.'
+}
 
 $cppExtensionPath = Join-Path $appPath 'extensions\cpp'
 $cppGrammar = Get-Content -LiteralPath (Join-Path $cppExtensionPath 'syntaxes\cpp.tmLanguage.json') -Raw | ConvertFrom-Json
@@ -176,6 +219,41 @@ if ($grammarOwners.Count -ne 1 -or
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
 if (-not (@($product.onboardingThemes) | Where-Object { $_.id -eq 'becoder-one-monokai' -and $_.themeId -eq 'BeCoder One Monokai' })) {
 	throw 'The packaged onboarding themes do not contain BeCoder One Monokai.'
+}
+$productText = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw
+$gallery = $product.extensionsGallery
+if ($gallery.serviceUrl -ne 'https://open-vsx.org/vscode/gallery' -or
+	$gallery.itemUrl -ne 'https://open-vsx.org/vscode/item' -or
+	$gallery.latestUrlTemplate -ne 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest' -or
+	$gallery.controlUrl -ne 'https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json') {
+	throw 'The packaged product does not use the approved Open VSX endpoints.'
+}
+foreach ($endpoint in @('marketplace.visualstudio.com', 'marketplace.vsallin.net', 'vscode-unpkg.net', 'az764295.vo.msecnd.net')) {
+	if ($productText.Contains($endpoint)) {
+		throw "The packaged product contains a forbidden Microsoft Marketplace endpoint: $endpoint"
+	}
+}
+if ((@($product.extensionBlacklist) -join ',') -ne 'ms-vscode.cpptools,ms-vscode.cpptools-extension-pack') {
+	throw 'The packaged product does not retain the complete cpptools blacklist.'
+}
+$expectedProtectedExtensions = @(
+	'becoder.becoder-setup',
+	'becoder.runner',
+	'becoder.gcc-diagnostics',
+	'becoder.one-monokai',
+	'llvm-vs-code-extensions.vscode-clangd',
+	'adpyke.codesnap',
+	'vscode.cpp',
+	'ms-ceintl.vscode-language-pack-zh-hans'
+)
+if ((@($product.protectedExtensions) -join ',') -ne ($expectedProtectedExtensions -join ',')) {
+	throw 'The packaged product does not protect the complete BeCoder core extension set.'
+}
+if (@($product.builtInExtensionsEnabledWithAutoUpdates).Count -ne 0) {
+	throw 'The packaged product must not allow gallery updates for built-in extensions.'
+}
+if ((@($product.linkProtectionTrustedDomains) -join ',') -ne 'https://open-vsx.org') {
+	throw 'The packaged product does not trust only the approved Open VSX registry domain.'
 }
 
 $clangdExtensionPath = Join-Path $appPath 'extensions\llvm-vs-code-extensions.vscode-clangd'
@@ -249,6 +327,19 @@ if (-not $clangdReadme.Contains("Visible C/C++ diagnostics belong to BeCoder's b
 	throw 'The packaged clangd README does not describe the BeCoder capability boundary.'
 }
 
+$languagePackPath = Join-Path $appPath 'extensions\MS-CEINTL.vscode-language-pack-zh-hans'
+$languagePackManifest = Get-Content -LiteralPath (Join-Path $languagePackPath 'package.json') -Raw | ConvertFrom-Json
+if ("$($languagePackManifest.publisher).$($languagePackManifest.name)".ToLowerInvariant() -ne 'ms-ceintl.vscode-language-pack-zh-hans' -or
+	$languagePackManifest.version -ne '1.130.2026072017' -or
+	$languagePackManifest.engines.vscode -ne '^1.130.0') {
+	throw 'The packaged Simplified Chinese language pack does not match the approved BeCoder 1.130 snapshot.'
+}
+foreach ($languagePackFile in @('LICENSE.md', 'ThirdPartyNotices.txt', 'translations\main.i18n.json')) {
+	if (-not (Test-Path -LiteralPath (Join-Path $languagePackPath $languagePackFile) -PathType Leaf)) {
+		throw "The packaged Simplified Chinese language pack is missing $languagePackFile."
+	}
+}
+
 $clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'
 $clangdArchivePath = Join-Path $PackagePath $clangdArchiveRelativePath
 if (-not (Test-Path -LiteralPath $clangdArchivePath -PathType Leaf)) {
@@ -256,6 +347,19 @@ if (-not (Test-Path -LiteralPath $clangdArchivePath -PathType Leaf)) {
 }
 if ((Get-Item -LiteralPath $clangdArchivePath).Length -lt 10MB) {
 	throw "The bundled BeCoder clangd archive is unexpectedly small: $clangdArchiveRelativePath"
+}
+$expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
+if ((Get-FileHash -LiteralPath $clangdArchivePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedClangdHash) {
+	throw 'The bundled clangd archive does not match its pinned SHA-256.'
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$clangdZip = [System.IO.Compression.ZipFile]::OpenRead($clangdArchivePath)
+try {
+	if (-not $clangdZip.GetEntry('clangd_22.1.6/LICENSE.TXT')) {
+		throw 'The bundled clangd archive is missing its Apache-2.0 WITH LLVM-exception license.'
+	}
+} finally {
+	$clangdZip.Dispose()
 }
 
 $compilerRelativePath = 'resources\app\resources\oi-defaults\toolchains\becoder-ucrt64.zip'
@@ -267,8 +371,139 @@ if ($IncludeCompiler) {
 	if ((Get-Item -LiteralPath $compilerPath).Length -lt 100MB) {
 		throw "The bundled BeCoder compiler archive is unexpectedly small: $compilerRelativePath"
 	}
+	$expectedCompilerHash = '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2'
+	if ((Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedCompilerHash) {
+		throw 'The bundled UCRT64 compiler archive does not match its pinned SHA-256.'
+	}
 } elseif (Test-Path -LiteralPath $compilerPath) {
 	throw "The Exclude Compiler package unexpectedly contains the bundled compiler: $compilerRelativePath"
+}
+
+$componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\BUNDLED-COMPONENTS.json') -Raw | ConvertFrom-Json
+$expectedComponentIds = @(
+	'code-oss',
+	'becoder.runner',
+	'becoder.becoder-setup',
+	'becoder.gcc-diagnostics',
+	'llvm-vs-code-extensions.vscode-clangd',
+	'adpyke.codesnap',
+	'becoder.one-monokai',
+	'vscode.cpp',
+	'ms-ceintl.vscode-language-pack-zh-hans',
+	'clangd-windows',
+	'becoder-ucrt64'
+)
+if ((@($componentInventory.components.id) -join ',') -ne ($expectedComponentIds -join ',')) {
+	throw 'The bundled component inventory does not contain the exact approved component set.'
+}
+$requiredComponentFields = @('id', 'version', 'source', 'modificationStatus', 'spdxIdentifier', 'copyrightNotice')
+foreach ($component in @($componentInventory.components)) {
+	foreach ($field in $requiredComponentFields) {
+		if (-not $component.$field) {
+			throw "The bundled component inventory is missing $field for $($component.id)."
+		}
+	}
+	if ($component.licensePath) {
+		$licensePath = Join-Path $appPath $component.licensePath
+		if (-not (Test-Path -LiteralPath $licensePath)) {
+			throw "The bundled component inventory references a missing license path for $($component.id): $($component.licensePath)"
+		}
+	}
+}
+$clangdComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'clangd-windows' }
+$ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 'becoder-ucrt64' }
+$languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
+if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2') {
+	throw 'The bundled component inventory does not match the shipped toolchain archives.'
+}
+if ($languagePackComponent.version -ne $languagePackManifest.version -or
+	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
+	$languagePackComponent.contentSha256 -ne 'b673f15a9e308edca466da2b3fce216b13a855a852cdfa91288b2c0d7b5ace1e' -or
+	$languagePackComponent.packagedContentSha256 -ne 'a9fabbecb50d14fb17abb91dd8905c7ba4e459247d910ad79da537fe5a914426') {
+	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
+}
+$ucrt64Inventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\toolchains\ucrt64-packages.json') -Raw | ConvertFrom-Json
+if (@($ucrt64Inventory.packages).Count -ne 36 -or @($ucrt64Inventory.auxiliaryPackageSources).Count -ne 2) {
+	throw 'The UCRT64 package inventory is incomplete.'
+}
+$ucrt64LicenseRoot = Join-Path $appPath $ucrt64Inventory.licenseFilesRoot
+$retainedLicenseFiles = @(Get-ChildItem -LiteralPath $ucrt64LicenseRoot -Recurse -File)
+if ($ucrt64Inventory.licenseFilesRoot -ne 'resources/oi-defaults/toolchains/ucrt64-licenses' -or
+	$retainedLicenseFiles.Count -ne $ucrt64Inventory.evidence.retainedLicenseFileCount -or
+	$retainedLicenseFiles.Count -lt 63) {
+	throw 'The packaged UCRT64 license bundle is incomplete.'
+}
+$ucrt64RecipeRoot = Join-Path $appPath $ucrt64Inventory.recipeFilesRoot
+$retainedRecipeFiles = @(Get-ChildItem -LiteralPath $ucrt64RecipeRoot -Recurse -File)
+if ($ucrt64Inventory.recipeFilesRoot -ne 'resources/oi-defaults/toolchains/ucrt64-sources/recipes' -or
+	$retainedRecipeFiles.Count -ne $ucrt64Inventory.evidence.retainedRecipeFileCount -or
+	$retainedRecipeFiles.Count -lt 290) {
+	throw 'The packaged UCRT64 source recipe bundle is incomplete.'
+}
+
+function Get-DirectoryFilesSha256 {
+	param([Parameter(Mandatory = $true)][string]$DirectoryPath)
+
+	$resolvedDirectoryPath = (Get-Item -LiteralPath $DirectoryPath).FullName
+	$relativePaths = @(Get-ChildItem -LiteralPath $resolvedDirectoryPath -Recurse -File | ForEach-Object {
+		$_.FullName.Substring($resolvedDirectoryPath.Length + 1).Replace('\', '/')
+	})
+	[Array]::Sort($relativePaths, [StringComparer]::Ordinal)
+	$manifest = (($relativePaths | ForEach-Object {
+		$pathHash = (Get-FileHash -LiteralPath (Join-Path $resolvedDirectoryPath $_) -Algorithm SHA256).Hash.ToLowerInvariant()
+		"$_`t$pathHash"
+	}) -join "`n")
+	if ($relativePaths.Count) {
+		$manifest += "`n"
+	}
+
+	$utf8 = New-Object System.Text.UTF8Encoding($false)
+	$sha256 = [System.Security.Cryptography.SHA256]::Create()
+	try {
+		return [BitConverter]::ToString($sha256.ComputeHash($utf8.GetBytes($manifest))).Replace('-', '').ToLowerInvariant()
+	} finally {
+		$sha256.Dispose()
+	}
+}
+
+$languagePackContentHash = Get-DirectoryFilesSha256 -DirectoryPath $languagePackPath
+if ($languagePackContentHash -ne $languagePackComponent.packagedContentSha256) {
+	throw 'The packaged Simplified Chinese language pack content differs from the approved deterministic package snapshot.'
+}
+
+$recipeDirectoryNames = @(Get-ChildItem -LiteralPath $ucrt64RecipeRoot -Directory | Sort-Object Name -CaseSensitive | ForEach-Object { $_.Name })
+$inventoryRecipeNames = @($ucrt64Inventory.recipes.PSObject.Properties.Name | Sort-Object -CaseSensitive)
+if (($recipeDirectoryNames -join ',') -ne ($inventoryRecipeNames -join ',')) {
+	throw 'The packaged UCRT64 recipe directories do not match the pinned recipe inventory.'
+}
+foreach ($recipeName in $inventoryRecipeNames) {
+	$recipe = $ucrt64Inventory.recipes.($recipeName)
+	if ($recipe.filesSha256 -notmatch '^[0-9a-f]{64}$' -or
+		(Get-DirectoryFilesSha256 -DirectoryPath (Join-Path $ucrt64RecipeRoot $recipeName)) -ne $recipe.filesSha256) {
+		throw "The packaged UCRT64 recipe files do not match the pinned digest for $recipeName."
+	}
+}
+foreach ($package in @($ucrt64Inventory.packages) + @($ucrt64Inventory.auxiliaryPackageSources)) {
+	$recipe = $ucrt64Inventory.recipes.($package.recipe)
+	if (-not $package.name -or -not $package.version -or -not $package.license -or
+		$recipe.commit -notmatch '^[0-9a-f]{40}$' -or $recipe.pkgbuildSha256 -notmatch '^[0-9a-f]{64}$') {
+		throw "The UCRT64 package inventory contains incomplete provenance for $($package.name)."
+	}
+	$pkgbuildPath = Join-Path $ucrt64RecipeRoot "$($package.recipe)\PKGBUILD"
+	if (-not (Test-Path -LiteralPath $pkgbuildPath -PathType Leaf) -or
+		(Get-FileHash -LiteralPath $pkgbuildPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $recipe.pkgbuildSha256) {
+		throw "The packaged UCRT64 recipe does not match its pinned PKGBUILD for $($package.name)."
+	}
+	$licensePaths = @($ucrt64Inventory.licenseMappings.($package.name))
+	if (-not $licensePaths.Count) {
+		throw "The UCRT64 package inventory is missing a license mapping for $($package.name)."
+	}
+	foreach ($relativeLicensePath in $licensePaths) {
+		$mappedLicensePath = Join-Path $ucrt64LicenseRoot $relativeLicensePath
+		if (-not (Test-Path -LiteralPath $mappedLicensePath -PathType Leaf) -or (Get-Item -LiteralPath $mappedLicensePath).Length -eq 0) {
+			throw "The UCRT64 package inventory references a missing license for $($package.name): $relativeLicensePath"
+		}
+	}
 }
 
 $forbiddenPaths = @(
@@ -277,6 +512,12 @@ $forbiddenPaths = @(
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\runner-init.ps1',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\run.cmd',
 	'resources\app\extensions\jeff-hykin.better-cpp-syntax',
+	'resources\app\extensions\mermaid-markdown-features',
+	'resources\app\extensions\ms-vscode.js-debug',
+	'resources\app\extensions\ms-vscode.js-debug-companion',
+	'resources\app\extensions\ms-vscode.vscode-js-profile-table',
+	'resources\app\resources\oi-defaults\.clangd',
+	'resources\app\resources\oi-defaults\portable-data\toolchains\.gitkeep',
 	'resources\app\resources\oi-defaults\toolchains\gdb.exe',
 	'resources\app\resources\oi-defaults\toolchains\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3.zip'
 )

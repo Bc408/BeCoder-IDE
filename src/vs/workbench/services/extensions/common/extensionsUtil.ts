@@ -14,7 +14,10 @@ const protectedBeCoderBuiltinExtensions = new Set([
 	'becoder.becoder-setup',
 	'becoder.runner',
 	'becoder.one-monokai',
-	'becoder.gcc-diagnostics'
+	'becoder.gcc-diagnostics',
+	'adpyke.codesnap',
+	'vscode.cpp',
+	'ms-ceintl.vscode-language-pack-zh-hans'
 ]);
 
 function isProtectedBeCoderBuiltin(extension: IExtensionDescription | undefined): boolean {

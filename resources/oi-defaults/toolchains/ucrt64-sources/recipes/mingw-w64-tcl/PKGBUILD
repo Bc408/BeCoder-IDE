@@ -1,0 +1,158 @@
+# Maintainer: Alexey Pavlov <alexpux@gmail.com>
+# Contributor: Ray Donnelly <mingw.android@gmail.com>
+
+_realname=tcl
+pkgbase=mingw-w64-${_realname}
+pkgname="${MINGW_PACKAGE_PREFIX}-${_realname}"
+pkgver=8.6.13
+pkgrel=1
+pkgdesc="The Tcl scripting language (mingw-w64)"
+arch=('any')
+mingw_arch=('mingw32' 'mingw64' 'ucrt64' 'clang64' 'clang32' 'clangarm64')
+depends=("${MINGW_PACKAGE_PREFIX}-gcc-libs" "${MINGW_PACKAGE_PREFIX}-zlib")
+#conflicts=(${MINGW_PACKAGE_PREFIX}-sqlite-analyzer)
+makedepends=("${MINGW_PACKAGE_PREFIX}-cc" "${MINGW_PACKAGE_PREFIX}-autotools")
+options=('staticlibs' '!makeflags') # '!strip' 'debug')
+license=("custom")
+url="https://tcl.sourceforge.io/"
+source=("https://downloads.sourceforge.net/sourceforge/tcl/tcl${pkgver}-src.tar.gz"
+        001-fix-relocation.patch
+        002-fix-forbidden-colon-in-paths.mingw.patch
+        004-use-system-zlib.mingw.patch
+        005-no-xc.mingw.patch
+        007-install.mingw.patch
+        008-tcl-8.5.14-hidden.patch
+        010-win-non-x86.patch
+        011-win-arm64.patch
+        012-tcl-add-pkgconfig-file.patch)
+
+sha256sums=('43a1fae7412f61ff11de2cfd05d28cfc3a73762f354a417c62370a54e2caf066'
+            '1e4473a32bfdf3edcf0d6215f8973596ba1f74c286ec02af88370aebfebf6b18'
+            '70bf0d8e84985f4e8ee63447ad37d5e50376eaf35ace51112761cacbbd596c4c'
+            '225d223da3c2d1f69e8e2481fdf347c0bd80dc761aea62c409ccb053529500eb'
+            '2b0f41f6704aa964dbfafa0a65dd5ce0ab97e82ff5cbbe2a95a2e8d644cc5550'
+            '0fcd6877b8057ac0e2870e26b32b6dad7e5368a7ecae2876aef3c2ffc2570fbb'
+            '3ec2702efb1be6873d6ffd2ffb357637588f835f8817ae65cf0373020fcc7359'
+            'bdaeb5695ffc860215df81276f347995a9f5bd8ce37f8f85ac1465cf71086ebd'
+            '51dc29f822ad7af721d1dd6d13700856c21da30c70c9c2aa688f69a950965113'
+            'bcdaed18b211616d7064dc141047dc6f34de7f1e08fae78c8693b844ccfd4b65')
+
+prepare() {
+  cd "${srcdir}/tcl${pkgver}"
+  patch -Np1 -i "${srcdir}/001-fix-relocation.patch"
+  patch -Np1 -i "${srcdir}/002-fix-forbidden-colon-in-paths.mingw.patch"
+  patch -Np1 -i "${srcdir}/004-use-system-zlib.mingw.patch"
+  patch -Np1 -i "${srcdir}/005-no-xc.mingw.patch"
+  patch -Np1 -i "${srcdir}/007-install.mingw.patch"
+  patch -Np1 -i "${srcdir}/008-tcl-8.5.14-hidden.patch"
+  patch -Np1 -i "${srcdir}/010-win-non-x86.patch"
+  patch -Np1 -i "${srcdir}/011-win-arm64.patch"
+
+  patch -Np1 -i "${srcdir}/012-tcl-add-pkgconfig-file.patch"
+  cp unix/tcl.pc.in win/tcl.pc.in
+
+  # Using the static libgcc library is problematic when sharing
+  # resources across dynamic link libraries, so we must use
+  # libgcc*.dll everywhere:
+  echo "Removing -static-libgcc from configure files"
+  find "${srcdir}/tcl${pkgver}" -type f \( -name "tcl.m4" -o -name "configure*" \) -print0 | xargs -0 sed -i 's/-static-libgcc//g'
+
+  cd win && autoreconf -fi
+}
+
+build() {
+  local extra_config=
+  if check_option "debug" "y"; then
+    extra_config="--enable-symbols"
+  fi
+  local enable64bit=
+  [[ "${MINGW_CHOST}" = "x86_64-w64-mingw32" ]] && enable64bit='--enable-64bit=amd64'
+  [[ "${MINGW_CHOST}" = "aarch64-w64-mingw32" ]] && enable64bit='--enable-64bit=arm64'
+
+  [[ -d ${srcdir}/build-${MSYSTEM} ]] && rm -rf ${srcdir}/build-${MSYSTEM}
+  mkdir -p ${srcdir}/build-${MSYSTEM}
+  cd "${srcdir}/build-${MSYSTEM}"
+  ${srcdir}/tcl${pkgver}/win/configure \
+    --prefix=${MINGW_PREFIX} \
+    --build=${MINGW_CHOST} \
+    --host=${MINGW_CHOST} \
+    --enable-threads \
+    ${extra_config} \
+    ${enable64bit}
+
+  make
+}
+
+package() {
+  local debug_suffix=
+  if check_option "debug" "y"; then
+    debug_suffix="g"
+  fi
+  cd "${srcdir}/build-${MSYSTEM}"
+  cp tclsh86${debug_suffix}.exe tclsh.exe
+  #PATH=.:$PATH
+  make install INSTALL_ROOT="$pkgdir"
+
+  cp "${pkgdir}${MINGW_PREFIX}/bin/tclsh86${debug_suffix}.exe" "${pkgdir}${MINGW_PREFIX}/bin/tclsh.exe"
+  find "${pkgdir}${MINGW_PREFIX}" -name '*.def' -o -name '*.exp' | xargs -rtl1 rm
+  find "${pkgdir}${MINGW_PREFIX}" -name '*.sh' -o -name '*.dll' -o -name '*.exe' | xargs -rtl1 chmod 755
+
+  local _libver=${pkgver%.*}
+  _libver=${_libver//./}
+
+  local _odbc_ver=1.1.5
+  local _itcl_ver=4.2.3
+  sed \
+    -e "s|^\(TCL_BUILD_LIB_SPEC\)='.*|\1='-Wl,${MINGW_PREFIX}/lib/libtcl${_libver}.dll.a'|" \
+    -e "s|^\(TCL_SRC_DIR\)='.*'|\1='${MINGW_PREFIX}/include/tcl${pkgver%.*}/tcl-private'|" \
+    -e "s|^\(TCL_BUILD_STUB_LIB_SPEC\)='.*|\1='-Wl,${MINGW_PREFIX}/lib/libtclstub${_libver}.a'|" \
+    -e "s|^\(TCL_BUILD_STUB_LIB_PATH\)='.*|\1='${MINGW_PREFIX}/lib'|" \
+    -e "s|^\(TCL_STUB_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib -ltclstub${_libver}'|" \
+    -e "s|^\(TCL_INCLUDE_SPEC\)='.*|\1='-I${MINGW_PREFIX}/include/tcl${pkgver%.*}'|" \
+    -i "${pkgdir}${MINGW_PREFIX}/lib/tclConfig.sh"
+
+  sed \
+    -e "s|^\(tdbc_BUILD_STUB_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/tdbc${_odbc_ver} -ltdbcstub${_odbc_ver//./}'|" \
+    -e "s|^\(TDBC_BUILD_STUB_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/tdbc${_odbc_ver} -ltdbcstub${_odbc_ver//./}'|" \
+    -e "s|^\(tdbc_BUILD_STUB_LIB_PATH\)='.*|\1='${MINGW_PREFIX}/lib/tdbc${_odbc_ver}/libtdbcstub${_odbc_ver//./}.a'|" \
+    -e "s|^\(TDBC_BUILD_STUB_LIB_PATH\)='.*|\1='${MINGW_PREFIX}/lib/tdbc${_odbc_ver}/libtdbcstub${_odbc_ver//./}.a'|" \
+    -e "s|^\(tdbc_INCLUDE_SPEC\)='.*|\1='${MINGW_PREFIX}/lib/tdbc${_odbc_ver}/libtdbcstub${_odbc_ver//./}.a'|" \
+    -e "s|^\(tdbc_INCLUDE_SPEC\)='.*|\1='${MINGW_PREFIX}/lib/tdbc${_odbc_ver}/libtdbcstub${_odbc_ver//./}.a'|" \
+    -i "${pkgdir}${MINGW_PREFIX}/lib/tdbc${_odbc_ver}/tdbcConfig.sh"
+
+  sed \
+    -e "s|^\(itcl_BUILD_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/itcl${_itcl_ver} -litcl${_itcl_ver//./}'|" \
+    -e "s|^\(ITCL_BUILD_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/itcl${_itcl_ver} -litcl${_itcl_ver//./}'|" \
+    -e "s|^\(itcl_BUILD_STUB_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/itcl${_itcl_ver} -litclstub${_itcl_ver//./}'|" \
+    -e "s|^\(ITCL_BUILD_STUB_LIB_SPEC\)='.*|\1='-L${MINGW_PREFIX}/lib/itcl${_itcl_ver} -litclstub${_itcl_ver//./}'|" \
+    -e "s|^\(itcl_BUILD_STUB_LIB_PATH\)='.*|\1='${MINGW_PREFIX}/lib/itcl${_itcl_ver}/libitclstub${_itcl_ver//./}.a'|" \
+    -e "s|^\(ITCL_BUILD_STUB_LIB_PATH\)='.*|\1='${MINGW_PREFIX}/lib/itcl${_itcl_ver}/libitclstub${_itcl_ver//./}.a'|" \
+    -i "${pkgdir}${MINGW_PREFIX}/lib/itcl${_itcl_ver}/itclConfig.sh"
+
+  ln -s "${pkgdir}${MINGW_PREFIX}/lib/libtcl86${debug_suffix}.dll.a" "${pkgdir}${MINGW_PREFIX}/lib/libtcl.dll.a"
+  ln -s "${pkgdir}${MINGW_PREFIX}/lib/tclConfig.sh" "${pkgdir}${MINGW_PREFIX}/lib/tcl${pkgver%.*.*}/tclConfig.sh"
+
+  # Install private headers
+  mkdir -p "${pkgdir}${MINGW_PREFIX}/include/tcl${pkgver%.*}/tcl-private/"{generic,win}
+  cd ${srcdir}/tcl${pkgver}
+  find generic win -name "*.h" -exec cp -p '{}' "${pkgdir}${MINGW_PREFIX}"/include/tcl${pkgver%.*}/tcl-private/'{}' ';'
+  ( cd "${pkgdir}${MINGW_PREFIX}/include"
+    for header in *.h ; do
+      cp -f ${header} ${pkgdir}${MINGW_PREFIX}/include/tcl${pkgver%.*}/tcl-private/generic/
+    done
+  )
+  chmod a-x "${pkgdir}${MINGW_PREFIX}/lib/tcl${pkgver%.*}/encoding/"*.enc
+  chmod a-x "${pkgdir}${MINGW_PREFIX}/lib/"*/pkgIndex.tcl
+
+  install -Dm644 ${srcdir}/${_realname}${pkgver}/win/tcl.m4 ${pkgdir}${MINGW_PREFIX}/share/aclocal/tcl${pkgver%.*}.m4
+  
+  # Resolve conflict with sqlite-analyzer package
+  mv ${pkgdir}${MINGW_PREFIX}/bin/sqlite3_analyzer{,.sh}
+
+  # mingw-w64-sqlite also provides the Tcl sqlite extension, which
+  # conflicts with the version provided by this package. Solve the
+  # problem removing the extension built here. The rationale is that
+  # the extension provided by mingw-w64-sqlite is more likely to be up
+  # to date:
+  rm -rf ${pkgdir}${MINGW_PREFIX}/lib/sqlite*
+}

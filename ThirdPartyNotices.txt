@@ -17,10 +17,12 @@ MIT License
 Copyright (c) 2015 - present Microsoft Corporation
 License text: licenses/MIT-VSCode.txt
 
-BeCoder Runner 0.2.0 (based on C/C++ Compile Run)
+BeCoder Runner 0.3.0 (based on C/C++ Compile Run)
 https://github.com/danielpinto8zz6/c-cpp-compile-run
 
 GNU General Public License v3.0
+Modified source: https://github.com/Bc408/BeCoder
+Source path: extensions/danielpinto8zz6.c-cpp-compile-run
 License text: extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE
 
 ---------------------------------------------------------
@@ -37,7 +39,19 @@ License text: extensions/llvm-vs-code-extensions.vscode-clangd/LICENSE
 CodeSnap 1.3.4
 https://github.com/kufii/CodeSnap
 
-MIT License, as declared by the bundled extension manifest.
+MIT License
+Copyright (c) 2019 Adrien Pyke
+Source snapshot: https://github.com/kufii/CodeSnap/commit/8ddd3c51090a4a6e2475b08cb9fada3079288287
+License text: extensions/aadityanarayan.code-snap/LICENSE
+
+---------------------------------------------------------
+
+BeCoder Setup 0.1.0 and BeCoder GCC Diagnostics 0.1.0
+https://github.com/Bc408/BeCoder
+
+MIT License
+Copyright (c) 2026 BeCoder contributors
+License texts: extensions/becoder.setup/LICENSE and extensions/becoder.gcc-diagnostics/LICENSE
 
 ---------------------------------------------------------
 
@@ -59,7 +73,31 @@ License text: extensions/becoder.one-monokai/LICENSE
 
 ---------------------------------------------------------
 
-Visual Studio Code Localization Packs - Chinese (Simplified) 1.128.2026071013
+clangd 22.1.6 Windows binary bundle
+https://github.com/clangd/clangd/releases/tag/22.1.6
+
+Apache License 2.0 with LLVM Exceptions
+Archive license entry: clangd_22.1.6/LICENSE.TXT
+Provenance and SHA-256: resources/oi-defaults/BUNDLED-COMPONENTS.json
+
+---------------------------------------------------------
+
+BeCoder UCRT64 GCC 14.1.0 bundle
+https://www.msys2.org/
+
+This archive is assembled from pinned MSYS2 UCRT64 packages plus BeCoder's
+debugger header and precompiled standard header. Exact package versions,
+licenses, PKGBUILD commits and hashes are recorded in
+resources/oi-defaults/toolchains/ucrt64-packages.json. Archive provenance and
+SHA-256 are recorded in resources/oi-defaults/BUNDLED-COMPONENTS.json. License
+and copyright files retained from the exact package and source versions are in
+resources/oi-defaults/toolchains/ucrt64-licenses. The pinned MSYS2 PKGBUILDs,
+patches, and auxiliary recipe files are retained in
+resources/oi-defaults/toolchains/ucrt64-sources/recipes.
+
+---------------------------------------------------------
+
+Visual Studio Code Localization Packs - Chinese (Simplified) 1.130.2026072017
 https://github.com/Microsoft/vscode-loc
 
 MIT License

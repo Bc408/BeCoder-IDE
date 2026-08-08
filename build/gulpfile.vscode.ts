@@ -301,17 +301,19 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		}).map(ext => `!.build/extensions/${ext.name}/**`);
 
 		const extensions = gulp.src(['.build/extensions/**', ...platformSpecificBuiltInExtensionsExclusions], { base: '.build', dot: true });
-	const beCoderOnboarding = gulp.src([
+		const beCoderOnboarding = gulp.src([
 			'resources/oi-defaults/**',
+			'!resources/oi-defaults/portable-data/**',
 			...(platform === 'win32' ? [] : [
 				'!resources/oi-defaults/toolchains/becoder-ucrt64.zip',
 				'!resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip'
 			])
 		], { base: '.' });
+		const beCoderRecipeDotfiles = gulp.src('resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/.gitignore', { base: '.', dot: true });
 		const sourceFilterPattern = stripSourceMapsInPackagingTasks
 			? ['**', '!**/*.map']
 			: ['**'];
-		const sources = es.merge(src, extensions, beCoderOnboarding)
+		const sources = es.merge(src, extensions, beCoderOnboarding, beCoderRecipeDotfiles)
 			.pipe(filter(sourceFilterPattern, { dot: true }));
 
 		let version = packageJson.version;

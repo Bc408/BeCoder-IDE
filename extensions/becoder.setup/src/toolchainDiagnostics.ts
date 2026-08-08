@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
+import { selectDisplayText } from './localize';
 
 type DiagnosticStatus = 'ok' | 'warning' | 'error';
 type DiagnosticItem = { label: string; status: DiagnosticStatus; detail: string; path?: string };
@@ -16,7 +17,8 @@ export function registerToolchainDiagnostics(context: vscode.ExtensionContext): 
 }
 
 async function openToolchainDiagnostics(context: vscode.ExtensionContext): Promise<void> {
-	const panel = vscode.window.createWebviewPanel('becoder.toolchainDiagnostics', 'BeCoder Toolchain Diagnostics', vscode.ViewColumn.Active, { enableScripts: true });
+	// allow-any-unicode-next-line
+	const panel = vscode.window.createWebviewPanel('becoder.toolchainDiagnostics', selectDisplayText('BeCoder Toolchain Diagnostics', 'BeCoder 工具链诊断'), vscode.ViewColumn.Active, { enableScripts: true });
 	const refresh = async () => panel.webview.postMessage({ type: 'state', value: await collectDiagnostics(context) });
 	panel.webview.onDidReceiveMessage(async message => {
 		if (message?.type === 'refresh') {
@@ -45,8 +47,10 @@ async function collectDiagnostics(context: vscode.ExtensionContext): Promise<Dia
 	return [
 		await executableDiagnostic('BeCoder g++ 14.1.0', compiler, ['--version']),
 		await executableDiagnostic('BeCoder clangd', clangd, ['--version']),
-		{ label: 'C++ semantic service', status: 'ok', detail: 'BeCoder clangd is the only bundled C++ semantic service.' },
-		{ label: 'C++ standard', status: configuration.get<string>('becoder.runner.cppStandard') === 'c++20' ? 'ok' : 'warning', detail: configuration.get<string>('becoder.runner.cppStandard') ?? 'c++20' },
+		// allow-any-unicode-next-line
+		{ label: selectDisplayText('C++ semantic service', 'C++ 语义服务'), status: 'ok', detail: selectDisplayText('BeCoder clangd is the only bundled C++ semantic service.', 'BeCoder clangd 是唯一内置的 C++ 语义服务。') },
+		// allow-any-unicode-next-line
+		{ label: selectDisplayText('C++ standard', 'C++ 标准'), status: configuration.get<string>('becoder.runner.cppStandard') === 'c++20' ? 'ok' : 'warning', detail: configuration.get<string>('becoder.runner.cppStandard') ?? 'c++20' },
 	];
 }
 
@@ -62,11 +66,14 @@ function getBeCoderToolchainRoot(context: vscode.ExtensionContext): string {
 }
 
 async function executableDiagnostic(label: string, executable: string, args: string[]): Promise<DiagnosticItem> {
-	if (!executable) { return { label, status: 'error', detail: 'Path is not configured.' }; }
-	if (!fs.existsSync(executable)) { return { label, status: 'error', detail: `File not found: ${executable}`, path: executable }; }
+	// allow-any-unicode-next-line
+	if (!executable) { return { label, status: 'error', detail: selectDisplayText('Path is not configured.', '路径尚未配置。') }; }
+	// allow-any-unicode-next-line
+	if (!fs.existsSync(executable)) { return { label, status: 'error', detail: selectDisplayText(`File not found: ${executable}`, `找不到文件：${executable}`), path: executable }; }
 	try {
 		const output = await run(executable, args);
-		return { label, status: 'ok', detail: output.split(/\r?\n/).find(Boolean)?.trim() || 'Executable started.', path: executable };
+		// allow-any-unicode-next-line
+		return { label, status: 'ok', detail: output.split(/\r?\n/).find(Boolean)?.trim() || selectDisplayText('Executable started.', '可执行文件已启动。'), path: executable };
 	} catch (error) {
 		return { label, status: 'error', detail: error instanceof Error ? error.message : String(error), path: executable };
 	}
@@ -77,5 +84,12 @@ function run(executable: string, args: string[]): Promise<string> {
 }
 
 function getHtml(): string {
-	return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"><style>body{margin:0;background:var(--vscode-editor-background);color:var(--vscode-foreground);font-family:var(--vscode-font-family)}main{max-width:900px;margin:auto;padding:32px}h1{font-size:24px}.toolbar{display:flex;gap:8px;margin:20px 0}button{border:0;padding:7px 12px;color:var(--vscode-button-foreground);background:var(--vscode-button-background);cursor:pointer}.list{border:1px solid var(--vscode-editorWidget-border)}.item{display:grid;grid-template-columns:12px 220px 1fr auto;gap:12px;padding:14px;border-bottom:1px solid var(--vscode-editorWidget-border)}.item:last-child{border:0}.dot{width:10px;height:10px;border-radius:50%;margin-top:5px}.ok{background:var(--vscode-testing-iconPassed)}.warning{background:var(--vscode-testing-iconQueued)}.error{background:var(--vscode-testing-iconFailed)}.detail{color:var(--vscode-descriptionForeground);overflow-wrap:anywhere}</style></head><body><main><h1>BeCoder Toolchain Diagnostics</h1><div class="toolbar"><button id="refresh">Refresh</button><button id="repair">Repair toolchain</button></div><div id="list" class="list"></div></main><script>const vscode=acquireVsCodeApi();document.getElementById('refresh').onclick=()=>vscode.postMessage({type:'refresh'});document.getElementById('repair').onclick=()=>vscode.postMessage({type:'repair'});window.addEventListener('message',event=>{if(event.data?.type!=='state')return;document.getElementById('list').replaceChildren(...event.data.value.map(item=>{const row=document.createElement('div');row.className='item';row.innerHTML='<span class="dot '+item.status+'"></span><strong></strong><span class="detail"></span>';row.querySelector('strong').textContent=item.label;row.querySelector('.detail').textContent=item.detail;return row;}));});</script></body></html>`;
+	const language = vscode.env.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+	// allow-any-unicode-next-line
+	const title = selectDisplayText('BeCoder Toolchain Diagnostics', 'BeCoder 工具链诊断');
+	// allow-any-unicode-next-line
+	const refresh = selectDisplayText('Refresh', '刷新');
+	// allow-any-unicode-next-line
+	const repair = selectDisplayText('Repair Toolchain', '修复工具链');
+	return `<!doctype html><html lang="${language}"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';"><style>body{margin:0;background:var(--vscode-editor-background);color:var(--vscode-foreground);font-family:var(--vscode-font-family)}main{max-width:900px;margin:auto;padding:32px}h1{font-size:24px}.toolbar{display:flex;gap:8px;margin:20px 0}button{border:0;padding:7px 12px;color:var(--vscode-button-foreground);background:var(--vscode-button-background);cursor:pointer}.list{border:1px solid var(--vscode-editorWidget-border)}.item{display:grid;grid-template-columns:12px 220px 1fr auto;gap:12px;padding:14px;border-bottom:1px solid var(--vscode-editorWidget-border)}.item:last-child{border:0}.dot{width:10px;height:10px;border-radius:50%;margin-top:5px}.ok{background:var(--vscode-testing-iconPassed)}.warning{background:var(--vscode-testing-iconQueued)}.error{background:var(--vscode-testing-iconFailed)}.detail{color:var(--vscode-descriptionForeground);overflow-wrap:anywhere}</style></head><body><main><h1>${title}</h1><div class="toolbar"><button id="refresh">${refresh}</button><button id="repair">${repair}</button></div><div id="list" class="list"></div></main><script>const vscode=acquireVsCodeApi();document.getElementById('refresh').onclick=()=>vscode.postMessage({type:'refresh'});document.getElementById('repair').onclick=()=>vscode.postMessage({type:'repair'});window.addEventListener('message',event=>{if(event.data?.type!=='state')return;document.getElementById('list').replaceChildren(...event.data.value.map(item=>{const row=document.createElement('div');row.className='item';row.innerHTML='<span class="dot '+item.status+'"></span><strong></strong><span class="detail"></span>';row.querySelector('strong').textContent=item.label;row.querySelector('.detail').textContent=item.detail;return row;}));});</script></body></html>`;
 }

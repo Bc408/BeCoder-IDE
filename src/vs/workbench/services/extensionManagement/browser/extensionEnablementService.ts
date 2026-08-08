@@ -62,6 +62,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 
 	// Sessions window allow-list (lowercased extension ids)
 	private readonly _sessionsWindowAllowedExtensions: ReadonlySet<string>;
+	private readonly productExtensionBlacklist: ReadonlySet<string>;
 
 	private _maliciousExtensionsCache: ReadonlyArray<MaliciousExtensionInfo> | undefined;
 
@@ -115,6 +116,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 		this._completionsExtensionId = productService.defaultChatAgent?.extensionId.toLowerCase();
 		this._chatExtensionId = productService.defaultChatAgent?.chatExtensionId.toLowerCase();
 		this._sessionsWindowAllowedExtensions = new Set<string>((productService.sessionsWindowAllowedExtensions ?? []).map(id => id.toLowerCase()));
+		this.productExtensionBlacklist = new Set((productService.extensionBlacklist ?? []).map(id => id.toLowerCase()));
 		const unificationExtensions = [this._completionsExtensionId, this._chatExtensionId].filter(id => !!id);
 
 		// Disabling extension unification should immediately disable the unified extension flow
@@ -464,7 +466,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 			enablementState = EnablementState.DisabledByMalicious;
 		}
 
-		else if (isEnabled && extension.type === ExtensionType.User && this.allowedExtensionsService.isAllowed(extension) !== true) {
+		else if (isEnabled && (extension.type === ExtensionType.User || this.productExtensionBlacklist.has(extension.identifier.id.toLowerCase())) && this.allowedExtensionsService.isAllowed(extension) !== true) {
 			enablementState = EnablementState.DisabledByAllowlist;
 		}
 

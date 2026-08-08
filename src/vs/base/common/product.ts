@@ -132,9 +132,12 @@ export interface IProductConfiguration {
 	readonly extensionsGallery?: {
 		readonly serviceUrl: string;
 		readonly controlUrl: string;
-		readonly extensionUrlTemplate: string;
-		readonly resourceUrlTemplate: string;
-		readonly nlsBaseUrl: string;
+		readonly itemUrl?: string;
+		readonly publisherUrl?: string;
+		readonly latestUrlTemplate?: string;
+		readonly extensionUrlTemplate?: string;
+		readonly resourceUrlTemplate?: string;
+		readonly nlsBaseUrl?: string;
 		readonly accessSKUs?: string[];
 	};
 
@@ -152,6 +155,7 @@ export interface IProductConfiguration {
 
 	readonly extensionPublisherOrgs?: readonly string[];
 	readonly extensionBlacklist?: readonly string[];
+	readonly protectedExtensions?: readonly string[];
 	readonly trustedExtensionPublishers?: readonly string[];
 
 	readonly extensionRecommendations?: IStringDictionary<IExtensionRecommendations>;

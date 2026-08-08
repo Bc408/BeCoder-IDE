@@ -8,6 +8,7 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { isDeepStrictEqual } from 'util';
 import * as vscode from 'vscode';
+import { selectDisplayText } from './localize';
 import { registerSimpleSettings } from './simpleSettings';
 import { registerToolchainDiagnostics } from './toolchainDiagnostics';
 
@@ -16,6 +17,7 @@ type PlatformPreset = {
 	compilerCandidates: string[];
 	clangdCandidates: string[];
 	installDescription: string;
+	installDescriptionZh: string;
 	downloadSources?: DownloadSource[];
 };
 
@@ -143,11 +145,12 @@ async function rerunFirstRunSetup(): Promise<void> {
 	const configuration = vscode.workspace.getConfiguration('becoder.setup');
 	await configuration.update('pending', undefined, vscode.ConfigurationTarget.Global);
 	await configuration.update('completed', false, vscode.ConfigurationTarget.Global);
+	const restartNow = selectDisplayText('Restart Now', '立即重启');
 	const action = await vscode.window.showInformationMessage(
-		'BeCoder IDE will show the first-run setup after restart.',
-		'Restart Now'
+		selectDisplayText('BeCoder IDE will show the first-run setup after restart.', 'BeCoder IDE 将在重启后显示首次配置。'),
+		restartNow
 	);
-	if (action === 'Restart Now') {
+	if (action === restartNow) {
 		await vscode.commands.executeCommand('workbench.action.reloadWindow');
 	}
 }
@@ -158,7 +161,10 @@ async function repairToolchain(context: vscode.ExtensionContext): Promise<void> 
 		const configuration = vscode.workspace.getConfiguration('becoder.setup');
 		await configuration.update('pending', undefined, vscode.ConfigurationTarget.Global);
 		await configuration.update('completed', false, vscode.ConfigurationTarget.Global);
-		await vscode.window.showInformationMessage('正在进入工具链修复。请在开箱页继续，BeCoder IDE 会重新下载缺失的组件。');
+		await vscode.window.showInformationMessage(selectDisplayText(
+			'BeCoder IDE is entering toolchain repair. Continue on the first-run page to restore missing components.',
+			'正在进入工具链修复。请在首次配置页继续，BeCoder IDE 会恢复缺失的组件。'
+		));
 		await vscode.commands.executeCommand('workbench.action.reloadWindow');
 		return;
 	}
@@ -210,12 +216,17 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 		}
 	}
 	if (compiler && await isAppleClang(compiler)) {
+		const repair = selectDisplayText('Repair Toolchain', '修复工具链');
+		const continueWithAppleClang = selectDisplayText('Continue with Apple Clang', '继续使用 Apple Clang');
 		await vscode.window.showWarningMessage(
-			'未检测到 Homebrew GCC，当前将使用 Apple Clang（g++ 兼容包装器）。它可以编译代码，但为保持竞赛环境一致，建议执行“修复工具链”安装 Homebrew GCC。',
+			selectDisplayText(
+				'Homebrew GCC was not detected. BeCoder will use the Apple Clang g++ compatibility wrapper. It can compile code, but installing Homebrew GCC is recommended for a consistent contest environment.',
+				'未检测到 Homebrew GCC，当前将使用 Apple Clang（g++ 兼容包装器）。它可以编译代码，但为保持竞赛环境一致，建议执行“修复工具链”安装 Homebrew GCC。'
+			),
 			{ modal: true },
-			'修复工具链',
-			'继续使用 Apple Clang'
-		).then(action => action === '修复工具链' ? repairToolchain(context) : undefined);
+			repair,
+			continueWithAppleClang
+		).then(action => action === repair ? repairToolchain(context) : undefined);
 	}
 
 	const settings: Record<string, unknown> = {};
@@ -252,11 +263,20 @@ async function configure(context: vscode.ExtensionContext, firstRunSelection?: F
 	await context.globalState.update(SETUP_COMPLETE, true);
 
 	if (installerStarted && preset.portableToolchain) {
-		void vscode.window.showInformationMessage('BeCoder IDE is configured for its Portable toolchain. The download continues in the setup terminal without changing your system PATH.');
+		void vscode.window.showInformationMessage(selectDisplayText(
+			'BeCoder IDE is configured for its portable toolchain. Installation continues in the setup terminal without changing your system PATH.',
+			'BeCoder IDE 已配置为使用便携工具链。安装将在配置终端中继续，且不会修改系统 PATH。'
+		));
 	} else if (!compiler || !clangd) {
-		void vscode.window.showWarningMessage('The preset was saved, but one or more compilers are not installed yet. Finish the terminal installer, then run “BeCoder IDE: Configure Competitive Programming Environment” again to detect their actual paths.');
+		void vscode.window.showWarningMessage(selectDisplayText(
+			'The preset was saved, but one or more toolchain components are not installed yet. Finish the terminal installer, then run "BeCoder IDE: Configure Competitive Programming Environment" again.',
+			'预设已保存，但仍有工具链组件尚未安装。请先完成终端中的安装，再次运行“BeCoder IDE：配置竞赛编程环境”。'
+		));
 	} else {
-		void vscode.window.showInformationMessage(`BeCoder IDE is ready. Using g++ at ${compiler}.`);
+		void vscode.window.showInformationMessage(selectDisplayText(
+			`BeCoder IDE is ready. Using g++ at ${compiler}.`,
+			`BeCoder IDE 已就绪。当前使用的 g++ 位于 ${compiler}。`
+		));
 	}
 }
 
@@ -302,23 +322,32 @@ async function offerInstaller(context: vscode.ExtensionContext, preset: Platform
 		compilerMissing ? (process.platform === 'darwin' ? 'Homebrew GCC' : 'g++') : undefined,
 		clangdMissing ? 'clangd' : undefined
 	].filter((tool): tool is string => !!tool);
+	const installAndRepair = selectDisplayText('Install and Repair', '安装并修复');
+	const notNow = selectDisplayText('Not Now', '暂不处理');
 	const choice = await vscode.window.showWarningMessage(
-		`未检测到 ${missingTools.join(' 和 ')}。${preset.installDescription}。安装命令会在集成终端中运行，可能需要管理员权限。`,
+		selectDisplayText(
+			`${missingTools.join(' and ')} was not detected. ${preset.installDescription}. The installation command runs in the integrated terminal and may require administrator privileges.`,
+			`未检测到 ${missingTools.join(' 和 ')}。${preset.installDescriptionZh}。安装命令会在集成终端中运行，可能需要管理员权限。`
+		),
 		{ modal: true },
-		'安装并修复',
-		'暂不处理'
+		installAndRepair,
+		notNow
 	);
-	if (choice === '安装并修复') {
+	if (choice === installAndRepair) {
 		const toolchainRoot = getBeCoderToolchainRoot(context);
 		const source = preset.downloadSources?.find(candidate => candidate.id === 'tuna' && !candidate.unavailable)
 			?? preset.downloadSources?.find(candidate => !candidate.unavailable);
 		const installer = loadPlatformInstaller(context);
 		if (installer.getPortableAssets || !installer.createCommand) {
+			const restartSetup = selectDisplayText('Restart Setup Now', '立即重启配置');
 			const restart = await vscode.window.showInformationMessage(
-				'Portable toolchains are downloaded by the first-run setup window. Restart setup to download them.',
-				'Restart setup now'
+				selectDisplayText(
+					'Portable toolchains are installed by the first-run setup window. Restart setup to continue.',
+					'便携工具链由首次配置页安装。请重启配置以继续。'
+				),
+				restartSetup
 			);
-			if (restart === 'Restart setup now') {
+			if (restart === restartSetup) {
 				await rerunFirstRunSetup();
 			}
 			return;
@@ -326,7 +355,7 @@ async function offerInstaller(context: vscode.ExtensionContext, preset: Platform
 		const installCommand = process.platform === 'darwin'
 			? `${installer.createCommand({ toolchainRoot, source, stage: 'xcode', locale: vscode.env.language })}; ${installer.createCommand({ toolchainRoot, source, stage: 'homebrew', locale: vscode.env.language })}; ${installer.createCommand({ toolchainRoot, source, stage: 'toolchain', locale: vscode.env.language })}`
 			: installer.createCommand({ toolchainRoot, source, stage: 'toolchain', locale: vscode.env.language });
-		const terminal = vscode.window.createTerminal('BeCoder IDE Toolchain Setup');
+		const terminal = vscode.window.createTerminal(selectDisplayText('BeCoder IDE Toolchain Setup', 'BeCoder IDE 工具链配置'));
 		terminal.show();
 		terminal.sendText(installCommand, true);
 	}

@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.3** is the latest archived implementation checkpoint inside Stage 4; earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.4.1** is the latest archived implementation checkpoint; its protected Simplified-Chinese and bilingual-product behavior has passed source, package, and project-owner runtime acceptance. The broader **Stage 4.4** Open VSX and extension-governance checkpoint still has separately listed Marketplace and local-VSIX acceptance items pending. Earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,12 +9,13 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.3`
-- Active baseline commit: `555e5d4` (`feat(stage4.2): add bundled GCC editor diagnostics`)
-- Latest remote backup target: `origin/stage4.3`
+- Active development branch: `codex/stage4.4`
+- Active baseline commit: `18e7f60` (`feat(stage4.3): refine runner and visual workflow`)
+- Latest remote backup target: `origin/stage4.4.1`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
+- Open VSX implementation reference: `C:\Users\Bc\Desktop\BeCoder\vscodium-1.126.04524`; use its `prepare_vscode.sh` and extension documentation as a read-only compatibility reference rather than copying the VSCodium product wholesale.
 - The untracked `build/npm/stubs/cpu-features/` directory predates this handoff rewrite and must not be staged, modified, or removed without separate authorization.
 
 The bundled toolchain archives are intentional Git LFS assets:
@@ -52,7 +53,7 @@ Core product requirements:
 - Automatically save the focused C/C++ file before Run actions.
 - Keep native PowerShell fully separate from Runner, clangd, and the diagnostic worker.
 - Do not bundle CPH, cpptools, GDB, external OJ services, account login, online submission, or ShortestPath network services.
-- Allow users to install optional extensions later through the marketplace or local `.vsix` flow.
+- Allow users to install optional extensions later through the public Eclipse Open VSX Registry or a user-supplied local `.vsix` file.
 - Remove the first-open custom configuration page and open directly with BeCoder defaults.
 - Keep the fork close to upstream Code - OSS and implement BeCoder-specific behavior in focused built-in extensions or narrow integration points.
 
@@ -97,7 +98,7 @@ Grammar requirements:
 
 Theme requirements:
 
-- Add One Monokai as a BeCoder-owned built-in system extension, not a marketplace-managed dependency.
+- Add One Monokai as a BeCoder-owned built-in system extension, not an online-registry-managed dependency.
 - Use a distinct built-in identity such as `becoder.one-monokai` and a visible label such as `BeCoder One Monokai`.
 - Make it the first-launch default without forcing it again after a user selects another theme.
 - Protect the built-in identity from replacement by a user or workspace extension while preserving extension-development overrides.
@@ -216,7 +217,7 @@ Regression cases must cover valid C17 VLAs, `stdio.h`, `scanf`, valid C++20 conc
 Stage 4.2 implementation boundary:
 
 - Implement diagnostics as a dedicated protected built-in extension, provisionally `extensions/becoder.gcc-diagnostics`; do not place the diagnostic state machine in BeCoder Setup, Runner, clangd, native PowerShell, or workbench core.
-- BeCoder Setup remains responsible only for making the private toolchain available. The diagnostic extension resolves the packaged Windows compiler from BeCoder-owned data paths and must not trust a workspace setting, user compiler path, `PATH`, registry entry, or extension-marketplace toolchain.
+- BeCoder Setup remains responsible only for making the private toolchain available. The diagnostic extension resolves the packaged Windows compiler from BeCoder-owned data paths and must not trust a workspace setting, user compiler path, `PATH`, registry entry, or online-registry toolchain.
 - Activate for saved file-backed C and C++ source documents. Diagnose the latest in-memory document text rather than the last saved disk contents; untitled documents and standalone header-as-translation-unit diagnostics are outside the first Stage 4.2 acceptance boundary.
 - Own one `vscode.DiagnosticCollection` with source label `BeCoder GCC`. Publish only red errors after the matching request completes successfully; canceled, stale, malformed, and failed compiler requests must never overwrite a newer result.
 - Use a short edit debounce and one global active compiler process. A newer eligible edit cancels the active process tree and replaces the pending debounce target. The latest target may become ready while the canceled process is retiring, but it must not start until the old process has actually closed. There is no FIFO queue and no retained pending history.
@@ -384,25 +385,49 @@ Editor and language-service targets:
 - Measure first completion, signature help, hover, definition, references, and rename readiness separately from visual completion.
 - Avoid unnecessary competition between clangd parsing, GCC diagnostics, and Runner compilation.
 
-### Extension Marketplace and Built-in Extension Policy
+### Open VSX Registry and Built-in Extension Policy
 
-Marketplace requirements:
+Registry requirements:
 
-- Provide VS Marketplace search, browse, install, uninstall, and update in the Code - OSS workbench.
-- Support local `.vsix` import.
-- Users may install CPH, cpptools, other OJ tools, languages, and themes themselves.
-- cpptools must not be prebundled or enabled as a BeCoder core dependency.
+- Use the public Eclipse Open VSX Registry as BeCoder's only product-configured online extension registry. Provide search, browse, install, uninstall, and update through the normal Code - OSS Extensions workbench.
+- Follow the proven VSCodium 1.126 integration shape: Open VSX gallery, item, latest-version, trusted-domain, and Eclipse extension-control endpoints. Reconcile the exact fields with BeCoder's newer Code - OSS baseline instead of copying obsolete endpoint templates blindly.
+- Remove `marketplace.visualstudio.com`, `vscode-unpkg.net`, Microsoft Marketplace PPE, Microsoft Marketplace control, and other Microsoft Marketplace delivery endpoints from the packaged product configuration. BeCoder must not provide a Microsoft Marketplace preset, automatic fallback, proxy, mirror, or user-facing switch.
+- Support user-supplied local `.vsix` import as the fallback for extensions that are absent from Open VSX. Do not fetch such VSIX files from Microsoft Marketplace on the user's behalf.
+- Users may install CPH, other OJ tools, languages, and themes themselves when their licenses permit use in BeCoder. The currently expected `DivyanshuAgrawal.competitive-programming-helper` entry is absent from Open VSX, so CPH acceptance must exercise the local VSIX path rather than silently changing registries.
+- Treat Open VSX as an open, vendor-neutral registry service, not as proof that every listed extension is open source. Keep publisher, source, license, trust, compatibility, and security information visible; user-installed extensions remain third-party content under their own terms and must not be rebundled into BeCoder automatically.
+- Download user-selected Open VSX extensions directly into BeCoder-owned user data. Do not operate a BeCoder extension mirror or redistribute the Open VSX catalog. Preserve the Eclipse extension-control feed and Code - OSS integrity, malicious-extension, publisher-trust, and compatibility checks where supported by the selected API.
+- Keep `ms-vscode.cpptools` and `ms-vscode.cpptools-extension-pack` in the product extension blacklist. BeCoder must not bundle, download, install, update, enable, or run cpptools through either Open VSX or local `.vsix` paths. This latest decision supersedes the earlier plan to allow optional user installation.
 
 Core built-in policy:
 
 - Maintain an explicit built-in allowlist and conflict/protection list.
-- BeCoder Setup, BeCoder Runner, the managed clangd client, BeCoder One Monokai, and CodeSnap are protected core extensions.
-- Preserve the current bundled CodeSnap extension at `extensions/aadityanarayan.code-snap` with extension ID `adpyke.codesnap`. CodeSnap is an archived BeCoder-distributed core capability at the same management level as BeCoder One Monokai, not a dependency to remove and reinstall from the extension marketplace.
-- Protect the built-in `adpyke.codesnap` identity from replacement by user or workspace extensions in normal packaged use while preserving extension-development overrides, and add focused deduplication and package-verifier coverage for that contract.
+- The protected core IDs are `becoder.becoder-setup`, `becoder.runner`, `becoder.gcc-diagnostics`, `becoder.one-monokai`, `llvm-vs-code-extensions.vscode-clangd`, `adpyke.codesnap`, `vscode.cpp`, and `ms-ceintl.vscode-language-pack-zh-hans`.
+- Preserve the current bundled CodeSnap extension at `extensions/aadityanarayan.code-snap` with extension ID `adpyke.codesnap`. CodeSnap is an archived BeCoder-distributed core capability at the same management level as BeCoder One Monokai, not a dependency to remove and reinstall from Open VSX.
+- Protect the built-in `adpyke.codesnap` and `vscode.cpp` identities from replacement by user or workspace extensions in normal packaged use while preserving extension-development overrides, and add focused install-policy, deduplication, and package-verifier coverage for the complete protected set.
 - Better C++ Syntax grammar content belongs to the built-in `extensions/cpp` language extension, not a second installed extension.
 - User/workspace extensions must not replace protected core IDs in normal packaged use; extension-development instances remain usable for source debugging.
-- Remove JavaScript Debugger (`js-debug`), Mermaid, and other non-core prebundled extensions unless the project owner explicitly adds them to the allowlist. CodeSnap is explicitly excluded from this cleanup.
+- Remove `ms-vscode.js-debug`, `ms-vscode.js-debug-companion`, `ms-vscode.vscode-js-profile-table`, and `vscode.mermaid-markdown-features` from the BeCoder distribution. Prefer narrow build/package exclusions over deleting upstream source trees. CodeSnap is explicitly excluded from this cleanup.
 - Do not restore ShortestPath login, online submission, network OJ services, or GDB.
+
+Built-in language policy:
+
+- Bundle the exact unmodified extension payload from `ms-ceintl.vscode-language-pack-zh-hans-1.130.2026072017.vsix` as the protected system extension `ms-ceintl.vscode-language-pack-zh-hans`; pin version `1.130.2026072017`, VS Code engine `^1.130.0`, SHA-256 `265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0`, source provenance, MIT license, and third-party notice.
+- Keep the bundled Simplified Chinese pack at the same product-management level as CodeSnap and BeCoder One Monokai. Normal Open VSX search/results, update, install, uninstall, user/workspace replacement, and profile-copy paths must not expose or replace its protected identity; extension-development overrides remain available for source work.
+- BeCoder defaults to `zh-cn` on a fresh profile. English uses the Code - OSS source messages and must not require or install an English language extension.
+- Contribute `becoder.displayLanguage` as the first `application`-scoped setting under `BeCoder IDE Features`, with exactly `zh-cn` and `en`; the `BeCoder IDE: Settings` command must open the `becoder.becoder-setup` settings page where this control is visible.
+- A language change first writes the BeCoder-owned `argv.json` preference and then offers `Restart` or `Later`. `Later` keeps the selected language for the next BeCoder launch. Only one change is active and only the latest pending selection is retained; a failed write or unavailable protected pack restores the last accepted setting.
+- Store the setting in BeCoder's local user configuration and use only BeCoder's user-data and extension directories. Do not inspect, copy, migrate, or modify system VS Code locale settings, extensions, or user data.
+- On startup, the main process may load the bundled Chinese pack directly so a fresh profile does not depend on a pre-existing `languagepacks.json`; the shared-process language-pack scan remains responsible for refreshing BeCoder's own cache for subsequent switching.
+- BeCoder-owned Settings, New Tab, Setup/toolchain diagnostics, Runner command labels, and GCC Diagnostics extension metadata must remain coherent in both Chinese and English. The Stage 4.3 BC command grammar and accepted PowerShell-style lifecycle/status text remain stable English terminal protocol text.
+
+Redistribution and licensing gate:
+
+- BeCoder's GPL-3.0-or-later project license does not replace third-party licenses. Keep an auditable bundled-component inventory containing the exact component/version or commit, source URL, modification status, SPDX identifier, copyright notice, license-file path, archive hash, and corresponding-source location where copyleft terms require it.
+- Correct the BeCoder Runner entry in `ThirdPartyNotices.txt` from version 0.2.0 to the bundled 0.3.0 and retain its GPL-3.0 license and modified source.
+- CodeSnap may remain core, but Stage 4.4 must add a complete MIT license text and defensible upstream copyright/provenance record to both source and package output; the manifest's bare `MIT` field is not the complete redistribution record.
+- Record the bundled clangd 22.1.6 binary separately from the MIT-licensed vscode-clangd client. Preserve its `Apache-2.0 WITH LLVM-exception` license from the archive and record the exact archive provenance and hash.
+- Treat `resources/oi-defaults/toolchains/becoder-ucrt64.zip` as an urgent compliance item because it is already distributed through Git LFS. Inventory the exact MSYS2 binary packages, remove unrelated components only through the controlled toolchain-slimming workflow, retain every required license and notice, and provide durable equivalent access to exact corresponding sources, PKGBUILDs, patches, and hashes for GPL/LGPL components. Do not rewrite Git history or delete the accepted archive merely to conceal the gap; repair the distribution forward.
+- A Stage 4.4 package must fail verification if a bundled core component or toolchain lacks its required license/provenance record, if the Runner notice version is stale, or if packaged product configuration still references Microsoft Marketplace delivery endpoints.
 
 Complete AI removal means removing the full feature chain, not merely hiding a panel:
 
@@ -431,6 +456,8 @@ Use `C:\Users\Bc\Desktop\BeCoder\vscode-1.130.0` as the interaction and visual r
 - Analyze real dependencies before removing any UCRT64 or clangd archive content.
 - Remove only files proven unnecessary for offline C17/C++20 compilation, Run, GCC diagnostics, retained clangd intelligence, `stdc++.h.gch`, and `debugger.h`.
 - Preserve the original LFS archives as recoverable sources before controlled reduction.
+- Rebuild the retained toolchain from an exact, reproducible package manifest rather than another manually copied UCRT64 directory. Preserve source-package identities, build recipes, patches, license directories, and checksums alongside the reduced archive.
+- Generate a machine-readable software bill of materials and a human-readable third-party license bundle for the compiler archive. Corresponding-source availability is a release requirement, not an optional documentation improvement.
 - Rebuild and test after every controlled reduction.
 - Record compressed and extracted sizes.
 - Do not optimize package size by depending on system compilers, PATH, registry state, downloads, or global configuration.
@@ -444,6 +471,30 @@ Setup and toolchain:
 - `extensions/becoder.setup/resources/windows.js`
 - `extensions/becoder.setup/resources/windows.json`
 - `src/vs/code/electron-main/app.ts`
+
+Open VSX and extension governance:
+
+- `product.json`
+- `src/vs/platform/extensionManagement/common/allowedExtensionsService.ts`
+- `src/vs/platform/extensionManagement/common/extensionGalleryService.ts`
+- `src/vs/platform/extensionManagement/common/abstractExtensionManagementService.ts`
+- `src/vs/platform/extensionManagement/test/common/allowedExtensionsService.test.ts`
+
+Display language and bilingual product UI:
+
+- `extensions/MS-CEINTL.vscode-language-pack-zh-hans`
+- `extensions/becoder.setup/package.json`
+- `extensions/becoder.setup/src/localize.ts`
+- `extensions/becoder.setup/src/toolchainDiagnostics.ts`
+- `src/main.ts`
+- `src/vs/base/node/nls.ts`
+- `src/vs/workbench/contrib/becoder/electron-browser/beCoderDisplayLanguage.contribution.ts`
+- `src/vs/workbench/services/localization/electron-browser/localeService.ts`
+- `src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts`
+- `src/vs/workbench/services/extensionManagement`
+- `build/gulpfile.vscode.ts`
+- `build/azure-pipelines/win32/verify-becoder-package.ps1`
+- `ThirdPartyNotices.txt`
 
 Runner and BC panel:
 
@@ -537,8 +588,14 @@ The consolidated Stage 4 acceptance matrix includes:
 - exact `input` validation and default explorer pinning;
 - generated `.exe` files and dot-prefixed configuration items visible in Explorer by default on a clean first launch, with the explicit hide/show action correctly toggling both groups;
 - native PowerShell retaining the user's environment and arbitrary-command behavior;
-- marketplace and local `.vsix` behavior without protected-extension replacement;
-- CodeSnap remaining bundled, functional, and protected from normal user/workspace replacement without marketplace reinstallation;
+- Open VSX search, browse, install, update, and uninstall plus local `.vsix` behavior without protected-extension replacement or Microsoft Marketplace access;
+- CPH local-VSIX fallback when the expected extension remains absent from Open VSX;
+- cpptools blocked consistently through Open VSX, local VSIX, enablement, update, and existing-install paths;
+- CodeSnap remaining bundled, functional, licensed in the package, and protected from normal user/workspace replacement without Open VSX reinstallation;
+- clean-profile Simplified-Chinese startup from the pinned built-in 1.130 pack, English source-message fallback, `BeCoder IDE Features` language switching, `Restart`/`Later` persistence, and no access to system VS Code settings;
+- the protected Chinese pack, CodeSnap, One Monokai, and other core identities remaining absent from normal Open VSX results and immune to user/workspace replacement;
+- BeCoder New Tab, Setup/toolchain diagnostics, extension commands, and settings labels presenting coherent Chinese and English while BC terminal protocol text keeps the accepted Stage 4.3 appearance;
+- packaged third-party inventory, notices, toolchain licenses, archive provenance, and corresponding-source records passing the redistribution gate;
 - absence of AI, debug/GDB, ShortestPath network services, and removed non-core bundled extensions;
 - BeCoder branding, Help entries, Settings gear, and terminal cancellation visuals;
 - comparison with `portable_stage2_4_verified`, ShortestPath visual behavior, and the VS Code 1.130 reference where applicable.
@@ -550,7 +607,7 @@ The consolidated Stage 4 acceptance matrix includes:
 | Stage 4 specification consolidation | Archived | The authoritative Stage 4 requirements and ownership boundaries are consolidated, committed, and accepted by the project owner. |
 | Better C++ Syntax single grammar | Archived | The pinned `071dd6e` snapshot is token-scope equivalent to ShortestPath's effective 1.27.1 grammar; the package contains one accepted `source.cpp` owner. |
 | BeCoder One Monokai | Archived | The protected MIT-licensed `becoder.one-monokai` system extension is the accepted first-launch default. |
-| CodeSnap core retention | Archived | Bundled `adpyke.codesnap` remains a BeCoder-distributed core capability and is excluded from marketplace migration or non-core cleanup. Marketplace-era same-ID replacement protection remains owned by that future feature. |
+| CodeSnap core retention | Archived | Bundled `adpyke.codesnap` remains a BeCoder-distributed core capability and is excluded from Open VSX migration or non-core cleanup. Open-VSX-era same-ID replacement protection remains owned by Stage 4.4. |
 | clangd capability reduction | Archived | Stage 4.1 exposes only completion, signature help, hover, definition, references, rename, and document/range formatting; source, package, and project-owner acceptance passed. |
 | Google formatting | Archived | Stage 4.1 uses clangd's embedded ClangFormat with Google fallback, accepts only a physical workspace `.clang-format` override, and ships no separate `clang-format.exe`; source, package, and project-owner acceptance passed. |
 | GCC editor error diagnostics | Archived | Stage 4.2 source, focused tests, raw bundled-GCC matrix, standard Windows build, direct package verification, package/source hash comparison, independent review, and project-owner portable GUI acceptance passed. |
@@ -559,7 +616,8 @@ The consolidated Stage 4 acceptance matrix includes:
 | Explorer `input` ordering | Archived | Stage 4.3 source, Electron tests, and project-owner acceptance prove that only an exact ordinary file named `input` is pinned above every sibling under all Explorer sort modes. |
 | Stage 4.3 visual closeout | Archived | The accepted visual architecture, BC detail refinements, and GCC namespace-isolation correction passed focused validation, final read-only review, replacement build, direct package verification, and project-owner acceptance. |
 | Explorer visibility toggle | Planned | Default to showing `.exe` and dot-prefixed configuration items; make `Hide Configuration and Executable Files` hide both groups and `Show All Files` restore them without changing unrelated user exclusions. |
-| Marketplace and extension cleanup | Planned | Add Marketplace/VSIX support, define allowlists, preserve protected CodeSnap, and remove only non-core bundled extensions. |
+| Stage 4.4 Open VSX and extension governance | Built; user acceptance pending | Source uses only Open VSX, enforces the cpptools blacklist and eight-ID core protection across install/enablement/dedup paths, excludes Mermaid and the three JS Debug downloads, and records bundled licenses plus UCRT64 provenance and corresponding source. Focused tests, the standard source/build sequence, direct package verification, independent package-content cross-checks, and final read-only review pass; only project-owner portable runtime acceptance remains pending. |
+| Stage 4.4.1 protected Chinese and bilingual UI | Archived | The pinned 1.130 Simplified-Chinese VSIX is the eighth protected core component, fresh profiles default to Chinese, English uses source messages, `BeCoder IDE Features` owns the two-language setting, changes persist before optional restart, protected gallery results are hidden, and BeCoder-owned settings/toolchain surfaces are bilingual. Focused boundary tests 9/9, full build-script tests 239/239, client typecheck, OI extension compilation, JSON/PowerShell parsing, `git diff --check`, independent review, the replacement Windows build, direct package verification, and project-owner runtime acceptance pass. |
 | AI/debug/GDB removal | Planned | Remove complete contribution and persisted-state chains after dependency tracing. |
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
 | Toolchain slimming and release | Planned | Begin only after retained compiler/language-service behavior is stable and measurable. |
@@ -601,14 +659,14 @@ The consolidated Stage 4 acceptance matrix includes:
 
 ### CodeSnap core retention policy
 
-- Requirement: retain bundled CodeSnap as a BeCoder core capability at the same distribution level as BeCoder One Monokai, rather than removing it for marketplace reinstallation.
-- User-visible result: `adpyke.codesnap` remains bundled and available in BeCoder without a marketplace install.
-- Source ownership: `extensions/aadityanarayan.code-snap`; future normal-install replacement protection belongs to the Marketplace and extension-cleanup feature.
+- Requirement: retain bundled CodeSnap as a BeCoder core capability at the same distribution level as BeCoder One Monokai, rather than removing it for Open VSX reinstallation.
+- User-visible result: `adpyke.codesnap` remains bundled and available in BeCoder without an Open VSX install.
+- Source ownership: `extensions/aadityanarayan.code-snap`; normal-install replacement protection belongs to Stage 4.4 Open VSX and extension governance.
 - Commit/PR: CodeSnap is present from source baseline commit `58816f2`; the retention decision is recorded in the Stage 4 handoff and requires no Stage 4.3 source rewrite.
-- Source validation: current source and package policy retain the bundled extension; future Marketplace validation must prove that a user/workspace copy cannot replace the protected built-in identity.
+- Source validation: current source and package policy retain the bundled extension; Stage 4.4 Open VSX and local-VSIX validation must prove that a user/workspace copy cannot replace the protected built-in identity.
 - Package/build validation: prior accepted portable packages include the bundled CodeSnap extension.
 - User acceptance: explicitly approved for archive by the project owner on 2026-08-07.
-- Remaining risks or follow-up: implement and test same-ID protection before Marketplace installation is enabled; do not classify that work as part of this archived retention decision.
+- Remaining risks or follow-up: implement and test same-ID protection before Open VSX installation is enabled; do not classify that work as part of this archived retention decision.
 
 ### Stage 4.1 clangd intelligence and Google formatting
 
@@ -642,7 +700,29 @@ The consolidated Stage 4 acceptance matrix includes:
 - Source validation: Runner tests 38/38, GCC diagnostics tests 24/24, bundled GCC C/C++ namespace/debugger-header matrix, build tests 236/236, Explorer Electron tests 5/5, client typecheck, OI extension compilation, clangd checks, Runner production bundling, `git diff --check`, and four final independent read-only review rounds passed.
 - Package/build validation: the replacement Windows portable build passed on 2026-08-08 in 145.5 seconds, followed by successful `verify-becoder-package.ps1 -IncludeCompiler $true` verification for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`.
 - User acceptance: passed on 2026-08-08; the project owner reported that Stage 4.3 fully meets the requirements and approved it for archive.
-- Remaining risks or follow-up: the GCC namespace-isolation path deliberately invalidates the bundled C++ PCH and measured approximately 1.5 seconds in the focused probe. The Explorer visibility toggle is newly planned: first launch shows `.exe` and dot-prefixed items, while the explicit hide action must hide both groups. Marketplace cleanup, AI/debug removal, broader Workbench alignment, and toolchain slimming remain separate Stage 4 work.
+- Remaining risks or follow-up: the GCC namespace-isolation path deliberately invalidates the bundled C++ PCH and measured approximately 1.5 seconds in the focused probe. The Explorer visibility toggle is newly planned: first launch shows `.exe` and dot-prefixed items, while the explicit hide action must hide both groups. Open VSX governance and license remediation, AI/debug removal, broader Workbench alignment, and toolchain slimming remain separate Stage 4 work.
+
+### Stage 4.4 Open VSX and extension governance implementation checkpoint
+
+- Requirement: use the public Eclipse Open VSX Registry as BeCoder's only configured online extension registry; retain local VSIX import; block cpptools; prevent normal user, workspace, gallery, resource, or profile-copy replacement of the eight protected core IDs; remove Mermaid and the three downloaded JS Debug extensions from the OI package; and close bundled-component and UCRT64 redistribution records without deleting user assets or relying on Microsoft Marketplace.
+- User-visible result: the normal Code - OSS Extensions workbench targets Open VSX for search, browse, install, update, and uninstall. Local VSIX remains available for extensions absent from Open VSX. `ms-vscode.cpptools` and its extension pack remain unavailable, while Runner, Setup, GCC Diagnostics, One Monokai, clangd, CodeSnap, and `vscode.cpp` retain their built-in identities. Extension-development overrides remain intentionally available for development.
+- Source ownership: `product.json`; extension gallery, allowed-extension, installation, enablement, and dedup services under `src/vs/`; `build/hygiene.ts`; `build/lib/extensions.ts`; `build/azure-pipelines/win32/verify-becoder-package.ps1`; `ThirdPartyNotices.txt`; bundled extension licenses; and `resources/oi-defaults/BUNDLED-COMPONENTS.json` plus the UCRT64 package, license, and corresponding-source inventories.
+- Commit/PR: included in the containing Stage 4.4.1 backup commit pushed directly to `origin/stage4.4.1`; no PR or release workflow was requested. `build/npm/stubs/cpu-features/` is unrelated user-owned untracked content and remains untouched and uncommitted.
+- Source validation: the focused OI boundary suite passes 8/8 and the full build-script suite passes 238/238. JSON parsing, PowerShell parsing, `git diff --check`, direct lint of the new profile-copy test, Open VSX extension-query/latest/control endpoint probes, 38-package PKGBUILD hashes, 38-package license mappings, and all 36 normalized recipe-directory hashes pass. Git attributes explicitly fix 289 recipe text files to LF and the sole `.tar.xz` to binary; all 290 current files match their canonical Git-filtered bytes. The final post-build independent read-only review confirms that the narrow recipe-dotfile copy, extension-governance chain, license/provenance records, and package-verifier boundary have no remaining P1/P2 issue.
+- Package/build validation: passed on 2026-08-08. `npm run typecheck-client`, `npm run compile-oi-extensions`, and `npm run gulp vscode-win32-x64-min` completed in order; the replacement Windows portable build completed in approximately 140 seconds. `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. An independent package-content cross-check found exactly 290 source and 290 packaged recipe files, including all six recipe `.gitignore` files, with identical relative paths and SHA-256 hashes; the obsolete packaged `.clangd` and duplicate portable-data toolchain placeholder are absent, and the packaged notice files match their source hashes.
+- User acceptance: pending. No agent-run GUI was launched. Open VSX workbench behavior, local VSIX acceptance including CPH, protected/blacklisted install UX, update/uninstall flows, and the portable package remain project-owner acceptance items.
+- Remaining risks or follow-up: the new native profile-copy behavior test is authored and typechecked but has not yet run from generated unit-test output. Future additions of new recipe file types must add an explicit `.gitattributes` rule before updating `filesSha256`. Stage 4.4 must not be archived until project-owner portable runtime acceptance passes.
+
+### Stage 4.4.1 protected Simplified Chinese and bilingual product checkpoint
+
+- Requirement: vendor the project-owner-supplied 1.130 Simplified-Chinese VSIX as a protected core component; default fresh BeCoder profiles to Chinese; use Code - OSS source messages for English; expose an easy two-language selector under `BeCoder IDE Features`; keep locale state entirely inside BeCoder data; hide the protected pack from online gallery results; and keep BeCoder-owned product surfaces coherent in both languages.
+- User-visible result: `becoder.displayLanguage` offers only `简体中文` and `English` as the first BeCoder IDE setting. The BeCoder settings command opens that page. A selection is persisted to BeCoder's `argv.json` before the user chooses `Restart` or `Later`, and rapid changes retain only the latest pending language. Setup/toolchain pages and extension command/settings metadata have Chinese and English resources, while the accepted BC terminal protocol remains unchanged.
+- Source ownership: `extensions/MS-CEINTL.vscode-language-pack-zh-hans`; `extensions/becoder.setup`; Runner and GCC Diagnostics package NLS files; `src/main.ts`; `src/vs/base/node/nls.ts`; the BeCoder display-language workbench contribution; localization services; protected extension/gallery policy; build boundary tests; package verification; bundled-component inventory; and third-party notices.
+- Commit/PR: the containing Stage 4.4.1 backup commit is pushed directly to `origin/stage4.4.1`; no PR or release workflow was requested.
+- Source validation: focused OI boundary tests pass 9/9 and full build-script tests pass 239/239. `npm run precommit`, `npm run typecheck-client`, `npm run compile-oi-extensions`, manifest/resource JSON parsing, package-verifier PowerShell parsing, Git attribute checks, and the complete staged-diff check pass. The precommit closeout preserves exact third-party snapshot bytes, validates only the approved Open VSX endpoints, and makes no user-visible behavior change. Independent read-only review found and then verified closure of protected-resource access, filtered-gallery pagination, superseded restart, retry-after-cancellation, and language-pack byte-boundary issues; the final review reports no remaining P1/P2. The approved VSIX archive hash, its 101-file source-tree hash, and the deterministic Code OSS JSON-minified package-tree hash are pinned separately. The display-language and gallery-pager workbench unit tests are authored and typechecked but are not yet executed from generated unit-test output.
+- Package/build validation: passed on 2026-08-08. The final replacement `npm run gulp vscode-win32-x64-min` build completed in approximately 119 seconds, then `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The verifier recomputed the packaged language pack's 101-file tree, core protection set, bundled licenses, component inventory, and compiler/toolchain hashes.
+- User acceptance: passed on 2026-08-08. The project owner confirmed satisfaction after verifying clean-profile Chinese startup, Chinese-to-English and English-to-Chinese switching with both immediate restart and `Later`, persistence across restart, the visible settings entry, bilingual BeCoder surfaces, protected-pack invisibility, and complete isolation from system VS Code settings. No agent-run GUI acceptance is claimed.
+- Remaining risks or follow-up: the pinned language pack is compatible with the current 1.130 baseline; future Code - OSS baseline upgrades must update and re-audit the bundled pack as a product component rather than accepting Open VSX replacement or automatic updates. The broader Stage 4.4 Marketplace and local-VSIX acceptance matrix remains separate and is not implicitly archived by this language checkpoint.
 
 ### Baseline: Runner, toolchain, and language isolation
 

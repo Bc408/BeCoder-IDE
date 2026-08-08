@@ -1,0 +1,130 @@
+{
+	"schemaVersion": 1,
+	"components": [
+		{
+			"id": "code-oss",
+			"version": "1.130.0",
+			"source": "https://github.com/microsoft/vscode",
+			"modificationStatus": "Modified as the BeCoder Code - OSS fork.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2015 - present Microsoft Corporation; BeCoder modifications copyright their contributors.",
+			"licensePath": "licenses/MIT-VSCode.txt"
+		},
+		{
+			"id": "becoder.runner",
+			"version": "0.3.0",
+			"source": "https://github.com/Bc408/BeCoder",
+			"upstream": "https://github.com/danielpinto8zz6/c-cpp-compile-run",
+			"modificationStatus": "Substantially modified for the shell-free BeCoder Runner and BC panel.",
+			"license": "GPL-3.0",
+			"spdxIdentifier": "GPL-3.0-only",
+			"copyrightNotice": "Copyright holders include the upstream C/C++ Compile Run and BeCoder contributors; Microsoft-attributed derived files retain their source headers.",
+			"licensePath": "extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE",
+			"correspondingSource": "https://github.com/Bc408/BeCoder",
+			"correspondingSourcePath": "extensions/danielpinto8zz6.c-cpp-compile-run"
+		},
+		{
+			"id": "becoder.becoder-setup",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder",
+			"modificationStatus": "BeCoder-authored bundled extension.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2026 BeCoder contributors",
+			"licensePath": "extensions/becoder.setup/LICENSE"
+		},
+		{
+			"id": "becoder.gcc-diagnostics",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder",
+			"modificationStatus": "BeCoder-authored bundled extension.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2026 BeCoder contributors",
+			"licensePath": "extensions/becoder.gcc-diagnostics/LICENSE"
+		},
+		{
+			"id": "llvm-vs-code-extensions.vscode-clangd",
+			"version": "0.6.0",
+			"source": "https://github.com/clangd/vscode-clangd",
+			"modificationStatus": "Modified to expose only the BeCoder-approved clangd feature set and bundled binary path.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2019 The LLVM Developers; BeCoder modifications copyright their contributors.",
+			"licensePath": "extensions/llvm-vs-code-extensions.vscode-clangd/LICENSE"
+		},
+		{
+			"id": "adpyke.codesnap",
+			"version": "1.3.4",
+			"source": "https://github.com/kufii/CodeSnap/commit/8ddd3c51090a4a6e2475b08cb9fada3079288287",
+			"modificationStatus": "Pinned upstream snapshot with BeCoder redistribution metadata and complete license text.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2019 Adrien Pyke",
+			"licensePath": "extensions/aadityanarayan.code-snap/LICENSE"
+		},
+		{
+			"id": "becoder.one-monokai",
+			"version": "1.0.0",
+			"source": "https://github.com/Bc408/BeCoder",
+			"upstream": "https://github.com/azemoh/vscode-one-monokai",
+			"modificationStatus": "Modified and integrated as BeCoder's built-in visual theme.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2018 Joshua Azemoh; BeCoder modifications copyright their contributors.",
+			"licensePath": "extensions/becoder.one-monokai/LICENSE"
+		},
+		{
+			"id": "vscode.cpp",
+			"version": "10.0.0",
+			"source": "https://github.com/jeff-hykin/better-cpp-syntax/commit/071dd6ecc9eda347bd84c8aa0e0b557396cb6a40",
+			"modificationStatus": "Better C++ Syntax grammar snapshot integrated into the built-in Code - OSS C++ extension.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) 2019 Jeff Hykin; surrounding Code - OSS integration copyright Microsoft Corporation and contributors.",
+			"licensePath": "extensions/cpp/better-cpp-syntax-license.txt"
+		},
+		{
+			"id": "ms-ceintl.vscode-language-pack-zh-hans",
+			"version": "1.130.2026072017",
+			"sourceArchive": "ms-ceintl.vscode-language-pack-zh-hans-1.130.2026072017.vsix",
+			"sha256": "265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0",
+			"contentSha256": "b673f15a9e308edca466da2b3fce216b13a855a852cdfa91288b2c0d7b5ace1e",
+			"packagedContentSha256": "a9fabbecb50d14fb17abb91dd8905c7ba4e459247d910ad79da537fe5a914426",
+			"source": "https://github.com/microsoft/vscode-loc",
+			"modificationStatus": "Unmodified extension payload extracted from the approved VSIX; the standard Code OSS packaging step deterministically minifies JSON resources.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) Microsoft Corporation",
+			"licensePath": "extensions/MS-CEINTL.vscode-language-pack-zh-hans/LICENSE.md"
+		},
+		{
+			"id": "clangd-windows",
+			"version": "22.1.6",
+			"archive": "resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip",
+			"sha256": "ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1",
+			"source": "https://github.com/clangd/clangd/releases/tag/22.1.6",
+			"modificationStatus": "Unmodified upstream Windows release archive.",
+			"license": "Apache-2.0 WITH LLVM-exception",
+			"spdxIdentifier": "Apache-2.0 WITH LLVM-exception",
+			"copyrightNotice": "Copyright LLVM Project contributors",
+			"archiveLicenseEntry": "clangd_22.1.6/LICENSE.TXT"
+		},
+		{
+			"id": "becoder-ucrt64",
+			"version": "gcc-14.1.0-3",
+			"archive": "resources/oi-defaults/toolchains/becoder-ucrt64.zip",
+			"sha256": "730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2",
+			"source": "https://www.msys2.org/",
+			"modificationStatus": "Assembled from pinned MSYS2 UCRT64 packages with BeCoder PCH, debugger header, helper scripts, and runtime DLL copies.",
+			"license": "Multiple licenses; see package inventory.",
+			"spdxIdentifier": "NOASSERTION",
+			"copyrightNotice": "Copyright belongs to the package authors identified by the pinned upstream sources and retained license files.",
+			"licensePath": "resources/oi-defaults/toolchains/ucrt64-licenses",
+			"packageInventory": "resources/oi-defaults/toolchains/ucrt64-packages.json",
+			"correspondingSource": "https://github.com/msys2/MINGW-packages/tree/{commit}/{recipe}",
+			"correspondingSourcePath": "resources/oi-defaults/toolchains/ucrt64-sources/recipes"
+		}
+	]
+}

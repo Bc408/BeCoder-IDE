@@ -10,7 +10,7 @@ export const ILocaleService = createDecorator<ILocaleService>('localizationServi
 
 export interface ILocaleService {
 	readonly _serviceBrand: undefined;
-	setLocale(languagePackItem: ILanguagePackItem, skipDialog?: boolean): Promise<void>;
+	setLocale(languagePackItem: ILanguagePackItem, skipDialog?: boolean, shouldRestart?: () => boolean): Promise<boolean>;
 	clearLocalePreference(): Promise<void>;
 }
 

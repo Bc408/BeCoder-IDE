@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { isUUID } from '../../../../base/common/uuid.js';
@@ -11,7 +12,9 @@ import { mock } from '../../../../base/test/common/mock.js';
 import { IConfigurationService } from '../../../configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../configuration/test/common/testConfigurationService.js';
 import { IEnvironmentService } from '../../../environment/common/environment.js';
-import { IRawGalleryExtensionVersion, sortExtensionVersions, filterLatestExtensionVersionsForTargetPlatform } from '../../common/extensionGalleryService.js';
+import { createFilteredExtensionPager, IRawGalleryExtensionVersion, sortExtensionVersions, filterLatestExtensionVersionsForTargetPlatform, isProtectedExtensionId } from '../../common/extensionGalleryService.js';
+import { ExtensionGalleryManifestService } from '../../common/extensionGalleryManifestService.js';
+import { ExtensionGalleryResourceType } from '../../common/extensionGalleryManifest.js';
 import { IFileService } from '../../../files/common/files.js';
 import { FileService } from '../../../files/common/fileService.js';
 import { InMemoryFileSystemProvider } from '../../../files/common/inMemoryFilesystemProvider.js';
@@ -56,6 +59,73 @@ suite('Extension Gallery Service', () => {
 		assert.ok(isUUID(headers['X-Market-User-Id']));
 		const headers2 = await resolveMarketplaceHeaders(product.version, productService, environmentService, configurationService, fileService, storageService, NullTelemetryService);
 		assert.strictEqual(headers['X-Market-User-Id'], headers2['X-Market-User-Id']);
+	});
+
+	test('uses the product latest-version template for Open VSX', async () => {
+		const latestUrlTemplate = 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest';
+		const service = disposables.add(new ExtensionGalleryManifestService({
+			...productService,
+			extensionsGallery: {
+				serviceUrl: 'https://open-vsx.org/vscode/gallery',
+				itemUrl: 'https://open-vsx.org/vscode/item',
+				latestUrlTemplate,
+				controlUrl: 'https://example.test/extensions.json'
+			}
+		} as IProductService));
+		const manifest = await service.getExtensionGalleryManifest();
+		const latestVersionResource = manifest?.resources.find(resource => resource.type === ExtensionGalleryResourceType.ExtensionLatestVersionUri);
+		assert.strictEqual(latestVersionResource?.id, latestUrlTemplate);
+	});
+
+	test('hides protected BeCoder components from gallery results', () => {
+		const protectedExtensions = ['becoder.one-monokai', 'ms-ceintl.vscode-language-pack-zh-hans'];
+		assert.strictEqual(isProtectedExtensionId('MS-CEINTL.VSCODE-LANGUAGE-PACK-ZH-HANS', protectedExtensions), true);
+		assert.strictEqual(isProtectedExtensionId('BeCoder.One-Monokai', protectedExtensions), true);
+		assert.strictEqual(isProtectedExtensionId('example.extension', protectedExtensions), false);
+	});
+
+	test('reflows gallery pages after protected components are removed', async () => {
+		const requestedPages: number[] = [];
+		const pager = await createFilteredExtensionPager(
+			['one', 'two'],
+			7,
+			2,
+			3,
+			async pageIndex => {
+				requestedPages.push(pageIndex);
+				return pageIndex === 1 ? ['three', 'four'] : ['five'];
+			},
+			CancellationToken.None,
+		);
+
+		assert.deepStrictEqual(pager.firstPage, ['one', 'two', 'three']);
+		assert.strictEqual(pager.total, 5);
+		assert.deepStrictEqual(await pager.getPage(1, CancellationToken.None), ['four', 'five']);
+		assert.deepStrictEqual(requestedPages, [1, 2]);
+	});
+
+	test('retries the same raw gallery page after a failed request', async () => {
+		const requestedPages: number[] = [];
+		let failRequest = true;
+		const pager = await createFilteredExtensionPager(
+			['one', 'two', 'three'],
+			7,
+			1,
+			3,
+			async pageIndex => {
+				requestedPages.push(pageIndex);
+				if (failRequest) {
+					failRequest = false;
+					throw new Error('Cancelled request');
+				}
+				return ['four', 'five', 'six'];
+			},
+			CancellationToken.None,
+		);
+
+		await assert.rejects(() => pager.getPage(1, CancellationToken.None), /Cancelled request/);
+		assert.deepStrictEqual(await pager.getPage(1, CancellationToken.None), ['four', 'five', 'six']);
+		assert.deepStrictEqual(requestedPages, [1, 1]);
 	});
 
 	test('sorting single extension version without target platform', async () => {

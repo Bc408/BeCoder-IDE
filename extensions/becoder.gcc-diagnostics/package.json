@@ -1,7 +1,7 @@
 {
 	"name": "gcc-diagnostics",
-	"displayName": "BeCoder GCC Diagnostics",
-	"description": "BeCoder's private bundled-GCC error diagnostics for C and C++.",
+	"displayName": "%displayName%",
+	"description": "%description%",
 	"version": "0.1.0",
 	"publisher": "becoder",
 	"license": "MIT",

@@ -35,7 +35,7 @@ export const excludedForOIDistribution = new Set([
 	'debug-auto-launch', 'debug-server-ready',
 	'docker', 'emmet', 'extension-editing', 'fsharp', 'git', 'git-base', 'github', 'github-authentication', 'go', 'groovy', 'grunt', 'gulp',
 	'handlebars', 'hlsl', 'html', 'html-language-features', 'ini', 'ipynb', 'jake', 'java', 'javascript',
-	'jeff-hykin.better-cpp-syntax', 'julia', 'less', 'lua', 'media-preview', 'merge-conflict', 'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm',
+	'jeff-hykin.better-cpp-syntax', 'julia', 'less', 'lua', 'media-preview', 'mermaid-markdown-features', 'merge-conflict', 'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm',
 	'objective-c', 'perl', 'php', 'php-language-features', 'powershell', 'pug', 'r', 'razor',
 	'references-view', 'restructuredtext', 'ruby', 'rust', 'scss', 'search-result', 'shaderlab', 'simple-browser', 'sql', 'swift',
 	'terminal-suggest', 'tunnel-forwarding', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests',

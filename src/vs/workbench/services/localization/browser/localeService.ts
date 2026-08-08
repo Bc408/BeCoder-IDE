@@ -61,11 +61,9 @@ export class WebLocaleService implements ILocaleService {
 		@IProductService private readonly productService: IProductService
 	) { }
 
-	async setLocale(languagePackItem: ILanguagePackItem, _skipDialog = false): Promise<void> {
+	async setLocale(languagePackItem: ILanguagePackItem, _skipDialog = false, shouldRestart: () => boolean = () => true): Promise<boolean> {
 		const locale = languagePackItem.id;
-		if (locale === Language.value() || (!locale && Language.value() === navigator.language.toLowerCase())) {
-			return;
-		}
+		const isCurrentLocale = locale === Language.value() || (!locale && Language.value() === navigator.language.toLowerCase());
 		if (locale) {
 			localeStorage.setLocale(locale);
 			if (languagePackItem.extensionId) {
@@ -75,6 +73,9 @@ export class WebLocaleService implements ILocaleService {
 			localeStorage.clearLocale();
 			localeStorage.clearExtensionId();
 		}
+		if (isCurrentLocale) {
+			return true;
+		}
 
 		const restartDialog = await this.dialogService.confirm({
 			type: 'info',
@@ -83,9 +84,10 @@ export class WebLocaleService implements ILocaleService {
 			primaryButton: localize({ key: 'reload', comment: ['&& denotes a mnemonic character'] }, "&&Reload"),
 		});
 
-		if (restartDialog.confirmed) {
+		if (restartDialog.confirmed && shouldRestart()) {
 			this.hostService.restart();
 		}
+		return true;
 	}
 
 	async clearLocalePreference(): Promise<void> {

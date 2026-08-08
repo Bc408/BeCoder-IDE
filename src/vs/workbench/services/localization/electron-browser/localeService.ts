@@ -85,17 +85,15 @@ class NativeLocaleService implements ILocaleService {
 		return true;
 	}
 
-	async setLocale(languagePackItem: ILanguagePackItem, skipDialog = false): Promise<void> {
+	async setLocale(languagePackItem: ILanguagePackItem, skipDialog = false, shouldRestart: () => boolean = () => true): Promise<boolean> {
 		const locale = languagePackItem.id;
-		if (locale === Language.value() || (!locale && Language.isDefaultVariant())) {
-			return;
-		}
-		const installedLanguages = await this.languagePackService.getInstalledLanguages();
+		const isCurrentLocale = locale === Language.value() || (!locale && Language.isDefaultVariant());
 		try {
+			const installedLanguages = isCurrentLocale ? [] : await this.languagePackService.getInstalledLanguages();
 
 			// Only Desktop has the concept of installing language packs so we only do this for Desktop
 			// and only if the language pack is not installed
-			if (!installedLanguages.some(installedLanguage => installedLanguage.id === languagePackItem.id)) {
+			if (!isCurrentLocale && !installedLanguages.some(installedLanguage => installedLanguage.id === languagePackItem.id)) {
 
 				// Only actually install a language pack from Microsoft
 				if (languagePackItem.galleryExtension?.publisher.toLowerCase() !== 'ms-ceintl') {
@@ -103,7 +101,7 @@ class NativeLocaleService implements ILocaleService {
 					// as of now, there are no 3rd party language packs available on the Marketplace.
 					const viewlet = await this.paneCompositePartService.openPaneComposite(EXTENSIONS_VIEWLET_ID, ViewContainerLocation.Sidebar);
 					(viewlet?.getViewPaneContainer() as IExtensionsViewPaneContainer).search(`@id:${languagePackItem.extensionId}`);
-					return;
+					return false;
 				}
 
 				await this.progressService.withProgress(
@@ -118,13 +116,19 @@ class NativeLocaleService implements ILocaleService {
 				);
 			}
 
-			if (!skipDialog && !await this.showRestartDialog(languagePackItem.label)) {
-				return;
+			if (!await this.writeLocaleValue(locale)) {
+				return false;
 			}
-			await this.writeLocaleValue(locale);
-			await this.hostService.restart();
+			if (isCurrentLocale) {
+				return true;
+			}
+			if ((skipDialog || await this.showRestartDialog(languagePackItem.label)) && shouldRestart()) {
+				await this.hostService.restart();
+			}
+			return true;
 		} catch (err) {
 			this.notificationService.error(err);
+			return false;
 		}
 	}
 
@@ -149,6 +153,7 @@ class NativeLocaleService implements ILocaleService {
 				this.productService.nameLong
 			),
 			primaryButton: localize({ key: 'restart', comment: ['&& denotes a mnemonic character'] }, "&&Restart"),
+			cancelButton: localize('later', "Later"),
 		});
 
 		return confirmed;

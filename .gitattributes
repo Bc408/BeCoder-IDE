@@ -9,4 +9,21 @@ ThirdPartyNotices.txt eol=crlf
 *.sh eol=lf
 *.rtf -text
 resources/oi-defaults/toolchains/*.zip filter=lfs diff=lfs merge=lfs -text
+extensions/MS-CEINTL.vscode-language-pack-zh-hans/** -text whitespace=-trailing-space
+resources/oi-defaults/toolchains/ucrt64-licenses/** whitespace=-trailing-space,-space-before-tab
+resources/oi-defaults/toolchains/ucrt64-sources/** whitespace=-trailing-space,-space-before-tab
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/PKGBUILD text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/LICENSE text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/gdbinit text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.c text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.diff text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.gitignore text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.h text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.in text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.mak text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.md text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.patch text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.pc text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.sh text eol=lf
+resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/*.tar.xz -text
 **/*.json linguist-language=jsonc

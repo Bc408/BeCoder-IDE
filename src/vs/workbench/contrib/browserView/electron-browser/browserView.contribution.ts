@@ -15,9 +15,8 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { IEditorResolverService, RegisteredEditorPriority } from '../../../services/editor/common/editorResolverService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { Schemas } from '../../../../base/common/network.js';
-import { IBrowserViewCDPService, IBrowserViewWorkbenchService } from '../common/browserView.js';
+import { IBrowserViewWorkbenchService } from '../common/browserView.js';
 import { BrowserViewWorkbenchService } from './browserViewWorkbenchService.js';
-import { BrowserViewCDPService } from './browserViewCDPService.js';
 
 // Register actions and browser features
 import './features/webContentsViewRendererFeature.js';
@@ -28,7 +27,6 @@ import './features/browserHistoryFeature.js';
 import './features/browserPermissionsFeature.js';
 import './features/browserDataStorageFeatures.js';
 import './features/browserDevToolsFeature.js';
-import './features/browserEditorChatFeatures.js';
 import './features/browserEditorErrorFeatures.js';
 import './features/browserEditorZoomFeature.js';
 import './features/browserEditorEmulationFeatures.js';
@@ -100,4 +98,3 @@ class BrowserEditorResolverContribution implements IWorkbenchContribution {
 registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEditorResolverContribution, WorkbenchPhase.BlockStartup);
 
 registerSingleton(IBrowserViewWorkbenchService, BrowserViewWorkbenchService, InstantiationType.Delayed);
-registerSingleton(IBrowserViewCDPService, BrowserViewCDPService, InstantiationType.Delayed);

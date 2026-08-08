@@ -21,15 +21,6 @@ declare module 'vscode' {
 		 * @return A {@link Disposable} that unregisters this provider when being disposed.
 		 */
 		export function registerInlineCompletionItemProvider(selector: DocumentSelector, provider: InlineCompletionItemProvider, metadata: InlineCompletionItemProviderMetadata): Disposable;
-
-		/**
-		 * temporary: to be removed
-		 */
-		export const inlineCompletionsUnificationState: InlineCompletionsUnificationState;
-		/**
-		 * temporary: to be removed
-		 */
-		export const onDidChangeCompletionsUnificationState: Event<void>;
 	}
 
 	export interface InlineCompletionItem {
@@ -66,8 +57,6 @@ declare module 'vscode' {
 		completeBracketPairs?: boolean;
 
 		warning?: InlineCompletionWarning;
-
-		supportsRename?: boolean;
 
 		jumpToPosition?: Position;
 	}
@@ -142,17 +131,6 @@ declare module 'vscode' {
 		 */
 		readonly onDidChange?: Event<InlineCompletionChangeHint | void>;
 
-		readonly modelInfo?: InlineCompletionModelInfo;
-		readonly onDidChangeModelInfo?: Event<void>;
-		// eslint-disable-next-line local/vscode-dts-provider-naming
-		setCurrentModelId?(modelId: string): Thenable<void>;
-
-		readonly providerOptions?: readonly InlineCompletionProviderOption[];
-		readonly onDidChangeProviderOptions?: Event<void>;
-		// eslint-disable-next-line local/vscode-dts-provider-naming
-		setProviderOptionValue?(optionId: string, valueId: string): Thenable<void>;
-
-
 		// #region Deprecated methods
 
 		/**
@@ -171,28 +149,6 @@ declare module 'vscode' {
 		handleDidRejectCompletionItem?(completionItem: InlineCompletionItem): void;
 
 		// #endregion
-	}
-
-	export interface InlineCompletionModelInfo {
-		readonly models: InlineCompletionModel[];
-		readonly currentModelId: string;
-	}
-
-	export interface InlineCompletionModel {
-		readonly id: string;
-		readonly name: string;
-	}
-
-	export interface InlineCompletionProviderOption {
-		readonly id: string;
-		readonly label: string;
-		readonly values: readonly InlineCompletionProviderOptionValue[];
-		readonly currentValueId: string;
-	}
-
-	export interface InlineCompletionProviderOptionValue {
-		readonly id: string;
-		readonly label: string;
 	}
 
 	export enum InlineCompletionEndOfLifeReasonKind {
@@ -234,8 +190,6 @@ declare module 'vscode' {
 	}
 
 	export interface InlineCompletionContext {
-		readonly userPrompt?: string;
-
 		readonly requestUuid: string;
 
 		readonly requestIssuedDateTime: number;
@@ -276,15 +230,5 @@ declare module 'vscode' {
 		 * Defaults to false (might change).
 		 */
 		enableForwardStability?: boolean;
-	}
-
-	/**
-	 * temporary: to be removed
-	 */
-	export interface InlineCompletionsUnificationState {
-		codeUnification: boolean;
-		modelUnification: boolean;
-		extensionUnification: boolean;
-		expAssignments: string[];
 	}
 }

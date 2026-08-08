@@ -145,17 +145,6 @@ export class CodeActionController extends Disposable implements IEditorContribut
 	}
 
 	private async showCodeActionsFromLightbulb(actions: CodeActionSet, at: IAnchor | IPosition): Promise<void> {
-		if (actions.allAIFixes && actions.validActions.length === 1) {
-			const actionItem = actions.validActions[0];
-			const command = actionItem.action.command;
-			if (command && command.id === 'inlineChat.start') {
-				if (command.arguments && command.arguments.length >= 1 && command.arguments[0]) {
-					command.arguments[0] = { ...command.arguments[0], autoSend: false };
-				}
-			}
-			await this.applyCodeAction(actionItem, false, false, ApplyCodeActionReason.FromAILightbulb);
-			return;
-		}
 		await this.showCodeActionList(actions, at, { includeDisabledActions: false, fromLightbulb: true });
 	}
 
@@ -331,7 +320,7 @@ export class CodeActionController extends Disposable implements IEditorContribut
 
 		const delegate: IActionListDelegate<CodeActionItem> = {
 			onSelect: async (action: CodeActionItem, preview?: boolean) => {
-				this.applyCodeAction(action, /* retrigger */ true, !!preview, options.fromLightbulb ? ApplyCodeActionReason.FromAILightbulb : ApplyCodeActionReason.FromCodeActions);
+				this.applyCodeAction(action, /* retrigger */ true, !!preview, options.fromLightbulb ? ApplyCodeActionReason.FromLightbulb : ApplyCodeActionReason.FromCodeActions);
 				this._actionWidgetService.hide(false);
 				currentDecorations.clear();
 			},

@@ -31,8 +31,6 @@ declare module 'vscode' {
 		provideHistoryItemChanges(historyItemId: string, historyItemParentId: string | undefined, token: CancellationToken): ProviderResult<SourceControlHistoryItemChange[]>;
 
 		resolveHistoryItem(historyItemId: string, token: CancellationToken): ProviderResult<SourceControlHistoryItem>;
-		resolveHistoryItemChatContext(historyItemId: string, token: CancellationToken): ProviderResult<string>;
-		resolveHistoryItemChangeRangeChatContext(historyItemId: string, historyItemParentId: string, path: string, token: CancellationToken): ProviderResult<string>;
 		resolveHistoryItemRefsCommonAncestor(historyItemRefs: string[], token: CancellationToken): ProviderResult<string>;
 	}
 

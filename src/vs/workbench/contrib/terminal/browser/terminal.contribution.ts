@@ -19,7 +19,7 @@ import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/edit
 import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
 import { WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { EditorExtensions, IEditorFactoryRegistry } from '../../../common/editor.js';
-import { IViewContainersRegistry, IViewsRegistry, Extensions as ViewContainerExtensions, ViewContainerLocation, WindowEnablement } from '../../../common/views.js';
+import { IViewContainersRegistry, IViewsRegistry, Extensions as ViewContainerExtensions, ViewContainerLocation } from '../../../common/views.js';
 import { ITerminalProfileService, TERMINAL_VIEW_ID, TerminalCommandId } from '../common/terminal.js';
 import { TerminalEditingService } from './terminalEditingService.js';
 import { registerColors } from '../common/terminalColorRegistry.js';
@@ -46,7 +46,6 @@ import { setupTerminalMenus } from './terminalMenus.js';
 import { TerminalProfileService } from './terminalProfileService.js';
 import { TerminalService } from './terminalService.js';
 import { TerminalViewPane } from './terminalView.js';
-import { AgentHostTerminalService, IAgentHostTerminalService } from './agentHostTerminalService.js';
 
 // Register services
 registerSingleton(ITerminalLogService, TerminalLogService, InstantiationType.Delayed);
@@ -57,7 +56,6 @@ registerSingleton(ITerminalEditingService, TerminalEditingService, Instantiation
 registerSingleton(ITerminalGroupService, TerminalGroupService, InstantiationType.Delayed);
 registerSingleton(ITerminalInstanceService, TerminalInstanceService, InstantiationType.Delayed);
 registerSingleton(ITerminalProfileService, TerminalProfileService, InstantiationType.Delayed);
-registerSingleton(IAgentHostTerminalService, AgentHostTerminalService, InstantiationType.Delayed);
 
 // Register workbench contributions
 // This contribution blocks startup as it's critical to enable the web embedder window.createTerminal API
@@ -110,8 +108,7 @@ const VIEW_CONTAINER = Registry.as<IViewContainersRegistry>(ViewContainerExtensi
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [TERMINAL_VIEW_ID, { mergeViewWithContainerWhenSingleView: true }]),
 	storageId: TERMINAL_VIEW_ID,
 	hideIfEmpty: true,
-	order: 3,
-	windowEnablement: WindowEnablement.Both
+	order: 3
 }, ViewContainerLocation.Panel, { doNotRegisterOpenCommand: true, isDefault: true });
 Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry).registerViews([{
 	id: TERMINAL_VIEW_ID,
@@ -120,7 +117,6 @@ Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry).registerViews
 	canToggleVisibility: true,
 	canMoveView: true,
 	ctorDescriptor: new SyncDescriptor(TerminalViewPane),
-	windowEnablement: WindowEnablement.Both,
 	openCommandActionDescriptor: {
 		id: TerminalCommandId.Toggle,
 		mnemonicTitle: nls.localize({ key: 'miToggleIntegratedTerminal', comment: ['&& denotes a mnemonic'] }, "&&Terminal"),

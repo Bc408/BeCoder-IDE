@@ -13,7 +13,6 @@ import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { assertType } from '../../../../base/common/types.js';
 import { URI } from '../../../../base/common/uri.js';
 import * as nls from '../../../../nls.js';
-import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ConfigurationScope, Extensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -31,7 +30,7 @@ import { Range } from '../../../common/core/range.js';
 import { IEditorContribution } from '../../../common/editorCommon.js';
 import { EditorContextKeys } from '../../../common/editorContextKeys.js';
 import { LanguageFeatureRegistry } from '../../../common/languageFeatureRegistry.js';
-import { NewSymbolNameTriggerKind, Rejection, RenameLocation, RenameProvider, WorkspaceEdit } from '../../../common/languages.js';
+import { Rejection, RenameLocation, RenameProvider, WorkspaceEdit } from '../../../common/languages.js';
 import { ITextModel } from '../../../common/model.js';
 import { ILanguageFeaturesService } from '../../../common/services/languageFeatures.js';
 import { ITextResourceConfigurationService } from '../../../common/services/textResourceConfiguration.js';
@@ -241,29 +240,12 @@ class RenameController implements IEditorContribution {
 		// part 2 - do rename at location
 		const cts2 = new EditorStateCancellationTokenSource(this.editor, CodeEditorStateFlag.Position | CodeEditorStateFlag.Value, loc.range, this._cts.token);
 
-		const model = this.editor.getModel(); // @ulugbekna: assumes editor still has a model, otherwise, cts1 should've been cancelled
-
-		const newSymbolNamesProviders = this._languageFeaturesService.newSymbolNamesProvider.all(model);
-
-		const resolvedNewSymbolnamesProviders = await Promise.all(newSymbolNamesProviders.map(async p => [p, await p.supportsAutomaticNewSymbolNamesTriggerKind ?? false] as const));
-
-		const requestRenameSuggestions = (triggerKind: NewSymbolNameTriggerKind, cts: CancellationToken) => {
-			let providers = resolvedNewSymbolnamesProviders.slice();
-
-			if (triggerKind === NewSymbolNameTriggerKind.Automatic) {
-				providers = providers.filter(([_, supportsAutomatic]) => supportsAutomatic);
-			}
-
-			return providers.map(([p,]) => p.provideNewSymbolNames(model, loc.range, triggerKind, cts));
-		};
-
 		trace('creating rename input field and awaiting its result');
 		const supportPreview = this._bulkEditService.hasPreviewHandler() && this._configService.getValue<boolean>(this.editor.getModel().uri, 'editor.rename.enablePreview');
 		const inputFieldResult = await this._renameWidget.getInput(
 			loc.range,
 			loc.text,
 			supportPreview,
-			newSymbolNamesProviders.length > 0 ? requestRenameSuggestions : undefined,
 			cts2
 		);
 		trace('received response from rename input field');
@@ -345,14 +327,6 @@ class RenameController implements IEditorContribution {
 
 	cancelRenameInput(): void {
 		this._renameWidget.cancelInput(true, 'cancelRenameInput command');
-	}
-
-	focusNextRenameSuggestion(): void {
-		this._renameWidget.focusNextRenameSuggestion();
-	}
-
-	focusPreviousRenameSuggestion(): void {
-		this._renameWidget.focusPreviousRenameSuggestion();
 	}
 }
 
@@ -450,62 +424,6 @@ registerEditorCommand(new RenameCommand({
 		secondary: [KeyMod.Shift | KeyCode.Escape]
 	}
 }));
-
-registerAction2(class FocusNextRenameSuggestion extends Action2 {
-	constructor() {
-		super({
-			id: 'focusNextRenameSuggestion',
-			title: {
-				...nls.localize2('focusNextRenameSuggestion', "Focus Next Rename Suggestion"),
-			},
-			precondition: CONTEXT_RENAME_INPUT_VISIBLE,
-			keybinding: [
-				{
-					primary: KeyCode.DownArrow,
-					weight: KeybindingWeight.EditorContrib + 99,
-				}
-			]
-		});
-	}
-
-	override run(accessor: ServicesAccessor): void {
-		const currentEditor = accessor.get(ICodeEditorService).getFocusedCodeEditor();
-		if (!currentEditor) { return; }
-
-		const controller = RenameController.get(currentEditor);
-		if (!controller) { return; }
-
-		controller.focusNextRenameSuggestion();
-	}
-});
-
-registerAction2(class FocusPreviousRenameSuggestion extends Action2 {
-	constructor() {
-		super({
-			id: 'focusPreviousRenameSuggestion',
-			title: {
-				...nls.localize2('focusPreviousRenameSuggestion', "Focus Previous Rename Suggestion"),
-			},
-			precondition: CONTEXT_RENAME_INPUT_VISIBLE,
-			keybinding: [
-				{
-					primary: KeyCode.UpArrow,
-					weight: KeybindingWeight.EditorContrib + 99,
-				}
-			]
-		});
-	}
-
-	override run(accessor: ServicesAccessor): void {
-		const currentEditor = accessor.get(ICodeEditorService).getFocusedCodeEditor();
-		if (!currentEditor) { return; }
-
-		const controller = RenameController.get(currentEditor);
-		if (!controller) { return; }
-
-		controller.focusPreviousRenameSuggestion();
-	}
-});
 
 // ---- api bridge command
 

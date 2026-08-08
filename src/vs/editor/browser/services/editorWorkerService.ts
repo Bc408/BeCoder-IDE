@@ -37,7 +37,6 @@ import { EditorWorkerHost } from '../../common/services/editorWorkerHost.js';
 import { StringEdit } from '../../common/core/edits/stringEdit.js';
 import { OffsetRange } from '../../common/core/ranges/offsetRange.js';
 import { FileAccess } from '../../../base/common/network.js';
-import { isCompletionsEnabledWithTextResourceConfig } from '../../common/services/completionsEnablement.js';
 
 /**
  * Stop the worker if it was not needed for 5 min.
@@ -94,7 +93,7 @@ export class EditorWorkerService extends Disposable implements IEditorWorkerServ
 				return links && { links };
 			}
 		}));
-		this._register(languageFeaturesService.completionProvider.register('*', new WordBasedCompletionItemProvider(this._workerManager, configurationService, this._modelService, this._languageConfigurationService, this._logService, languageFeaturesService)));
+		this._register(languageFeaturesService.completionProvider.register('*', new WordBasedCompletionItemProvider(this._workerManager, configurationService, this._modelService, this._languageConfigurationService, this._logService)));
 	}
 
 
@@ -262,7 +261,6 @@ class WordBasedCompletionItemProvider implements languages.CompletionItemProvide
 		modelService: IModelService,
 		private readonly languageConfigurationService: ILanguageConfigurationService,
 		private readonly logService: ILogService,
-		private readonly languageFeaturesService: ILanguageFeaturesService,
 	) {
 		this._workerManager = workerManager;
 		this._configurationService = configurationService;
@@ -275,12 +273,6 @@ class WordBasedCompletionItemProvider implements languages.CompletionItemProvide
 		};
 		const config = this._configurationService.getValue<WordBasedSuggestionsConfig>(model.uri, position, 'editor');
 		if (config.wordBasedSuggestions === 'off') {
-			return undefined;
-		}
-
-		if (config.wordBasedSuggestions === 'offWithInlineSuggestions'
-			&& this.languageFeaturesService.inlineCompletionsProvider.has(model)
-			&& isCompletionsEnabledWithTextResourceConfig(this._configurationService, model.uri, model.getLanguageId())) {
 			return undefined;
 		}
 

@@ -68,7 +68,6 @@ suite('IssueReporterOverlay', () => {
 				enabledExtensions: [],
 				restrictedMode: false,
 				isInstallationPure: true,
-				isSessionsWindow: false,
 				githubAccessToken: '',
 				issueType: IssueType.Bug,
 				issueSource: IssueSource.VSCode,

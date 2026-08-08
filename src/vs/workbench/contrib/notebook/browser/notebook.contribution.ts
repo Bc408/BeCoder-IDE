@@ -19,10 +19,9 @@ import { Extensions, IConfigurationPropertySchema, IConfigurationRegistry } from
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
-import { Extensions as WorkbenchExtensions, IWorkbenchContribution, IWorkbenchContributionsRegistry, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
+import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IEditorSerializer, IEditorFactoryRegistry, EditorExtensions } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { NotebookEditor } from './notebookEditor.js';
@@ -69,11 +68,8 @@ import './controller/editActions.js';
 import './controller/cellOutputActions.js';
 import './controller/apiActions.js';
 import './controller/foldingController.js';
-import './controller/chat/notebook.chat.contribution.js';
-import './controller/variablesActions.js';
 
 // Editor Contribution
-import './contrib/editorHint/emptyCellEditorHint.js';
 import './contrib/clipboard/notebookClipboard.js';
 import './contrib/find/notebookFind.js';
 import './contrib/format/formatting.js';
@@ -92,15 +88,11 @@ import './contrib/undoRedo/notebookUndoRedo.js';
 import './contrib/cellCommands/cellCommands.js';
 import './contrib/viewportWarmup/viewportWarmup.js';
 import './contrib/troubleshoot/layout.js';
-import './contrib/debug/notebookBreakpoints.js';
-import './contrib/debug/notebookCellPausing.js';
-import './contrib/debug/notebookDebugDecorations.js';
 import './contrib/execute/executionEditorProgress.js';
 import './contrib/kernelDetection/notebookKernelDetection.js';
 import './contrib/cellDiagnostics/cellDiagnostics.js';
 import './contrib/multicursor/notebookMulticursor.js';
 import './contrib/multicursor/notebookSelectionHighlight.js';
-import './contrib/notebookVariables/notebookInlineVariables.js';
 
 // Diff Editor Contribution
 import './diff/notebookDiffActions.js';
@@ -122,7 +114,6 @@ import { NotebookKernelHistoryService } from './services/notebookKernelHistorySe
 import { INotebookLoggingService } from '../common/notebookLoggingService.js';
 import { NotebookLoggingService } from './services/notebookLoggingServiceImpl.js';
 import product from '../../../../platform/product/common/product.js';
-import { NotebookVariables } from './contrib/notebookVariables/notebookVariables.js';
 import { AccessibleViewRegistry } from '../../../../platform/accessibility/browser/accessibleViewRegistry.js';
 import { NotebookAccessibilityHelp } from './notebookAccessibilityHelp.js';
 import { NotebookAccessibleView } from './notebookAccessibleView.js';
@@ -891,7 +882,6 @@ class NotebookLanguageSelectorScoreRefine {
 	}
 }
 
-const workbenchContributionsRegistry = Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench);
 registerWorkbenchContribution2(NotebookContribution.ID, NotebookContribution, WorkbenchPhase.BlockStartup);
 registerWorkbenchContribution2(CellContentProvider.ID, CellContentProvider, WorkbenchPhase.BlockStartup);
 registerWorkbenchContribution2(CellInfoContentProvider.ID, CellInfoContentProvider, WorkbenchPhase.BlockStartup);
@@ -900,7 +890,6 @@ registerWorkbenchContribution2(RegisterSchemasContribution.ID, RegisterSchemasCo
 registerWorkbenchContribution2(NotebookEditorManager.ID, NotebookEditorManager, WorkbenchPhase.BlockRestore);
 registerWorkbenchContribution2(NotebookLanguageSelectorScoreRefine.ID, NotebookLanguageSelectorScoreRefine, WorkbenchPhase.BlockRestore);
 registerWorkbenchContribution2(SimpleNotebookWorkingCopyEditorHandler.ID, SimpleNotebookWorkingCopyEditorHandler, WorkbenchPhase.BlockRestore);
-workbenchContributionsRegistry.registerWorkbenchContribution(NotebookVariables, LifecyclePhase.Eventually);
 
 AccessibleViewRegistry.register(new NotebookAccessibleView());
 AccessibleViewRegistry.register(new NotebookAccessibilityHelp());
@@ -1267,27 +1256,6 @@ configurationRegistry.registerConfiguration({
 				nls.localize('notebook.scrolling.revealNextCellOnExecute.none.description', 'Do not scroll.'),
 			],
 			default: 'fullCell'
-		},
-		[NotebookSetting.cellGenerate]: {
-			markdownDescription: nls.localize('notebook.cellGenerate', "Enable experimental generate action to create code cell with inline chat enabled."),
-			type: 'boolean',
-			default: true
-		},
-		[NotebookSetting.notebookVariablesView]: {
-			markdownDescription: nls.localize('notebook.VariablesView.description', "Enable the experimental notebook variables view within the debug panel."),
-			type: 'boolean',
-			default: false
-		},
-		[NotebookSetting.notebookInlineValues]: {
-			markdownDescription: nls.localize('notebook.inlineValues.description', "Control whether to show inline values within notebook code cells after cell execution. Values will remain until the cell is edited, re-executed, or explicitly cleared via the Clear All Outputs toolbar button or the `Notebook: Clear Inline Values` command."),
-			type: 'string',
-			enum: ['on', 'auto', 'off'],
-			enumDescriptions: [
-				nls.localize('notebook.inlineValues.on', "Always show inline values, with a regex fallback if no inline value provider is registered. Note: There may be a performance impact in larger cells if the fallback is used."),
-				nls.localize('notebook.inlineValues.auto', "Show inline values only when an inline value provider is registered."),
-				nls.localize('notebook.inlineValues.off', "Never show inline values."),
-			],
-			default: 'off'
 		},
 		[NotebookSetting.cellFailureDiagnostics]: {
 			markdownDescription: nls.localize('notebook.cellFailureDiagnostics', "Show available diagnostics for cell failures."),

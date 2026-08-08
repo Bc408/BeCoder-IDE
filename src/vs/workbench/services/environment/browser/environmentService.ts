@@ -6,7 +6,7 @@
 import { Schemas } from '../../../../base/common/network.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
-import { ExtensionKind, IEnvironmentService, IExtensionHostDebugParams } from '../../../../platform/environment/common/environment.js';
+import { ExtensionKind, IEnvironmentService } from '../../../../platform/environment/common/environment.js';
 import { IPath } from '../../../../platform/window/common/window.js';
 import { IWorkbenchEnvironmentService } from '../common/environmentService.js';
 import { IWorkbenchConstructionOptions } from '../../../browser/web.api.js';
@@ -142,77 +142,56 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 	get untitledWorkspacesHome(): URI { return joinPath(this.userRoamingDataHome, 'Workspaces'); }
 
 	@memoize
-	get agentSessionsWorkspace(): URI { return joinPath(this.userRoamingDataHome, 'agent-sessions.code-workspace'); }
-
-	@memoize
 	get serviceMachineIdResource(): URI { return joinPath(this.userRoamingDataHome, 'machineid'); }
 
 	@memoize
 	get extHostLogsPath(): URI { return joinPath(this.logsHome, 'exthost'); }
 
-	private extensionHostDebugEnvironment: IExtensionHostDebugEnvironment | undefined = undefined;
-
-	@memoize
-	get debugExtensionHost(): IExtensionHostDebugParams {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
-		}
-
-		return this.extensionHostDebugEnvironment.params;
-	}
+	private extensionHostEnvironment: IExtensionHostEnvironment | undefined = undefined;
 
 	@memoize
 	get isExtensionDevelopment(): boolean {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
+		if (!this.extensionHostEnvironment) {
+			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
 
-		return this.extensionHostDebugEnvironment.isExtensionDevelopment;
+		return this.extensionHostEnvironment.isExtensionDevelopment;
 	}
 
 	@memoize
 	get extensionDevelopmentLocationURI(): URI[] | undefined {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
+		if (!this.extensionHostEnvironment) {
+			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
 
-		return this.extensionHostDebugEnvironment.extensionDevelopmentLocationURI;
+		return this.extensionHostEnvironment.extensionDevelopmentLocationURI;
 	}
 
 	@memoize
 	get extensionDevelopmentLocationKind(): ExtensionKind[] | undefined {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
+		if (!this.extensionHostEnvironment) {
+			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
 
-		return this.extensionHostDebugEnvironment.extensionDevelopmentKind;
+		return this.extensionHostEnvironment.extensionDevelopmentKind;
 	}
 
 	@memoize
 	get extensionTestsLocationURI(): URI | undefined {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
+		if (!this.extensionHostEnvironment) {
+			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
 
-		return this.extensionHostDebugEnvironment.extensionTestsLocationURI;
+		return this.extensionHostEnvironment.extensionTestsLocationURI;
 	}
 
 	@memoize
 	get extensionEnabledProposedApi(): string[] | undefined {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
+		if (!this.extensionHostEnvironment) {
+			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
 
-		return this.extensionHostDebugEnvironment.extensionEnabledProposedApi;
-	}
-
-	@memoize
-	get debugRenderer(): boolean {
-		if (!this.extensionHostDebugEnvironment) {
-			this.extensionHostDebugEnvironment = this.resolveExtensionHostDebugEnvironment();
-		}
-
-		return this.extensionHostDebugEnvironment.debugRenderer;
+		return this.extensionHostEnvironment.extensionEnabledProposedApi;
 	}
 
 	@memoize
@@ -263,9 +242,6 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 	get beCoderTrustWorkspace(): string | undefined { return undefined; }
 
 	@memoize
-	get isSessionsWindow(): boolean { return this.payload?.get('isSessionsWindow') === 'true'; }
-
-	@memoize
 	get profile(): string | undefined { return this.payload?.get('profile'); }
 
 	@memoize
@@ -288,13 +264,8 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 		}
 	}
 
-	private resolveExtensionHostDebugEnvironment(): IExtensionHostDebugEnvironment {
-		const extensionHostDebugEnvironment: IExtensionHostDebugEnvironment = {
-			params: {
-				port: null,
-				break: false
-			},
-			debugRenderer: false,
+	private resolveExtensionHostEnvironment(): IExtensionHostEnvironment {
+		const extensionHostEnvironment: IExtensionHostEnvironment = {
 			isExtensionDevelopment: false,
 			extensionDevelopmentLocationURI: undefined,
 			extensionDevelopmentKind: undefined
@@ -305,58 +276,38 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 			for (const [key, value] of this.payload) {
 				switch (key) {
 					case 'extensionDevelopmentPath':
-						if (!extensionHostDebugEnvironment.extensionDevelopmentLocationURI) {
-							extensionHostDebugEnvironment.extensionDevelopmentLocationURI = [];
+						if (!extensionHostEnvironment.extensionDevelopmentLocationURI) {
+							extensionHostEnvironment.extensionDevelopmentLocationURI = [];
 						}
-						extensionHostDebugEnvironment.extensionDevelopmentLocationURI.push(URI.parse(value));
-						extensionHostDebugEnvironment.isExtensionDevelopment = true;
+						extensionHostEnvironment.extensionDevelopmentLocationURI.push(URI.parse(value));
+						extensionHostEnvironment.isExtensionDevelopment = true;
 						break;
 					case 'extensionDevelopmentKind':
-						extensionHostDebugEnvironment.extensionDevelopmentKind = [<ExtensionKind>value];
+						extensionHostEnvironment.extensionDevelopmentKind = [<ExtensionKind>value];
 						break;
 					case 'extensionTestsPath':
-						extensionHostDebugEnvironment.extensionTestsLocationURI = URI.parse(value);
-						break;
-					case 'debugRenderer':
-						extensionHostDebugEnvironment.debugRenderer = value === 'true';
-						break;
-					case 'debugId':
-						extensionHostDebugEnvironment.params.debugId = value;
-						break;
-					case 'inspect-brk-extensions':
-						extensionHostDebugEnvironment.params.port = parseInt(value);
-						extensionHostDebugEnvironment.params.break = true;
-						break;
-					case 'inspect-extensions':
-						extensionHostDebugEnvironment.params.port = parseInt(value);
-						break;
-					case 'extensionEnvironment':
-						try {
-							extensionHostDebugEnvironment.params.env = JSON.parse(value);
-						} catch (error) {
-							onUnexpectedError(error);
-						}
+						extensionHostEnvironment.extensionTestsLocationURI = URI.parse(value);
 						break;
 					case 'enableProposedApi':
-						extensionHostDebugEnvironment.extensionEnabledProposedApi = [];
+						extensionHostEnvironment.extensionEnabledProposedApi = [];
 						break;
 				}
 			}
 		}
 
 		const developmentOptions = this.options.developmentOptions;
-		if (developmentOptions && !extensionHostDebugEnvironment.isExtensionDevelopment) {
+		if (developmentOptions && !extensionHostEnvironment.isExtensionDevelopment) {
 			if (developmentOptions.extensions?.length) {
-				extensionHostDebugEnvironment.extensionDevelopmentLocationURI = developmentOptions.extensions.map(e => URI.revive(e));
-				extensionHostDebugEnvironment.isExtensionDevelopment = true;
+				extensionHostEnvironment.extensionDevelopmentLocationURI = developmentOptions.extensions.map(e => URI.revive(e));
+				extensionHostEnvironment.isExtensionDevelopment = true;
 			}
 
 			if (developmentOptions.extensionTestsPath) {
-				extensionHostDebugEnvironment.extensionTestsLocationURI = URI.revive(developmentOptions.extensionTestsPath);
+				extensionHostEnvironment.extensionTestsLocationURI = URI.revive(developmentOptions.extensionTestsPath);
 			}
 		}
 
-		return extensionHostDebugEnvironment;
+		return extensionHostEnvironment;
 	}
 
 	@memoize
@@ -422,9 +373,7 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 	}
 }
 
-interface IExtensionHostDebugEnvironment {
-	params: IExtensionHostDebugParams;
-	debugRenderer: boolean;
+interface IExtensionHostEnvironment {
 	isExtensionDevelopment: boolean;
 	extensionDevelopmentLocationURI?: URI[];
 	extensionDevelopmentKind?: ExtensionKind[];

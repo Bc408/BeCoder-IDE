@@ -30,25 +30,6 @@ interface IConfiguration extends IWindowsConfiguration {
 	window: IWindowSettings;
 	workbench?: { enableExperiments?: boolean };
 	telemetry?: { feedback?: { enabled?: boolean } };
-	chat?: {
-		extensionUnification?: { enabled?: boolean };
-		agentHost?: {
-			enabled?: boolean;
-			claudeAgent?: { enabled?: boolean };
-			codexAgent?: { enabled?: boolean };
-			byokModels?: { enabled?: boolean };
-			otel?: {
-				enabled?: boolean;
-				exporterType?: string;
-				otlpEndpoint?: string;
-				captureContent?: boolean;
-				outfile?: string;
-				dbSpanExporter?: { enabled?: boolean };
-			};
-		};
-		agents?: { claude?: { preferAgentHost?: boolean } };
-		editor?: { claude?: { preferAgentHost?: boolean }; codex?: { preferAgentHost?: boolean } };
-	};
 	_extensionsGallery?: { enablePPE?: boolean };
 	accessibility?: { verbosity?: { debug?: boolean } };
 }
@@ -68,21 +49,7 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		'_extensionsGallery.enablePPE',
 		'security.restrictUNCAccess',
 		'accessibility.verbosity.debug',
-		'telemetry.feedback.enabled',
-		'chat.extensionUnification.enabled',
-		'chat.agentHost.enabled',
-		'chat.agentHost.claudeAgent.enabled',
-		'chat.agentHost.codexAgent.enabled',
-		'chat.agentHost.byokModels.enabled',
-		'chat.agents.claude.preferAgentHost',
-		'chat.editor.claude.preferAgentHost',
-		'chat.editor.codex.preferAgentHost',
-		'chat.agentHost.otel.enabled',
-		'chat.agentHost.otel.exporterType',
-		'chat.agentHost.otel.otlpEndpoint',
-		'chat.agentHost.otel.captureContent',
-		'chat.agentHost.otel.outfile',
-		'chat.agentHost.otel.dbSpanExporter.enabled'
+		'telemetry.feedback.enabled'
 	];
 
 	private readonly titleBarStyle = new ChangeObserver<TitlebarStyle>('string');
@@ -98,20 +65,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 	private readonly restrictUNCAccess = new ChangeObserver('boolean');
 	private readonly accessibilityVerbosityDebug = new ChangeObserver('boolean');
 	private readonly telemetryFeedbackEnabled = new ChangeObserver('boolean');
-	private readonly extensionUnificationEnabled = new ChangeObserver('boolean');
-	private readonly agentHostEnabled = new ChangeObserver('boolean');
-	private readonly agentHostClaudeAgentEnabled = new ChangeObserver('boolean');
-	private readonly agentHostCodexAgentEnabled = new ChangeObserver('boolean');
-	private readonly agentHostByokModelsEnabled = new ChangeObserver('boolean');
-	private readonly agentsClaudePreferAgentHost = new ChangeObserver('boolean');
-	private readonly editorClaudePreferAgentHost = new ChangeObserver('boolean');
-	private readonly editorCodexPreferAgentHost = new ChangeObserver('boolean');
-	private readonly agentHostOTelEnabled = new ChangeObserver('boolean');
-	private readonly agentHostOTelExporterType = new ChangeObserver('string');
-	private readonly agentHostOTelOtlpEndpoint = new ChangeObserver('string');
-	private readonly agentHostOTelCaptureContent = new ChangeObserver('boolean');
-	private readonly agentHostOTelOutfile = new ChangeObserver('string');
-	private readonly agentHostOTelDbSpanExporterEnabled = new ChangeObserver('boolean');
 
 	constructor(
 		@IHostService private readonly hostService: IHostService,
@@ -201,31 +154,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		// Enable Feedback
 		processChanged(this.telemetryFeedbackEnabled.handleChange(config.telemetry?.feedback?.enabled));
 
-		// Extension Unification (only when turning on)
-		processChanged(this.extensionUnificationEnabled.handleChange(config.chat?.extensionUnification?.enabled) && config.chat?.extensionUnification?.enabled === true);
-
-		// Agent Host
-		processChanged(this.agentHostEnabled.handleChange(config.chat?.agentHost?.enabled));
-		processChanged(this.agentHostByokModelsEnabled.handleChange(config.chat?.agentHost?.byokModels?.enabled));
-
-		// Provider registration and implementation preferences are read at spawn.
-		processChanged(this.agentHostClaudeAgentEnabled.handleChange(config.chat?.agentHost?.claudeAgent?.enabled));
-		processChanged(this.agentHostCodexAgentEnabled.handleChange(config.chat?.agentHost?.codexAgent?.enabled));
-		processChanged(this.agentsClaudePreferAgentHost.handleChange(config.chat?.agents?.claude?.preferAgentHost));
-		processChanged(this.editorClaudePreferAgentHost.handleChange(config.chat?.editor?.claude?.preferAgentHost));
-		processChanged(this.editorCodexPreferAgentHost.handleChange(config.chat?.editor?.codex?.preferAgentHost));
-
-		// Agent Host OTel: settings are forwarded as env vars when the agent host
-		// child process is spawned (see `electronAgentHostStarter.ts`). The child
-		// is owned by the main process and is not respawned on window reload, so
-		// changes only take effect after a full app restart.
-		processChanged(this.agentHostOTelEnabled.handleChange(config.chat?.agentHost?.otel?.enabled));
-		processChanged(this.agentHostOTelExporterType.handleChange(config.chat?.agentHost?.otel?.exporterType));
-		processChanged(this.agentHostOTelOtlpEndpoint.handleChange(config.chat?.agentHost?.otel?.otlpEndpoint));
-		processChanged(this.agentHostOTelCaptureContent.handleChange(config.chat?.agentHost?.otel?.captureContent));
-		processChanged(this.agentHostOTelOutfile.handleChange(config.chat?.agentHost?.otel?.outfile));
-		processChanged(this.agentHostOTelDbSpanExporterEnabled.handleChange(config.chat?.agentHost?.otel?.dbSpanExporter?.enabled));
-
 		if (askToRelaunch && changed && this.hostService.hasFocus) {
 			this.doConfirm(
 				isNative ?
@@ -296,10 +224,6 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 		this.extensionHostRestarter = this._register(new RunOnceScheduler(async () => {
 			if (!!environmentService.extensionTestsLocationURI) {
 				return; // no restart when in tests: see https://github.com/microsoft/vscode/issues/66936
-			}
-
-			if (environmentService.isSessionsWindow) {
-				return; // no restart for sessions window
 			}
 
 			if (environmentService.remoteAuthority) {

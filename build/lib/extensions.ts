@@ -35,7 +35,7 @@ export const excludedForOIDistribution = new Set([
 	'debug-auto-launch', 'debug-server-ready',
 	'docker', 'emmet', 'extension-editing', 'fsharp', 'git', 'git-base', 'github', 'github-authentication', 'go', 'groovy', 'grunt', 'gulp',
 	'handlebars', 'hlsl', 'html', 'html-language-features', 'ini', 'ipynb', 'jake', 'java', 'javascript',
-	'jeff-hykin.better-cpp-syntax', 'julia', 'less', 'lua', 'media-preview', 'mermaid-markdown-features', 'merge-conflict', 'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm',
+	'jeff-hykin.better-cpp-syntax', 'julia', 'less', 'lua', 'media-preview', 'merge-conflict', 'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm',
 	'objective-c', 'perl', 'php', 'php-language-features', 'powershell', 'pug', 'r', 'razor',
 	'references-view', 'restructuredtext', 'ruby', 'rust', 'scss', 'search-result', 'shaderlab', 'simple-browser', 'sql', 'swift',
 	'terminal-suggest', 'tunnel-forwarding', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests',
@@ -387,7 +387,7 @@ export function isWebExtension(manifest: IExtensionManifest): boolean {
 		}
 	}
 	if (typeof manifest.contributes !== 'undefined') {
-		for (const id of ['debuggers', 'terminal', 'typescriptServerPlugins']) {
+		for (const id of ['terminal', 'typescriptServerPlugins']) {
 			if (manifest.contributes.hasOwnProperty(id)) {
 				return false;
 			}
@@ -496,33 +496,6 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 		result
 			.pipe(util2.setExecutableBit(['**/*.sh']))
 	);
-}
-
-/**
- * Package the built-in copilot extension specifically.
- * This is used by non-CI local builds where copilot is not downloaded as a VSIX
- * but must be compiled from source and included in the build.
- */
-export function packageCopilotExtensionStream(disableMangle: boolean): Stream {
-	const extensionPath = path.join(root, 'extensions', 'copilot');
-	if (!fs.existsSync(extensionPath)) {
-		return es.readArray([]);
-	}
-
-	const localExtensionsStream = minifyExtensionResources(
-		fromLocal(extensionPath, false, disableMangle)
-			.pipe(rename(p => p.dirname = `extensions/copilot/${p.dirname}`))
-	);
-
-	const productionDependencies = getProductionDependencies('extensions/copilot');
-	const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
-
-	return es.merge(
-		localExtensionsStream,
-		gulp.src(dependenciesSrc, { base: '.' })
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
-	).pipe(util2.setExecutableBit(['**/*.sh']));
 }
 
 export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {

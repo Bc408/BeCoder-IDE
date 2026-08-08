@@ -73,6 +73,16 @@ License text: extensions/becoder.one-monokai/LICENSE
 
 ---------------------------------------------------------
 
+Mermaid Markdown Features 10.0.0
+https://github.com/microsoft/vscode/tree/1.130.0/extensions/mermaid-markdown-features
+
+MIT License
+Copyright (c) Microsoft Corporation and Mermaid dependency contributors
+License text: licenses/MIT-VSCode.txt
+Additional notices: extensions/mermaid-markdown-features/ThirdPartyNotices.txt
+
+---------------------------------------------------------
+
 clangd 22.1.6 Windows binary bundle
 https://github.com/clangd/clangd/releases/tag/22.1.6
 

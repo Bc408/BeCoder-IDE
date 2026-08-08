@@ -424,18 +424,10 @@ export class BrowserHostService extends Disposable implements IHostService {
 
 	private preservePayload(isEmptyWindow: boolean, options?: IOpenWindowOptions): Array<unknown> | undefined {
 
-		// Selectively copy payload: for now only extension debugging properties are considered
+		// Preserve extension development location when opening another development window.
 		const newPayload: Array<unknown> = [];
 		if (!isEmptyWindow && this.environmentService.extensionDevelopmentLocationURI) {
 			newPayload.push(['extensionDevelopmentPath', this.environmentService.extensionDevelopmentLocationURI.toString()]);
-
-			if (this.environmentService.debugExtensionHost.debugId) {
-				newPayload.push(['debugId', this.environmentService.debugExtensionHost.debugId]);
-			}
-
-			if (this.environmentService.debugExtensionHost.port) {
-				newPayload.push(['inspect-brk-extensions', String(this.environmentService.debugExtensionHost.port)]);
-			}
 		}
 
 		const newWindowProfile = options?.forceProfile

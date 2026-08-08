@@ -14,7 +14,7 @@ import { ModelService } from '../../../../../editor/common/services/modelService
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
-import { IAITextQuery, IFileMatch, IFileQuery, IFileSearchStats, IFolderQuery, ISearchComplete, ISearchProgressItem, ISearchQuery, ISearchService, ITextQuery, ITextSearchMatch, OneLineRange, QueryType, TextSearchMatch } from '../../../../services/search/common/search.js';
+import { IFileMatch, IFileQuery, IFileSearchStats, IFolderQuery, ISearchComplete, ISearchProgressItem, ISearchQuery, ISearchService, ITextQuery, ITextSearchMatch, OneLineRange, QueryType, TextSearchMatch } from '../../../../services/search/common/search.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { NullTelemetryService } from '../../../../../platform/telemetry/common/telemetryUtils.js';
 import { SearchModelImpl } from '../../browser/searchTreeModel/searchModel.js';
@@ -123,14 +123,6 @@ suite('SearchModel', () => {
 
 				});
 			},
-			aiTextSearch(query: ISearchQuery, token?: CancellationToken, onProgress?: (result: ISearchProgressItem) => void, notebookURIs?: ResourceSet): Promise<ISearchComplete> {
-				return new Promise(resolve => {
-					queueMicrotask(() => {
-						results.forEach(onProgress!);
-						resolve(complete!);
-					});
-				});
-			},
 			textSearchSplitSyncAsync(query: ITextQuery, token?: CancellationToken | undefined, onProgress?: ((result: ISearchProgressItem) => void) | undefined): { syncResults: ISearchComplete; asyncResults: Promise<ISearchComplete> } {
 				return {
 					syncResults: {
@@ -160,11 +152,6 @@ suite('SearchModel', () => {
 					queueMicrotask(() => {
 						reject(error);
 					});
-				});
-			},
-			aiTextSearch(query: ISearchQuery, token?: CancellationToken, onProgress?: (result: ISearchProgressItem) => void, notebookURIs?: ResourceSet): Promise<ISearchComplete> {
-				return new Promise((resolve, reject) => {
-					reject(error);
 				});
 			},
 			textSearchSplitSyncAsync(query: ITextQuery, token?: CancellationToken | undefined, onProgress?: ((result: ISearchProgressItem) => void) | undefined): { syncResults: ISearchComplete; asyncResults: Promise<ISearchComplete> } {
@@ -201,17 +188,6 @@ suite('SearchModel', () => {
 						// eslint-disable-next-line local/code-no-any-casts
 						resolve(<any>{});
 					});
-				});
-			},
-			aiTextSearch(query: IAITextQuery, token?: CancellationToken, onProgress?: (result: ISearchProgressItem) => void, notebookURIs?: ResourceSet): Promise<ISearchComplete> {
-				const disposable = token?.onCancellationRequested(() => tokenSource.cancel());
-				if (disposable) {
-					store.add(disposable);
-				}
-
-				return Promise.resolve({
-					results: [],
-					messages: []
 				});
 			},
 			textSearchSplitSyncAsync(query: ITextQuery, token?: CancellationToken | undefined, onProgress?: ((result: ISearchProgressItem) => void) | undefined): { syncResults: ISearchComplete; asyncResults: Promise<ISearchComplete> } {

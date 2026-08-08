@@ -40,13 +40,6 @@ export class StandaloneCommandsQuickAccessProvider extends AbstractEditorCommand
 		return this.getCodeEditorCommandPicks();
 	}
 
-	protected hasAdditionalCommandPicks(): boolean {
-		return false;
-	}
-
-	protected async getAdditionalCommandPicks(): Promise<ICommandQuickPick[]> {
-		return [];
-	}
 }
 
 export class GotoLineAction extends EditorAction {

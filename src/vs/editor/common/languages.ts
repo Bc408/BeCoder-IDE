@@ -775,11 +775,6 @@ export interface InlineCompletionContext {
 	 * @experimental
 	 * @internal
 	*/
-	readonly userPrompt?: string | undefined;
-	/**
-	 * @experimental
-	 * @internal
-	*/
 	readonly requestUuid: string;
 
 	readonly includeInlineEdits: boolean;
@@ -792,28 +787,6 @@ export interface InlineCompletionContext {
 	 * Only set if this request was triggered by such an event.
 	 */
 	readonly changeHint?: IInlineCompletionChangeHint;
-}
-
-export interface IInlineCompletionModelInfo {
-	models: IInlineCompletionModel[];
-	currentModelId: string;
-}
-
-export interface IInlineCompletionModel {
-	name: string;
-	id: string;
-}
-
-export interface IInlineCompletionProviderOption {
-	readonly id: string;
-	readonly label: string;
-	readonly values: readonly IInlineCompletionProviderOptionValue[];
-	readonly currentValueId: string;
-}
-
-export interface IInlineCompletionProviderOptionValue {
-	readonly id: string;
-	readonly label: string;
 }
 
 export class SelectedSuggestionInfo {
@@ -892,8 +865,6 @@ export interface InlineCompletion {
 	readonly warning?: InlineCompletionWarning;
 
 	readonly hint?: IInlineCompletionHint;
-
-	readonly supportsRename?: boolean;
 
 	/**
 	 * Used for telemetry.
@@ -1002,14 +973,6 @@ export interface InlineCompletionsProvider<T extends InlineCompletions = InlineC
 	displayName?: string;
 
 	debounceDelayMs?: number;
-
-	modelInfo?: IInlineCompletionModelInfo;
-	onDidModelInfoChange?: Event<void>;
-	setModelId?(modelId: string): Promise<void>;
-
-	providerOptions?: readonly IInlineCompletionProviderOption[];
-	onDidProviderOptionsChange?: Event<void>;
-	setProviderOption?(optionId: string, valueId: string): Promise<void>;
 
 	toString?(): string;
 }
@@ -1128,13 +1091,6 @@ export type LifetimeSummary = {
 	typingIntervalCharacterCount: number;
 	selectedSuggestionInfo: boolean;
 	availableProviders: string;
-	skuPlan: string | undefined;
-	skuType: string | undefined;
-	renameCreated: boolean | undefined;
-	renameDuration: number | undefined;
-	renameTimedOut: boolean | undefined;
-	renameDroppedOtherEdits: number | undefined;
-	renameDroppedRenameEdits: number | undefined;
 	editKind: string | undefined;
 	longDistanceHintVisible?: boolean;
 	longDistanceHintDistance?: number;
@@ -1148,7 +1104,6 @@ export interface CodeAction {
 	diagnostics?: IMarkerData[];
 	kind?: string;
 	isPreferred?: boolean;
-	isAI?: boolean;
 	disabled?: string;
 	ranges?: IRange[];
 }
@@ -2133,25 +2088,6 @@ export interface RenameLocation {
 export interface RenameProvider {
 	provideRenameEdits(model: model.ITextModel, position: Position, newName: string, token: CancellationToken): ProviderResult<WorkspaceEdit & Rejection>;
 	resolveRenameLocation?(model: model.ITextModel, position: Position, token: CancellationToken): ProviderResult<RenameLocation & Rejection>;
-}
-
-export enum NewSymbolNameTag {
-	AIGenerated = 1
-}
-
-export enum NewSymbolNameTriggerKind {
-	Invoke = 0,
-	Automatic = 1,
-}
-
-export interface NewSymbolName {
-	readonly newSymbolName: string;
-	readonly tags?: readonly NewSymbolNameTag[];
-}
-
-export interface NewSymbolNamesProvider {
-	supportsAutomaticNewSymbolNamesTriggerKind?: Promise<boolean | undefined>;
-	provideNewSymbolNames(model: model.ITextModel, range: IRange, triggerKind: NewSymbolNameTriggerKind, token: CancellationToken): ProviderResult<NewSymbolName[]>;
 }
 
 export interface Command {

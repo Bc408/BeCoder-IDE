@@ -11,7 +11,7 @@ import { env } from '../../../base/common/process.js';
 import { joinPath } from '../../../base/common/resources.js';
 import { URI } from '../../../base/common/uri.js';
 import { NativeParsedArgs } from './argv.js';
-import { ExtensionKind, IExtensionHostDebugParams, INativeEnvironmentService } from './environment.js';
+import { ExtensionKind, IDebugParams, INativeEnvironmentService } from './environment.js';
 import { IProductService } from '../../product/common/productService.js';
 
 export const EXTENSION_IDENTIFIER_WITH_LOG_REGEX = /^([^.]+\..+)[:=](.+)$/;
@@ -224,10 +224,6 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 		return value.split(',').map(id => id.trim()).filter(id => id);
 	}
 
-	@memoize
-	get debugExtensionHost(): IExtensionHostDebugParams { return parseExtensionHostDebugPort(this.args, this.isBuilt); }
-	get debugRenderer(): boolean { return !!this.args.debugRenderer; }
-
 	get isBuilt(): boolean { return !env['VSCODE_DEV']; }
 	get verbose(): boolean { return !!this.args.verbose; }
 
@@ -276,11 +272,6 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 		return undefined;
 	}
 
-	@memoize
-	get agentSessionsWorkspace(): URI {
-		return joinPath(this.appSettingsHome, 'agent-sessions.code-workspace');
-	}
-
 	get editSessionId(): string | undefined { return this.args['editSessionId']; }
 
 	get exportPolicyData(): string | undefined {
@@ -308,22 +299,9 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 	) { }
 }
 
-export function parseExtensionHostDebugPort(args: NativeParsedArgs, isBuilt: boolean): IExtensionHostDebugParams {
-	return parseDebugParams(args['inspect-extensions'], args['inspect-brk-extensions'], 5870, isBuilt, args.debugId, args.extensionEnvironment);
-}
-
-export function parseDebugParams(debugArg: string | undefined, debugBrkArg: string | undefined, defaultBuildPort: number, isBuilt: boolean, debugId?: string, environmentString?: string): IExtensionHostDebugParams {
+export function parseDebugParams(debugArg: string | undefined, debugBrkArg: string | undefined, defaultBuildPort: number, isBuilt: boolean): IDebugParams {
 	const portStr = debugBrkArg || debugArg;
 	const port = Number(portStr) || (!isBuilt ? defaultBuildPort : null);
 	const brk = port ? Boolean(!!debugBrkArg) : false;
-	let env: Record<string, string> | undefined;
-	if (environmentString) {
-		try {
-			env = JSON.parse(environmentString);
-		} catch {
-			// ignore
-		}
-	}
-
-	return { port, break: brk, debugId, env };
+	return { port, break: brk };
 }

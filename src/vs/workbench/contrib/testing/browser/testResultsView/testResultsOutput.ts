@@ -32,7 +32,7 @@ import { IEditorConfiguration } from '../../../../browser/parts/editor/textEdito
 import { EditorModel } from '../../../../common/editor/editorModel.js';
 import { PANEL_BACKGROUND, SIDE_BAR_BACKGROUND } from '../../../../common/theme.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../../common/views.js';
-import { CALL_STACK_WIDGET_HEADER_HEIGHT } from '../../../debug/browser/callStackWidget.js';
+import { CALL_STACK_WIDGET_HEADER_HEIGHT } from '../testResultStackWidget.js';
 import { DetachedProcessInfo } from '../../../terminal/browser/detachedTerminal.js';
 import { IDetachedTerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { getXtermScaledDimensions } from '../../../terminal/browser/xterm/xtermTerminal.js';

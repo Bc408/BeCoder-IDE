@@ -46,10 +46,6 @@ export const codiconsDerived = {
 	thumbsUpFilled: register('thumbsup-filled', 0xec14),
 	gitFetch: register('git-fetch', 0xec1d),
 	lightbulbSparkleAutofix: register('lightbulb-sparkle-autofix', 0xec1f),
-	debugBreakpointPending: register('debug-breakpoint-pending', 0xebd9),
-	chatImport: register('chat-import', 0xec86),
-	chatExport: register('chat-export', 0xec87),
-
 } as const;
 
 /**

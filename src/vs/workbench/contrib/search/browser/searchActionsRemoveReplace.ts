@@ -24,7 +24,6 @@ import { category, getElementsToOperateOn, getSearchView, shouldRefocus } from '
 import { equals } from '../../../../base/common/arrays.js';
 import { arrayContainsElementOrParent, RenderableMatch, ISearchResult, isSearchTreeFileMatch, isSearchTreeFolderMatch, isSearchTreeMatch, isSearchResult, isTextSearchHeading } from './searchTreeModel/searchTreeCommon.js';
 import { MatchInNotebook } from './notebookSearch/notebookSearchModel.js';
-import { AITextSearchHeadingImpl } from './AISearch/aiSearchModel.js';
 
 
 //#region Interfaces
@@ -378,18 +377,10 @@ export async function getElementToFocusAfterRemoved(viewer: WorkbenchCompressibl
 		while (!!navigator.next() && (!isSearchTreeFolderMatch(navigator.current()) || arrayContainsElementOrParent(navigator.current(), elementsToRemove))) { }
 	} else if (isSearchTreeFileMatch(element)) {
 		while (!!navigator.next() && (!isSearchTreeFileMatch(navigator.current()) || arrayContainsElementOrParent(navigator.current(), elementsToRemove))) {
-			// Never expand AI search results by default
-			if (navigator.current() instanceof AITextSearchHeadingImpl) {
-				return navigator.current();
-			}
 			await viewer.expand(navigator.current());
 		}
 	} else {
 		while (navigator.next() && (!isSearchTreeMatch(navigator.current()) || arrayContainsElementOrParent(navigator.current(), elementsToRemove))) {
-			// Never expand AI search results by default
-			if (navigator.current() instanceof AITextSearchHeadingImpl) {
-				return navigator.current();
-			}
 			await viewer.expand(navigator.current());
 		}
 	}

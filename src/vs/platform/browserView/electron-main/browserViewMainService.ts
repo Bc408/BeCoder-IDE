@@ -21,7 +21,6 @@ import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { localize } from '../../../nls.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
 import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
-import { BrowserViewInspectElementId } from './browserViewInspector.js';
 import { equals } from '../../../base/common/objects.js';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
@@ -30,9 +29,6 @@ export interface IBrowserViewMainService extends IBrowserViewService {
 	readonly _serviceBrand: undefined;
 
 	tryGetBrowserView(id: string): BrowserView | undefined;
-
-	/** Create a new target and return it. */
-	createTarget(url: string, owner: IBrowserViewOwner, browserContextId?: string): Promise<BrowserView>;
 }
 
 export class BrowserViewMainService extends Disposable implements IBrowserViewMainService {
@@ -105,17 +101,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return this.browserViews.get(id);
 	}
 
-	async createTarget(url: string, owner: IBrowserViewOwner, browserContextId?: string): Promise<BrowserView> {
-		const browserSession = browserContextId ? BrowserSession.get(browserContextId) : undefined;
-
-		return this.openNew(url, {
-			owner,
-			session: browserSession,
-			openOptions: { preserveFocus: true },
-			source: 'cdpCreated'
-		});
-	}
-
 	/**
 	 * Get a browser view or throw if not found
 	 */
@@ -184,22 +169,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	onDynamicDidClose(id: string) {
 		return this._getBrowserView(id).onDidClose;
-	}
-
-	onDynamicDidSelectElement(id: string) {
-		return this._getBrowserView(id).inspector.onDidSelectElement;
-	}
-
-	onDynamicDidChangeElementSelectionActive(id: string) {
-		return this._getBrowserView(id).inspector.onDidChangeElementSelectionActive;
-	}
-
-	onDynamicDidPickArea(id: string) {
-		return this._getBrowserView(id).inspector.onDidPickArea;
-	}
-
-	onDynamicDidChangeAreaSelectionActive(id: string) {
-		return this._getBrowserView(id).inspector.onDidChangeAreaSelectionActive;
 	}
 
 	onDynamicDidChangeDeviceEmulation(id: string) {
@@ -338,17 +307,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return this._getBrowserView(id).getConsoleLogs();
 	}
 
-	async toggleElementSelection(id: string, enabled?: boolean): Promise<void> {
-		return this._getBrowserView(id).inspector.toggleElementSelection(enabled);
-	}
-
-	async toggleAreaSelection(id: string, enabled?: boolean): Promise<void> {
-		return this._getBrowserView(id).inspector.toggleAreaSelection(enabled);
-	}
-
 	async updateWindowConfiguration(windowId: number, config: IBrowserViewWindowConfiguration): Promise<void> {
 		const oldConfig = this._windowConfigurations.get(windowId);
-		const didThemeChange = !equals(oldConfig?.theme, config.theme);
 		const didProxyChange = !equals(oldConfig?.proxyInfo, config.proxyInfo);
 
 		this._windowConfigurations.set(windowId, config);
@@ -356,9 +316,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 		for (const [, view] of this.browserViews) {
 			if (view.owner.mainWindowId === windowId) {
-				if (didThemeChange) {
-					view.inspector.setTheme(config.theme);
-				}
 				if (didProxyChange) {
 					view.session.remote.acquire(view.id, config.proxyInfo);
 				}
@@ -442,10 +399,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			options
 		);
 		this.browserViews.set(id, view);
-		if (windowConfiguration?.theme) {
-			view.inspector.setTheme(windowConfiguration.theme);
-		}
-
 		Event.once(view.onDidClose)(() => {
 			browserSession.remote.release(id);
 			this.browserViews.deleteAndDispose(id);
@@ -498,9 +451,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		}
 
 		const windowConfiguration = this._windowConfigurations.get(view.owner.mainWindowId);
-		const inspectTarget = windowConfiguration?.aiFeaturesDisabled
-			? undefined
-			: params.frame && await view.inspector.getElementHandle(BrowserViewInspectElementId.ContextMenuTarget, params.frame);
 		const menu = new Menu();
 
 		if (params.linkURL) {
@@ -590,14 +540,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		}
 
 		menu.append(new MenuItem({ type: 'separator' }));
-		if (inspectTarget) {
-			menu.append(new MenuItem({
-				label: localize('browser.contextMenu.addElementToChat', 'Add Element to Chat'),
-				click: () => inspectTarget.addToChat()
-			}));
-			void inspectTarget.highlight().catch(() => { });
-			menu.on('menu-will-close', () => inspectTarget.dispose());
-		}
 		menu.append(new MenuItem({
 			label: localize('browser.contextMenu.inspect', 'Inspect'),
 			click: () => webContents.inspectElement(params.x, params.y)

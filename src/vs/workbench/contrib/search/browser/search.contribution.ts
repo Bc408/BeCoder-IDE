@@ -19,12 +19,11 @@ import { SearchView } from './searchView.js';
 import { registerContributions as searchWidgetContributions } from './searchWidget.js';
 import { SearchViewModelWorkbenchService } from './searchTreeModel/searchModel.js';
 import { ISearchViewModelWorkbenchService } from './searchTreeModel/searchViewModelWorkbenchService.js';
-import { SearchSortOrder, SEARCH_EXCLUDE_CONFIG, VIEWLET_ID, ViewMode, VIEW_ID, DEFAULT_MAX_SEARCH_RESULTS, SemanticSearchBehavior } from '../../../services/search/common/search.js';
+import { SearchSortOrder, SEARCH_EXCLUDE_CONFIG, VIEWLET_ID, ViewMode, VIEW_ID, DEFAULT_MAX_SEARCH_RESULTS } from '../../../services/search/common/search.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { assertType } from '../../../../base/common/types.js';
 import { getWorkspaceSymbols, IWorkspaceSymbol, searchConfigurationNode } from '../common/search.js';
 import * as Constants from '../common/constants.js';
-import { SearchChatContextContribution } from './searchChatContext.js';
 
 import './searchActionsCopy.js';
 import './searchActionsFind.js';
@@ -36,15 +35,12 @@ import './searchQuickAccess.contribution.js';
 import './search.common.contribution.js';
 import { TEXT_SEARCH_QUICK_ACCESS_PREFIX, TextSearchQuickAccess } from './quickTextSearch/textSearchQuickAccess.js';
 import { Extensions, IConfigurationMigrationRegistry } from '../../../common/configuration.js';
-import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { AccessibleViewRegistry } from '../../../../platform/accessibility/browser/accessibleViewRegistry.js';
 import { SearchAccessibilityHelp } from './searchAccessibilityHelp.js';
 
 registerSingleton(ISearchViewModelWorkbenchService, SearchViewModelWorkbenchService, InstantiationType.Delayed);
 
 searchWidgetContributions();
-
-registerWorkbenchContribution2(SearchChatContextContribution.ID, SearchChatContextContribution, WorkbenchPhase.AfterRestored);
 
 AccessibleViewRegistry.register(new SearchAccessibilityHelp());
 
@@ -171,7 +167,6 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			description: nls.localize('search.quickOpen.includeHistory', "Whether to include results from recently opened files in the file results for Quick Open."),
 			default: true,
-			agentsWindow: { default: false },
 		},
 		'search.quickOpen.history.filterSortOrder': {
 			type: 'string',
@@ -294,24 +289,6 @@ configurationRegistry.registerConfiguration({
 			default: false,
 			markdownDescription: nls.localize('search.experimental.useIgnoreFilesInFindFiles', "When enabled, the legacy `findFiles` extension API honors the user's `#search.useIgnoreFiles#` setting instead of always ignoring `.gitignore`. Extensions that explicitly pass `null` as the `exclude` argument still get unfiltered results. Telemetry is emitted regardless of this setting to help decide future defaults."),
 			tags: ['experimental'],
-		},
-		'search.searchView.semanticSearchBehavior': {
-			type: 'string',
-			description: nls.localize('search.searchView.semanticSearchBehavior', "Controls the behavior of the semantic search results displayed in the Search view."),
-			enum: [SemanticSearchBehavior.Manual, SemanticSearchBehavior.RunOnEmpty, SemanticSearchBehavior.Auto],
-			default: SemanticSearchBehavior.Manual,
-			enumDescriptions: [
-				nls.localize('search.searchView.semanticSearchBehavior.manual', "Only request semantic search results manually."),
-				nls.localize('search.searchView.semanticSearchBehavior.runOnEmpty', "Request semantic results automatically only when text search results are empty."),
-				nls.localize('search.searchView.semanticSearchBehavior.auto', "Request semantic results automatically with every search.")
-			],
-			tags: ['preview'],
-		},
-		'search.searchView.keywordSuggestions': {
-			type: 'boolean',
-			description: nls.localize('search.searchView.keywordSuggestions', "Enable keyword suggestions in the Search view."),
-			default: false,
-			tags: ['preview'],
 		},
 	}
 });

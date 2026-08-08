@@ -19,7 +19,6 @@ import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { RuntimeExtensionsInput } from '../common/runtimeExtensionsInput.js';
-import { DebugExtensionHostInNewWindowAction, DebugExtensionsContribution, DebugRendererInNewWindowAction, DebugExtensionHostAndRendererAction } from './debugExtensionHostAction.js';
 import { ExtensionHostProfileService } from './extensionProfileService.js';
 import { CleanUpExtensionsFolderAction, OpenExtensionsFolderAction } from './extensionsActions.js';
 import { ExtensionsAutoProfiler } from './extensionsAutoProfiler.js';
@@ -73,13 +72,9 @@ workbenchRegistry.registerWorkbenchContribution(ExtensionsContributions, Lifecyc
 workbenchRegistry.registerWorkbenchContribution(ExtensionsAutoProfiler, LifecyclePhase.Eventually);
 workbenchRegistry.registerWorkbenchContribution(RemoteExtensionsInitializerContribution, LifecyclePhase.Restored);
 workbenchRegistry.registerWorkbenchContribution(InstallRemoteExtensionsContribution, LifecyclePhase.Restored);
-workbenchRegistry.registerWorkbenchContribution(DebugExtensionsContribution, LifecyclePhase.Restored);
 
 // Register Commands
 
-registerAction2(DebugExtensionHostInNewWindowAction);
-registerAction2(DebugRendererInNewWindowAction);
-registerAction2(DebugExtensionHostAndRendererAction);
 registerAction2(StartExtensionHostProfileAction);
 registerAction2(StopExtensionHostProfileAction);
 registerAction2(SaveExtensionHostProfileAction);

@@ -150,8 +150,6 @@ const emptyCodeActionSet = Object.freeze<CodeActionSet>({
 	dispose: () => { },
 	documentation: [],
 	hasAutoFix: false,
-	hasAIFix: false,
-	allAIFixes: false,
 });
 
 
@@ -257,11 +255,9 @@ export class CodeActionModel extends Disposable {
 							return emptyCodeActionSet;
 						}
 
-						// Search for non-AI quickfixes in the current code action set - if AI code actions are the only thing found, continue searching for diagnostics in line.
 						const foundQuickfix = codeActionSet.validActions?.some(action => {
 							return action.action.kind &&
-								CodeActionKind.QuickFix.contains(new HierarchicalKind(action.action.kind)) &&
-								!action.action.isAI;
+								CodeActionKind.QuickFix.contains(new HierarchicalKind(action.action.kind));
 						});
 						const allMarkers = this._markerService.read({ resource: model.uri });
 						if (foundQuickfix) {
@@ -270,7 +266,7 @@ export class CodeActionModel extends Disposable {
 									action.action.diagnostics = [...allMarkers.filter(marker => marker.relatedInformation)];
 								}
 							}
-							return { validActions: codeActionSet.validActions, allActions: allCodeActions, documentation: codeActionSet.documentation, hasAutoFix: codeActionSet.hasAutoFix, hasAIFix: codeActionSet.hasAIFix, allAIFixes: codeActionSet.allAIFixes, dispose: () => { this.codeActionsDisposable.value = codeActionSet; } };
+							return { validActions: codeActionSet.validActions, allActions: allCodeActions, documentation: codeActionSet.documentation, hasAutoFix: codeActionSet.hasAutoFix, dispose: () => { this.codeActionsDisposable.value = codeActionSet; } };
 						} else if (!foundQuickfix) {
 							// If markers exist, and there are no quickfixes found or length is zero, check for quickfixes on that line.
 							if (allMarkers.length > 0) {
@@ -331,17 +327,13 @@ export class CodeActionModel extends Disposable {
 										return -1;
 									} else if (!a.action.isPreferred && b.action.isPreferred) {
 										return 1;
-									} else if (a.action.isAI && !b.action.isAI) {
-										return 1;
-									} else if (!a.action.isAI && b.action.isAI) {
-										return -1;
 									} else {
 										return 0;
 									}
 								});
 
 								// Only retriggers if actually found quickfix on the same line as cursor
-								return { validActions: filteredActions, allActions: allCodeActions, documentation: codeActionSet.documentation, hasAutoFix: codeActionSet.hasAutoFix, hasAIFix: codeActionSet.hasAIFix, allAIFixes: codeActionSet.allAIFixes, dispose: () => { this.codeActionsDisposable.value = codeActionSet; } };
+								return { validActions: filteredActions, allActions: allCodeActions, documentation: codeActionSet.documentation, hasAutoFix: codeActionSet.hasAutoFix, dispose: () => { this.codeActionsDisposable.value = codeActionSet; } };
 							}
 						}
 					}

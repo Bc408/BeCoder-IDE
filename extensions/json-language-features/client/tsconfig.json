@@ -8,6 +8,7 @@
 			"webworker"
 		],
 		"module": "Node16",
+		"skipLibCheck": true,
 		"types": [
 			"node"
 		],

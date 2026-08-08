@@ -347,21 +347,16 @@ async function doConnectRemoteAgentManagement(options: ISimpleConnectionOptions,
 
 export interface IRemoteExtensionHostStartParams {
 	language: string;
-	debugId?: string;
-	break?: boolean;
-	port?: number | null;
 	env?: { [key: string]: string | null };
 }
 
 interface IExtensionHostConnectionResult {
 	protocol: PersistentProtocol;
-	debugPort?: number;
 }
 
 async function doConnectRemoteAgentExtensionHost(options: ISimpleConnectionOptions, startArguments: IRemoteExtensionHostStartParams, timeoutCancellationToken: CancellationToken): Promise<IExtensionHostConnectionResult> {
-	const { protocol, firstMessage } = await connectToRemoteExtensionHostAgentAndReadOneMessage<{ debugPort?: number }>(options, ConnectionType.ExtensionHost, startArguments, timeoutCancellationToken);
-	const debugPort = firstMessage && firstMessage.debugPort;
-	return { protocol, debugPort };
+	const { protocol } = await connectToRemoteExtensionHostAgentAndReadOneMessage(options, ConnectionType.ExtensionHost, startArguments, timeoutCancellationToken);
+	return { protocol };
 }
 
 export interface ITunnelConnectionStartParams {
@@ -425,8 +420,8 @@ export async function connectRemoteAgentExtensionHost(options: IConnectionOption
 	return createInitialConnection(
 		options,
 		async (simpleOptions) => {
-			const { protocol, debugPort } = await doConnectRemoteAgentExtensionHost(simpleOptions, startArguments, CancellationToken.None);
-			return new ExtensionHostPersistentConnection(options, startArguments, simpleOptions.reconnectionToken, protocol, debugPort);
+			const { protocol } = await doConnectRemoteAgentExtensionHost(simpleOptions, startArguments, CancellationToken.None);
+			return new ExtensionHostPersistentConnection(options, startArguments, simpleOptions.reconnectionToken, protocol);
 		}
 	);
 }
@@ -771,12 +766,9 @@ export class ManagementPersistentConnection extends PersistentConnection {
 export class ExtensionHostPersistentConnection extends PersistentConnection {
 
 	private readonly _startArguments: IRemoteExtensionHostStartParams;
-	public readonly debugPort: number | undefined;
-
-	constructor(options: IConnectionOptions, startArguments: IRemoteExtensionHostStartParams, reconnectionToken: string, protocol: PersistentProtocol, debugPort: number | undefined) {
+	constructor(options: IConnectionOptions, startArguments: IRemoteExtensionHostStartParams, reconnectionToken: string, protocol: PersistentProtocol) {
 		super(ConnectionType.ExtensionHost, options, reconnectionToken, protocol, /*reconnectionFailureIsFatal*/false);
 		this._startArguments = startArguments;
-		this.debugPort = debugPort;
 	}
 
 	protected async _reconnect(options: ISimpleConnectionOptions, timeoutCancellationToken: CancellationToken): Promise<void> {

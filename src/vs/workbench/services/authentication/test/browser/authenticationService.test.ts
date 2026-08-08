@@ -136,16 +136,7 @@ suite('AuthenticationService', () => {
 			assert.strictEqual(result, undefined);
 		});
 
-		test('getOrActivateProviderIdForServer - should return provider id if authorizationServerGlobs matches and authorizationServers match', async () => {
-			// Register a declared provider with an authorization server glob
-			const provider: AuthenticationProviderInformation = {
-				id: 'github',
-				label: 'GitHub',
-				authorizationServerGlobs: ['https://github.com/*']
-			};
-			authenticationService.registerDeclaredAuthenticationProvider(provider);
-
-			// Register an authentication provider with matching authorization servers
+		test('getOrActivateProviderIdForServer - should return provider id when a registered provider matches', async () => {
 			const authProvider = createProvider({
 				id: 'github',
 				label: 'GitHub',
@@ -161,16 +152,7 @@ suite('AuthenticationService', () => {
 			assert.strictEqual(result, 'github');
 		});
 
-		test('getOrActivateProviderIdForServer - should return undefined if authorizationServerGlobs match but authorizationServers do not match', async () => {
-			// Register a declared provider with an authorization server glob
-			const provider: AuthenticationProviderInformation = {
-				id: 'github',
-				label: 'GitHub',
-				authorizationServerGlobs: ['https://github.com/*']
-			};
-			authenticationService.registerDeclaredAuthenticationProvider(provider);
-
-			// Register an authentication provider with non-matching authorization servers
+		test('getOrActivateProviderIdForServer - should return undefined when a registered provider does not match', async () => {
 			const authProvider = createProvider({
 				id: 'github',
 				label: 'GitHub',
@@ -187,20 +169,6 @@ suite('AuthenticationService', () => {
 		});
 
 		test('getOrActivateProviderIdForAuthorizationServer - should check multiple providers and return the first match', async () => {
-			// Register two declared providers with authorization server globs
-			const provider1: AuthenticationProviderInformation = {
-				id: 'github',
-				label: 'GitHub',
-				authorizationServerGlobs: ['https://github.com/*']
-			};
-			const provider2: AuthenticationProviderInformation = {
-				id: 'microsoft',
-				label: 'Microsoft',
-				authorizationServerGlobs: ['https://login.microsoftonline.com/*']
-			};
-			authenticationService.registerDeclaredAuthenticationProvider(provider1);
-			authenticationService.registerDeclaredAuthenticationProvider(provider2);
-
 			// Register authentication providers
 			const githubProvider = createProvider({
 				id: 'github',

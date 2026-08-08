@@ -327,6 +327,40 @@ if (-not $clangdReadme.Contains("Visible C/C++ diagnostics belong to BeCoder's b
 	throw 'The packaged clangd README does not describe the BeCoder capability boundary.'
 }
 
+$mermaidExtensionPath = Join-Path $appPath 'extensions\mermaid-markdown-features'
+foreach ($mermaidFile in @(
+	'package.json',
+	'README.md',
+	'ThirdPartyNotices.txt',
+	'out\extension.js',
+	'diagram-preview-out\index.js',
+	'diagram-preview-out\codicon.css',
+	'markdown-preview-out\index.js',
+	'notebook-out\index.js'
+)) {
+	if (-not (Test-Path -LiteralPath (Join-Path $mermaidExtensionPath $mermaidFile) -PathType Leaf)) {
+		throw "The packaged Mermaid Markdown extension is missing $mermaidFile."
+	}
+}
+$mermaidManifest = Get-Content -LiteralPath (Join-Path $mermaidExtensionPath 'package.json') -Raw | ConvertFrom-Json
+if ("$($mermaidManifest.publisher).$($mermaidManifest.name)" -ne 'vscode.mermaid-markdown-features' -or
+	-not $mermaidManifest.contributes.'markdown.previewScripts' -or
+	-not $mermaidManifest.contributes.notebookRenderer -or
+	-not $mermaidManifest.contributes.'markdown.markdownItPlugins' -or
+	$mermaidManifest.contributes.chatOutputRenderers -or
+	$mermaidManifest.enabledApiProposals) {
+	throw 'The packaged Mermaid extension does not match the BeCoder Markdown-only contribution boundary.'
+}
+if (Test-Path -LiteralPath (Join-Path $mermaidExtensionPath 'chat-webview-out')) {
+	throw 'The packaged Mermaid extension contains the removed Chat output bundle.'
+}
+$mermaidBundle = Get-Content -LiteralPath (Join-Path $mermaidExtensionPath 'out\extension.js') -Raw
+foreach ($forbiddenMermaidApi in @('registerChatOutputRenderer', 'text/vnd.mermaid', 'ChatOutputDataItem', 'LanguageModelTextPart', 'LanguageModelToolResult')) {
+	if ($mermaidBundle.Contains($forbiddenMermaidApi)) {
+		throw "The packaged Mermaid extension contains removed Chat integration: $forbiddenMermaidApi"
+	}
+}
+
 $languagePackPath = Join-Path $appPath 'extensions\MS-CEINTL.vscode-language-pack-zh-hans'
 $languagePackManifest = Get-Content -LiteralPath (Join-Path $languagePackPath 'package.json') -Raw | ConvertFrom-Json
 if ("$($languagePackManifest.publisher).$($languagePackManifest.name)".ToLowerInvariant() -ne 'ms-ceintl.vscode-language-pack-zh-hans' -or
@@ -338,6 +372,17 @@ foreach ($languagePackFile in @('LICENSE.md', 'ThirdPartyNotices.txt', 'translat
 	if (-not (Test-Path -LiteralPath (Join-Path $languagePackPath $languagePackFile) -PathType Leaf)) {
 		throw "The packaged Simplified Chinese language pack is missing $languagePackFile."
 	}
+}
+$languagePackTranslationIds = @($languagePackManifest.contributes.localizations.translations.id)
+if ($languagePackTranslationIds -notcontains 'vscode.mermaid-markdown-features' -or
+	$languagePackTranslationIds -contains 'vscode.mermaid-chat-features' -or
+	-not (Test-Path -LiteralPath (Join-Path $languagePackPath 'translations\extensions\vscode.mermaid-markdown-features.i18n.json') -PathType Leaf)) {
+	throw 'The packaged Simplified Chinese language pack does not preserve the Mermaid Markdown-only translation boundary.'
+}
+$languagePackBoundaryVerifier = Join-Path $PSScriptRoot 'verify-becoder-language-pack.ts'
+& node $languagePackBoundaryVerifier (Join-Path $languagePackPath 'translations\main.i18n.json')
+if ($LASTEXITCODE -ne 0) {
+	throw 'The packaged Simplified Chinese language pack failed its product-boundary verification.'
 }
 
 $clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'
@@ -389,6 +434,7 @@ $expectedComponentIds = @(
 	'adpyke.codesnap',
 	'becoder.one-monokai',
 	'vscode.cpp',
+	'vscode.mermaid-markdown-features',
 	'ms-ceintl.vscode-language-pack-zh-hans',
 	'clangd-windows',
 	'becoder-ucrt64'
@@ -409,18 +455,30 @@ foreach ($component in @($componentInventory.components)) {
 			throw "The bundled component inventory references a missing license path for $($component.id): $($component.licensePath)"
 		}
 	}
+	if ($component.thirdPartyNoticesPath) {
+		$thirdPartyNoticesPath = Join-Path $appPath $component.thirdPartyNoticesPath
+		if (-not (Test-Path -LiteralPath $thirdPartyNoticesPath -PathType Leaf)) {
+			throw "The bundled component inventory references missing third-party notices for $($component.id): $($component.thirdPartyNoticesPath)"
+		}
+	}
 }
 $clangdComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'clangd-windows' }
 $ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 'becoder-ucrt64' }
 $languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
+$mermaidComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'vscode.mermaid-markdown-features' }
 if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2') {
 	throw 'The bundled component inventory does not match the shipped toolchain archives.'
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne 'b673f15a9e308edca466da2b3fce216b13a855a852cdfa91288b2c0d7b5ace1e' -or
-	$languagePackComponent.packagedContentSha256 -ne 'a9fabbecb50d14fb17abb91dd8905c7ba4e459247d910ad79da537fe5a914426') {
+	$languagePackComponent.contentSha256 -ne 'df9c4b94d2343c583b68688139af11bed5ea375b3a86bec036aabb4f8ef763f8' -or
+	$languagePackComponent.packagedContentSha256 -ne 'f892bef137c2210f0468b1f820be21a977ba60c0c7cbbb75ba96a6e500004f14') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
+}
+if ($mermaidComponent.version -ne '10.0.0' -or
+	$mermaidComponent.licensePath -ne 'licenses/MIT-VSCode.txt' -or
+	$mermaidComponent.thirdPartyNoticesPath -ne 'extensions/mermaid-markdown-features/ThirdPartyNotices.txt') {
+	throw 'The bundled component inventory does not preserve the Mermaid Markdown license boundary.'
 }
 $ucrt64Inventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\toolchains\ucrt64-packages.json') -Raw | ConvertFrom-Json
 if (@($ucrt64Inventory.packages).Count -ne 36 -or @($ucrt64Inventory.auxiliaryPackageSources).Count -ne 2) {
@@ -512,10 +570,37 @@ $forbiddenPaths = @(
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\runner-init.ps1',
 	'resources\app\extensions\danielpinto8zz6.c-cpp-compile-run\resources\run.cmd',
 	'resources\app\extensions\jeff-hykin.better-cpp-syntax',
-	'resources\app\extensions\mermaid-markdown-features',
 	'resources\app\extensions\ms-vscode.js-debug',
 	'resources\app\extensions\ms-vscode.js-debug-companion',
 	'resources\app\extensions\ms-vscode.vscode-js-profile-table',
+	'resources\app\extensions\prompt-basics',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\ms-vscode.js-debug.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-auto-launch.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-server-ready.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.mermaid-chat-features.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.prompt.i18n.json',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\chatEditModifiedFile.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\chatUserActionRequired.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\requestSent.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\responseReceived1.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\responseReceived2.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\responseReceived3.mp3',
+	'resources\app\out\vs\platform\accessibilitySignal\browser\media\responseReceived4.mp3',
+	'resources\app\out\vs\sessions',
+	'resources\app\out\vs\platform\agentHost',
+	'resources\app\out\vs\platform\mcp',
+	'resources\app\out\vs\platform\networkFilter',
+	'resources\app\out\vs\platform\webContentExtractor',
+	'resources\app\out\vs\workbench\contrib\chat',
+	'resources\app\out\vs\workbench\contrib\debug',
+	'resources\app\out\vs\workbench\contrib\inlineChat',
+	'resources\app\out\vs\workbench\contrib\mcp',
+	'resources\app\out\vs\workbench\contrib\remoteCodingAgents',
+	'resources\app\out\vs\workbench\contrib\welcomeAgentSessions',
+	'resources\app\out\vs\workbench\services\agentHost',
+	'resources\app\out\vs\workbench\services\chat',
+	'resources\app\out\vs\workbench\services\mcp',
+	'resources\app\out\vs\workbench\contrib\welcomeOnboarding',
 	'resources\app\resources\oi-defaults\.clangd',
 	'resources\app\resources\oi-defaults\portable-data\toolchains\.gitkeep',
 	'resources\app\resources\oi-defaults\toolchains\gdb.exe',
@@ -525,6 +610,9 @@ foreach ($relativePath in $forbiddenPaths) {
 	if (Test-Path -LiteralPath (Join-Path $PackagePath $relativePath)) {
 		throw "Forbidden legacy BeCoder package entry was produced: $relativePath"
 	}
+}
+if (Get-ChildItem -LiteralPath $PackagePath -Filter 'gdb.exe' -File -Recurse | Select-Object -First 1) {
+	throw 'The packaged application contains a forbidden gdb.exe.'
 }
 
 Write-Host "Verified staged BeCoder package at $PackagePath (IncludeCompiler=$IncludeCompiler)"

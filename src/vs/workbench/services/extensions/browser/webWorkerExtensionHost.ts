@@ -86,9 +86,6 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 
 	private async _getWebWorkerExtensionHostIframeSrc(): Promise<string> {
 		const suffixSearchParams = new URLSearchParams();
-		if (this._environmentService.debugExtensionHost && this._environmentService.debugRenderer) {
-			suffixSearchParams.set('debugged', '1');
-		}
 		COI.addSearchParam(suffixSearchParams, true, true);
 
 		const suffix = `?${suffixSearchParams.toString()}`;
@@ -311,7 +308,6 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 			parentPid: 0,
 			enabledApiProposalsFallback,
 			environment: {
-				isExtensionDevelopmentDebug: this._environmentService.debugRenderer,
 				appName: this._productService.nameLong,
 				appHost: this._productService.embedderIdentifier ?? (platform.isWeb ? 'web' : 'desktop'),
 				appUriScheme: this._productService.urlProtocol,
@@ -322,8 +318,7 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 				extensionTestsLocationURI: this._environmentService.extensionTestsLocationURI,
 				globalStorageHome: this._userDataProfilesService.defaultProfile.globalStorageHome,
 				workspaceStorageHome: this._environmentService.workspaceStorageHome,
-				extensionLogLevel: this._defaultLogLevelsService.defaultLogLevels.extensions,
-				isSessionsWindow: this._environmentService.isSessionsWindow
+				extensionLogLevel: this._defaultLogLevelsService.defaultLogLevels.extensions
 			},
 			workspace: this._contextService.getWorkbenchState() === WorkbenchState.EMPTY ? undefined : {
 				configuration: workspace.configuration || undefined,
@@ -333,7 +328,7 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 			},
 			consoleForward: {
 				includeStack: false,
-				logNative: this._environmentService.debugRenderer
+				logNative: false
 			},
 			extensions: this.extensions.toSnapshot(),
 			nlsBaseUrl: nlsUrlWithDetails,

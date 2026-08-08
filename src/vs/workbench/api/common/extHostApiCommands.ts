@@ -9,12 +9,11 @@ import { Schemas, matchesSomeScheme } from '../../../base/common/network.js';
 import { URI } from '../../../base/common/uri.js';
 import { IPosition } from '../../../editor/common/core/position.js';
 import { IRange } from '../../../editor/common/core/range.js';
-import { ISelection } from '../../../editor/common/core/selection.js';
 import * as languages from '../../../editor/common/languages.js';
 import { decodeSemanticTokensDto } from '../../../editor/common/services/semanticTokensDto.js';
 import { validateWhenClauses } from '../../../platform/contextkey/common/contextkey.js';
 import { ITextEditorOptions } from '../../../platform/editor/common/editor.js';
-import { ICallHierarchyItemDto, IIncomingCallDto, IInlineValueContextDto, IOutgoingCallDto, IRawColorInfo, ITypeHierarchyItemDto, IWorkspaceEditDto } from './extHost.protocol.js';
+import { ICallHierarchyItemDto, IIncomingCallDto, IOutgoingCallDto, IRawColorInfo, ITypeHierarchyItemDto, IWorkspaceEditDto } from './extHost.protocol.js';
 import { ApiCommand, ApiCommandArgument, ApiCommandResult, ExtHostCommands } from './extHostCommands.js';
 import { CustomCodeAction } from './extHostLanguageFeatures.js';
 import * as typeConverters from './extHostTypeConverters.js';
@@ -22,8 +21,6 @@ import * as types from './extHostTypes.js';
 import { TransientCellMetadata, TransientDocumentMetadata } from '../../contrib/notebook/common/notebookCommon.js';
 import * as search from '../../contrib/search/common/search.js';
 import type * as vscode from 'vscode';
-import { PromptsType } from '../../contrib/chat/common/promptSyntax/promptTypes.js';
-import type { IExtensionPromptFileResult } from '../../contrib/chat/common/promptSyntax/chatPromptFilesContribution.js';
 
 //#region --- NEW world
 
@@ -414,18 +411,6 @@ const newCommands: ApiCommand[] = [
 			};
 		}))
 	),
-	// --- debug support
-	new ApiCommand(
-		'vscode.executeInlineValueProvider', '_executeInlineValueProvider', 'Execute inline value provider',
-		[
-			ApiCommandArgument.Uri,
-			ApiCommandArgument.Range,
-			new ApiCommandArgument<types.InlineValueContext, IInlineValueContextDto>('context', 'An InlineValueContext', v => v && typeof v.frameId === 'number' && v.stoppedLocation instanceof types.Range, v => typeConverters.InlineValueContext.from(v))
-		],
-		new ApiCommandResult<languages.InlineValue[], vscode.InlineValue[]>('A promise that resolves to an array of InlineValue objects', result => {
-			return result.map(typeConverters.InlineValue.to);
-		})
-	),
 	// --- open'ish commands
 	new ApiCommand(
 		'vscode.open', '_workbench.open', 'Opens the provided resource in the editor. Can be a text or binary file, or an http(s) URL. If you need more control over the options for opening a text file, use vscode.window.showTextDocument instead.',
@@ -536,66 +521,7 @@ const newCommands: ApiCommand[] = [
 		],
 		ApiCommandResult.Void
 	),
-	// --- inline chat
-	new ApiCommand(
-		'vscode.editorChat.start', 'inlineChat.start', 'Invoke a new editor chat session',
-		[new ApiCommandArgument<InlineChatEditorApiArg | undefined, InlineChatRunOptions | undefined>('Run arguments', '', _v => true, v => {
-
-			if (!v) {
-				return undefined;
-			}
-
-			return {
-				initialRange: v.initialRange ? typeConverters.Range.from(v.initialRange) : undefined,
-				initialSelection: types.Selection.isSelection(v.initialSelection) ? typeConverters.Selection.from(v.initialSelection) : undefined,
-				message: v.message,
-				attachments: v.attachments,
-				autoSend: v.autoSend,
-				position: v.position ? typeConverters.Position.from(v.position) : undefined,
-				resolveOnResponse: v.resolveOnResponse
-			};
-		})],
-		ApiCommandResult.Void
-	),
-	// --- extension prompt files
-	new ApiCommand(
-		'vscode.extensionPromptFileProvider', '_listExtensionPromptFiles', 'Get all extension-contributed prompt files (custom agents, instructions, and prompt files).',
-		[],
-		new ApiCommandResult<IExtensionPromptFileResult[], { uri: vscode.Uri; type: PromptsType; extensionId: string }[]>(
-			'A promise that resolves to an array of objects containing uri, type, and extensionId.',
-			(value) => {
-				if (!value) {
-					return [];
-				}
-				return value.map(item => ({
-					uri: URI.revive(item.uri),
-					type: item.type,
-					extensionId: item.extensionId
-				}));
-			}
-		)
-	)
 ];
-
-type InlineChatEditorApiArg = {
-	initialRange?: vscode.Range;
-	initialSelection?: vscode.Selection;
-	message?: string;
-	attachments?: vscode.Uri[];
-	autoSend?: boolean;
-	position?: vscode.Position;
-	resolveOnResponse?: boolean;
-};
-
-type InlineChatRunOptions = {
-	initialRange?: IRange;
-	initialSelection?: ISelection;
-	message?: string;
-	attachments?: URI[];
-	autoSend?: boolean;
-	position?: IPosition;
-	resolveOnResponse?: boolean;
-};
 
 //#endregion
 

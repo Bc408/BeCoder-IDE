@@ -73,6 +73,320 @@ function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativ
 }
 
 suite('OI extension boundary', () => {
+	test('does not build or package AI, local transcription, sessions, or debug workbench entrypoints', () => {
+		const product = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
+		for (const property of ['agentsTelemetryAppName', 'agentSdks', 'defaultChatAgent', 'sessionsWindowAllowedExtensions', 'voiceWsUrl']) {
+			assert.ok(!(property in product), `Unsupported product property remains: ${property}`);
+		}
+		const packageManifest = readJson<{
+			dependencies?: Record<string, string>;
+			devDependencies?: Record<string, string>;
+		}>(path.join(repositoryRoot, 'package.json'));
+		for (const dependency of ['@huggingface/transformers', 'onnxruntime-node']) {
+			assert.ok(!(dependency in (packageManifest.dependencies ?? {})), `AI runtime remains a product dependency: ${dependency}`);
+		}
+		assert.ok('@playwright/test' in (packageManifest.devDependencies ?? {}), 'Playwright should remain available only as development test infrastructure');
+
+		const buildfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'buildfile.ts'), 'utf8');
+		for (const entrypoint of [
+			'vs/sessions/',
+			'vs/platform/agentHost/',
+			'vs/platform/localTranscription/',
+			'vs/workbench/contrib/debug/node/telemetryApp'
+		]) {
+			assert.ok(!buildfile.includes(entrypoint), `Unsupported build entrypoint remains: ${entrypoint}`);
+		}
+
+		const gulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
+		for (const packagedResource of [
+			'out-build/vs/sessions/',
+			'out-build/vs/workbench/contrib/debug/browser/media/',
+			'onnxruntime-node',
+			'readAgentSdkResults',
+			'json.agentSdks'
+		]) {
+			assert.ok(!gulpfile.includes(packagedResource), `Unsupported packaged resource remains: ${packagedResource}`);
+		}
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeOnboarding')));
+		for (const buildBoundaryPath of [
+			path.join(repositoryRoot, 'src', 'tsconfig.json'),
+			path.join(repositoryRoot, 'build', 'next', 'index.ts'),
+			path.join(repositoryRoot, 'build', 'gulpfile.vscode.web.ts'),
+			path.join(repositoryRoot, 'build', 'lib', 'i18n.resources.json')
+		]) {
+			assert.ok(!fs.readFileSync(buildBoundaryPath, 'utf8').includes('welcomeOnboarding'), `Unsupported onboarding build entry remains: ${buildBoundaryPath}`);
+		}
+		const eslintConfig = fs.readFileSync(path.join(repositoryRoot, 'eslint.config.js'), 'utf8');
+		const extensionGulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.extensions.ts'), 'utf8');
+		assert.doesNotMatch(`${eslintConfig}\n${extensionGulpfile}`, /extensions\/(?:media-preview|simple-browser)|mermaid-markdown-features\/preview-src\/chat/);
+		const packageVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
+		assert.match(packageVerifier, /resources\\app\\out\\vs\\workbench\\contrib\\welcomeOnboarding'/);
+		assert.doesNotMatch(packageVerifier, /welcomeOnboarding\\browser\\media/);
+		for (const excludedIcon of [
+			'agent*.svg',
+			'chat*.svg',
+			'copilot*.svg',
+			'mcp*.svg',
+			'new-session.svg',
+			'send-to-remote-agent.svg',
+			'session-in-progress*.svg',
+			'share-window.svg',
+			'terminal-secure.svg'
+		]) {
+			assert.ok(gulpfile.includes(`!**/@vscode/codicons/src/icons/${excludedIcon}`), `AI codicon source is not excluded from packaging: ${excludedIcon}`);
+		}
+
+		const entrypointPaths = [
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.web.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'extensionHost.contribution.ts')
+		];
+		const entrypoints = entrypointPaths.map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		for (const unsupportedRegistration of [
+			'/sessions/',
+			'/agentHost/',
+			'/mcp/',
+			'/chat/',
+			'/inlineChat/',
+			'/agentsVoice/',
+			'/aiEmbeddingVector/',
+			'/aiRelatedInformation/',
+			'/aiSettingsSearch/',
+			'/editTelemetry/',
+			'/localTranscription/',
+			'/remoteCodingAgents/',
+			'/debug/'
+		]) {
+			assert.ok(!entrypoints.includes(unsupportedRegistration), `Unsupported runtime registration remains: ${unsupportedRegistration}`);
+		}
+
+		for (const removedPath of [
+			path.join(repositoryRoot, 'build', 'agent-sdk'),
+			path.join(repositoryRoot, 'build', 'npm', 'stubs', 'sharp'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'localTranscription'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'networkFilter'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'webContentExtractor'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'search', 'browser', 'AISearch'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'agentEditorComments')
+		]) {
+			const files = fs.existsSync(removedPath) ? fs.readdirSync(removedPath, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile()) : [];
+			assert.deepStrictEqual(files, [], `Removed product resource still contains files: ${removedPath}`);
+		}
+
+		const accessibilitySources = [
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'accessibilitySignal', 'browser', 'accessibilitySignalService.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'accessibility', 'browser', 'accessibilityConfiguration.ts')
+		].map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		for (const unsupportedSetting of [
+			'accessibility.signals.chatUserActionRequired',
+			'accessibility.signals.chatResponsePending',
+			'audioCues.chatResponsePending',
+			'accessibility.debugWatchVariableAnnouncements',
+			'accessibility.replEditor.readLastExecutionOutput'
+		]) {
+			assert.ok(!accessibilitySources.includes(unsupportedSetting), `Unsupported accessibility setting remains: ${unsupportedSetting}`);
+		}
+		for (const removedAudio of [
+			'chatEditModifiedFile.mp3',
+			'chatUserActionRequired.mp3',
+			'requestSent.mp3',
+			'responseReceived1.mp3',
+			'responseReceived2.mp3',
+			'responseReceived3.mp3',
+			'responseReceived4.mp3'
+		]) {
+			assert.ok(!fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'accessibilitySignal', 'browser', 'media', removedAudio)), `Unsupported Chat audio remains: ${removedAudio}`);
+		}
+
+		const stableApi = fs.readFileSync(path.join(repositoryRoot, 'src', 'vscode-dts', 'vscode.d.ts'), 'utf8');
+		for (const removedNamespace of ['namespace chat', 'namespace debug', 'namespace lm']) {
+			assert.ok(!stableApi.includes(removedNamespace), `Unsupported extension API remains: ${removedNamespace}`);
+		}
+		const unsupportedProposals = fs.readdirSync(path.join(repositoryRoot, 'src', 'vscode-dts'))
+			.filter(file => /^vscode\.proposed\.(?:agent|ai|browser|chat|interactive\.|languageModel|mappedEditsProvider|mcp)/i.test(file));
+		assert.deepStrictEqual(unsupportedProposals, []);
+		for (const removedSource of [
+			path.join(repositoryRoot, 'src', 'typings', 'copilot-api.d.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'endpoint', 'common', 'licenseAgreement.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'mainThreadAgentEditorComments.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHostAgentEditorComments.ts')
+		]) {
+			assert.ok(!fs.existsSync(removedSource), `Unsupported AI source remains: ${removedSource}`);
+		}
+
+		const mixedCoreBoundaries: readonly [string, readonly RegExp[]][] = [
+			['src/vs/editor/common/standaloneStrings.ts', [/quickChatCommand/, /startInlineChatCommand/, /chatEditorModification/, /chatEditing\.navigation/]],
+			['src/vs/editor/common/textModelEditSource.ts', [/function isAiEdit/, /chatApplyEdits/, /inlineChatApplyEdit/, /EditSuggestionId/]],
+			['src/vs/platform/accessibility/browser/accessibleView.ts', [/TerminalChat\s*=/, /PanelChat\s*=/, /AgentChat\s*=/, /QuickChat\s*=/, /SessionsChat\s*=/]],
+			['src/vs/workbench/api/common/extHost.api.impl.ts', [/ExtHostChatAgents/, /ExtHostLanguageModels/, /ExtHostLanguageModelTools/, /ExtHostMpcService/, /ExtHostDebugService/]],
+			['src/vs/workbench/api/common/extHostCommands.ts', [/MappedEdits/, /CodeMapper/]],
+			['src/vs/workbench/api/common/extHost.protocol.ts', [/MainThreadChat/, /ExtHostChat/, /MainThreadLanguageModels/, /ExtHostLanguageModels/, /MainThreadMcp/, /ExtHostMcp/]],
+			['src/vs/workbench/api/common/extHostTypes.ts', [/ChatResponse/, /LanguageModelChat/, /DebugConsoleMode/, /DebugVisualization/]],
+			['src/vs/workbench/api/browser/viewsExtensionPoint.ts', [/contrib\/debug\/common\/debug/, /'debug'\s*:\s*\{/, /RequiresChatSessionsProposedAPI/]],
+			['src/vs/workbench/contrib/notebook/browser/notebookBrowser.ts', [/chatHeight\??:/, /ChatInput/]],
+			['src/vs/workbench/contrib/notebook/browser/viewModel/codeCellViewModel.ts', [/IInlineChatSessionService/, /chatHeight/]],
+			['src/vs/workbench/contrib/notebook/browser/viewModel/markupCellViewModel.ts', [/IInlineChatSessionService/, /chatHeight/]],
+			['src/vs/workbench/contrib/notebook/browser/diff/inlineDiff/notebookCellDiffDecorator.ts', [/chat-edit/, /chat-editing/]],
+			['src/vs/workbench/contrib/notebook/browser/diff/inlineDiff/notebookOriginalCellModelFactory.ts', [/chat-edit/, /chat-editing/]],
+			['src/vs/workbench/contrib/surveys/browser/surveyEditorInput.ts', [/code\.copilot/, /panel\.agent/, /agent\.codeEdit/]],
+			['src/vs/workbench/contrib/surveys/browser/surveyQuestions.ts', [/CopilotPMFSurvey/, /survey\.copilotPmf/]],
+		];
+		for (const [relativePath, removedPatterns] of mixedCoreBoundaries) {
+			const source = fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8');
+			for (const removedPattern of removedPatterns) {
+				assert.doesNotMatch(source, removedPattern, `Unsupported product coupling remains in ${relativePath}: ${removedPattern}`);
+			}
+		}
+
+		const apiProposals = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensions', 'common', 'extensionsApiProposals.ts'), 'utf8');
+		assert.doesNotMatch(apiProposals, /(?:mappedEditsProvider|vscode\.proposed\.interactive\.d\.ts)/);
+
+		const jsonClientTsconfig = readJson<{ compilerOptions?: { skipLibCheck?: boolean } }>(
+			path.join(extensionsRoot, 'json-language-features', 'client', 'tsconfig.json'));
+		assert.strictEqual(jsonClientTsconfig.compilerOptions?.skipLibCheck, true);
+		for (const jsonClientMain of [
+			path.join(extensionsRoot, 'json-language-features', 'client', 'src', 'node', 'jsonClientMain.ts'),
+			path.join(extensionsRoot, 'json-language-features', 'client', 'src', 'browser', 'jsonClientMain.ts')
+		]) {
+			const source = fs.readFileSync(jsonClientMain, 'utf8');
+			assert.match(source, /class BeCoderJSONLanguageClient extends LanguageClient/);
+			assert.match(source, /registrationType\?\.method === 'textDocument\/inlineValue'/);
+		}
+	});
+
+	test('keeps generic authentication without AI or MCP account policy', () => {
+		const commonWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		assert.match(commonWorkbench, /contrib\/authentication\/browser\/authentication\.contribution\.js/);
+
+		const stableApi = fs.readFileSync(path.join(repositoryRoot, 'src', 'vscode-dts', 'vscode.d.ts'), 'utf8');
+		assert.match(stableApi, /namespace authentication[\s\S]*registerAuthenticationProvider/);
+
+		const authenticationPaths = [
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'mainThreadAuthentication.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHostAuthentication.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'authentication', 'common', 'authentication.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'authentication', 'browser', 'authenticationService.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'authentication', 'browser', 'authentication.contribution.ts')
+		];
+		const authenticationSources = authenticationPaths.map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		assert.doesNotMatch(authenticationSources, /(?:chat|agent|copilot|language.?model|mcp|defaultAccount|entitlement|quota|sku|tracking.?id)/i);
+		assert.match(authenticationSources, /registerAuthenticationProvider/);
+
+		for (const removedPath of [
+			path.join(repositoryRoot, 'src', 'vs', 'base', 'common', 'defaultAccount.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'defaultAccount'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'policies', 'browser', 'accountPolicyGate.contribution.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'policy', 'common', 'copilotManagedSettings.ts')
+		]) {
+			const remainingFiles = !fs.existsSync(removedPath)
+				? []
+				: fs.statSync(removedPath).isDirectory()
+					? fs.readdirSync(removedPath, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile())
+					: [removedPath];
+			assert.deepStrictEqual(remainingFiles, [], `AI account implementation remains: ${removedPath}`);
+		}
+	});
+
+	test('keeps ordinary Browser View access without extraction or automation channels', () => {
+		const desktopWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'), 'utf8');
+		assert.match(desktopWorkbench, /contrib\/browserView\/electron-browser\/browserView\.contribution\.js/);
+		const appSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
+		assert.match(appSource, /BrowserViewMainService/);
+		assert.match(appSource, /ipcBrowserViewChannelName/);
+
+		for (const ordinaryBrowserFeature of [
+			'browserNavigationFeatures.ts',
+			'browserHistoryFeature.ts',
+			'browserFavoritesFeature.ts',
+			'browserPermissionsFeature.ts',
+			'browserEditorFindFeature.ts',
+			'browserEditorZoomFeature.ts',
+			'browserDevToolsFeature.ts'
+		]) {
+			assert.ok(fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'browserView', 'electron-browser', 'features', ordinaryBrowserFeature)));
+		}
+
+		for (const removedAutomationPath of [
+			path.join(repositoryRoot, 'src', 'vscode-dts', 'vscode.proposed.browser.d.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'mainThreadBrowsers.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHostBrowsers.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'browserView', 'common', 'playwrightService.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'browserView', 'node', 'playwrightService.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'browserView', 'node', 'playwrightChannel.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'browserView', 'common', 'browserViewGroup.ts')
+		]) {
+			assert.ok(!fs.existsSync(removedAutomationPath), `Browser automation entry remains: ${removedAutomationPath}`);
+		}
+
+		const browserSources = [
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHost.protocol.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'extensionHost.contribution.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts')
+		].map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		assert.doesNotMatch(browserSources, /MainThreadBrowsers|ExtHostBrowsers|IBrowserViewCDPService|browserViewGroup|startCDPSession/);
+	});
+
+	test('keeps generic assignment and Notebook diagnostics without AI actions', () => {
+		const commonWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		assert.match(commonWorkbench, /services\/assignment\/common\/assignmentService\.js/);
+
+		const assignmentService = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'assignment', 'common', 'assignmentService.ts'), 'utf8');
+		assert.match(assignmentService, /class WorkbenchAssignmentService/);
+		assert.doesNotMatch(assignmentService, /CopilotAssignmentFilterProvider|defaultAccount|chatEntitlement/);
+
+		const sourceTsconfig = fs.readFileSync(path.join(repositoryRoot, 'src', 'tsconfig.json'), 'utf8');
+		assert.match(sourceTsconfig, /vs\/workbench\/services\/assignment\/common\/assignmentFilters\.ts/);
+		assert.doesNotMatch(sourceTsconfig, /vs\/workbench\/services\/assignment\/\*\*/);
+		assert.doesNotMatch(sourceTsconfig, /contrib\/notebook\/browser\/contrib\/cellDiagnostics\/\*\*/);
+
+		const notebookContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'notebook.contribution.ts'), 'utf8');
+		assert.match(notebookContribution, /contrib\/cellDiagnostics\/cellDiagnostics\.js/);
+		assert.match(notebookContribution, /\[NotebookSetting\.cellFailureDiagnostics\][\s\S]*default: true/);
+
+		const diagnosticsRoot = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'contrib', 'cellDiagnostics');
+		const diagnosticsSource = [
+			'cellDiagnosticEditorContrib.ts',
+			'cellDiagnosticsActions.ts',
+			'diagnosticCellStatusBarContrib.ts'
+		].map(file => fs.readFileSync(path.join(diagnosticsRoot, file), 'utf8')).join('\n');
+		assert.match(diagnosticsSource, /markerService\.changeOne/);
+		assert.match(diagnosticsSource, /CodeActionController\.get/);
+		assert.doesNotMatch(diagnosticsSource, /IChatAgentService|InlineChatController|IChatWidgetService|notebook\.cell\.chat\./);
+
+		const standaloneStrings = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'editor', 'common', 'standaloneStrings.ts'), 'utf8');
+		const editorAccessibilityHelp = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'accessibility', 'browser', 'editorAccessibilityHelp.ts'), 'utf8');
+		assert.doesNotMatch(standaloneStrings, /debug\.startDebugging|debugConsole\.(?:setBreakpoint|addToWatch|executeSelection)/);
+		assert.doesNotMatch(editorAccessibilityHelp, /AccessibilityHelpNLS\.(?:startDebugging|setBreakpoint|addToWatch|debugExecuteSelection)/);
+	});
+
+	test('keeps ordinary Images Preview without Chat integration', () => {
+		const commonWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		assert.match(commonWorkbench, /contrib\/imageCarousel\/browser\/imageCarousel\.contribution\.js/);
+
+		const sourceTsconfig = fs.readFileSync(path.join(repositoryRoot, 'src', 'tsconfig.json'), 'utf8');
+		assert.doesNotMatch(sourceTsconfig, /vs\/workbench\/contrib\/imageCarousel\/\*\*/);
+		assert.doesNotMatch(sourceTsconfig, /componentFixtures\/imageCarousel\.fixture\.ts/);
+
+		const contributionSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'imageCarousel', 'browser', 'imageCarousel.contribution.ts'), 'utf8');
+		assert.match(contributionSource, /workbench\.action\.openImagesInCarousel/);
+		assert.match(contributionSource, /imageCarousel\.explorerContextMenu\.enabled/);
+		assert.doesNotMatch(contributionSource, /workbench\.action\.chat|imageCarousel\.chat\.enabled/);
+	});
+
+	test('keeps ordinary terminal shell identification without Agent CLI branding', () => {
+		const shellTypes = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'terminal', 'common', 'terminal.ts'), 'utf8');
+		const windowsShellHelper = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'terminal', 'node', 'windowsShellHelper.ts'), 'utf8');
+		for (const retainedShell of ['PowerShell', 'Python', 'Julia', 'Node', 'NuShell', 'Xonsh']) {
+			assert.match(shellTypes, new RegExp(`\\b${retainedShell}\\s*=`), `Missing ordinary shell type: ${retainedShell}`);
+		}
+		for (const retainedExecutable of ['cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'git-cmd.exe', 'python', 'wsl.exe']) {
+			assert.ok(windowsShellHelper.includes(retainedExecutable), `Missing ordinary Windows shell identification: ${retainedExecutable}`);
+		}
+		assert.doesNotMatch(shellTypes, /\b(?:Claude|Codex|CommandCode|Copilot|Gemini)\s*=/);
+		assert.doesNotMatch(windowsShellHelper, /(?:claude|codex|commandcode|copilot|gemini)\.exe/);
+	});
+
 	test('uses only Open VSX and protects the complete BeCoder core set', () => {
 		const productPath = path.join(repositoryRoot, 'product.json');
 		const productText = fs.readFileSync(productPath, 'utf8');
@@ -110,20 +424,78 @@ suite('OI extension boundary', () => {
 		}
 
 		const extensionBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'extensions.ts'), 'utf8');
-		assert.match(extensionBuildSource, /excludedForOIDistribution[\s\S]*'mermaid-markdown-features'/);
+		const excludedExtensions = /export const excludedForOIDistribution = new Set\(\[([\s\S]*?)\n\]\);/.exec(extensionBuildSource)?.[1] ?? '';
+		assert.doesNotMatch(excludedExtensions, /'mermaid-markdown-features'/);
 		const packageBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
 		assert.match(packageBuildSource, /const beCoderOnboarding = gulp\.src\(\[[\s\S]*'resources\/oi-defaults\/\*\*',[\s\S]*'!resources\/oi-defaults\/portable-data\/\*\*'[\s\S]*\], \{ base: '\.' \}\);/);
 		assert.match(packageBuildSource, /const beCoderRecipeDotfiles = gulp\.src\('resources\/oi-defaults\/toolchains\/ucrt64-sources\/recipes\/\*\*\/\.gitignore', \{ base: '\.', dot: true \}\);/);
 
 		const gallerySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'common', 'extensionGalleryService.ts'), 'utf8');
-		assert.match(gallerySource, /defaultChatAgentExtensionId = this\.productService\.defaultChatAgent\?\.extensionId/);
-		assert.match(gallerySource, /if \(defaultChatAgent\) \{[\s\S]*deprecated\[defaultChatAgent\.extensionId\.toLowerCase\(\)\]/);
 		assert.match(gallerySource, /countMatchingProtectedExtensions[\s\S]*createFilteredExtensionPager/);
 		assert.match(gallerySource, /private async getVersions[\s\S]*isProtectedExtensionId\(extensionIdentifier\.id/);
 		assert.match(gallerySource, /private async getAsset[\s\S]*Gallery resources are unavailable for protected BeCoder extension/);
 
 		const extensionManagementSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'node', 'extensionManagementService.ts'), 'utf8');
 		assert.match(extensionManagementSource, /installExtensionsFromProfile[\s\S]*allowedExtensionsService\.isAllowed\(extension\)[\s\S]*addExtensionsToProfile/);
+	});
+
+	test('bundles Mermaid Markdown and Notebook rendering without Chat output integration', () => {
+		const extensionPath = path.join(extensionsRoot, 'mermaid-markdown-features');
+		const manifest = readJson<{
+			publisher?: string;
+			name?: string;
+			enabledApiProposals?: readonly string[];
+			contributes?: {
+				commands?: readonly { command?: string }[];
+				menus?: Record<string, readonly { when?: string }[]>;
+				'markdown.previewScripts'?: readonly { path?: string }[];
+				notebookRenderer?: readonly { entrypoint?: { path?: string } }[];
+				'markdown.markdownItPlugins'?: boolean;
+				chatOutputRenderers?: unknown;
+			};
+		}>(path.join(extensionPath, 'package.json'));
+		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'vscode.mermaid-markdown-features');
+		assert.deepStrictEqual(manifest.enabledApiProposals, undefined);
+		assert.strictEqual(manifest.contributes?.chatOutputRenderers, undefined);
+		assert.deepStrictEqual(manifest.contributes?.['markdown.previewScripts']?.map(item => item.path), ['./markdown-preview-out/index.js']);
+		assert.deepStrictEqual(manifest.contributes?.notebookRenderer?.map(item => item.entrypoint?.path), ['./notebook-out/index.js']);
+		assert.strictEqual(manifest.contributes?.['markdown.markdownItPlugins'], true);
+		assert.ok(manifest.contributes?.commands?.some(command => command.command === '_mermaid-markdown.openInEditor'));
+		for (const menu of Object.values(manifest.contributes?.menus ?? {})) {
+			for (const item of menu) {
+				assert.doesNotMatch(item.when ?? '', /chatOutputItem/);
+			}
+		}
+
+		const extensionSource = fs.readFileSync(path.join(extensionPath, 'src', 'extension.ts'), 'utf8');
+		const editorSource = fs.readFileSync(path.join(extensionPath, 'src', 'editorManager.ts'), 'utf8');
+		const webviewBuild = fs.readFileSync(path.join(extensionPath, 'esbuild.webview.mts'), 'utf8');
+		const gitIgnore = fs.readFileSync(path.join(extensionPath, '.gitignore'), 'utf8');
+		const renderingSource = fs.readFileSync(path.join(extensionPath, 'preview-src', 'shared', 'index.ts'), 'utf8');
+		const combinedSource = `${extensionSource}\n${editorSource}\n${webviewBuild}`;
+		assert.doesNotMatch(combinedSource, /registerChatOutputRenderer|text\/vnd\.mermaid|ChatOutputDataItem|LanguageModelTextPart|LanguageModelToolResult|chat-webview-out|preview-src[\\/]chat/);
+		assert.match(extensionSource, /extendMarkdownItWithMermaid/);
+		assert.match(editorSource, /diagram-preview-out/);
+		assert.match(webviewBuild, /diagram-preview-out/);
+		assert.match(webviewBuild, /markdown-preview-out/);
+		assert.match(webviewBuild, /notebook-out/);
+		assert.match(gitIgnore, /^diagram-preview-out$/m);
+		assert.doesNotMatch(gitIgnore, /^chat-webview-out$/m);
+		assert.match(renderingSource, /createMermaidErrorElement/);
+		assert.match(renderingSource, /function isAbortError\(error: unknown\)/);
+		assert.match(renderingSource, /if \(isAbortError\(error\)\) \{\s*throw error;\s*\}[\s\S]*markVsCodeContextAsError\(mermaidContainer\);[\s\S]*writeOut\(mermaidContainer, createMermaidErrorElement\(error\)\.outerHTML, true\);/);
+		assert.match(renderingSource, /renderMermaidBlocksInElement/);
+		assert.ok(!fs.existsSync(path.join(extensionPath, 'src', 'chatOutputRenderer.ts')));
+		assert.ok(!fs.existsSync(path.join(extensionPath, 'preview-src', 'chat')));
+		for (const retainedPath of [
+			'preview-src/diagram-preview/index.ts',
+			'preview-src/diagram-preview/mermaidWebview.ts',
+			'preview-src/markdown/index.ts',
+			'preview-src/notebook/index.ts',
+			'ThirdPartyNotices.txt'
+		]) {
+			assert.ok(fs.existsSync(path.join(extensionPath, retainedPath)), `Missing retained Mermaid component: ${retainedPath}`);
+		}
 	});
 
 	test('pins bundled component licenses and toolchain provenance', () => {
@@ -143,6 +515,7 @@ suite('OI extension boundary', () => {
 				archiveLicenseEntry?: string;
 				packageInventory?: string;
 				correspondingSource?: string;
+				thirdPartyNoticesPath?: string;
 			}[];
 		}>(path.join(repositoryRoot, 'resources', 'oi-defaults', 'BUNDLED-COMPONENTS.json'));
 		const components = inventory.components ?? [];
@@ -155,6 +528,7 @@ suite('OI extension boundary', () => {
 			'adpyke.codesnap',
 			'becoder.one-monokai',
 			'vscode.cpp',
+			'vscode.mermaid-markdown-features',
 			'ms-ceintl.vscode-language-pack-zh-hans',
 			'clangd-windows',
 			'becoder-ucrt64'
@@ -176,20 +550,71 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
 		assert.ok(ucrt64?.correspondingSource);
 		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
+		const mermaid = components.find(component => component.id === 'vscode.mermaid-markdown-features');
+		assert.strictEqual(mermaid?.version, '10.0.0');
+		assert.strictEqual(mermaid?.licensePath, 'licenses/MIT-VSCode.txt');
+		assert.strictEqual(mermaid?.thirdPartyNoticesPath, 'extensions/mermaid-markdown-features/ThirdPartyNotices.txt');
+		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, 'b673f15a9e308edca466da2b3fce216b13a855a852cdfa91288b2c0d7b5ace1e');
+		assert.strictEqual(languagePack?.contentSha256, 'df9c4b94d2343c583b68688139af11bed5ea375b3a86bec036aabb4f8ef763f8');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, 'a9fabbecb50d14fb17abb91dd8905c7ba4e459247d910ad79da537fe5a914426');
+		assert.strictEqual(languagePack?.packagedContentSha256, 'f892bef137c2210f0468b1f820be21a977ba60c0c7cbbb75ba96a6e500004f14');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
 		), languagePack?.packagedContentSha256);
 		const gitAttributes = fs.readFileSync(path.join(repositoryRoot, '.gitattributes'), 'utf8');
 		assert.match(gitAttributes, /^extensions\/MS-CEINTL\.vscode-language-pack-zh-hans\/\*\* -text whitespace=-trailing-space$/m);
-		const languagePackManifest = readJson<{ version?: string; engines?: { vscode?: string } }>(path.join(repositoryRoot, 'extensions', 'MS-CEINTL.vscode-language-pack-zh-hans', 'package.json'));
+		const languagePackManifest = readJson<{
+			version?: string;
+			engines?: { vscode?: string };
+			contributes?: { localizations?: readonly { translations?: readonly { id?: string; path?: string }[] }[] };
+		}>(path.join(repositoryRoot, 'extensions', 'MS-CEINTL.vscode-language-pack-zh-hans', 'package.json'));
 		assert.strictEqual(languagePackManifest.version, languagePack?.version);
 		assert.strictEqual(languagePackManifest.engines?.vscode, '^1.130.0');
+		const languagePackTranslations = languagePackManifest.contributes?.localizations?.flatMap(localization => localization.translations ?? []) ?? [];
+		for (const removedTranslationId of [
+			'ms-vscode.js-debug',
+			'vscode.debug-auto-launch',
+			'vscode.debug-server-ready',
+			'vscode.mermaid-chat-features',
+			'vscode.prompt'
+		]) {
+			assert.ok(!languagePackTranslations.some(translation => translation.id === removedTranslationId), `Unsupported language-pack contribution remains: ${removedTranslationId}`);
+			assert.ok(!fs.existsSync(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans', 'translations', 'extensions', `${removedTranslationId}.i18n.json`)), `Unsupported language-pack translation remains: ${removedTranslationId}`);
+		}
+		assert.ok(languagePackTranslations.some(translation => translation.id === 'vscode.mermaid-markdown-features'));
+		assert.ok(fs.existsSync(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans', 'translations', 'extensions', 'vscode.mermaid-markdown-features.i18n.json')));
+		const mainTranslation = readJson<{ contents?: Record<string, Record<string, string>> }>(
+			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans', 'translations', 'main.i18n.json'));
+		const translatedModules = Object.keys(mainTranslation.contents ?? {});
+		for (const forbiddenModulePattern of [
+			/^vs\/sessions\//,
+			/^vs\/platform\/(?:agentHost|agentPlugins|defaultAccount|localTranscription|mcp|networkFilter|otel|sandbox|webContentExtractor)\//,
+			/^vs\/workbench\/contrib\/(?:agentsVoice|chat|debug|editTelemetry|inlineChat|mcp|remoteCodingAgents|replNotebook|welcomeAgentSessions|welcomeOnboarding)\//,
+			/^vs\/workbench\/services\/(?:agentHost|aiEmbeddingVector|aiRelatedInformation|aiSettingsSearch|chat|mcp)\//,
+			/(?:^|\/)(?:mainThread|extHost)(?:Agent|Ai|Chat|CodeMapper|Debug|Embedding|LanguageModel|Mcp)/i
+		]) {
+			assert.ok(!translatedModules.some(moduleName => forbiddenModulePattern.test(moduleName)), `Unsupported language-pack module remains: ${forbiddenModulePattern}`);
+		}
+		const imageCarouselTranslations = mainTranslation.contents?.['vs/workbench/contrib/imageCarousel/browser/imageCarousel.contribution'] ?? {};
+		assert.strictEqual(imageCarouselTranslations.openImagesInCarousel, '\u5728\u56fe\u50cf\u9884\u89c8\u4e2d\u6253\u5f00');
+		assert.ok(!('imageCarousel.chat.enabled' in imageCarouselTranslations));
+		assert.ok(!('openImageInCarousel' in imageCarouselTranslations));
+		const packageVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
+		const languagePackVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-language-pack.ts'), 'utf8');
+		assert.match(packageVerifier, /verify-becoder-language-pack\.ts/);
+		assert.doesNotMatch(packageVerifier, /main\.i18n\.json'\) -Raw[^\n]*ConvertFrom-Json/);
+		assert.match(languagePackVerifier, /Object\.hasOwn\(imageCarouselTranslations, 'imageCarousel\.chat\.enabled'\)/);
+		const authenticationTranslations = mainTranslation.contents?.['vs/workbench/api/browser/mainThreadAuthentication'] ?? {};
+		for (const removedAuthenticationKey of ['xaaResourceSecretPlaceholder', 'xaaResourceSecretPrompt', 'xaaResourceSecretTitle']) {
+			assert.ok(!(removedAuthenticationKey in authenticationTranslations), `MCP-specific authentication translation remains: ${removedAuthenticationKey}`);
+		}
+		assert.strictEqual(
+			mainTranslation.contents?.['vs/workbench/contrib/issue/browser/baseIssueReporterService']?.internalPreviewMessage,
+			'\u5982\u679c\u8bca\u65ad\u65e5\u5fd7\u5305\u542b\u79c1\u4eba\u4fe1\u606f\uff1a'
+		);
 
 		const packages = readJson<{
 			archiveSha256?: string;
@@ -240,6 +665,7 @@ suite('OI extension boundary', () => {
 		const notices = fs.readFileSync(path.join(repositoryRoot, 'ThirdPartyNotices.txt'), 'utf8');
 		assert.match(notices, /BeCoder Runner 0\.3\.0/);
 		assert.match(notices, /CodeSnap 1\.3\.4[\s\S]*Copyright \(c\) 2019 Adrien Pyke/);
+		assert.match(notices, /Mermaid Markdown Features 10\.0\.0[\s\S]*extensions\/mermaid-markdown-features\/ThirdPartyNotices\.txt/);
 		assert.match(notices, /clangd 22\.1\.6 Windows binary bundle/);
 		assert.match(notices, /BeCoder UCRT64 GCC 14\.1\.0 bundle/);
 	});
@@ -358,9 +784,6 @@ suite('OI extension boundary', () => {
 			path.join(repositoryRoot, 'product.json'));
 		assert.ok(product.onboardingThemes?.some(theme =>
 			theme.id === 'becoder-one-monokai' && theme.themeId === 'BeCoder One Monokai'));
-		const onboardingSource = fs.readFileSync(
-			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeOnboarding', 'browser', 'onboardingVariationA.ts'), 'utf8');
-		assert.match(onboardingSource, /selectedThemeId = 'becoder-one-monokai'/);
 	});
 
 	test('keeps clangd inside the approved Stage 4.1 capability boundary', () => {

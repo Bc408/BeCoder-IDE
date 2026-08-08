@@ -20,10 +20,8 @@ import { ACTIVE_GROUP, AUX_WINDOW_GROUP, SIDE_GROUP } from '../../../services/ed
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { HasSpeechProvider } from '../../speech/common/speechService.js';
 import { hasKey } from '../../../../base/common/types.js';
-import { TerminalContribContextKeyStrings } from '../terminalContribExports.js';
 
 export const enum TerminalContextMenuGroup {
-	Chat = '0_chat',
 	Create = '1_create',
 	Edit = '3_edit',
 	Clear = '5_clear',
@@ -411,7 +409,6 @@ export function setupTerminalMenus(): void {
 					group: 'navigation',
 					order: 0,
 					when: ContextKeyExpr.and(
-						ContextKeyExpr.not(TerminalContribContextKeyStrings.ChatHasHiddenTerminals),
 						ContextKeyExpr.equals('view', TERMINAL_VIEW_ID),
 						ContextKeyExpr.has(`config.${TerminalSettingId.TabsEnabled}`),
 						ContextKeyExpr.or(
@@ -788,8 +785,6 @@ export function getTerminalActionBarArgs(location: ITerminalLocationOptions, pro
 	dropdownIcon?: string;
 } {
 	profiles = profiles.filter(e => !e.isAutoDetected);
-	const [aiProfiles, otherProfiles] = splitProfiles(profiles);
-	const [aiContributedProfiles, otherContributedProfiles] = splitContributedProfiles(contributedProfiles);
 	const dropdownActions: IAction[] = [];
 	const submenuActions: IAction[] = [];
 	const splitLocation = (location === TerminalLocation.Editor || (typeof location === 'object' && hasKey(location, { viewColumn: true }) && location.viewColumn === ACTIVE_GROUP)) ? { viewColumn: SIDE_GROUP } : { splitActiveTerminal: true };
@@ -809,21 +804,11 @@ export function getTerminalActionBarArgs(location: ITerminalLocationOptions, pro
 		location: splitLocation
 	}))));
 	dropdownActions.push(new Separator());
-	for (const p of aiProfiles) {
-		addProfileActions(p, defaultProfileName, location, splitLocation, terminalService, dropdownActions, submenuActions, disposableStore);
-	}
-	for (const contributed of aiContributedProfiles) {
-		addContributedProfileActions(contributed, defaultProfileName, location, splitLocation, terminalService, dropdownActions, submenuActions, disposableStore);
-	}
-	if ((aiProfiles.length > 0 || aiContributedProfiles.length > 0) && (otherProfiles.length > 0 || otherContributedProfiles.length > 0)) {
-		dropdownActions.push(new Separator());
-	}
-
-	for (const p of otherProfiles) {
+	for (const p of profiles) {
 		addProfileActions(p, defaultProfileName, location, splitLocation, terminalService, dropdownActions, submenuActions, disposableStore);
 	}
 
-	for (const contributed of otherContributedProfiles) {
+	for (const contributed of contributedProfiles) {
 		addContributedProfileActions(contributed, defaultProfileName, location, splitLocation, terminalService, dropdownActions, submenuActions, disposableStore);
 	}
 
@@ -836,46 +821,6 @@ export function getTerminalActionBarArgs(location: ITerminalLocationOptions, pro
 
 	const dropdownAction = disposableStore.add(new Action('refresh profiles', localize('launchProfile', 'Launch Profile...'), 'codicon-chevron-down', true));
 	return { dropdownAction, dropdownMenuActions: dropdownActions, className: `terminal-tab-actions-${terminalService.resolveLocation(location)}` };
-}
-
-function splitProfiles(profiles: readonly ITerminalProfile[]): [ITerminalProfile[], ITerminalProfile[]] {
-	const aiProfiles: ITerminalProfile[] = [];
-	const otherProfiles: ITerminalProfile[] = [];
-	for (const profile of profiles) {
-		if (isAiProfileName(profile.profileName)) {
-			aiProfiles.push(profile);
-		} else {
-			otherProfiles.push(profile);
-		}
-	}
-	return [aiProfiles, otherProfiles];
-}
-
-function splitContributedProfiles(contributedProfiles: readonly IExtensionTerminalProfile[]): [IExtensionTerminalProfile[], IExtensionTerminalProfile[]] {
-	const aiContributedProfiles: IExtensionTerminalProfile[] = [];
-	const otherContributedProfiles: IExtensionTerminalProfile[] = [];
-	for (const profile of contributedProfiles) {
-		if (isAiContributedProfile(profile)) {
-			aiContributedProfiles.push(profile);
-		} else {
-			otherContributedProfiles.push(profile);
-		}
-	}
-	return [aiContributedProfiles, otherContributedProfiles];
-}
-
-function isAiContributedProfile(profile: IExtensionTerminalProfile): boolean {
-	const extensionIdentifier = profile.extensionIdentifier.toLowerCase();
-	if (extensionIdentifier === 'github.copilot-chat' || extensionIdentifier === 'anthropic.claude-code') {
-		return true;
-	}
-
-	return isAiProfileName(profile.title);
-}
-
-function isAiProfileName(name: string): boolean {
-	const lowerCaseName = name.toLowerCase();
-	return lowerCaseName.includes('copilot') || lowerCaseName.includes('claude');
 }
 
 function addProfileActions(

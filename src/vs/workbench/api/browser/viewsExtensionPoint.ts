@@ -22,7 +22,6 @@ import { CustomTreeView, TreeViewPane } from '../../browser/parts/views/treeView
 import { ViewPaneContainer } from '../../browser/parts/views/viewPaneContainer.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../common/contributions.js';
 import { ICustomViewDescriptor, IViewContainersRegistry, IViewDescriptor, IViewsRegistry, ViewContainer, Extensions as ViewContainerExtensions, ViewContainerLocation } from '../../common/views.js';
-import { VIEWLET_ID as DEBUG } from '../../contrib/debug/common/debug.js';
 import { VIEWLET_ID as EXPLORER } from '../../contrib/files/common/files.js';
 import { VIEWLET_ID as REMOTE } from '../../contrib/remote/browser/remoteExplorer.js';
 import { VIEWLET_ID as SCM } from '../../contrib/scm/common/scm.js';
@@ -160,7 +159,7 @@ const viewDescriptor: IJSONSchema = {
 			],
 			default: 'visible',
 			enumDescriptions: [
-				localize('vscode.extension.contributes.view.initialState.visible', "The default initial state for the view. In most containers the view will be expanded, however; some built-in containers (explorer, scm, and debug) show all contributed views collapsed regardless of the `visibility`."),
+				localize('vscode.extension.contributes.view.initialState.visible', "The default initial state for the view. In most containers the view will be expanded, however; some built-in containers (explorer and scm) show all contributed views collapsed regardless of the `visibility`."),
 				localize('vscode.extension.contributes.view.initialState.hidden', "The view will not be shown in the view container, but will be discoverable through the views menu and other view entry points and can be un-hidden by the user."),
 				localize('vscode.extension.contributes.view.initialState.collapsed', "The view will show in the view container, but will be collapsed.")
 			]
@@ -211,12 +210,6 @@ const viewsContribution: IJSONSchema = {
 	properties: {
 		'explorer': {
 			description: localize('views.explorer', "Contributes views to Explorer container in the Activity bar"),
-			type: 'array',
-			items: viewDescriptor,
-			default: []
-		},
-		'debug': {
-			description: localize('views.debug', "Contributes views to Debug container in the Activity bar"),
 			type: 'array',
 			items: viewDescriptor,
 			default: []
@@ -306,8 +299,7 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 		const viewContainersRegistry = Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry);
 		let activityBarOrder = CUSTOM_VIEWS_START_ORDER + viewContainersRegistry.all.filter(v => !!v.extensionId && viewContainersRegistry.getViewContainerLocation(v) === ViewContainerLocation.Sidebar).length;
 		let panelOrder = 5 + viewContainersRegistry.all.filter(v => !!v.extensionId && viewContainersRegistry.getViewContainerLocation(v) === ViewContainerLocation.Panel).length + 1;
-		// offset by 100 because the chat view container used to have order 100 (now 1). Due to caching, we still need to account for the original order value
-		let auxiliaryBarOrder = 100 + viewContainersRegistry.all.filter(v => !!v.extensionId && viewContainersRegistry.getViewContainerLocation(v) === ViewContainerLocation.AuxiliaryBar).length + 1;
+		let auxiliaryBarOrder = CUSTOM_VIEWS_START_ORDER + viewContainersRegistry.all.filter(v => !!v.extensionId && viewContainersRegistry.getViewContainerLocation(v) === ViewContainerLocation.AuxiliaryBar).length;
 		for (const { value, collector, description } of extensionPoints) {
 			Object.entries(value).forEach(([key, value]) => {
 				if (!this.isValidViewsContainer(value, collector)) {
@@ -453,11 +445,6 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 
 				if (key === 'remote' && !isProposedApiEnabled(extension.description, 'contribViewsRemote')) {
 					collector.warn(localize('ViewContainerRequiresProposedAPI', "View container '{0}' requires 'enabledApiProposals: [\"contribViewsRemote\"]' to be added to 'Remote'.", key));
-					return;
-				}
-
-				if (key === 'agentSessions' && !isProposedApiEnabled(extension.description, 'chatSessionsProvider')) {
-					collector.warn(localize('RequiresChatSessionsProposedAPI', "View container '{0}' requires 'enabledApiProposals: [\"chatSessionsProvider\"]'.", key));
 					return;
 				}
 
@@ -627,7 +614,6 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 	private getViewContainer(value: string): ViewContainer | undefined {
 		switch (value) {
 			case 'explorer': return this.viewContainersRegistry.get(EXPLORER);
-			case 'debug': return this.viewContainersRegistry.get(DEBUG);
 			case 'scm': return this.viewContainersRegistry.get(SCM);
 			case 'remote': return this.viewContainersRegistry.get(REMOTE);
 			default: return this.viewContainersRegistry.get(`workbench.view.extension.${value}`);
@@ -638,7 +624,6 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 		switch (container.id) {
 			case EXPLORER:
 			case SCM:
-			case DEBUG:
 				return true;
 		}
 		return false;

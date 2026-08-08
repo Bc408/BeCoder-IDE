@@ -22,7 +22,6 @@ import { createRegExp, escapeRegExpCharacters } from '../../base/common/strings.
 import { URI } from '../../base/common/uri.js';
 import { generateUuid } from '../../base/common/uuid.js';
 import { getOSReleaseInfo } from '../../base/node/osReleaseInfo.js';
-import { findFreePort } from '../../base/node/ports.js';
 import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
 import { PersistentProtocol } from '../../base/parts/ipc/common/ipc.net.js';
 import { NodeSocket, upgradeToISocket, WebSocketNodeSocket } from '../../base/parts/ipc/node/ipc.net.js';
@@ -434,12 +433,7 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		} else if (msg.desiredConnectionType === ConnectionType.ExtensionHost) {
 
 			// This should become an extension host connection
-			const startParams0 = <IRemoteExtensionHostStartParams>msg.args || { language: 'en' };
-			const startParams = await this._updateWithFreeDebugPort(startParams0);
-
-			if (startParams.port) {
-				this._logService.trace(`${logPrefix} - startParams debug port ${startParams.port}`);
-			}
+			const startParams = <IRemoteExtensionHostStartParams>msg.args || { language: 'en' };
 			this._logService.trace(`${logPrefix} - startParams language: ${startParams.language}`);
 			this._logService.trace(`${logPrefix} - startParams env: ${JSON.stringify(startParams.env)}`);
 
@@ -456,7 +450,7 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 				}
 
 				protocol.sendPause();
-				protocol.sendControl(VSBuffer.fromString(JSON.stringify(startParams.port ? { debugPort: startParams.port } : {})));
+				protocol.sendControl(VSBuffer.fromString('{}'));
 				const dataChunk = protocol.readEntireBuffer();
 				protocol.dispose();
 				this._extHostConnections[reconnectionToken].acceptReconnection(remoteAddress, socket, dataChunk);
@@ -469,7 +463,7 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 				}
 
 				protocol.sendPause();
-				protocol.sendControl(VSBuffer.fromString(JSON.stringify(startParams.port ? { debugPort: startParams.port } : {})));
+				protocol.sendControl(VSBuffer.fromString('{}'));
 				const dataChunk = protocol.readEntireBuffer();
 				protocol.dispose();
 				const con = this._instantiationService.createInstance(ExtensionHostConnection, reconnectionToken, remoteAddress, socket, dataChunk);
@@ -559,19 +553,6 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		});
 	}
 
-	private _updateWithFreeDebugPort(startParams: IRemoteExtensionHostStartParams): Thenable<IRemoteExtensionHostStartParams> {
-		if (typeof startParams.port === 'number') {
-			return findFreePort(startParams.port, 10 /* try 10 ports */, 5000 /* try up to 5 seconds */).then(freePort => {
-				startParams.port = freePort;
-				return startParams;
-			});
-		}
-		// No port clear debug configuration.
-		startParams.debugId = undefined;
-		startParams.port = undefined;
-		startParams.break = undefined;
-		return Promise.resolve(startParams);
-	}
 }
 
 export interface IServerAPI {

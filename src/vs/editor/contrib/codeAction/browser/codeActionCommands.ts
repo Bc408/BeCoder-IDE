@@ -12,7 +12,6 @@ import { EditorAction, EditorAction2, EditorCommand, ServicesAccessor } from '..
 import { EditorContextKeys } from '../../../common/editorContextKeys.js';
 import { autoFixCommandId, codeActionCommandId, fixAllCommandId, organizeImportsCommandId, quickFixCommandId, refactorCommandId, sourceActionCommandId } from './codeAction.js';
 import * as nls from '../../../../nls.js';
-import { MenuId } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { CodeActionAutoApply, CodeActionCommandArgs, CodeActionFilter, CodeActionKind, CodeActionTriggerSource } from '../common/types.js';
@@ -79,12 +78,6 @@ export class QuickFixAction extends EditorAction2 {
 				when: EditorContextKeys.textInputFocus,
 				primary: KeyMod.CtrlCmd | KeyCode.Period,
 				weight: KeybindingWeight.EditorContrib
-			},
-			menu: {
-				id: MenuId.InlineChatEditorAffordance,
-				group: '1_quickfix',
-				order: 0,
-				when: ContextKeyExpr.and(EditorContextKeys.writable, EditorContextKeys.hasCodeActionsProvider)
 			}
 		});
 	}

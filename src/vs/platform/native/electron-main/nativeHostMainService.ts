@@ -15,7 +15,7 @@ import { matchesSomeScheme, Schemas } from '../../../base/common/network.js';
 import { dirname, join, posix, resolve, win32 } from '../../../base/common/path.js';
 import { isLinux, isMacintosh, isWindows } from '../../../base/common/platform.js';
 import { AddFirstParameterToFunctions, hasKey } from '../../../base/common/types.js';
-import { URI, UriComponents } from '../../../base/common/uri.js';
+import { URI } from '../../../base/common/uri.js';
 import { virtualMachineHint } from '../../../base/node/id.js';
 import { Promises, SymlinkSupport } from '../../../base/node/pfs.js';
 import { findFreePort, isPortFree } from '../../../base/node/ports.js';
@@ -49,7 +49,7 @@ import { IConfigurationService } from '../../configuration/common/configuration.
 import { IProxyAuthService } from './auth.js';
 import { AuthInfo, Credentials, IRequestService } from '../../request/common/request.js';
 import { randomPath } from '../../../base/common/extpath.js';
-import { CancellationToken, CancellationTokenSource } from '../../../base/common/cancellation.js';
+import { CancellationTokenSource } from '../../../base/common/cancellation.js';
 
 export interface INativeHostMainService extends AddFirstParameterToFunctions<ICommonNativeHostService, Promise<unknown> /* only methods, not events */, number | undefined /* window ID */> { }
 
@@ -277,7 +277,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 
 	private async doOpenWindow(windowId: number | undefined, toOpen: IWindowOpenable[], options: IOpenWindowOptions = Object.create(null)): Promise<void> {
 		if (toOpen.length > 0) {
-			const windows = await this.windowsMainService.open({
+			await this.windowsMainService.open({
 				context: OpenContext.API,
 				contextWindowId: windowId,
 				urisToOpen: toOpen,
@@ -296,15 +296,6 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 				forceProfile: options.forceProfile,
 				forceTempProfile: options.forceTempProfile,
 			});
-
-			// Hand off a chat session to the opened window so it restores both the
-			// folder and the session (e.g. the Agents window "Open in VS Code" flow).
-			// Only meaningful when exactly one window is opened so the session is
-			// not sent to an ambiguous target.
-			const chatSessionToOpen = options.chatSessionToOpen;
-			if (chatSessionToOpen && windows.length === 1) {
-				windows[0].sendWhenReady('vscode:openChatSession', CancellationToken.None, URI.revive(chatSessionToOpen).toString());
-			}
 		}
 	}
 
@@ -313,17 +304,6 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 			context: OpenContext.API,
 			contextWindowId: windowId
 		}, options);
-	}
-
-	async openAgentsWindow(windowId: number | undefined, options?: { folderUri?: UriComponents; sessionResource?: UriComponents }): Promise<void> {
-		const windows = await this.windowsMainService.openAgentsWindow({
-			context: OpenContext.API,
-			contextWindowId: windowId,
-			cli: this.environmentMainService.args,
-		}, options?.folderUri ? URI.revive(options.folderUri) : undefined, options?.sessionResource ? URI.revive(options.sessionResource) : undefined);
-		if (windows.length > 0) {
-			windows[0].focus();
-		}
 	}
 
 	async syncSystemWideKeybindings(windowId: number | undefined, keybindings: INativeSystemWideKeybinding[]): Promise<INativeSystemWideKeybindingResult> {

@@ -161,7 +161,7 @@ export class NotebookCellDiffDecorator extends DisposableStore {
 		});
 		const createOverviewDecoration = (overviewRulerColor: string, minimapColor: string) => {
 			return ModelDecorationOptions.createDynamic({
-				description: 'chat-editing-decoration',
+				description: 'notebook-inline-diff-decoration',
 				overviewRuler: { color: themeColorFromId(overviewRulerColor), position: OverviewRulerLane.Left },
 				minimap: { color: themeColorFromId(minimapColor), position: MinimapPosition.Gutter },
 			});
@@ -239,7 +239,7 @@ export class NotebookCellDiffDecorator extends DisposableStore {
 				}
 
 				const domNode = document.createElement('div');
-				domNode.className = 'chat-editing-original-zone view-lines line-delete monaco-mouse-cursor-text';
+				domNode.className = 'notebook-inline-diff-original-zone view-lines line-delete monaco-mouse-cursor-text';
 				const result = renderLines(source, renderOptions, decorations, domNode);
 
 				if (!isCreatedContent) {

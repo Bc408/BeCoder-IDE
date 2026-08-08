@@ -40,13 +40,6 @@ export enum BrowserViewCommandId {
 	// Permissions
 	ManagePermissions = `${commandPrefix}.managePermissions`,
 
-	// Chat actions
-	AddElementToChat = `${commandPrefix}.addElementToChat`,
-	AddConsoleLogsToChat = `${commandPrefix}.addConsoleLogsToChat`,
-	AddScreenshotToChat = `${commandPrefix}.addScreenshotToChat`,
-	AddAreaScreenshotToChat = `${commandPrefix}.addAreaScreenshotToChat`,
-	AddFullPageScreenshotToChat = `${commandPrefix}.addFullPageScreenshotToChat`,
-
 	// Dev Tools
 	ToggleDevTools = `${commandPrefix}.toggleDevTools`,
 
@@ -62,24 +55,6 @@ export enum BrowserViewCommandId {
 	FindPrevious = `${commandPrefix}.findPrevious`,
 }
 
-export interface IElementAncestor {
-	readonly tagName: string;
-	readonly id?: string;
-	readonly classNames?: string[];
-}
-
-export interface IElementData {
-	readonly url?: string;
-	readonly outerHTML: string;
-	readonly computedStyle: string;
-	readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
-	readonly ancestors?: IElementAncestor[];
-	readonly attributes?: Record<string, string>;
-	readonly computedStyles?: Record<string, string>;
-	readonly dimensions?: { readonly top: number; readonly left: number; readonly width: number; readonly height: number };
-	readonly innerText?: string;
-}
-
 export interface IBrowserViewRect {
 	readonly x: number;
 	readonly y: number;
@@ -87,25 +62,13 @@ export interface IBrowserViewRect {
 	readonly height: number;
 }
 
-export interface IBrowserViewTheme {
-	readonly focusBorder?: string;
-	readonly buttonBackground?: string;
-	readonly buttonForeground?: string;
-	readonly font?: string;
-}
-
 /**
  * The full set of configuration a window contributes for the browser views it
  * owns. Sent as a single unit by the owning window.
  */
 export interface IBrowserViewWindowConfiguration {
-	/** Theme variables for injected UI. */
-	readonly theme: IBrowserViewTheme;
 	/** Map of command ID to accelerator label for context menus. */
 	readonly keybindings: { [commandId: string]: string };
-
-	/** Whether AI features are disabled for this window. */
-	readonly aiFeaturesDisabled?: boolean;
 	/** Maximum number of entries to retain per browser session history. */
 	readonly maxHistoryEntries?: number;
 	/**
@@ -182,8 +145,6 @@ export interface IBrowserViewCaptureScreenshotOptions {
 export interface IBrowserViewOwner {
 	/** The main code window ID that owns this view's lifecycle. */
 	readonly mainWindowId: number;
-	/** Optional session ID identifying the agent session that created this view. */
-	readonly sessionId?: string;
 }
 
 /**
@@ -246,9 +207,7 @@ export interface IBrowserViewState {
 	storageKeys: IBrowserViewStorageKeys;
 	permissions: ISerializedBrowserPermissionsSnapshot;
 	browserZoomIndex: number;
-	isElementSelectionActive: boolean;
 	isRemoteSession: boolean;
-	isAreaSelectionActive: boolean;
 	device: IBrowserDeviceProfile | undefined;
 }
 
@@ -401,10 +360,6 @@ export interface IBrowserViewService {
 	onDynamicDidChangeFavicon(id: string): Event<IBrowserViewFaviconChangeEvent>;
 	onDynamicDidFindInPage(id: string): Event<IBrowserViewFindInPageResult>;
 	onDynamicDidClose(id: string): Event<void>;
-	onDynamicDidSelectElement(id: string): Event<IElementData>;
-	onDynamicDidChangeElementSelectionActive(id: string): Event<boolean>;
-	onDynamicDidPickArea(id: string): Event<IBrowserViewRect | undefined>;
-	onDynamicDidChangeAreaSelectionActive(id: string): Event<boolean>;
 	onDynamicDidChangeDeviceEmulation(id: string): Event<IBrowserDeviceProfile | undefined>;
 	onDynamicDidChangeRemoteStatus(id: string): Event<boolean>;
 	onDynamicDidRequestPermission(id: string): Event<IBrowserViewPermissionRequestEvent>;
@@ -620,27 +575,6 @@ export interface IBrowserViewService {
 	 * @returns The captured console logs as a single string
 	 */
 	getConsoleLogs(id: string): Promise<string>;
-
-	/**
-	 * Toggle element selection mode in a browser view.
-	 * Element selections are delivered via {@link onDynamicDidSelectElement}.
-	 * State changes are delivered via {@link onDynamicDidChangeElementSelectionActive}.
-	 *
-	 * @param id The browser view identifier
-	 * @param enabled Whether to enable or disable. Omit to toggle.
-	 */
-	toggleElementSelection(id: string, enabled?: boolean): Promise<void>;
-
-	/**
-	 * Toggle drag-to-select area picking on the top frame of a browser view.
-	 * The pick result (rectangle, or `undefined` on cancellation) is delivered via
-	 * {@link onDynamicDidPickArea}. UI toggle state is delivered via
-	 * {@link onDynamicDidChangeAreaSelectionActive}.
-	 *
-	 * @param id The browser view identifier
-	 * @param enabled Whether to enable or disable. Omit to toggle.
-	 */
-	toggleAreaSelection(id: string, enabled?: boolean): Promise<void>;
 
 	/**
 	 * Replace the calling window's configuration for the browser views it owns.

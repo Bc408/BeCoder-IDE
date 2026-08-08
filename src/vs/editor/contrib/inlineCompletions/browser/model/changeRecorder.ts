@@ -5,11 +5,8 @@
 
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { autorun, observableFromEvent } from '../../../../../base/common/observable.js';
-import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { canLog, ILoggerService, LogLevel } from '../../../../../platform/log/common/log.js';
 import { ICodeEditor } from '../../../../browser/editorBrowser.js';
-import { CodeEditorWidget } from '../../../../browser/widget/codeEditor/codeEditorWidget.js';
-import { IDocumentEventDataSetChangeReason, IRecordableEditorLogEntry, StructuredLogger } from '../structuredLogger.js';
 
 export interface ITextModelChangeRecorderMetadata {
 	source?: string;
@@ -19,18 +16,11 @@ export interface ITextModelChangeRecorderMetadata {
 }
 
 export class TextModelChangeRecorder extends Disposable {
-	private readonly _structuredLogger;
-
 	constructor(
 		private readonly _editor: ICodeEditor,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILoggerService private readonly _loggerService: ILoggerService,
 	) {
 		super();
-
-		this._structuredLogger = this._register(this._instantiationService.createInstance(StructuredLogger.cast<IRecordableEditorLogEntry & IDocumentEventDataSetChangeReason>(),
-			'editor.inlineSuggest.logChangeReason.commandId'
-		));
 
 		const logger = this._loggerService?.createLogger('textModelChanges', { hidden: false, name: 'Text Model Changes Reason' });
 
@@ -46,32 +36,6 @@ export class TextModelChangeRecorder extends Disposable {
 					return;
 				}
 				logger.trace('onDidChangeModelContent: ' + e.detailedReasons.map(r => r.toKey(Number.MAX_VALUE)).join(', '));
-			}));
-		}));
-
-		this._register(autorun(reader => {
-			if (!(this._editor instanceof CodeEditorWidget)) { return; }
-			if (!this._structuredLogger.isEnabled.read(reader)) { return; }
-
-			reader.store.add(this._editor.onDidChangeModelContent(e => {
-				const tm = this._editor.getModel();
-				if (!tm) { return; }
-
-				const reason = e.detailedReasons[0];
-
-				const data: IRecordableEditorLogEntry & IDocumentEventDataSetChangeReason = {
-					...reason.metadata,
-					sourceId: 'TextModel.setChangeReason',
-					source: reason.metadata.source,
-					time: Date.now(),
-					modelUri: tm.uri,
-					modelVersion: tm.getVersionId(),
-				};
-				setTimeout(() => {
-					// To ensure that this reaches the extension host after the content change event.
-					// (Without the setTimeout, I observed this command being called before the content change event arrived)
-					this._structuredLogger.log(data);
-				}, 0);
 			}));
 		}));
 	}

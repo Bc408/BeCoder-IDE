@@ -41,8 +41,6 @@ steps:
     condition: and(succeeded(), ne(variables['NPM_REGISTRY'], 'none'))
     displayName: Setup NPM Registry
 
-  - template: ../../common/apply-sdk-canary.yml@self
-
   - script: mkdir -p .build && node build/azure-pipelines/common/computeNodeModulesCacheKey.ts darwin $VSCODE_ARCH $(node -p process.arch) > .build/packagelockhash
     displayName: Prepare node_modules cache key
 
@@ -138,17 +136,6 @@ steps:
 
   - template: ../../common/install-builtin-extensions.yml@self
 
-  - template: ../../common/agent-sdk-produce.yml@self
-    parameters:
-      vscodePlatform: darwin
-
-  - script: npx deemon --detach --wait -- node build/azure-pipelines/common/downloadCopilotVsix.ts
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-    displayName: Download Copilot VSIX (background)
-
-  - template: ../../common/mixin-vscode-capi.yml@self
-
   - script: npm run gulp core-ci
     env:
       GITHUB_TOKEN: "$(github-token-code-oss)"
@@ -169,11 +156,6 @@ steps:
     - script: npm run copy-policy-dto --prefix build && node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc darwin
       displayName: Generate policy definitions
       retryCountOnTaskFailure: 3
-
-  - script: npx deemon --attach -- node build/azure-pipelines/common/downloadCopilotVsix.ts
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-    displayName: Download Copilot VSIX
 
   # Block on the CG NOTICE download and overwrite ThirdPartyNotices.txt
   # before gulp packages it (and before any later signing/notarization).
@@ -204,10 +186,6 @@ steps:
       GITHUB_TOKEN: "$(github-token-code-oss)"
       AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
     displayName: Build server
-
-  - ${{ if eq(parameters.VSCODE_ARCH, 'arm64') }}:
-    - script: node build/azure-pipelines/common/smokeTestAgentHost.ts "$(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)"
-      displayName: 🧪 Smoke test packaged Agent Host
 
   - script: |
       set -e

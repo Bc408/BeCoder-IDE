@@ -185,13 +185,8 @@ export class GlobalKeybindingsMainService extends Disposable implements IGlobalK
 
 		this.logService.trace(`[GlobalKeybindings] trigger '${accelerator}' -> '${binding.commandId}' in window ${target.id}`);
 
-		// We deliberately do NOT focus the routing window here. A system-wide keybinding fires while
-		// VS Code is typically unfocused, and force-focusing the routing window would pull it to the
-		// foreground even when the command opens or reveals a *different* window (e.g.
-		// `workbench.action.openAgentsWindow` reveals the agents window). Pulling the routing window
-		// forward first produces a visible flicker. Instead we let the command decide what to surface
-		// and focus — matching every other `vscode:runAction` sender (menubar, touchbar, mouse), none
-		// of which force-focus. `sendWhenReady` only needs the web contents to be ready, not focused.
+		// Do not focus the routing window. The command decides what to surface, matching other
+		// `vscode:runAction` senders such as the menubar, touchbar and mouse.
 		const payload: INativeRunActionInWindowRequest = {
 			id: binding.commandId,
 			from: 'systemWideKeybinding',

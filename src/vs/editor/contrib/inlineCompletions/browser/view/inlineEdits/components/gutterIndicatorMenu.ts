@@ -112,19 +112,6 @@ export class GutterIndicatorMenuContent {
 			commandId: inlineSuggestCommitAlternativeActionId,
 		})) : undefined;
 
-		const showModelEnabled = false;
-		const modelOptions = showModelEnabled ? this._data.modelInfo?.models.map((m: { id: string; name: string }) => option({
-			title: m.name,
-			icon: m.id === this._data.modelInfo?.currentModelId ? Codicon.check : Codicon.circle,
-			keybinding: constObservable(undefined),
-			isActive: activeElement.map(v => v === 'model_' + m.id),
-			onHoverChange: v => activeElement.set(v ? 'model_' + m.id : undefined, undefined),
-			onAction: () => {
-				this._close(true);
-				this._data.setModelId?.(m.id);
-			},
-		})) ?? [] : [];
-
 		const toggleCollapsedMode = this._inlineEditsShowCollapsed.map(showCollapsed => showCollapsed ?
 			option(createOptionArgs({
 				id: 'showExpanded',
@@ -174,8 +161,6 @@ export class GutterIndicatorMenuContent {
 			alternativeCommand,
 			reject,
 			toggleCollapsedMode,
-			modelOptions.length ? separator() : undefined,
-			...modelOptions,
 			snooze,
 			settings,
 

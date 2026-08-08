@@ -43,9 +43,6 @@ export const enum SearchCommandIds {
 	GetSearchResultsActionId = 'search.action.getSearchResults',
 	ViewAsTreeActionId = 'search.action.viewAsTree',
 	ViewAsListActionId = 'search.action.viewAsList',
-	ShowAIResultsActionId = 'search.action.showAIResults',
-	HideAIResultsActionId = 'search.action.hideAIResults',
-	SearchWithAIActionId = 'search.action.searchWithAI',
 	ToggleQueryDetailsActionId = 'workbench.action.search.toggleQueryDetails',
 	ExcludeFolderFromSearchId = 'search.action.excludeFromSearch',
 	ExcludeFileTypeFromSearchId = 'search.action.excludeFileTypeFromSearch',
@@ -83,7 +80,4 @@ export const SearchContext = {
 	ViewHasFilePatternKey: new RawContextKey<boolean>('viewHasFilePattern', false),
 	ViewHasSomeCollapsibleKey: new RawContextKey<boolean>('viewHasSomeCollapsibleResult', false),
 	InTreeViewKey: new RawContextKey<boolean>('inTreeView', false),
-	hasAIResultProvider: new RawContextKey<boolean>('hasAIResultProviderKey', false),
-	AIResultsTitle: new RawContextKey<boolean>('aiResultsTitle', false),
-	AIResultsRequested: new RawContextKey<boolean>('aiResultsRequested', false),
 };

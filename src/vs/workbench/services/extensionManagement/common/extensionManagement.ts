@@ -108,7 +108,6 @@ export const enum EnablementState {
 	DisabledByInvalidExtension,
 	DisabledByAllowlist,
 	DisabledByExtensionDependency,
-	DisabledByUnification, // Temporary TODO@benibenj remove when unification transition is complete
 	DisabledGlobally,
 	DisabledWorkspace,
 	EnabledGlobally,

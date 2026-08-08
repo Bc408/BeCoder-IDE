@@ -9,7 +9,6 @@ import { DisposableStore, IDisposable } from '../../../../../base/common/lifecyc
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { UrlFinder } from '../../browser/urlFinder.js';
 import { ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
-import { IDebugService } from '../../../debug/common/debug.js';
 
 // Wait time for debounce tests - should be greater than the UrlFinder debounce timeout (500ms)
 const DEBOUNCE_WAIT_MS = 600;
@@ -42,22 +41,11 @@ suite('UrlFinder', () => {
 		} as unknown as ITerminalService;
 	}
 
-	function createMockDebugService(localStore: DisposableStore): IDebugService {
-		const onDidNewSession = localStore.add(new Emitter<never>());
-		const onDidEndSession = localStore.add(new Emitter<never>());
-		return {
-			onDidNewSession: onDidNewSession.event,
-			onDidEndSession: onDidEndSession.event,
-		} as unknown as IDebugService;
-	}
-
 	test('should debounce terminal data processing', async () => {
 		const store = ds.add(new DisposableStore());
 		const mockInstance = store.add(new MockTerminalInstance());
 		const terminalService = createMockTerminalService([mockInstance as unknown as ITerminalInstance], store);
-		const debugService = createMockDebugService(store);
-
-		const urlFinder = store.add(new UrlFinder(terminalService, debugService));
+		const urlFinder = store.add(new UrlFinder(terminalService));
 
 		const matchedUrls: { host: string; port: number }[] = [];
 		store.add(urlFinder.onDidMatchLocalUrl((url: { host: string; port: number }) => matchedUrls.push(url)));
@@ -84,9 +72,7 @@ suite('UrlFinder', () => {
 		const store = ds.add(new DisposableStore());
 		const mockInstance = store.add(new MockTerminalInstance());
 		const terminalService = createMockTerminalService([mockInstance as unknown as ITerminalInstance], store);
-		const debugService = createMockDebugService(store);
-
-		const urlFinder = store.add(new UrlFinder(terminalService, debugService));
+		const urlFinder = store.add(new UrlFinder(terminalService));
 
 		const matchedUrls: { host: string; port: number }[] = [];
 		store.add(urlFinder.onDidMatchLocalUrl((url: { host: string; port: number }) => matchedUrls.push(url)));
@@ -110,9 +96,7 @@ suite('UrlFinder', () => {
 		const store = ds.add(new DisposableStore());
 		const mockInstance = store.add(new MockTerminalInstance());
 		const terminalService = createMockTerminalService([mockInstance as unknown as ITerminalInstance], store);
-		const debugService = createMockDebugService(store);
-
-		const urlFinder = store.add(new UrlFinder(terminalService, debugService));
+		const urlFinder = store.add(new UrlFinder(terminalService));
 
 		const matchedUrls: { host: string; port: number }[] = [];
 		store.add(urlFinder.onDidMatchLocalUrl((url: { host: string; port: number }) => matchedUrls.push(url)));
@@ -131,9 +115,7 @@ suite('UrlFinder', () => {
 		const store = ds.add(new DisposableStore());
 		const mockInstance = store.add(new MockTerminalInstance());
 		const terminalService = createMockTerminalService([mockInstance as unknown as ITerminalInstance], store);
-		const debugService = createMockDebugService(store);
-
-		const urlFinder = store.add(new UrlFinder(terminalService, debugService));
+		const urlFinder = store.add(new UrlFinder(terminalService));
 
 		const matchedUrls: { host: string; port: number }[] = [];
 		store.add(urlFinder.onDidMatchLocalUrl((url: { host: string; port: number }) => matchedUrls.push(url)));
@@ -152,9 +134,7 @@ suite('UrlFinder', () => {
 		const store = ds.add(new DisposableStore());
 		const mockInstance = store.add(new MockTerminalInstance());
 		const terminalService = createMockTerminalService([mockInstance as unknown as ITerminalInstance], store);
-		const debugService = createMockDebugService(store);
-
-		const urlFinder = store.add(new UrlFinder(terminalService, debugService));
+		const urlFinder = store.add(new UrlFinder(terminalService));
 
 		const matchedUrls: { host: string; port: number }[] = [];
 		store.add(urlFinder.onDidMatchLocalUrl((url: { host: string; port: number }) => matchedUrls.push(url)));

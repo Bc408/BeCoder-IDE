@@ -6,12 +6,10 @@
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { Schemas } from '../../../../base/common/network.js';
 import * as platform from '../../../../base/common/platform.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IMessagePassingProtocol } from '../../../../base/parts/ipc/common/ipc.js';
 import { PersistentProtocol } from '../../../../base/parts/ipc/common/ipc.net.js';
-import { IExtensionHostDebugService } from '../../../../platform/debug/common/extensionHostDebug.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
 import { ILogService, ILoggerService } from '../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
@@ -72,7 +70,6 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 		@ILoggerService protected readonly _loggerService: ILoggerService,
 		@ILabelService private readonly _labelService: ILabelService,
 		@IRemoteAuthorityResolverService private readonly remoteAuthorityResolverService: IRemoteAuthorityResolverService,
-		@IExtensionHostDebugService private readonly _extensionHostDebugService: IExtensionHostDebugService,
 		@IProductService private readonly _productService: IProductService,
 		@ISignService private readonly _signService: ISignService,
 		@IDefaultLogLevelsService private readonly _defaultLogLevelsService: IDefaultLogLevelsService,
@@ -107,33 +104,12 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 
 			const startParams: IRemoteExtensionHostStartParams = {
 				language: platform.language,
-				debugId: this._environmentService.debugExtensionHost.debugId,
-				break: this._environmentService.debugExtensionHost.break,
-				port: this._environmentService.debugExtensionHost.port,
-				env: { ...this._environmentService.debugExtensionHost.env, ...resolverResult.options?.extensionHostEnv },
+				env: resolverResult.options?.extensionHostEnv,
 			};
-
-			const extDevLocs = this._environmentService.extensionDevelopmentLocationURI;
-
-			let debugOk = true;
-			if (extDevLocs && extDevLocs.length > 0) {
-				// TODO@AW: handles only first path in array
-				if (extDevLocs[0].scheme === Schemas.file) {
-					debugOk = false;
-				}
-			}
-
-			if (!debugOk) {
-				startParams.break = false;
-			}
 
 			return connectRemoteAgentExtensionHost(options, startParams).then(result => {
 				this._register(result);
-				const { protocol, debugPort, reconnectionToken } = result;
-				const isExtensionDevelopmentDebug = typeof debugPort === 'number';
-				if (debugOk && this._environmentService.isExtensionDevelopment && this._environmentService.debugExtensionHost.debugId && debugPort) {
-					this._extensionHostDebugService.attachSession(this._environmentService.debugExtensionHost.debugId, debugPort, this._initDataProvider.remoteAuthority);
-				}
+				const { protocol, reconnectionToken } = result;
 
 				protocol.onDidDispose(() => {
 					this._onExtHostConnectionLost(reconnectionToken);
@@ -157,7 +133,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 
 						if (isMessageOfType(msg, MessageType.Ready)) {
 							// 1) Extension Host is ready to receive messages, initialize it
-							this._createExtHostInitData(isExtensionDevelopmentDebug).then(data => {
+							this._createExtHostInitData().then(data => {
 								protocol.send(VSBuffer.fromString(JSON.stringify(data)));
 							});
 							return;
@@ -193,10 +169,6 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 		}
 		this._hasLostConnection = true;
 
-		if (this._isExtensionDevHost && this._environmentService.debugExtensionHost.debugId) {
-			this._extensionHostDebugService.close(this._environmentService.debugExtensionHost.debugId);
-		}
-
 		if (this._terminating) {
 			// Expected termination path (we asked the process to terminate)
 			return;
@@ -205,7 +177,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 		this._onExit.fire([0, reconnectionToken]);
 	}
 
-	private async _createExtHostInitData(isExtensionDevelopmentDebug: boolean): Promise<IExtensionHostInitData> {
+	private async _createExtHostInitData(): Promise<IExtensionHostInitData> {
 		const remoteInitData = await this._initDataProvider.getInitData();
 		this.extensions = remoteInitData.extensions;
 		const workspace = this._contextService.getWorkspace();
@@ -218,7 +190,6 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 			parentPid: remoteInitData.pid,
 			enabledApiProposalsFallback,
 			environment: {
-				isExtensionDevelopmentDebug,
 				appRoot: remoteInitData.appRoot,
 				appName: this._productService.nameLong,
 				appHost: this._productService.embedderIdentifier || 'desktop',
@@ -229,8 +200,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 				extensionTestsLocationURI: this._environmentService.extensionTestsLocationURI,
 				globalStorageHome: remoteInitData.globalStorageHome,
 				workspaceStorageHome: remoteInitData.workspaceStorageHome,
-				extensionLogLevel: this._defaultLogLevelsService.defaultLogLevels.extensions,
-				isSessionsWindow: this._environmentService.isSessionsWindow
+				extensionLogLevel: this._defaultLogLevelsService.defaultLogLevels.extensions
 			},
 			workspace: this._contextService.getWorkbenchState() === WorkbenchState.EMPTY ? null : {
 				configuration: workspace.configuration,
@@ -245,7 +215,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 			},
 			consoleForward: {
 				includeStack: false,
-				logNative: Boolean(this._environmentService.debugExtensionHost.debugId)
+				logNative: false
 			},
 			extensions: this.extensions.toSnapshot(),
 			telemetryInfo: {

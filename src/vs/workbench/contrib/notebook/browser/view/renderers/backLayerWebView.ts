@@ -421,10 +421,6 @@ export class BackLayerWebView<T extends ICommonCellInfo> extends Themable {
 						background-color: var(--theme-notebook-symbol-highlight-background);
 					}
 
-					#container .nb-chatGenerationHighlight .output_container .output {
-						background-color: var(--vscode-notebook-selectedCellBackground);
-					}
-
 					#container > div.nb-cellDeleted .output_container {
 						background-color: var(--theme-notebook-diff-removed-background);
 					}

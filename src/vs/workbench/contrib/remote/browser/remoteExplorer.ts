@@ -19,7 +19,6 @@ import { ConfigurationTarget, IConfigurationService } from '../../../../platform
 import { INotificationHandle, INotificationService, IPromptChoice } from '../../../../platform/notification/common/notification.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
-import { IDebugService } from '../../debug/common/debug.js';
 import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { isWeb, OperatingSystem } from '../../../../base/common/platform.js';
 import { ITunnelService, RemoteTunnel, TunnelPrivacyId } from '../../../../platform/tunnel/common/tunnel.js';
@@ -206,7 +205,6 @@ export class AutomaticPortForwarding extends Disposable implements IWorkbenchCon
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IWorkbenchConfigurationService private readonly configurationService: IWorkbenchConfigurationService,
-		@IDebugService private readonly debugService: IDebugService,
 		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@ITunnelService private readonly tunnelService: ITunnelService,
 		@IHostService private readonly hostService: IHostService,
@@ -317,7 +315,7 @@ export class AutomaticPortForwarding extends Disposable implements IWorkbenchCon
 					.registerDefaultConfigurations([{ overrides: { 'remote.autoForwardPortsSource': PORT_AUTO_SOURCE_SETTING_OUTPUT } }]);
 			}
 			this.outputForwarder = this._register(new OutputAutomaticPortForwarding(this.terminalService, this.notificationService, this.openerService, this.externalOpenerService,
-				this.remoteExplorerService, this.configurationService, this.debugService, this.tunnelService, this.hostService, this.logService, this.contextKeyService, () => false));
+				this.remoteExplorerService, this.configurationService, this.tunnelService, this.hostService, this.logService, this.contextKeyService, () => false));
 		} else {
 			const useProc = () => (this.configurationService.getValue(PORT_AUTO_SOURCE_SETTING) === PORT_AUTO_SOURCE_SETTING_PROCESS);
 			if (useProc()) {
@@ -328,7 +326,7 @@ export class AutomaticPortForwarding extends Disposable implements IWorkbenchCon
 					this.openerService, this.externalOpenerService, this.tunnelService, this.hostService, this.logService, this.contextKeyService));
 			}
 			this.outputForwarder = this._register(new OutputAutomaticPortForwarding(this.terminalService, this.notificationService, this.openerService, this.externalOpenerService,
-				this.remoteExplorerService, this.configurationService, this.debugService, this.tunnelService, this.hostService, this.logService, this.contextKeyService, useProc));
+				this.remoteExplorerService, this.configurationService, this.tunnelService, this.hostService, this.logService, this.contextKeyService, useProc));
 		}
 		this.listenForPorts();
 	}
@@ -562,7 +560,6 @@ class OutputAutomaticPortForwarding extends Disposable {
 		readonly externalOpenerService: IExternalUriOpenerService,
 		private readonly remoteExplorerService: IRemoteExplorerService,
 		private readonly configurationService: IConfigurationService,
-		private readonly debugService: IDebugService,
 		readonly tunnelService: ITunnelService,
 		readonly hostService: IHostService,
 		readonly logService: ILogService,
@@ -600,7 +597,7 @@ class OutputAutomaticPortForwarding extends Disposable {
 			return;
 		}
 		this.portsFeatures?.dispose();
-		this.urlFinder = this._register(new UrlFinder(this.terminalService, this.debugService));
+		this.urlFinder = this._register(new UrlFinder(this.terminalService));
 		this._register(this.urlFinder.onDidMatchLocalUrl(async (localUrl) => {
 			if (mapHasAddressLocalhostOrAllInterfaces(this.remoteExplorerService.tunnelModel.detected, localUrl.host, localUrl.port)) {
 				return;

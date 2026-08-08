@@ -271,14 +271,11 @@ function toInlineSuggestData(
 		source,
 		context,
 		inlineCompletion.isInlineEdit ?? false,
-		inlineCompletion.supportsRename ?? false,
 		requestInfo,
 		providerRequestInfo,
 		inlineCompletion.correlationId,
 	);
 }
-
-export type InlineSuggestSku = { type: string; plan: string };
 
 export type InlineSuggestRequestInfo = {
 	startTime: number;
@@ -288,7 +285,6 @@ export type InlineSuggestRequestInfo = {
 	typingInterval: number;
 	typingIntervalCharacterCount: number;
 	availableProviders: ProviderId[];
-	sku: InlineSuggestSku | undefined;
 };
 
 export type InlineSuggestProviderRequestInfo = {
@@ -300,14 +296,6 @@ export type PartialAcceptance = {
 	characters: number;
 	count: number;
 	ratio: number;
-};
-
-export type RenameInfo = {
-	createdRename: boolean;
-	duration: number;
-	timedOut?: boolean;
-	droppedOtherEdits?: number;
-	droppedRenameEdits?: number;
 };
 
 export type InlineSuggestViewData = {
@@ -360,7 +348,6 @@ export class InlineSuggestData {
 		};
 		const mockRequestInfo: InlineSuggestRequestInfo = {
 			startTime: Date.now(),
-			sku: undefined,
 			editorType: InlineCompletionEditorType.TextEditor,
 			languageId: 'plaintext',
 			availableProviders: [],
@@ -381,7 +368,6 @@ export class InlineSuggestData {
 			mockSource,
 			mockContext,
 			true,
-			false,
 			mockRequestInfo,
 			mockProviderRequestInfo,
 			undefined
@@ -403,7 +389,6 @@ export class InlineSuggestData {
 	private _isPreceeded = false;
 	private _partiallyAcceptedCount = 0;
 	private _partiallyAcceptedSinceOriginal: PartialAcceptance = { characters: 0, ratio: 0, count: 0 };
-	private _renameInfo: RenameInfo | undefined = undefined;
 	private _editKind: InlineSuggestionEditKind | undefined = undefined;
 
 	get action(): IInlineSuggestDataAction | undefined {
@@ -418,7 +403,6 @@ export class InlineSuggestData {
 		public readonly source: InlineSuggestionList,
 		public readonly context: InlineCompletionContext,
 		public readonly isInlineEdit: boolean,
-		public readonly supportsRename: boolean,
 		private readonly _requestInfo: InlineSuggestRequestInfo,
 		private readonly _providerRequestInfo: InlineSuggestProviderRequestInfo,
 		private readonly _correlationId: string | undefined,
@@ -517,15 +501,8 @@ export class InlineSuggestData {
 				viewKind: this._viewData.viewKind,
 				notShownReason: this._notShownReason,
 				performanceMarkers: this.performance.toString(),
-				renameCreated: this._renameInfo?.createdRename,
-				renameDuration: this._renameInfo?.duration,
-				renameTimedOut: this._renameInfo?.timedOut,
-				renameDroppedOtherEdits: this._renameInfo?.droppedOtherEdits,
-				renameDroppedRenameEdits: this._renameInfo?.droppedRenameEdits,
 				typingInterval: this._requestInfo.typingInterval,
 				typingIntervalCharacterCount: this._requestInfo.typingIntervalCharacterCount,
-				skuPlan: this._requestInfo.sku?.plan,
-				skuType: this._requestInfo.sku?.type,
 				availableProviders: this._requestInfo.availableProviders.map(p => p.toString()).join(','),
 				...this._viewData.renderData?.getData(),
 			};
@@ -583,13 +560,6 @@ export class InlineSuggestData {
 		}
 		this._showUncollapsedDuration += timeNow - this._showUncollapsedStartTime;
 		this._showUncollapsedStartTime = undefined;
-	}
-
-	public setRenameProcessingInfo(info: RenameInfo): void {
-		if (this._renameInfo) {
-			throw new BugIndicatingError('Rename info has already been set.');
-		}
-		this._renameInfo = info;
 	}
 
 	public withAction(action: IInlineSuggestDataAction): InlineSuggestData {

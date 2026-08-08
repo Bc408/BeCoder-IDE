@@ -28,10 +28,9 @@ import minimist from 'minimist';
 import { compileBuildWithoutManglingTask, compileBuildWithManglingTask } from './gulpfile.compile.ts';
 import { compileNonNativeExtensionsBuildTask, compileNativeExtensionsBuildTask, compileAllExtensionsBuildTask, compileExtensionMediaBuildTask, cleanExtensionsBuildTask } from './gulpfile.extensions.ts';
 import { copyCodiconsTask } from './lib/compilation.ts';
-import { getCopilotExcludeFilter, getCopilotTgrepExcludeFilter, getRipgrepExcludeFilter } from './lib/copilot.ts';
+import { getRipgrepExcludeFilter } from './lib/ripgrep.ts';
 import { ensureOSProxyResolverPlatformPackage, getOSProxyResolverExcludeFilter, getOSProxyResolverPlatformFiles } from './lib/osProxyResolver.ts';
 import { isBeCoderElectronLocale } from './lib/electronLocales.ts';
-import { readAgentSdkResults } from './agent-sdk/common.ts';
 import { useEsbuildTranspile } from './buildConfig.ts';
 import { promisify } from 'util';
 import globCallback from 'glob';
@@ -67,7 +66,6 @@ const vscodeResourceIncludes = [
 
 	// Workbench
 	'out-build/vs/code/electron-browser/workbench/workbench.html',
-	'out-build/vs/sessions/electron-browser/sessions.html',
 
 	// Electron Preload
 	'out-build/vs/base/parts/sandbox/electron-browser/preload.js',
@@ -79,7 +77,6 @@ const vscodeResourceIncludes = [
 
 	// Touchbar
 	'out-build/vs/workbench/browser/parts/editor/media/*.png',
-	'out-build/vs/workbench/contrib/debug/browser/media/*.png',
 
 	// External Terminal
 	'out-build/vs/workbench/contrib/externalTerminal/**/*.scpt',
@@ -97,14 +94,6 @@ const vscodeResourceIncludes = [
 
 	// Welcome
 	'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.{svg,png}',
-	'out-build/vs/workbench/contrib/welcomeOnboarding/browser/media/*.svg',
-
-	// Sessions
-	'out-build/vs/sessions/contrib/chat/browser/media/*.svg',
-	'out-build/vs/sessions/contrib/welcome/browser/media/*.svg',
-	'out-build/vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg',
-	'out-build/vs/sessions/prompts/*.prompt.md',
-	'out-build/vs/sessions/skills/**/SKILL.md',
 
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
@@ -162,7 +151,7 @@ const bundleVSCodeTask = task.define('bundle-vscode', task.series(
 					...bootstrapEntryPoints
 				],
 				resources: vscodeResources,
-				skipTSBoilerplateRemoval: entryPoint => entryPoint === 'vs/code/electron-browser/workbench/workbench' || entryPoint === 'vs/sessions/electron-browser/sessions'
+				skipTSBoilerplateRemoval: entryPoint => entryPoint === 'vs/code/electron-browser/workbench/workbench'
 			}
 		}
 	)
@@ -242,19 +231,6 @@ function computeChecksum(filename: string): string {
 	return hash;
 }
 
-// BeCoder does not expose Chat, Agents, or on-device chat dictation. Keep
-// their development dependencies installed for upstream compilation, but do not
-// ship the large, unreachable runtime payloads in the product.
-const beCoderUnusedAIRuntimeExcludeFilter = [
-	'**',
-	'!**/@anthropic-ai/**',
-	'!**/@huggingface/**',
-	'!**/@microsoft/mxc-sdk/**',
-	'!**/onnxruntime-common/**',
-	'!**/onnxruntime-node/**',
-	'!**/onnxruntime-web/**',
-];
-
 function packageTask(platform: string, arch: string, sourceFolderName: string, destinationFolderName: string, _opts?: { stats?: boolean }) {
 	const destination = path.join(path.dirname(root), destinationFolderName);
 	platform = platform || process.platform;
@@ -280,11 +256,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 			'vs/workbench/workbench.desktop.main.css',
 			'vs/workbench/api/node/extensionHostProcess.js',
 			'vs/code/electron-browser/workbench/workbench.html',
-			'vs/code/electron-browser/workbench/workbench.js',
-			'vs/sessions/sessions.desktop.main.js',
-			'vs/sessions/sessions.desktop.main.css',
-			'vs/sessions/electron-browser/sessions.html',
-			'vs/sessions/electron-browser/sessions.js'
+			'vs/code/electron-browser/workbench/workbench.js'
 		]);
 
 		const src = gulp.src(out + '/**', { base: '.' })
@@ -345,13 +317,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				json.date = readISODate(out);
 				json.checksums = checksums;
 				json.version = version;
-				// Stamp agentSdks from the per-platform results file produced
-				// by `build/agent-sdk/produce.ts` (an earlier pipeline step).
 				// Local dev: file absent → empty → not stamped.
-				const agentSdks = readAgentSdkResults();
-				if (Object.keys(agentSdks).length > 0) {
-					json.agentSdks = agentSdks;
-				}
 				return json;
 			}))
 			.pipe(es.through(function (file) {
@@ -371,7 +337,22 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const productionDependencies = getProductionDependencies(root);
 		const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat().concat('!**/*.mk');
 
-		const depFilterPattern = ['**', `!**/${config.version}/**`, '!**/bin/darwin-arm64-87/**', '!**/package-lock.json', '!**/yarn.lock'];
+		const depFilterPattern = [
+			'**',
+			`!**/${config.version}/**`,
+			'!**/bin/darwin-arm64-87/**',
+			'!**/package-lock.json',
+			'!**/yarn.lock',
+			'!**/@vscode/codicons/src/icons/agent*.svg',
+			'!**/@vscode/codicons/src/icons/chat*.svg',
+			'!**/@vscode/codicons/src/icons/copilot*.svg',
+			'!**/@vscode/codicons/src/icons/mcp*.svg',
+			'!**/@vscode/codicons/src/icons/send-to-remote-agent.svg',
+			'!**/@vscode/codicons/src/icons/new-session.svg',
+			'!**/@vscode/codicons/src/icons/session-in-progress*.svg',
+			'!**/@vscode/codicons/src/icons/share-window.svg',
+			'!**/@vscode/codicons/src/icons/terminal-secure.svg'
+		];
 		if (stripSourceMapsInPackagingTasks) {
 			depFilterPattern.push('!**/*.map');
 		}
@@ -383,11 +364,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		ensureOSProxyResolverPlatformPackage(platform, arch);
 		const osProxyResolverPlatformPackage = gulp.src(getOSProxyResolverPlatformFiles(platform, arch), { base: '.', dot: true, allowEmpty: true });
 		const deps = es.merge(cleanedDeps, osProxyResolverPlatformPackage)
-			.pipe(filter(['**', '!**/@github/copilot*/**', '!**/@vscode/copilot-api/**']))
-			.pipe(filter(getCopilotExcludeFilter(platform, arch)))
-			.pipe(filter(getCopilotTgrepExcludeFilter(platform, arch)))
 			.pipe(filter(getRipgrepExcludeFilter(platform, arch)))
-			.pipe(filter(beCoderUnusedAIRuntimeExcludeFilter))
 			.pipe(filter(getOSProxyResolverExcludeFilter(platform, arch)))
 			.pipe(jsFilter)
 			.pipe(util.rewriteSourceMappingURL(sourceMappingURLBase))
@@ -419,13 +396,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				'**/*.mk',
 			], [
 				'node_modules/vsda/**', // retain copy of `vsda` in node_modules for internal use
-				// The sandbox runtime is spawned as a standalone Node subprocess (no ASAR
-				// resolution hook), so it and its transitive JS dependencies must remain as
-				// real files under `node_modules`. Keep them duplicated out of the archive.
-				'node_modules/@vscode/sandbox-runtime/**', // includes its nested `commander`
-				'node_modules/@pondwader/socks5-server/**',
-				'node_modules/shell-quote/**',
-				'node_modules/zod/**'
 			], 'node_modules.asar'));
 
 		const mergeStreams = [

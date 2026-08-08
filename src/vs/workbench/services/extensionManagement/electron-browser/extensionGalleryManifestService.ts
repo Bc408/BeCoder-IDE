@@ -20,11 +20,9 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IDefaultAccountService } from '../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IHostService } from '../../host/browser/host.js';
-import { IDefaultAccount } from '../../../../base/common/defaultAccount.js';
 
 export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryManifestService implements IExtensionGalleryManifestService {
 
@@ -49,7 +47,6 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 		@ISharedProcessService sharedProcessService: ISharedProcessService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IRequestService private readonly requestService: IRequestService,
-		@IDefaultAccountService private readonly defaultAccountService: IDefaultAccountService,
 		@ILogService private readonly logService: ILogService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IHostService private readonly hostService: IHostService,
@@ -100,9 +97,15 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 
 		const configuredServiceUrl = this.configurationService.getValue<string>(ExtensionGalleryServiceUrlConfigKey);
 		if (configuredServiceUrl) {
-			this.logService.trace('[Marketplace] Private marketplace configured, checking access and fetching manifest', configuredServiceUrl);
-			await this.handleDefaultAccountAccess(configuredServiceUrl);
-			this._register(this.defaultAccountService.onDidChangeDefaultAccount(() => this.handleDefaultAccountAccess(configuredServiceUrl)));
+			this.logService.trace('[Marketplace] Custom marketplace configured, fetching manifest', configuredServiceUrl);
+			try {
+				const manifest = await this.getExtensionGalleryManifestFromServiceUrl(configuredServiceUrl);
+				this.update(manifest);
+				this.telemetryService.publicLog2<{}, { owner: 'sandy081'; comment: 'Reports when a custom marketplace is successfully accessed' }>('galleryservice:custom:marketplace');
+			} catch (error) {
+				this.logService.error('[Marketplace] Error retrieving custom gallery manifest', error);
+				this.update(null);
+			}
 		} else {
 			const defaultExtensionGalleryManifest = await super.getExtensionGalleryManifest();
 			this.update(defaultExtensionGalleryManifest);
@@ -114,32 +117,6 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 			}
 			this.requestRestart();
 		}));
-	}
-
-	private async handleDefaultAccountAccess(configuredServiceUrl: string): Promise<void> {
-		const account = await this.defaultAccountService.getDefaultAccount();
-
-		if (!account) {
-			this.logService.debug('[Marketplace] Enterprise marketplace configured but user not signed in');
-			this.update(null, ExtensionGalleryManifestStatus.RequiresSignIn);
-		} else if (!this.checkAccess(account)) {
-			this.logService.debug('[Marketplace] User signed in but lacks access to enterprise marketplace');
-			this.update(null, ExtensionGalleryManifestStatus.AccessDenied);
-		} else if (this.currentStatus !== ExtensionGalleryManifestStatus.Available) {
-			try {
-				const manifest = await this.getExtensionGalleryManifestFromServiceUrl(configuredServiceUrl);
-				this.update(manifest);
-				this.telemetryService.publicLog2<
-					{},
-					{
-						owner: 'sandy081';
-						comment: 'Reports when a user successfully accesses a custom marketplace';
-					}>('galleryservice:custom:marketplace');
-			} catch (error) {
-				this.logService.error('[Marketplace] Error retrieving enterprise gallery manifest', error);
-				this.update(null, ExtensionGalleryManifestStatus.AccessDenied);
-			}
-		}
 	}
 
 	private update(manifest: IExtensionGalleryManifest | null, status?: ExtensionGalleryManifestStatus): void {
@@ -156,16 +133,6 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 			this.currentStatus = status;
 			this._onDidChangeExtensionGalleryManifestStatus.fire(status);
 		}
-	}
-
-	private checkAccess(account: IDefaultAccount): boolean {
-		this.logService.debug('[Marketplace] Checking Account SKU access for configured gallery', account.entitlementsData?.access_type_sku);
-		if (account.entitlementsData?.access_type_sku && this.productService.extensionsGallery?.accessSKUs?.includes(account.entitlementsData.access_type_sku)) {
-			this.logService.debug('[Marketplace] Account has access to configured gallery');
-			return true;
-		}
-		this.logService.debug('[Marketplace] Checking enterprise account access for configured gallery', account.enterprise);
-		return account.enterprise;
 	}
 
 	private async requestRestart(): Promise<void> {

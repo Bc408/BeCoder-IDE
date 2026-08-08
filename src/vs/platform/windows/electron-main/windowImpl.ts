@@ -52,7 +52,6 @@ export interface IWindowCreationOptions {
 	readonly state: IWindowState;
 	readonly extensionDevelopmentPath?: string[];
 	readonly isExtensionTestHost?: boolean;
-	readonly isSessionsWindow?: boolean;
 }
 
 interface ITouchBarSegment extends electron.SegmentedControlSegment {
@@ -644,7 +643,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 
 	get isExtensionTestHost(): boolean { return !!(this._config?.extensionTestsPath); }
 
-	get isExtensionDevelopmentTestFromCli(): boolean { return this.isExtensionDevelopmentHost && this.isExtensionTestHost && !this._config?.debugId; }
+	get isExtensionDevelopmentTestFromCli(): boolean { return this.isExtensionDevelopmentHost && this.isExtensionTestHost; }
 
 	//#endregion
 
@@ -708,10 +707,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 				additionalArguments: [`--vscode-window-config=${this.configObjectUrl.resource.toString()}`],
 				v8CacheOptions: this.environmentMainService.useCodeCache ? 'bypassHeatCheck' : 'none'
 			};
-			if (config.isSessionsWindow) {
-				webPreferences.backgroundThrottling = false; // keep agents window responsive when in background
-			}
-
 			const options = instantiationService.invokeFunction(defaultBrowserWindowOptions, this.windowState, undefined, webPreferences);
 
 			// Create the browser window
@@ -1210,8 +1205,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 		let windowUrl: string;
 		if (process.env.VSCODE_DEV && process.env.VSCODE_DEV_SERVER_URL) {
 			windowUrl = process.env.VSCODE_DEV_SERVER_URL; // support URL override for development
-		} else if (configuration.isSessionsWindow) {
-			windowUrl = FileAccess.asBrowserUri(`vs/sessions/electron-browser/sessions${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true);
 		} else {
 			windowUrl = FileAccess.asBrowserUri(`vs/code/electron-browser/workbench/workbench${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true);
 		}
@@ -1312,10 +1305,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 		// in extension development mode. These options are all development related.
 		if (this.isExtensionDevelopmentHost && cli) {
 			configuration.verbose = cli.verbose;
-			configuration.debugId = cli.debugId;
-			configuration.extensionEnvironment = cli.extensionEnvironment;
-			configuration['inspect-extensions'] = cli['inspect-extensions'];
-			configuration['inspect-brk-extensions'] = cli['inspect-brk-extensions'];
 			configuration['extensions-dir'] = cli['extensions-dir'];
 		}
 

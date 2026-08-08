@@ -5,7 +5,7 @@
 
 import { Disposable, ExtensionContext, LogOutputChannel, window, l10n, env, LogLevel } from 'vscode';
 import { startClient, LanguageClientConstructor, SchemaRequestService, languageServerDescription, AsyncDisposable } from '../jsonClient';
-import { ServerOptions, TransportKind, LanguageClientOptions, LanguageClient } from 'vscode-languageclient/node';
+import { DynamicFeature, ServerOptions, StaticFeature, TransportKind, LanguageClientOptions, LanguageClient } from 'vscode-languageclient/node';
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -15,6 +15,15 @@ import TelemetryReporter from '@vscode/extension-telemetry';
 import { JSONSchemaCache } from './schemaCache';
 
 let client: AsyncDisposable | undefined;
+
+class BeCoderJSONLanguageClient extends LanguageClient {
+	override registerFeature(feature: StaticFeature | DynamicFeature<unknown>): void {
+		if ((feature as Partial<DynamicFeature<unknown>>).registrationType?.method === 'textDocument/inlineValue') {
+			return;
+		}
+		super.registerFeature(feature);
+	}
+}
 
 // this method is called when vs code is activated
 export async function activate(context: ExtensionContext) {
@@ -39,7 +48,7 @@ export async function activate(context: ExtensionContext) {
 	};
 
 	const newLanguageClient: LanguageClientConstructor = (id: string, name: string, clientOptions: LanguageClientOptions) => {
-		return new LanguageClient(id, name, serverOptions, clientOptions);
+		return new BeCoderJSONLanguageClient(id, name, serverOptions, clientOptions);
 	};
 
 	const timer = {

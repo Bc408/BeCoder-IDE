@@ -68,7 +68,7 @@ import { IProgressService } from '../../platform/progress/common/progress.js';
 import { DelayedLogChannel } from '../services/output/common/delayedLogChannel.js';
 import { dirname, joinPath } from '../../base/common/resources.js';
 import { IUserDataProfile, IUserDataProfilesService } from '../../platform/userDataProfile/common/userDataProfile.js';
-import { IPolicyService } from '../../platform/policy/common/policy.js';
+import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
 import { IRemoteExplorerService } from '../services/remote/common/remoteExplorerService.js';
 import { DisposableTunnel, TunnelProtocol } from '../../platform/tunnel/common/tunnel.js';
 import { ILabelService } from '../../platform/label/common/label.js';
@@ -95,9 +95,6 @@ import { ISecretStorageService } from '../../platform/secrets/common/secrets.js'
 import { TunnelSource } from '../services/remote/common/tunnelModel.js';
 import { mainWindow } from '../../base/browser/window.js';
 import { INotificationService, Severity } from '../../platform/notification/common/notification.js';
-import { IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
-import { DefaultAccountService } from '../services/accounts/browser/defaultAccount.js';
-import { AccountPolicyService, IAccountPolicyGateService } from '../services/policies/common/accountPolicyService.js';
 
 export interface IBrowserMainWorkbench {
 	startup(): IInstantiationService;
@@ -362,14 +359,9 @@ export class BrowserMain extends Disposable {
 		serviceCollection.set(IRemoteAgentService, remoteAgentService);
 		this._register(RemoteFileSystemProviderClient.register(remoteAgentService, fileService, logService));
 
-		// Default Account
-		const defaultAccountService = this._register(new DefaultAccountService(productService));
-		serviceCollection.set(IDefaultAccountService, defaultAccountService);
-
 		// Policies
-		const policyService = new AccountPolicyService(logService, defaultAccountService);
+		const policyService = new NullPolicyService();
 		serviceCollection.set(IPolicyService, policyService);
-		serviceCollection.set(IAccountPolicyGateService, policyService);
 
 		const configurationService = await this.createWorkspaceAndDependentServices(serviceCollection, workspace, environmentService, userDataProfileService, userDataProfilesService, fileService, remoteAgentService, uriIdentityService, policyService, logService, loggerService, remoteAuthorityResolverService, productService);
 

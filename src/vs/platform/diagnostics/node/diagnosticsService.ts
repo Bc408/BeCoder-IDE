@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
 import * as osLib from 'os';
 import { Promises } from '../../../base/common/async.js';
-import { getNodeType, parse, ParseError } from '../../../base/common/json.js';
 import { Schemas } from '../../../base/common/network.js';
 import { basename, join } from '../../../base/common/path.js';
 import { isLinux, isWindows } from '../../../base/common/platform.js';
@@ -56,8 +54,6 @@ export async function collectWorkspaceStats(folder: string, filter: string[], op
 		{ tag: 'tslint.json', filePattern: /^tslint\.json$/i },
 		{ tag: 'eslint.json', filePattern: /^eslint\.json$/i },
 		{ tag: 'tasks.json', filePattern: /^tasks\.json$/i },
-		{ tag: 'launch.json', filePattern: /^launch\.json$/i },
-		{ tag: 'mcp.json', filePattern: /^mcp\.json$/i },
 		{ tag: 'settings.json', filePattern: /^settings\.json$/i },
 		{ tag: 'webpack.config.js', filePattern: /^webpack\.config\.js$/i },
 		{ tag: 'project.json', filePattern: /^project\.json$/i },
@@ -68,23 +64,6 @@ export async function collectWorkspaceStats(folder: string, filter: string[], op
 		{ tag: 'github-actions', filePattern: /^.+\.ya?ml$/i, relativePathPattern: /^\.github(?:\/|\\)workflows$/i },
 		{ tag: 'devcontainer.json', filePattern: /^devcontainer\.json$/i },
 		{ tag: 'dockerfile', filePattern: /^(dockerfile|docker\-compose\.ya?ml)$/i },
-		{ tag: 'cursorrules', filePattern: /^\.cursorrules$/i },
-		{ tag: 'cursorrules-dir', filePattern: /\.mdc$/i, relativePathPattern: /^\.cursor[\/\\]rules$/i },
-		{ tag: 'github-instructions-dir', filePattern: /\.instructions\.md$/i, relativePathPattern: /^\.github[\/\\]instructions$/i },
-		{ tag: 'github-prompts-dir', filePattern: /\.prompt\.md$/i, relativePathPattern: /^\.github[\/\\]prompts$/i },
-		{ tag: 'clinerules', filePattern: /^\.clinerules$/i },
-		{ tag: 'clinerules-dir', filePattern: /\.md$/i, relativePathPattern: /^\.clinerules$/i },
-		{ tag: 'agent.md', filePattern: /^agent\.md$/i },
-		{ tag: 'agents.md', filePattern: /^agents\.md$/i },
-		{ tag: 'claude.md', filePattern: /^claude\.md$/i },
-		{ tag: 'claude-settings', filePattern: /^settings\.json$/i, relativePathPattern: /^\.claude$/i },
-		{ tag: 'claude-settings-local', filePattern: /^settings\.local\.json$/i, relativePathPattern: /^\.claude$/i },
-		{ tag: 'claude-mcp', filePattern: /^mcp\.json$/i, relativePathPattern: /^\.claude$/i },
-		{ tag: 'claude-commands-dir', filePattern: /\.md$/i, relativePathPattern: /^\.claude[\/\\]commands$/i },
-		{ tag: 'claude-skills-dir', filePattern: /^SKILL\.md$/i, relativePathPattern: /^\.claude[\/\\]skills[\/\\]/i },
-		{ tag: 'claude-rules-dir', filePattern: /\.md$/i, relativePathPattern: /^\.claude[\/\\]rules$/i },
-		{ tag: 'gemini.md', filePattern: /^gemini\.md$/i },
-		{ tag: 'copilot-instructions.md', filePattern: /^copilot\-instructions\.md$/i, relativePathPattern: /^\.github$/i },
 	];
 
 	const fileTypes = new Map<string, number>();
@@ -177,13 +156,11 @@ export async function collectWorkspaceStats(folder: string, filter: string[], op
 		const token: { count: number; maxReached: boolean; readdirCount: number } = { count: 0, maxReached: false, readdirCount: 0 };
 		const sw = new StopWatch(true);
 		await collect(folder, folder, filter, token);
-		const launchConfigs = await collectLaunchConfigs(folder);
 		resolve({
 			configFiles: asSortedItems(configFiles),
 			fileTypes: asSortedItems(fileTypes),
 			fileCount: token.count,
 			maxFilesReached: token.maxReached,
-			launchConfigFiles: launchConfigs,
 			totalScanTime: sw.elapsed(),
 			totalReaddirCount: token.readdirCount
 		});
@@ -212,39 +189,6 @@ export function getMachineInfo(): IMachineInfo {
 	}
 
 	return machineInfo;
-}
-
-export async function collectLaunchConfigs(folder: string): Promise<WorkspaceStatItem[]> {
-	try {
-		const launchConfigs = new Map<string, number>();
-		const launchConfig = join(folder, '.vscode', 'launch.json');
-
-		const contents = await fs.promises.readFile(launchConfig);
-
-		const errors: ParseError[] = [];
-		const json = parse(contents.toString(), errors);
-		if (errors.length) {
-			console.log(`Unable to parse ${launchConfig}`);
-			return [];
-		}
-
-		if (getNodeType(json) === 'object' && json['configurations']) {
-			for (const each of json['configurations']) {
-				const type = each['type'];
-				if (type) {
-					if (launchConfigs.has(type)) {
-						launchConfigs.set(type, launchConfigs.get(type)! + 1);
-					} else {
-						launchConfigs.set(type, 1);
-					}
-				}
-			}
-		}
-
-		return asSortedItems(launchConfigs);
-	} catch (error) {
-		return [];
-	}
 }
 
 export class DiagnosticsService implements IDiagnosticsService {
@@ -466,14 +410,6 @@ export class DiagnosticsService implements IDiagnosticsService {
 			output.push(line);
 		}
 
-		if (workspaceStats.launchConfigFiles.length > 0) {
-			let line = '|      Launch Configs:';
-			workspaceStats.launchConfigFiles.forEach(each => {
-				const item = each.count > 1 ? ` ${each.name}(${each.count})` : ` ${each.name}`;
-				line += item;
-			});
-			output.push(line);
-		}
 		return output.join('\n');
 	}
 
@@ -621,13 +557,6 @@ export class DiagnosticsService implements IDiagnosticsService {
 						return;
 					}
 					this.telemetryService.publicLog2<WorkspaceStatsFileEvent, WorkspaceStatsFileClassification>('workspace.stats.file', {
-						rendererSessionId: workspace.rendererSessionId,
-						type: e.name,
-						count: e.count
-					});
-				});
-				stats.launchConfigFiles.forEach(e => {
-					this.telemetryService.publicLog2<WorkspaceStatsFileEvent, WorkspaceStatsFileClassification>('workspace.stats.launchConfigFile', {
 						rendererSessionId: workspace.rendererSessionId,
 						type: e.name,
 						count: e.count

@@ -6,7 +6,6 @@
 import { ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { Disposable, DisposableMap, IDisposable } from '../../../../base/common/lifecycle.js';
-import { IDebugService, IDebugSession, IReplElement } from '../../debug/common/debug.js';
 import { removeAnsiEscapeCodes } from '../../../../base/common/strings.js';
 import { RunOnceWorker } from '../../../../base/common/async.js';
 
@@ -43,7 +42,7 @@ export class UrlFinder extends Disposable {
 	private readonly listeners: Map<ITerminalInstance | string, IDisposable> = new Map();
 	private readonly terminalDataWorkers = this._register(new DisposableMap<ITerminalInstance, RunOnceWorker<string>>());
 
-	constructor(terminalService: ITerminalService, debugService: IDebugService) {
+	constructor(terminalService: ITerminalService) {
 		super();
 		// Terminal
 		terminalService.instances.forEach(instance => {
@@ -56,21 +55,6 @@ export class UrlFinder extends Disposable {
 			this.listeners.get(instance)?.dispose();
 			this.listeners.delete(instance);
 			this.terminalDataWorkers.deleteAndDispose(instance);
-		}));
-
-		// Debug
-		this._register(debugService.onDidNewSession(session => {
-			if (!session.parentSession || (session.parentSession && session.hasSeparateRepl())) {
-				this.listeners.set(session.getId(), session.onDidChangeReplElements(() => {
-					this.processNewReplElements(session);
-				}));
-			}
-		}));
-		this._register(debugService.onDidEndSession(({ session }) => {
-			if (this.listeners.has(session.getId())) {
-				this.listeners.get(session.getId())?.dispose();
-				this.listeners.delete(session.getId());
-			}
 		}));
 	}
 
@@ -98,27 +82,6 @@ export class UrlFinder extends Disposable {
 			return;
 		}
 		this.processData(chunks.join(''));
-	}
-
-	private replPositions: Map<string, { position: number; tail: IReplElement }> = new Map();
-	private processNewReplElements(session: IDebugSession) {
-		const oldReplPosition = this.replPositions.get(session.getId());
-		const replElements = session.getReplElements();
-		this.replPositions.set(session.getId(), { position: replElements.length - 1, tail: replElements[replElements.length - 1] });
-
-		if (!oldReplPosition && replElements.length > 0) {
-			replElements.forEach(element => this.processData(element.toString()));
-		} else if (oldReplPosition && (replElements.length - 1 !== oldReplPosition.position)) {
-			// Process lines until we reach the old "tail"
-			for (let i = replElements.length - 1; i >= 0; i--) {
-				const element = replElements[i];
-				if (element === oldReplPosition.tail) {
-					break;
-				} else {
-					this.processData(element.toString());
-				}
-			}
-		}
 	}
 
 	override dispose() {

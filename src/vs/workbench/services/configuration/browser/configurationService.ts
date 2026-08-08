@@ -132,7 +132,7 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
 		this._configuration = new Configuration(this.defaultConfiguration.configurationModel, this.policyConfiguration.configurationModel, ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), new ResourceMap(), ConfigurationModel.createEmptyModel(logService), new ResourceMap<ConfigurationModel>(), this.workspace, logService);
 		this.applicationConfigurationDisposables = this._register(new DisposableStore());
 		this.createApplicationConfiguration();
-		this.localUserConfiguration = this._register(new UserConfiguration(userDataProfileService.currentProfile.settingsResource, userDataProfileService.currentProfile.tasksResource, userDataProfileService.currentProfile.mcpResource, { scopes: getLocalUserConfigurationScopes(userDataProfileService.currentProfile, !!remoteAuthority) }, fileService, uriIdentityService, logService));
+		this.localUserConfiguration = this._register(new UserConfiguration(userDataProfileService.currentProfile.settingsResource, userDataProfileService.currentProfile.tasksResource, { scopes: getLocalUserConfigurationScopes(userDataProfileService.currentProfile, !!remoteAuthority) }, fileService, uriIdentityService, logService));
 		this._register(this.localUserConfiguration.onDidChangeConfiguration(userConfiguration => this.onLocalUserConfigurationChanged(userConfiguration)));
 		if (remoteAuthority) {
 			const remoteUserConfiguration = this.remoteUserConfiguration = this._register(new RemoteUserConfiguration(remoteAuthority, configurationCache, fileService, uriIdentityService, remoteAgentService, logService));
@@ -727,7 +727,7 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
 	private onUserDataProfileChanged(e: DidChangeUserDataProfileEvent): void {
 		e.join((async () => {
 			const promises: Promise<ConfigurationModel>[] = [];
-			promises.push(this.localUserConfiguration.reset(e.profile.settingsResource, e.profile.tasksResource, e.profile.mcpResource, { scopes: getLocalUserConfigurationScopes(e.profile, !!this.remoteUserConfiguration) }));
+			promises.push(this.localUserConfiguration.reset(e.profile.settingsResource, e.profile.tasksResource, { scopes: getLocalUserConfigurationScopes(e.profile, !!this.remoteUserConfiguration) }));
 			if (e.previous.isDefault !== e.profile.isDefault
 				|| !!e.previous.useDefaultFlags?.settings !== !!e.profile.useDefaultFlags?.settings) {
 				this.createApplicationConfiguration();
@@ -1359,7 +1359,6 @@ class ConfigurationDefaultOverridesContribution extends Disposable implements IW
 		@IWorkbenchAssignmentService private readonly workbenchAssignmentService: IWorkbenchAssignmentService,
 		@IExtensionService private readonly extensionService: IExtensionService,
 		@IConfigurationService private readonly configurationService: WorkspaceService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -1421,9 +1420,6 @@ class ConfigurationDefaultOverridesContribution extends Disposable implements IW
 	private shouldOverride(value: unknown, schema: IConfigurationPropertySchema): boolean {
 		if (isUndefined(value)) {
 			return false;
-		}
-		if (this.environmentService.isSessionsWindow && schema.agentsWindow?.default !== undefined) {
-			return !equals(value, schema.agentsWindow?.default);
 		}
 		return !equals(value, schema.default);
 	}

@@ -461,14 +461,6 @@ export function registerRenameProvider(languageSelector: LanguageSelector, provi
 }
 
 /**
- * Register a new symbol-name provider (e.g., when a symbol is being renamed, show new possible symbol-names)
- */
-export function registerNewSymbolNameProvider(languageSelector: LanguageSelector, provider: languages.NewSymbolNamesProvider): IDisposable {
-	const languageFeaturesService = StandaloneServices.get(ILanguageFeaturesService);
-	return languageFeaturesService.newSymbolNamesProvider.register(languageSelector, provider);
-}
-
-/**
  * Register a signature help provider (used by e.g. parameter hints).
  */
 export function registerSignatureHelpProvider(languageSelector: LanguageSelector, provider: languages.SignatureHelpProvider): IDisposable {
@@ -776,8 +768,6 @@ export function createMonacoLanguagesAPI(): typeof monaco.languages {
 		// eslint-disable-next-line local/code-no-any-casts
 		registerRenameProvider: <any>registerRenameProvider,
 		// eslint-disable-next-line local/code-no-any-casts
-		registerNewSymbolNameProvider: <any>registerNewSymbolNameProvider,
-		// eslint-disable-next-line local/code-no-any-casts
 		registerCompletionItemProvider: <any>registerCompletionItemProvider,
 		// eslint-disable-next-line local/code-no-any-casts
 		registerSignatureHelpProvider: <any>registerSignatureHelpProvider,
@@ -837,8 +827,6 @@ export function createMonacoLanguagesAPI(): typeof monaco.languages {
 		InlayHintKind: standaloneEnums.InlayHintKind,
 		InlineCompletionTriggerKind: standaloneEnums.InlineCompletionTriggerKind,
 		CodeActionTriggerType: standaloneEnums.CodeActionTriggerType,
-		NewSymbolNameTag: standaloneEnums.NewSymbolNameTag,
-		NewSymbolNameTriggerKind: standaloneEnums.NewSymbolNameTriggerKind,
 		PartialAcceptTriggerKind: standaloneEnums.PartialAcceptTriggerKind,
 		HoverVerbosityAction: standaloneEnums.HoverVerbosityAction,
 		InlineCompletionEndOfLifeReasonKind: standaloneEnums.InlineCompletionEndOfLifeReasonKind,

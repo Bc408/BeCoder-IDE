@@ -47,27 +47,10 @@ import { isWeb } from '../../../../base/common/platform.js';
 import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { securityConfigurationNodeBase } from '../../../common/configuration.js';
 import { basename, dirname as uriDirname } from '../../../../base/common/resources.js';
-import { URI } from '../../../../base/common/uri.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
 
 const BANNER_RESTRICTED_MODE = 'workbench.banner.restrictedMode';
 const STARTUP_PROMPT_SHOWN_KEY = 'workspace.trust.startupPrompt.shown';
 const BANNER_RESTRICTED_MODE_DISMISSED_KEY = 'workbench.banner.restrictedMode.dismissed';
-
-/**
- * Returns a trust note string for the sessions window explaining that trusting
- * a folder/workspace also persists trust to the parent VS Code install.
- * Returns `undefined` when not running in the sessions window.
- */
-function getSessionsWindowTrustNote(environmentService: IWorkbenchEnvironmentService, productService: IProductService, isWorkspace: boolean): string | undefined {
-	if (!environmentService.isSessionsWindow) {
-		return undefined;
-	}
-	if (isWorkspace) {
-		return localize('sessionsWindowWorkspaceTrustNote', "Trusting this workspace will also mark it as trusted in {0}.", productService.nameLong);
-	}
-	return localize('sessionsWindowFolderTrustNote', "Trusting this folder will also mark it as trusted in {0}.", productService.nameLong);
-}
 
 export class WorkspaceTrustContextKeys extends Disposable implements IWorkbenchContribution {
 
@@ -108,9 +91,7 @@ export class WorkspaceTrustRequestHandler extends Disposable implements IWorkben
 		@ILabelService private readonly labelService: ILabelService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
-		@IWorkspaceTrustRequestService private readonly workspaceTrustRequestService: IWorkspaceTrustRequestService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-		@IProductService private readonly productService: IProductService) {
+		@IWorkspaceTrustRequestService private readonly workspaceTrustRequestService: IWorkspaceTrustRequestService) {
 		super();
 
 		this.registerListeners();
@@ -175,11 +156,6 @@ export class WorkspaceTrustRequestHandler extends Disposable implements IWorkben
 				`\`${this.labelService.getUriLabel(options.uri)}\``
 			];
 
-			const sessionsTrustNote = getSessionsWindowTrustNote(this.environmentService, this.productService, false);
-			if (sessionsTrustNote) {
-				markdownDetails.push(sessionsTrustNote);
-			}
-
 			// Dialog
 			await this.dialogService.prompt<void>({
 				type: Severity.Info,
@@ -229,10 +205,6 @@ export class WorkspaceTrustRequestHandler extends Disposable implements IWorkben
 				{ markdown: new MarkdownString(details) },
 				{ markdown: new MarkdownString(localize('immediateTrustRequestLearnMore', "If you don't trust the authors of these files, we do not recommend continuing as the files may be malicious. See [our docs](https://aka.ms/vscode-workspace-trust) to learn more.")) }
 			];
-			const sessionsTrustNote = getSessionsWindowTrustNote(this.environmentService, this.productService, this.useWorkspaceLanguage);
-			if (sessionsTrustNote) {
-				markdownDetails.push({ markdown: new MarkdownString(sessionsTrustNote) });
-			}
 			const { result } = await this.dialogService.prompt({
 				type: Severity.Info,
 				message,
@@ -304,8 +276,6 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 		@IHostService private readonly hostService: IHostService,
 		@IProductService private readonly productService: IProductService,
 		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-		@IFileService private readonly fileService: IFileService,
 	) {
 		super();
 
@@ -351,11 +321,7 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 					const addedFoldersTrustInfo = await Promise.all(e.changes.added.map(folder => this.workspaceTrustManagementService.getUriTrustInfo(folder.uri)));
 
 					if (!addedFoldersTrustInfo.map(info => info.trusted).every(trusted => trusted)) {
-						let detail = localize('addWorkspaceFolderDetail', "You are adding files that are not currently trusted to a trusted workspace. Do you trust the authors of these new files?");
-						const sessionsTrustNote = getSessionsWindowTrustNote(this.environmentService, this.productService, false);
-						if (sessionsTrustNote) {
-							detail += '\n\n' + sessionsTrustNote;
-						}
+						const detail = localize('addWorkspaceFolderDetail', "You are adding files that are not currently trusted to a trusted workspace. Do you trust the authors of these new files?");
 						const { confirmed } = await this.dialogService.confirm({
 							type: Severity.Info,
 							message: localize('addWorkspaceFolderMessage', "Do you trust the authors of the files in this folder?"),
@@ -379,29 +345,15 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 
 		this._register(this.workspaceTrustRequestService.onDidInitiateWorkspaceTrustRequestOnStartup(async () => {
 
-			let titleString: string | undefined;
-			let learnMoreString: string | undefined;
-			let trustOption: string | undefined;
-			let dontTrustOption: string | undefined;
-			const isAiGeneratedWorkspace = await this.isAiGeneratedWorkspace();
-			if (isAiGeneratedWorkspace && this.productService.aiGeneratedWorkspaceTrust) {
-				titleString = this.productService.aiGeneratedWorkspaceTrust.title;
-				learnMoreString = this.productService.aiGeneratedWorkspaceTrust.startupTrustRequestLearnMore;
-				trustOption = this.productService.aiGeneratedWorkspaceTrust.trustOption;
-				dontTrustOption = this.productService.aiGeneratedWorkspaceTrust.dontTrustOption;
-			} else {
-				console.warn('AI generated workspace trust dialog contents not available.');
-			}
-
-			const title = titleString ?? (this.useWorkspaceLanguage ?
+			const title = this.useWorkspaceLanguage ?
 				localize('workspaceTrust', "Do you trust the authors of the files in this workspace?") :
-				localize('folderTrust', "Do you trust the authors of the files in this folder?"));
+				localize('folderTrust', "Do you trust the authors of the files in this folder?");
 
 			let checkboxText: string | undefined;
 			const workspaceIdentifier = toWorkspaceIdentifier(this.workspaceContextService.getWorkspace());
 			const isSingleFolderWorkspace = isSingleFolderWorkspaceIdentifier(workspaceIdentifier);
 			const isEmptyWindow = isEmptyWorkspaceIdentifier(workspaceIdentifier);
-			if (!isAiGeneratedWorkspace && this.workspaceTrustManagementService.canSetParentFolderTrust()) {
+			if (this.workspaceTrustManagementService.canSetParentFolderTrust()) {
 				const name = basename(uriDirname((workspaceIdentifier as ISingleFolderWorkspaceIdentifier).uri));
 				checkboxText = localize('checkboxString', "Trust the authors of all files in the parent folder '{0}'", name);
 			}
@@ -411,18 +363,14 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 				!isSingleFolderWorkspace ?
 					localize('workspaceStartupTrustDetails', "{0} provides features that may automatically execute files in this workspace.", this.productService.nameShort) :
 					localize('folderStartupTrustDetails', "{0} provides features that may automatically execute files in this folder.", this.productService.nameShort),
-				learnMoreString ?? localize('startupTrustRequestLearnMore', "If you don't trust the authors of these files, we recommend to continue in restricted mode as the files may be malicious. See [our docs](https://aka.ms/vscode-workspace-trust) to learn more."),
+				localize('startupTrustRequestLearnMore', "If you don't trust the authors of these files, we recommend to continue in restricted mode as the files may be malicious. See [our docs](https://aka.ms/vscode-workspace-trust) to learn more."),
 				!isEmptyWindow ?
 					`\`${this.labelService.getWorkspaceLabel(workspaceIdentifier, { verbose: Verbosity.LONG })}\`` : '',
 			];
-			const sessionsTrustNote = getSessionsWindowTrustNote(this.environmentService, this.productService, !isSingleFolderWorkspace);
-			if (sessionsTrustNote) {
-				markdownStrings.push(sessionsTrustNote);
-			}
 			this.doShowModal(
 				title,
-				{ label: trustOption ?? localize({ key: 'trustOption', comment: ['&& denotes a mnemonic'] }, "&&Yes, I trust the authors"), sublabel: isSingleFolderWorkspace ? localize('trustFolderOptionDescription', "Trust folder and enable all features") : localize('trustWorkspaceOptionDescription', "Trust workspace and enable all features") },
-				{ label: dontTrustOption ?? localize({ key: 'dontTrustOption', comment: ['&& denotes a mnemonic'] }, "&&No, I don't trust the authors"), sublabel: isSingleFolderWorkspace ? localize('dontTrustFolderOptionDescription', "Open folder in restricted mode") : localize('dontTrustWorkspaceOptionDescription', "Open workspace in restricted mode") },
+				{ label: localize({ key: 'trustOption', comment: ['&& denotes a mnemonic'] }, "&&Yes, I trust the authors"), sublabel: isSingleFolderWorkspace ? localize('trustFolderOptionDescription', "Trust folder and enable all features") : localize('trustWorkspaceOptionDescription', "Trust workspace and enable all features") },
+				{ label: localize({ key: 'dontTrustOption', comment: ['&& denotes a mnemonic'] }, "&&No, I don't trust the authors"), sublabel: isSingleFolderWorkspace ? localize('dontTrustFolderOptionDescription', "Open folder in restricted mode") : localize('dontTrustWorkspaceOptionDescription', "Open workspace in restricted mode") },
 				markdownStrings,
 				checkboxText
 			);
@@ -528,24 +476,6 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 
 	private get useWorkspaceLanguage(): boolean {
 		return !isSingleFolderWorkspaceIdentifier(toWorkspaceIdentifier(this.workspaceContextService.getWorkspace()));
-	}
-
-	private async isAiGeneratedWorkspace(): Promise<boolean> {
-		const aiGeneratedWorkspaces = URI.joinPath(this.environmentService.workspaceStorageHome, 'aiGeneratedWorkspaces.json');
-		return await this.fileService.exists(aiGeneratedWorkspaces).then(async result => {
-			if (result) {
-				try {
-					const content = await this.fileService.readFile(aiGeneratedWorkspaces);
-					const workspaces = JSON.parse(content.value.toString()) as string[];
-					if (workspaces.indexOf(this.workspaceContextService.getWorkspace().folders[0].uri.toString()) > -1) {
-						return true;
-					}
-				} catch (e) {
-					// Ignore errors when resolving file contents
-				}
-			}
-			return false;
-		});
 	}
 
 	//#endregion

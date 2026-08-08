@@ -45,6 +45,10 @@ function getErrorMessage(error: unknown): string {
 	return String(error);
 }
 
+function isAbortError(error: unknown): boolean {
+	return !!error && typeof error === 'object' && (error as { name?: unknown }).name === 'AbortError';
+}
+
 /**
  * Merges `mermaidError: true` into the element's `data-vscode-context` so that mermaid-specific
  * context menu commands that don't make sense on an unrendered diagram (like reset pan/zoom)
@@ -107,12 +111,13 @@ function renderMermaidElement(
 				writeOut(mermaidContainer, renderResult.svg, false);
 				renderResult.bindFunctions?.(mermaidContainer);
 			} catch (error) {
-				if (error instanceof Error && error.name !== 'AbortError') {
-					markVsCodeContextAsError(mermaidContainer);
-					writeOut(mermaidContainer, createMermaidErrorElement(error).outerHTML, true);
+				if (isAbortError(error)) {
+					throw error;
 				}
 
-				throw error;
+				// Keep a malformed diagram local to its block so the rest of the document still renders.
+				markVsCodeContextAsError(mermaidContainer);
+				writeOut(mermaidContainer, createMermaidErrorElement(error).outerHTML, true);
 			}
 		})()
 	};

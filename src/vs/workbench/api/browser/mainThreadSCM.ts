@@ -230,14 +230,6 @@ class MainThreadSCMHistoryProvider implements ISCMHistoryProvider {
 		return historyItem ? toISCMHistoryItem(historyItem) : undefined;
 	}
 
-	async resolveHistoryItemChatContext(historyItemId: string, token?: CancellationToken): Promise<string | undefined> {
-		return this.proxy.$resolveHistoryItemChatContext(this.handle, historyItemId, token ?? CancellationToken.None);
-	}
-
-	async resolveHistoryItemChangeRangeChatContext(historyItemId: string, historyItemParentId: string, path: string, token?: CancellationToken): Promise<string | undefined> {
-		return this.proxy.$resolveHistoryItemChangeRangeChatContext(this.handle, historyItemId, historyItemParentId, path, token ?? CancellationToken.None);
-	}
-
 	async resolveHistoryItemRefsCommonAncestor(historyItemRefs: string[], token: CancellationToken): Promise<string | undefined> {
 		return this.proxy.$resolveHistoryItemRefsCommonAncestor(this.handle, historyItemRefs, token ?? CancellationToken.None);
 	}

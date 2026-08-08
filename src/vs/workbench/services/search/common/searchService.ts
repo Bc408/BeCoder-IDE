@@ -22,7 +22,7 @@ import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uri
 import { EditorResourceAccessor, SideBySideEditor } from '../../../common/editor.js';
 import { IEditorService } from '../../editor/common/editorService.js';
 import { IExtensionService } from '../../extensions/common/extensions.js';
-import { DEFAULT_MAX_SEARCH_RESULTS, deserializeSearchError, FileMatch, IAITextQuery, ICachedSearchStats, IFileMatch, IFileQuery, IFileSearchStats, IFolderQuery, IProgressMessage, isAIKeyword, ISearchComplete, ISearchEngineStats, ISearchProgressItem, ISearchQuery, ISearchResultProvider, ISearchService, isFileMatch, isProgressMessage, ITextQuery, pathIncludedInQuery, QueryType, SEARCH_RESULT_LANGUAGE_ID, SearchError, SearchErrorCode, SearchProviderType } from './search.js';
+import { DEFAULT_MAX_SEARCH_RESULTS, deserializeSearchError, FileMatch, ICachedSearchStats, IFileMatch, IFileQuery, IFileSearchStats, IFolderQuery, IProgressMessage, ISearchComplete, ISearchEngineStats, ISearchProgressItem, ISearchQuery, ISearchResultProvider, ISearchService, isFileMatch, isProgressMessage, ITextQuery, pathIncludedInQuery, QueryType, SEARCH_RESULT_LANGUAGE_ID, SearchError, SearchErrorCode, SearchProviderType } from './search.js';
 import { getTextSearchMatchWithModelContext, editorMatchesToTextSearchResults } from './searchHelpers.js';
 
 export class SearchService extends Disposable implements ISearchService {
@@ -31,11 +31,9 @@ export class SearchService extends Disposable implements ISearchService {
 
 	private readonly fileSearchProviders = new Map<string, ISearchResultProvider>();
 	private readonly textSearchProviders = new Map<string, ISearchResultProvider>();
-	private readonly aiTextSearchProviders = new Map<string, ISearchResultProvider>();
 
 	private deferredFileSearchesByScheme = new Map<string, DeferredPromise<ISearchResultProvider>>();
 	private deferredTextSearchesByScheme = new Map<string, DeferredPromise<ISearchResultProvider>>();
-	private deferredAITextSearchesByScheme = new Map<string, DeferredPromise<ISearchResultProvider>>();
 
 	private loggedSchemesMissingProviders = new Set<string>();
 
@@ -60,9 +58,6 @@ export class SearchService extends Disposable implements ISearchService {
 		} else if (type === SearchProviderType.text) {
 			list = this.textSearchProviders;
 			deferredMap = this.deferredTextSearchesByScheme;
-		} else if (type === SearchProviderType.aiText) {
-			list = this.aiTextSearchProviders;
-			deferredMap = this.deferredAITextSearchesByScheme;
 		} else {
 			throw new Error('Unknown SearchProviderType');
 		}
@@ -88,29 +83,6 @@ export class SearchService extends Disposable implements ISearchService {
 			results: [...otherResults.results, ...openEditorResults.results],
 			messages: [...otherResults.messages, ...openEditorResults.messages]
 		};
-	}
-
-	async aiTextSearch(query: IAITextQuery, token?: CancellationToken, onProgress?: (item: ISearchProgressItem) => void): Promise<ISearchComplete> {
-		const onProviderProgress = (progress: ISearchProgressItem) => {
-			// Match
-			if (onProgress) { // don't override open editor results
-				if (isFileMatch(progress) || isAIKeyword(progress)) {
-					onProgress(progress);
-				} else {
-					onProgress(<IProgressMessage>progress);
-				}
-			}
-
-			if (isProgressMessage(progress)) {
-				this.logService.debug('SearchService#search', progress.message);
-			}
-		};
-		return this.doSearch(query, token, onProviderProgress);
-	}
-
-	async getAIName(): Promise<string | undefined> {
-		const provider = this.getSearchProvider(QueryType.aiText).get(Schemas.file);
-		return await provider?.getAIName();
 	}
 
 	textSearchSplitSyncAsync(
@@ -214,7 +186,6 @@ export class SearchService extends Disposable implements ISearchService {
 				stats: completes[0].stats,
 				messages: arrays.coalesce(completes.flatMap(i => i.messages)).filter(arrays.uniqueFilter(message => message.type + message.text + message.trusted)),
 				results: completes.flatMap((c: ISearchComplete) => c.results),
-				aiKeywords: completes.flatMap((c: ISearchComplete) => c.aiKeywords).filter(keyword => keyword !== undefined),
 			};
 		})();
 
@@ -248,8 +219,6 @@ export class SearchService extends Disposable implements ISearchService {
 				return this.fileSearchProviders;
 			case QueryType.Text:
 				return this.textSearchProviders;
-			case QueryType.aiText:
-				return this.aiTextSearchProviders;
 			default:
 				throw new Error(`Unknown query type: ${type}`);
 		}
@@ -261,8 +230,6 @@ export class SearchService extends Disposable implements ISearchService {
 				return this.deferredFileSearchesByScheme;
 			case QueryType.Text:
 				return this.deferredTextSearchesByScheme;
-			case QueryType.aiText:
-				return this.deferredAITextSearchesByScheme;
 			default:
 				throw new Error(`Unknown query type: ${type}`);
 		}
@@ -315,7 +282,7 @@ export class SearchService extends Disposable implements ISearchService {
 					case QueryType.Text:
 						return provider.textSearch(<ITextQuery>oneSchemeQuery, onProviderProgress, token);
 					default:
-						return provider.textSearch(<ITextQuery>oneSchemeQuery, onProviderProgress, token);
+						throw new Error('Unknown query type');
 				}
 			};
 

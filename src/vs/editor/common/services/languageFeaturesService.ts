@@ -5,7 +5,7 @@
 
 import { URI } from '../../../base/common/uri.js';
 import { LanguageFeatureRegistry, NotebookInfo, NotebookInfoResolver } from '../languageFeatureRegistry.js';
-import { CodeActionProvider, CodeLensProvider, CompletionItemProvider, DocumentPasteEditProvider, DeclarationProvider, DefinitionProvider, DocumentColorProvider, DocumentFormattingEditProvider, MultiDocumentHighlightProvider, DocumentHighlightProvider, DocumentDropEditProvider, DocumentRangeFormattingEditProvider, DocumentRangeSemanticTokensProvider, DocumentSemanticTokensProvider, DocumentSymbolProvider, EvaluatableExpressionProvider, FoldingRangeProvider, HoverProvider, ImplementationProvider, InlayHintsProvider, InlineCompletionsProvider, InlineValuesProvider, LinkedEditingRangeProvider, LinkProvider, OnTypeFormattingEditProvider, ReferenceProvider, RenameProvider, SelectionRangeProvider, SignatureHelpProvider, TypeDefinitionProvider, NewSymbolNamesProvider } from '../languages.js';
+import { CodeActionProvider, CodeLensProvider, CompletionItemProvider, DocumentPasteEditProvider, DeclarationProvider, DefinitionProvider, DocumentColorProvider, DocumentFormattingEditProvider, MultiDocumentHighlightProvider, DocumentHighlightProvider, DocumentDropEditProvider, DocumentRangeFormattingEditProvider, DocumentRangeSemanticTokensProvider, DocumentSemanticTokensProvider, DocumentSymbolProvider, EvaluatableExpressionProvider, FoldingRangeProvider, HoverProvider, ImplementationProvider, InlayHintsProvider, InlineCompletionsProvider, InlineValuesProvider, LinkedEditingRangeProvider, LinkProvider, OnTypeFormattingEditProvider, ReferenceProvider, RenameProvider, SelectionRangeProvider, SignatureHelpProvider, TypeDefinitionProvider } from '../languages.js';
 import { ILanguageFeaturesService } from './languageFeatures.js';
 import { InstantiationType, registerSingleton } from '../../../platform/instantiation/common/extensions.js';
 
@@ -15,7 +15,6 @@ export class LanguageFeaturesService implements ILanguageFeaturesService {
 
 	readonly referenceProvider = new LanguageFeatureRegistry<ReferenceProvider>(this._score.bind(this));
 	readonly renameProvider = new LanguageFeatureRegistry<RenameProvider>(this._score.bind(this));
-	readonly newSymbolNamesProvider = new LanguageFeatureRegistry<NewSymbolNamesProvider>(this._score.bind(this));
 	readonly codeActionProvider = new LanguageFeatureRegistry<CodeActionProvider>(this._score.bind(this));
 	readonly definitionProvider = new LanguageFeatureRegistry<DefinitionProvider>(this._score.bind(this));
 	readonly typeDefinitionProvider = new LanguageFeatureRegistry<TypeDefinitionProvider>(this._score.bind(this));

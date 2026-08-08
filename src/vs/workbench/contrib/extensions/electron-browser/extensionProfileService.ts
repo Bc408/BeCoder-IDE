@@ -8,14 +8,10 @@ import { mainWindow } from '../../../../base/browser/window.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
-import { randomPort } from '../../../../base/common/ports.js';
 import * as nls from '../../../../nls.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
-import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { ExtensionIdentifier, ExtensionIdentifierMap } from '../../../../platform/extensions/common/extensions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { INativeHostService } from '../../../../platform/native/common/native.js';
-import { IProductService } from '../../../../platform/product/common/productService.js';
 import { RuntimeExtensionsInput } from '../common/runtimeExtensionsInput.js';
 import { IExtensionHostProfileService, ProfileSessionState } from './runtimeExtensionsEditor.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -51,10 +47,7 @@ export class ExtensionHostProfileService extends Disposable implements IExtensio
 		@IExtensionService private readonly _extensionService: IExtensionService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@INativeHostService private readonly _nativeHostService: INativeHostService,
-		@IDialogService private readonly _dialogService: IDialogService,
-		@IStatusbarService private readonly _statusbarService: IStatusbarService,
-		@IProductService private readonly _productService: IProductService
+		@IStatusbarService private readonly _statusbarService: IStatusbarService
 	) {
 		super();
 		this._profile = null;
@@ -122,16 +115,7 @@ export class ExtensionHostProfileService extends Disposable implements IExtensio
 		const inspectPorts = await this._extensionService.getInspectPorts(ExtensionHostKind.LocalProcess, true);
 
 		if (inspectPorts.length === 0) {
-			return this._dialogService.confirm({
-				type: 'info',
-				message: nls.localize('restart1', "Profile Extensions"),
-				detail: nls.localize('restart2', "In order to profile extensions a restart is required. Do you want to restart '{0}' now?", this._productService.nameLong),
-				primaryButton: nls.localize({ key: 'restart3', comment: ['&& denotes a mnemonic'] }, "&&Restart")
-			}).then(res => {
-				if (res.confirmed) {
-					this._nativeHostService.relaunch({ addArgs: [`--inspect-extensions=${randomPort()}`] });
-				}
-			});
+			return null;
 		}
 
 		if (inspectPorts.length > 1) {

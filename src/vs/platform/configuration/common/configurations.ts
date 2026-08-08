@@ -184,7 +184,7 @@ export class PolicyConfiguration extends Disposable implements IPolicyConfigurat
 	}
 
 	private isSamePolicyDefinition(a: PolicyDefinition | undefined, b: PolicyDefinition): boolean {
-		return !!a && a.type === b.type && a.value === b.value && a.managedSettings === b.managedSettings && a.restrictedValue === b.restrictedValue;
+		return !!a && a.type === b.type;
 	}
 
 	/** Resolve the authoritative definition: owner wins; references provide a bare type fallback. */
@@ -197,8 +197,7 @@ export class PolicyConfiguration extends Disposable implements IPolicyConfigurat
 			const config = configurationProperties[ownerKey] ?? excludedConfigurationProperties[ownerKey];
 			if (config?.policy) {
 				const type = this.toPolicyDefinitionType(config.type, policyName);
-				const { value, managedSettings, restrictedValue } = config.policy;
-				return type ? { type, value, managedSettings, restrictedValue } : undefined;
+				return type ? { type } : undefined;
 			}
 		}
 

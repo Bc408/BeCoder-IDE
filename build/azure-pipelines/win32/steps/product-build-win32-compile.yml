@@ -41,10 +41,6 @@ steps:
     condition: and(succeeded(), ne(variables['NPM_REGISTRY'], 'none'))
     displayName: Setup NPM Registry
 
-  - template: ../../common/apply-sdk-canary.yml@self
-    parameters:
-      windows: true
-
   - pwsh: |
       mkdir .build -ea 0
       node build/azure-pipelines/common/computeNodeModulesCacheKey.ts win32 $(VSCODE_ARCH) $(node -p process.arch) > .build/packagelockhash
@@ -127,17 +123,6 @@ steps:
 
   - template: ../../common/install-builtin-extensions.yml@self
 
-  - template: ../../common/agent-sdk-produce.yml@self
-    parameters:
-      vscodePlatform: win32
-
-  - pwsh: npx deemon --detach --wait -- node build/azure-pipelines/common/downloadCopilotVsix.ts
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-    displayName: Download Copilot VSIX (background)
-
-  - template: ../../common/mixin-vscode-capi.yml@self
-
   - powershell: npm run gulp core-ci
     env:
       GITHUB_TOKEN: "$(github-token-code-oss)"
@@ -165,11 +150,6 @@ steps:
   - ${{ if and(ne(parameters.VSCODE_CIBUILD, true), ne(parameters.VSCODE_QUALITY, 'exploration')) }}:
     - powershell: node build/win32/explorer-dll-fetcher.ts .build/win32/appx
       displayName: Download Explorer dll
-
-  - pwsh: npx deemon --attach -- node build/azure-pipelines/common/downloadCopilotVsix.ts
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-    displayName: Download Copilot VSIX
 
   # Block on the CG NOTICE download and overwrite ThirdPartyNotices.txt
   # right before gulp packages it. Non-fatal: falls back to legacy on any problem.
@@ -228,10 +208,6 @@ steps:
       GITHUB_TOKEN: "$(github-token-code-oss)"
       AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
     displayName: Build server
-
-  - ${{ if eq(parameters.VSCODE_ARCH, 'x64') }}:
-    - powershell: node build/azure-pipelines/common/smokeTestAgentHost.ts "$(Agent.BuildDirectory)\vscode-server-win32-$(VSCODE_ARCH)"
-      displayName: 🧪 Smoke test packaged Agent Host
 
   - powershell: |
       . build/azure-pipelines/win32/exec.ps1

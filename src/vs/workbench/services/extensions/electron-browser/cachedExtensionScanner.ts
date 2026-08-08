@@ -21,7 +21,7 @@ import { IWorkbenchEnvironmentService } from '../../environment/common/environme
 // Keep the development build aligned with the curated distribution. The source checkout contains
 // many builtin extensions that are intentionally not compiled or shipped for OI.
 const excludedOIDistributionExtensions = new Set([
-	'bat', 'clojure', 'coffeescript', 'configuration-editing', 'copilot', 'csharp', 'css', 'css-language-features', 'dart',
+	'bat', 'clojure', 'coffeescript', 'configuration-editing', 'csharp', 'css', 'css-language-features', 'dart',
 	'debug-auto-launch', 'debug-server-ready', 'docker', 'emmet', 'extension-editing', 'fsharp', 'github', 'github-authentication', 'go', 'groovy', 'grunt', 'gulp',
 	'handlebars', 'hlsl', 'html', 'html-language-features', 'ini', 'ipynb', 'jake', 'javascript', 'julia', 'less', 'lua', 'media-preview', 'merge-conflict',
 	'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm', 'objective-c', 'perl', 'php', 'php-language-features', 'powershell', 'pug', 'r',

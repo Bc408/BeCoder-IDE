@@ -28,7 +28,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../../../platform
 import { ServiceCollection } from '../../../../../platform/instantiation/common/serviceCollection.js';
 import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
 import { IUriIdentityService } from '../../../../../platform/uriIdentity/common/uriIdentity.js';
-import { AnyStackFrame, CallStackFrame, CallStackWidget, CustomStackFrame } from '../../../debug/browser/callStackWidget.js';
+import { AnyStackFrame, CallStackFrame, CallStackWidget, CustomStackFrame } from '../testResultStackWidget.js';
 import { TestCommandId } from '../../common/constants.js';
 import { getTestingConfiguration, TestingConfigKeys, TestingResultsViewLayout } from '../../common/configuration.js';
 import { IObservableValue } from '../../common/observableValue.js';

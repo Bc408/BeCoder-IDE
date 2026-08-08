@@ -26,7 +26,6 @@ import { IFileMatch, IFileQuery, IPatternInfo, IRawFileMatch2, ISearchCompleteSt
 import { TextSearchManager } from '../../../services/search/common/textSearchManager.js';
 import { NativeTextSearchManager } from '../../../services/search/node/textSearchManager.js';
 import type * as vscode from 'vscode';
-import { AISearchKeyword } from '../../../services/search/common/searchExtTypes.js';
 
 let rpcProtocol: TestRPCProtocol;
 let extHostSearch: NativeExtHostSearch;
@@ -37,17 +36,11 @@ class MockMainThreadSearch implements MainThreadSearchShape {
 
 	results: Array<UriComponents | IRawFileMatch2> = [];
 
-	keywords: Array<AISearchKeyword> = [];
-
 	$registerFileSearchProvider(handle: number, scheme: string): void {
 		this.lastHandle = handle;
 	}
 
 	$registerTextSearchProvider(handle: number, scheme: string): void {
-		this.lastHandle = handle;
-	}
-
-	$registerAITextSearchProvider(handle: number, scheme: string): void {
 		this.lastHandle = handle;
 	}
 
@@ -60,10 +53,6 @@ class MockMainThreadSearch implements MainThreadSearchShape {
 
 	$handleTextMatch(handle: number, session: number, data: IRawFileMatch2[]): void {
 		this.results.push(...data);
-	}
-
-	$handleKeywordResult(handle: number, session: number, data: AISearchKeyword): void {
-		this.keywords.push(data);
 	}
 
 	$handleTelemetry(eventName: string, data: any): void {

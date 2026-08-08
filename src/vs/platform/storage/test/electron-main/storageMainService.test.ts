@@ -43,13 +43,9 @@ suite('StorageMainService', function () {
 		settingsResource: joinPath(inMemoryProfileRoot, 'settingsResource'),
 		keybindingsResource: joinPath(inMemoryProfileRoot, 'keybindingsResource'),
 		tasksResource: joinPath(inMemoryProfileRoot, 'tasksResource'),
-		mcpResource: joinPath(inMemoryProfileRoot, 'mcp.json'),
-		languageModelsResource: joinPath(inMemoryProfileRoot, 'chatLanguageModels.json'),
 		snippetsHome: joinPath(inMemoryProfileRoot, 'snippetsHome'),
-		promptsHome: joinPath(inMemoryProfileRoot, 'promptsHome'),
 		extensionsResource: joinPath(inMemoryProfileRoot, 'extensionsResource'),
 		cacheHome: joinPath(inMemoryProfileRoot, 'cache'),
-		agentPluginsHome: joinPath(inMemoryProfileRoot, 'agentPluginsHome'),
 	};
 
 	class TestStorageMainService extends StorageMainService {
@@ -118,7 +114,7 @@ suite('StorageMainService', function () {
 		const environmentService = new NativeEnvironmentService(parseArgs(process.argv, OPTIONS), productService);
 		const fileService = disposables.add(new FileService(new NullLogService()));
 		const uriIdentityService = disposables.add(new UriIdentityService(fileService));
-		const testStorageService = disposables.add(new TestStorageMainService(new NullLogService(), environmentService, disposables.add(new UserDataProfilesMainService(disposables.add(new StateService(SaveStrategy.DELAYED, environmentService, new NullLogService(), fileService)), disposables.add(uriIdentityService), environmentService, fileService, new NullLogService(), productService)), lifecycleMainService, fileService, uriIdentityService));
+		const testStorageService = disposables.add(new TestStorageMainService(new NullLogService(), environmentService, disposables.add(new UserDataProfilesMainService(disposables.add(new StateService(SaveStrategy.DELAYED, environmentService, new NullLogService(), fileService)), disposables.add(uriIdentityService), environmentService, fileService, new NullLogService())), lifecycleMainService, fileService, uriIdentityService));
 
 		disposables.add(testStorageService.applicationStorage);
 

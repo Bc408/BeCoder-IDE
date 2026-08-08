@@ -16,7 +16,7 @@ import { CodeActionTriggerType } from '../../../common/languages.js';
 import { IModelDecoration } from '../../../common/model.js';
 import { ILanguageFeaturesService } from '../../../common/services/languageFeatures.js';
 import { IMarkerDecorationsService } from '../../../common/services/markerDecorations.js';
-import { ApplyCodeActionReason, getCodeActions, quickFixCommandId } from '../../codeAction/browser/codeAction.js';
+import { getCodeActions, quickFixCommandId } from '../../codeAction/browser/codeAction.js';
 import { CodeActionController } from '../../codeAction/browser/codeActionController.js';
 import { CodeActionKind, CodeActionSet, CodeActionTrigger, CodeActionTriggerSource } from '../../codeAction/common/types.js';
 import { MarkerController, NextMarkerAction } from '../../gotoError/browser/gotoError.js';
@@ -28,8 +28,6 @@ import { ITextEditorOptions } from '../../../../platform/editor/common/editor.js
 import { IMarker, IMarkerData, MarkerSeverity } from '../../../../platform/markers/common/markers.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { Progress } from '../../../../platform/progress/common/progress.js';
-import { ThemeIcon } from '../../../../base/common/themables.js';
-import { Codicon } from '../../../../base/common/codicons.js';
 
 const $ = dom.$;
 
@@ -214,7 +212,7 @@ export class MarkerHoverParticipant implements IEditorHoverParticipant<MarkerHov
 			}
 		}
 
-		// Menu-contributed actions (e.g. fix with inline chat)
+		// Menu-contributed actions
 		const menuActions: MenuItemAction[] = [];
 		for (const [, actions] of this._menuService.getMenuActions(MenuId.MarkerHoverStatusBar, this._contextKeyService)) {
 			for (const action of actions) {
@@ -297,22 +295,7 @@ export class MarkerHoverParticipant implements IEditorHoverParticipant<MarkerHov
 					}
 				});
 
-				const aiCodeAction = actions.validActions.find(action => action.action.isAI);
-				if (aiCodeAction) {
-					context.statusBar.addAction({
-						label: aiCodeAction.action.title,
-						commandId: aiCodeAction.action.command?.id ?? '',
-						iconClass: ThemeIcon.asClassName(Codicon.sparkle),
-						run: () => {
-							const controller = CodeActionController.get(this._editor);
-							controller?.applyCodeAction(aiCodeAction, false, false, ApplyCodeActionReason.FromProblemsHover);
-						}
-					});
-				} else {
-					// Only show menu-contributed actions (e.g. inline chat Fix) when there
-					// is no AI code action, to avoid duplicate Fix entry points.
-					renderMenuActions();
-				}
+				renderMenuActions();
 
 				// Notify that the contents have changed given we added
 				// actions to the hover

@@ -22,7 +22,7 @@ export class SurveyEditorInput extends EditorInput {
 
 	constructor(
 		readonly survey: ISurveyDefinition,
-		/** The Copilot feature source that triggered this survey (e.g. 'completions', 'panel.agent', 'agent.codeEdit'). */
+		/** The product feature source that triggered this survey. */
 		source?: string,
 	) {
 		super();

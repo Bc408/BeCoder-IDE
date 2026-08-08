@@ -30,9 +30,6 @@ export const enum TerminalSettingId {
 	AutomationProfileLinux = 'terminal.integrated.automationProfile.linux',
 	AutomationProfileMacOs = 'terminal.integrated.automationProfile.osx',
 	AutomationProfileWindows = 'terminal.integrated.automationProfile.windows',
-	AgentHostProfileLinux = 'terminal.integrated.agentHostProfile.linux',
-	AgentHostProfileMacOs = 'terminal.integrated.agentHostProfile.osx',
-	AgentHostProfileWindows = 'terminal.integrated.agentHostProfile.windows',
 	ProfilesWindows = 'terminal.integrated.profiles.windows',
 	ProfilesMacOs = 'terminal.integrated.profiles.osx',
 	ProfilesLinux = 'terminal.integrated.profiles.linux',
@@ -49,7 +46,6 @@ export const enum TerminalSettingId {
 	TabsShowActions = 'terminal.integrated.tabs.showActions',
 	TabsLocation = 'terminal.integrated.tabs.location',
 	TabsFocusMode = 'terminal.integrated.tabs.focusMode',
-	TabsAllowAgentCliTitle = 'terminal.integrated.tabs.allowAgentCliTitle',
 	MacOptionIsMeta = 'terminal.integrated.macOptionIsMeta',
 	MacOptionClickForcesSelection = 'terminal.integrated.macOptionClickForcesSelection',
 	AltClickMovesCursor = 'terminal.integrated.altClickMovesCursor',
@@ -154,11 +150,6 @@ export const enum WindowsShellType {
 }
 
 export const enum GeneralShellType {
-	Claude = 'claude',
-	Codex = 'codex',
-	CommandCode = 'commandcode',
-	Copilot = 'copilot',
-	Gemini = 'gemini',
 	PowerShell = 'pwsh',
 	Python = 'python',
 	Julia = 'julia',

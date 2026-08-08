@@ -111,9 +111,6 @@ export class IssueReporterOverlay {
 	private descriptionError!: HTMLElement;
 	private titleInput!: InputBox;
 	private titleError!: HTMLElement;
-	private generateTitleBtn!: Button;
-	private readonly _onDidRequestGenerateTitle = new Emitter<string>();
-	readonly onDidRequestGenerateTitle: Event<string> = this._onDidRequestGenerateTitle.event;
 
 	// Step 0: Screenshots & Recording
 	private screenshotContainer!: HTMLElement;
@@ -597,14 +594,11 @@ export class IssueReporterOverlay {
 		this.updateExtensionFieldVisibility();
 
 		// Default the target to the most likely option when the reporter opens.
-		// In the Agents Window we preselect Agents Window; otherwise default to
-		// VS Code (the most common target). Extension is preselected only when an
+		// Extension is preselected only when an
 		// extension id was already provided. The user can always override.
 		if (!this.selectedIssueSource) {
 			if (this.data.extensionId) {
 				this.selectedIssueSource = IssueSource.Extension;
-			} else if (this.data.isSessionsWindow) {
-				this.selectedIssueSource = IssueSource.AgentsWindow;
 			} else {
 				this.selectedIssueSource = IssueSource.VSCode;
 			}
@@ -647,30 +641,11 @@ export class IssueReporterOverlay {
 		}
 		this.typeError = this.createFieldError(page, localize('categoryRequired', "Select a category to continue."));
 
-		// Title field with AI generate button next to label
+		// Title field
 		const titleGroup = append(page, $('div.wizard-field.wizard-title-field'));
-		const titleLabelRow = append(titleGroup, $('div.wizard-title-label-row'));
-		const titleLabel = append(titleLabelRow, $('label.wizard-field-label'));
+		const titleLabel = append(titleGroup, $('label.wizard-field-label'));
 		titleLabel.textContent = localize('issueTitle', "Title");
 		this.appendRequiredMarker(titleLabel);
-
-		const aiBtn = this.disposables.add(new Button(titleLabelRow, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
-		aiBtn.label = `$(sparkle) ${localize('generateTitleBtn', "Generate from description")}`;
-		aiBtn.element.classList.add('wizard-ai-title-btn');
-		aiBtn.element.title = localize('generateTitle', "Generate title from description");
-		aiBtn.enabled = !!this.data.issueBody?.trim();
-		this.disposables.add(aiBtn.onDidClick(() => {
-			const desc = this.descriptionTextarea.value.trim();
-			if (desc && !aiBtn.element.classList.contains('loading')) {
-				// Lock width to prevent layout shift during loading
-				aiBtn.element.style.minWidth = `${aiBtn.element.offsetWidth}px`;
-				aiBtn.enabled = false;
-				aiBtn.label = `$(loading~spin) ${localize('generatingTitle', "Generating...")}`;
-				aiBtn.element.classList.add('loading');
-				this._onDidRequestGenerateTitle.fire(desc);
-			}
-		}));
-		this.generateTitleBtn = aiBtn;
 
 		this.titleInput = this.disposables.add(new InputBox(titleGroup, undefined, {
 			placeholder: localize('issueTitlePlaceholder', "Brief summary of the issue"),
@@ -715,7 +690,6 @@ export class IssueReporterOverlay {
 			}
 			autoGrowTextarea();
 			this.searchSimilarIssues();
-			this.updateGenerateTitleButtonState();
 		}));
 		this.descriptionError = this.createFieldError(descriptionGroup, localize('descriptionRequired', "Enter a description to continue."));
 
@@ -755,7 +729,6 @@ export class IssueReporterOverlay {
 	private getAllSourceOptions(): { label: string; value: IssueSource }[] {
 		return [
 			{ label: product.nameLong || localize('vscode', "Visual Studio Code"), value: IssueSource.VSCode },
-			{ label: localize('agentsWindow', "Agents Window"), value: IssueSource.AgentsWindow },
 			{ label: localize('extensionSource', "A VS Code extension"), value: IssueSource.Extension },
 			{ label: localize('marketplace', "Extensions Marketplace"), value: IssueSource.Marketplace },
 		];
@@ -764,8 +737,8 @@ export class IssueReporterOverlay {
 	private getSourceOptions(): { label: string; value: IssueSource }[] {
 		const options = this.getAllSourceOptions();
 		// The Extension target only applies when there are non-builtin, non-theme
-		// extensions to report against, which never happens in the Agents Window.
-		if (this.data.isSessionsWindow || !this.hasReportableExtensions()) {
+		// extensions to report against.
+		if (!this.hasReportableExtensions()) {
 			return options.filter(o => o.value !== IssueSource.Extension);
 		}
 		return options;
@@ -839,14 +812,12 @@ export class IssueReporterOverlay {
 	private updateIssueSourceFlags(): void {
 		const fileOnExtension = this.selectedIssueSource === IssueSource.Extension;
 		const fileOnMarketplace = this.selectedIssueSource === IssueSource.Marketplace;
-		const fileOnProduct = this.selectedIssueSource === IssueSource.VSCode || this.selectedIssueSource === IssueSource.AgentsWindow || this.selectedIssueSource === IssueSource.Unknown;
-		const fileOnAgentsWindow = this.selectedIssueSource === IssueSource.AgentsWindow;
+		const fileOnProduct = this.selectedIssueSource === IssueSource.VSCode || this.selectedIssueSource === IssueSource.Unknown;
 		this.model.update({
 			issueSource: this.selectedIssueSource,
 			fileOnExtension,
 			fileOnMarketplace,
 			fileOnProduct,
-			isSessionsWindow: fileOnAgentsWindow ? true : this.data.isSessionsWindow,
 			selectedExtension: this.selectedExtension,
 		});
 		this.data.issueSource = this.selectedIssueSource;
@@ -866,9 +837,6 @@ export class IssueReporterOverlay {
 				break;
 			case IssueSource.Marketplace:
 				this.titleInput.setPlaceHolder(localize('marketplacePlaceholder', "E.g. Cannot disable installed extension"));
-				break;
-			case IssueSource.AgentsWindow:
-				this.titleInput.setPlaceHolder(localize('agentsWindowPlaceholder', "E.g. Sessions list does not refresh after creating a new session"));
 				break;
 			case IssueSource.VSCode:
 				this.titleInput.setPlaceHolder(localize('vscodePlaceholder', "E.g. Workbench is missing problems panel"));
@@ -946,8 +914,8 @@ export class IssueReporterOverlay {
 		// `workbench.action.openIssueReporter` command) with a preset `extensionId`
 		// plus extension `data`/`uri`, propagate that data onto the selected
 		// extension and the model so it shows up in the issue body. Doing this
-		// before the built-in early-return is important: extensions bundled with
-		// the dev build (Copilot, etc.) are flagged `isBuiltin`, which triggers
+		// before the built-in early-return is important: bundled extensions are
+		// flagged `isBuiltin`, which triggers
 		// the source switch to VSCode and returns — otherwise the preset data
 		// would be silently lost for every built-in caller. We guard on
 		// `!this.includeExtensionData` (rather than `!extension.data`) because
@@ -1063,8 +1031,6 @@ export class IssueReporterOverlay {
 		switch (this.selectedIssueSource) {
 			case IssueSource.VSCode:
 				return product.nameLong || localize('vscode', "Visual Studio Code");
-			case IssueSource.AgentsWindow:
-				return localize('agentsWindow', "Agents Window");
 			case IssueSource.Extension:
 				return this.selectedExtension?.displayName || this.selectedExtension?.name || localize('extensionSource', "A VS Code extension");
 			case IssueSource.Marketplace:
@@ -1261,13 +1227,6 @@ export class IssueReporterOverlay {
 
 	private hasDescriptionContent(): boolean {
 		return !!this.descriptionTextarea.value.trim();
-	}
-
-	private updateGenerateTitleButtonState(): void {
-		if (!this.generateTitleBtn || this.generateTitleBtn.element.classList.contains('loading')) {
-			return;
-		}
-		this.generateTitleBtn.enabled = this.hasDescriptionContent();
 	}
 
 	private createFieldError(parent: HTMLElement, message: string): HTMLElement {
@@ -2153,10 +2112,8 @@ export class IssueReporterOverlay {
 	}
 
 	/**
-	 * Replace the current attachments with a previously-captured set. Used when the
-	 * issue reporter editor is moved between the main editor area and a modal editor
-	 * part in the Agents Window, which rebuilds the wizard and would otherwise drop
-	 * the in-memory screenshots and recordings. Does not fire
+	 * Replace the current attachments with a previously-captured set when the host
+	 * rebuilds the wizard. Does not fire
 	 * `onDidChangeAttachments` since the host is the source of this state.
 	 */
 	restoreAttachments(screenshots: readonly IScreenshot[], recordings: readonly { filePath: string; durationMs: number; thumbnailDataUrl?: string }[]): void {
@@ -2477,22 +2434,6 @@ ${rows.map(row => row.map(value => this.escapeMarkdownTableCell(value ?? '')).jo
 		});
 	}
 
-	/** Set the title input value (e.g., from AI generation) */
-	setGeneratedTitle(title: string): void {
-		this.titleInput.value = title;
-		if (title.trim()) {
-			this.setFieldError(this.titleInput.element, this.titleError, false);
-		}
-		this.resetGenerateButton();
-	}
-
-	resetGenerateButton(): void {
-		this.generateTitleBtn.label = `$(sparkle) ${localize('generateTitleBtn', "Generate from description")}`;
-		this.generateTitleBtn.element.classList.remove('loading');
-		this.generateTitleBtn.element.style.minWidth = '';
-		this.generateTitleBtn.enabled = this.hasDescriptionContent();
-	}
-
 	/** Show a "Close" button next to the submit button after successful submission */
 	showCloseButton(): void {
 		// Add close button next to the existing preview button
@@ -2633,6 +2574,5 @@ ${rows.map(row => row.map(value => this.escapeMarkdownTableCell(value ?? '')).jo
 		this._onDidRequestOpenRecording.dispose();
 		this._onDidRequestOpenScreenshot.dispose();
 		this._onDidChangeAttachments.dispose();
-		this._onDidRequestGenerateTitle.dispose();
 	}
 }

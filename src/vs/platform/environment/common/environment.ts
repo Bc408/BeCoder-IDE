@@ -15,11 +15,6 @@ export interface IDebugParams {
 	break: boolean;
 }
 
-export interface IExtensionHostDebugParams extends IDebugParams {
-	debugId?: string;
-	env?: Record<string, string>;
-}
-
 /**
  * Type of extension.
  *
@@ -69,7 +64,6 @@ export interface IEnvironmentService {
 	editSessionId?: string;
 
 	// --- extension development
-	debugExtensionHost: IExtensionHostDebugParams;
 	isExtensionDevelopment: boolean;
 	disableExtensions: boolean | string[];
 	skipBuiltinExtensions?: readonly string[];
@@ -90,8 +84,6 @@ export interface IEnvironmentService {
 	disableExperiments: boolean;
 	serviceMachineIdResource: URI;
 
-	// --- agent sessions workspace
-	agentSessionsWorkspace: URI;
 	// --- Policy
 	policyFile?: URI;
 

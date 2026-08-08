@@ -16,14 +16,14 @@ import { MenuId, registerAction2, Action2 } from '../../../../platform/actions/c
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { MarkersViewMode, Markers, MarkersContextKeys } from '../common/markers.js';
 import Messages from './messages.js';
-import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution } from '../../../common/contributions.js';
 import { IMarkersView } from './markers.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { Disposable, IDisposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { IStatusbarEntryAccessor, IStatusbarService, StatusbarAlignment, IStatusbarEntry } from '../../../services/statusbar/browser/statusbar.js';
 import { IMarkerService, MarkerStatistics } from '../../../../platform/markers/common/markers.js';
-import { ViewContainer, IViewContainersRegistry, Extensions as ViewContainerExtensions, ViewContainerLocation, IViewsRegistry, WindowEnablement } from '../../../common/views.js';
+import { ViewContainer, IViewContainersRegistry, Extensions as ViewContainerExtensions, ViewContainerLocation, IViewsRegistry } from '../../../common/views.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { getVisbileViewContextKey, FocusedViewContext } from '../../../common/contextkeys.js';
 import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
@@ -36,7 +36,6 @@ import { IActivityService, NumberBadge } from '../../../services/activity/common
 import { viewFilterSubmenu } from '../../../browser/parts/views/viewFilter.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { problemsConfigurationNodeBase } from '../../../common/configuration.js';
-import { MarkerChatContextContribution } from './markersChatContext.js';
 import { AccessibleViewRegistry } from '../../../../platform/accessibility/browser/accessibleViewRegistry.js';
 import { ProblemsAccessibilityHelp } from './markersAccessibilityHelp.js';
 
@@ -136,8 +135,7 @@ const VIEW_CONTAINER: ViewContainer = Registry.as<IViewContainersRegistry>(ViewC
 	hideIfEmpty: true,
 	order: 0,
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [Markers.MARKERS_CONTAINER_ID, { mergeViewWithContainerWhenSingleView: true }]),
-	storageId: Markers.MARKERS_VIEW_STORAGE_ID,
-	windowEnablement: WindowEnablement.Both
+	storageId: Markers.MARKERS_VIEW_STORAGE_ID
 }, ViewContainerLocation.Panel, { doNotRegisterOpenCommand: true });
 
 Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry).registerViews([{
@@ -152,8 +150,7 @@ Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry).registerViews
 		mnemonicTitle: localize({ key: 'miMarker', comment: ['&& denotes a mnemonic'] }, "&&Problems"),
 		keybindings: { primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyM },
 		order: 0,
-	},
-	windowEnablement: WindowEnablement.Both
+	}
 }], VIEW_CONTAINER);
 
 // workbench
@@ -691,7 +688,6 @@ class MarkersStatusBarContributions extends Disposable implements IWorkbenchCont
 
 workbenchRegistry.registerWorkbenchContribution(MarkersStatusBarContributions, LifecyclePhase.Restored);
 
-registerWorkbenchContribution2(MarkerChatContextContribution.ID, MarkerChatContextContribution, WorkbenchPhase.AfterRestored);
 
 class ActivityUpdater extends Disposable implements IWorkbenchContribution {
 

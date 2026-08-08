@@ -8,7 +8,7 @@ The image carousel is a self-contained workbench contribution that follows the *
 
 - **URI scheme**: `vscode-image-carousel` (registered in `Schemas` in `src/vs/base/common/network.ts`) — used for `EditorInput.resource` identity.
 - **Direct editor input**: Callers create `ImageCarouselEditorInput` with a collection and open it directly via `IEditorService.openEditor()`.
-- **Image extraction**: Chat integration builds a **sections-based** collection from chat request/response items. A section can include user-attached request images alongside response-derived images (tool invocations and inline references). For paired request/response items, the section title prefers the user's chat request message; pending requests with image attachments form their own section.
+- **Explorer integration**: The Explorer action builds a collection from selected media files or from the media files in a selected folder.
 
 ## How to open the carousel
 
@@ -20,9 +20,9 @@ const input = new ImageCarouselEditorInput(collection, startIndex);
 await editorService.openEditor(input, { pinned: true }, MODAL_GROUP);
 ```
 
-### From chat (via click handler)
+### From Explorer
 
-Clicking an image attachment pill in chat (when `chat.imageCarousel.enabled` is true) executes the `workbench.action.chat.openImageInCarousel` command, which collects request attachment images together with response-derived images for the current chat session and opens them in the carousel. MIME types are resolved via `getMediaMime()` from `src/vs/base/common/mime.ts`.
+The `workbench.action.openImagesInCarousel` action opens selected media files or the media files in a selected folder. MIME types are resolved via `getMediaMime()` from `src/vs/base/common/mime.ts`.
 
 ## Key design decisions
 
@@ -30,9 +30,8 @@ Clicking an image attachment pill in chat (when `chat.imageCarousel.enabled` is 
 
 - **Modal editor**: Opens in `MODAL_GROUP` (-4) as an overlay.
 - **Not restorable**: `canSerialize()` returns `false` — image data is in-memory only.
-- **Collection ID = chat session identity**: `sessionResource + '_carousel'` for stable dedup via `EditorInput.matches()`.
-- **Preview-gated**: `chat.imageCarousel.enabled` (default `false`, tagged `preview`). When off, clicks fall through to `openResource()`.
-- **Exact image matching**: Finds the clicked image within the constructed collection by URI first, then falls back to byte equality when needed.
+- **Collection identity**: `ImageCarouselEditorInput` uses its collection ID for `EditorInput.matches()` deduplication.
+- **Explorer-gated**: `imageCarousel.explorerContextMenu.enabled` controls the Explorer context-menu action.
 
 ### DOM & rendering
 

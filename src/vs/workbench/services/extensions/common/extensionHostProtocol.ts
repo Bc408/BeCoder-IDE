@@ -66,7 +66,6 @@ export interface IExtensionHostInitData {
 }
 
 export interface IEnvironment {
-	isExtensionDevelopmentDebug: boolean;
 	appName: string;
 	appHost: string;
 	appRoot?: URI;
@@ -81,7 +80,6 @@ export interface IEnvironment {
 	useHostProxy?: boolean;
 	skipWorkspaceStorageLock?: boolean;
 	extensionLogLevel?: [string, LogLevel][];
-	isSessionsWindow?: boolean;
 }
 
 export interface IStaticWorkspaceData {

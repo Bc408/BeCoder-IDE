@@ -8,7 +8,7 @@ import { run } from '../esbuild-webview-common.mts';
 
 const rootDir = import.meta.dirname;
 const previewSrcDir = path.join(rootDir, 'preview-src');
-const chatSrcDir = path.join(previewSrcDir, 'chat');
+const diagramPreviewSrcDir = path.join(previewSrcDir, 'diagram-preview');
 
 const cssTextPlugin: Plugin = {
 	name: 'css-text',
@@ -42,15 +42,14 @@ const mermaidMarkdownBuildOptions: Partial<esbuild.BuildOptions> = {
 };
 
 await Promise.all([
-	// Chat
+	// Standalone diagram preview
 	run({
 		entryPoints: {
-			'index': path.join(chatSrcDir, 'index.ts'),
-			'index-editor': path.join(chatSrcDir, 'index-editor.ts'),
+			'index': path.join(diagramPreviewSrcDir, 'index.ts'),
 			'codicon': path.join(rootDir, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'),
 		},
-		srcDir: chatSrcDir,
-		outdir: path.join(rootDir, 'chat-webview-out'),
+		srcDir: diagramPreviewSrcDir,
+		outdir: path.join(rootDir, 'diagram-preview-out'),
 		additionalOptions: {
 			loader: {
 				'.ttf': 'dataurl',

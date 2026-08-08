@@ -22,7 +22,7 @@ import { IDialogService } from '../../dialogs/common/dialogs.js';
 import { IInstantiationService } from '../../instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../keybinding/common/keybinding.js';
 import { ILogService } from '../../log/common/log.js';
-import { FastAndSlowPicks, IPickerQuickAccessItem, IPickerQuickAccessProviderOptions, PickerQuickAccessProvider, Picks, TriggerAction } from './pickerQuickAccess.js';
+import { IPickerQuickAccessItem, IPickerQuickAccessProviderOptions, PickerQuickAccessProvider, Picks, TriggerAction } from './pickerQuickAccess.js';
 import { IQuickAccessProviderRunOptions } from '../common/quickAccess.js';
 import { IKeyMods, IQuickPickSeparator } from '../common/quickInput.js';
 import { IStorageService, StorageScope, StorageTarget, WillSaveStateReason } from '../../storage/common/storage.js';
@@ -74,7 +74,7 @@ export abstract class AbstractCommandsQuickAccessProvider extends PickerQuickAcc
 		this.options = options;
 	}
 
-	protected async _getPicks(filter: string, _disposables: DisposableStore, token: CancellationToken, runOptions?: IQuickAccessProviderRunOptions): Promise<Picks<ICommandQuickPick> | FastAndSlowPicks<ICommandQuickPick>> {
+	protected async _getPicks(filter: string, _disposables: DisposableStore, token: CancellationToken, runOptions?: IQuickAccessProviderRunOptions): Promise<Picks<ICommandQuickPick>> {
 
 		// Ask subclass for all command picks
 		const allCommandPicks = await this.getCommandPicks(token);
@@ -247,27 +247,7 @@ export abstract class AbstractCommandsQuickAccessProvider extends PickerQuickAcc
 			commandPicks.push(this.toCommandPick(commandPick, runOptions, isInHistory));
 		}
 
-		if (!this.hasAdditionalCommandPicks(filter, token)) {
-			return commandPicks;
-		}
-
-		return {
-			picks: commandPicks,
-			additionalPicks: (async (): Promise<Picks<ICommandQuickPick>> => {
-				const additionalCommandPicks = await this.getAdditionalCommandPicks(allCommandPicks, filteredCommandPicks, filter, token);
-				if (token.isCancellationRequested) {
-					return [];
-				}
-
-				const commandPicks: Array<ICommandQuickPick | IQuickPickSeparator> = additionalCommandPicks.map(commandPick => this.toCommandPick(commandPick, runOptions));
-				// Basically, if we haven't already added a separator, we add one before the additional picks so long
-				// as one hasn't been added to the start of the array.
-				if (addSuggestedSeparator && commandPicks[0]?.type !== 'separator') {
-					commandPicks.unshift({ type: 'separator', label: localize('suggested', "similar commands") });
-				}
-				return commandPicks;
-			})()
-		};
+		return commandPicks;
 	}
 
 	private toCommandPick(commandPick: ICommandQuickPick | IQuickPickSeparator, runOptions?: IQuickAccessProviderRunOptions, isRecentlyUsed: boolean = false): ICommandQuickPick | IQuickPickSeparator {
@@ -351,9 +331,6 @@ export abstract class AbstractCommandsQuickAccessProvider extends PickerQuickAcc
 	}
 
 	protected abstract getCommandPicks(token: CancellationToken): Promise<Array<ICommandQuickPick>>;
-
-	protected abstract hasAdditionalCommandPicks(filter: string, token: CancellationToken): boolean;
-	protected abstract getAdditionalCommandPicks(allPicks: ICommandQuickPick[], picksSoFar: ICommandQuickPick[], filter: string, token: CancellationToken): Promise<Array<ICommandQuickPick | IQuickPickSeparator>>;
 }
 
 interface ISerializedCommandHistory {

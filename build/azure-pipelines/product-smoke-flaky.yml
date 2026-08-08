@@ -73,14 +73,6 @@ variables:
     value: microsoft/vscode-distro
   - name: VSCODE_OVERWRITE_TPN
     value: "true"
-  # The Copilot extension build patches its package.json version for pre-release
-  # (non-stable) quality and requires a per-build counter (0-99, reset daily) to
-  # keep versions unique. Mirrors product-build.yml. The counter resets each day
-  # per quality+branch, so this twice-daily pipeline stays at a low value.
-  - name: VSCODE_PUBLISH_COUNTER_PREFIX
-    value: $[format('{0:yyyyMMdd}-{1}-{2}', pipeline.startTime, variables['VSCODE_QUALITY'], variables['Build.SourceBranch'])]
-  - name: VSCODE_PUBLISH_COUNTER
-    value: $[counter(variables['VSCODE_PUBLISH_COUNTER_PREFIX'], 1)]
   - name: skipComponentGovernanceDetection
     value: true
   - name: Codeql.SkipTaskAutoInjection
@@ -152,30 +144,9 @@ extends:
       sourceAnalysisPool: 1es-windows-2022-x64
       createAdoIssuesForJustificationsForDisablement: false
     stages:
-      # The per-OS compile template unconditionally waits (up to 30 min) for a
-      # `Copilot` job to publish the `copilot_vsix` artifact, which is mixed into
-      # the build. This stage produces it — mirroring product-build.yml. The
-      # platform stages depend on its artifact-published output so they are
-      # skipped when the artifact cannot be produced, but still run if later
-      # Copilot validation fails.
-      - stage: Copilot
-        dependsOn: []
-        pool:
-          name: 1es-ubuntu-22.04-x64
-          os: linux
-        jobs:
-          - template: build/azure-pipelines/product-copilot.yml@self
-            parameters:
-              VSCODE_PUBLISH: false
-              VSCODE_RELEASE: false
-              # This is a test-only run; don't push the Copilot extension's source
-              # maps to the CDN.
-              VSCODE_UPLOAD_SOURCEMAPS: false
-
       - ${{ if eq(parameters.VSCODE_BUILD_LINUX, true) }}:
         - stage: Linux
-          dependsOn: Copilot
-          condition: and(not(canceled()), eq(dependencies.Copilot.outputs['Copilot.copilotVsix.published'], 'true'))
+          dependsOn: []
           pool:
             name: 1es-ubuntu-22.04-x64
             os: linux
@@ -187,8 +158,7 @@ extends:
 
       - ${{ if eq(parameters.VSCODE_BUILD_WIN32, true) }}:
         - stage: Windows
-          dependsOn: Copilot
-          condition: and(not(canceled()), eq(dependencies.Copilot.outputs['Copilot.copilotVsix.published'], 'true'))
+          dependsOn: []
           pool:
             name: 1es-windows-2022-x64
             os: windows
@@ -200,8 +170,7 @@ extends:
 
       - ${{ if eq(parameters.VSCODE_BUILD_MACOS, true) }}:
         - stage: macOS
-          dependsOn: Copilot
-          condition: and(not(canceled()), eq(dependencies.Copilot.outputs['Copilot.copilotVsix.published'], 'true'))
+          dependsOn: []
           pool:
             name: AcesShared
             os: macOS

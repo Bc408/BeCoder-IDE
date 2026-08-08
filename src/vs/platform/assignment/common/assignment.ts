@@ -103,14 +103,13 @@ export enum Filters {
 	ReleaseDate = 'X-VSCode-ReleaseDate',
 
 	/**
-	 * The kind of window VS Code is running in (`editor` or `agents`).
+	 * The kind of window VS Code is running in.
 	 */
 	WindowKind = 'X-VSCode-WindowKind',
 }
 
 export const enum WindowKind {
 	Editor = 'editor',
-	Agents = 'agents',
 }
 
 export class AssignmentFilterProvider implements IExperimentationFilterProvider {
@@ -195,6 +194,6 @@ export class AssignmentFilterProvider implements IExperimentationFilterProvider 
 export function getInternalOrg(organisations: string[] | undefined): 'vscode' | 'github' | 'microsoft' | undefined {
 	const isVSCodeInternal = organisations?.includes('Visual-Studio-Code');
 	const isGitHubInternal = organisations?.includes('github');
-	const isMicrosoftInternal = organisations?.includes('microsoft') || organisations?.includes('ms-copilot') || organisations?.includes('MicrosoftCopilot');
+	const isMicrosoftInternal = organisations?.includes('microsoft');
 	return isVSCodeInternal ? 'vscode' : isGitHubInternal ? 'github' : isMicrosoftInternal ? 'microsoft' : undefined;
 }

@@ -11,17 +11,13 @@ import * as path from '../../../../base/common/path.js';
 import * as resources from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { FolderQuerySearchTree } from './folderQuerySearchTree.js';
-import { DEFAULT_MAX_SEARCH_RESULTS, hasSiblingPromiseFn, IAITextQuery, IFileMatch, IFolderQuery, excludeToGlobPattern, IPatternInfo, ISearchCompleteStats, ITextQuery, ITextSearchContext, ITextSearchMatch, ITextSearchResult, ITextSearchStats, QueryGlobTester, QueryType, resolvePatternsForProvider, ISearchRange, DEFAULT_TEXT_SEARCH_PREVIEW_OPTIONS } from './search.js';
-import { TextSearchComplete2, TextSearchMatch2, TextSearchProviderFolderOptions, TextSearchProvider2, TextSearchProviderOptions, TextSearchQuery2, TextSearchResult2, AITextSearchProvider, AISearchResult, AISearchKeyword } from './searchExtTypes.js';
+import { DEFAULT_MAX_SEARCH_RESULTS, hasSiblingPromiseFn, IFileMatch, IFolderQuery, excludeToGlobPattern, IPatternInfo, ISearchCompleteStats, ITextQuery, ITextSearchContext, ITextSearchMatch, ITextSearchResult, ITextSearchStats, QueryGlobTester, resolvePatternsForProvider, ISearchRange, DEFAULT_TEXT_SEARCH_PREVIEW_OPTIONS } from './search.js';
+import { TextSearchComplete2, TextSearchMatch2, TextSearchProviderFolderOptions, TextSearchProvider2, TextSearchProviderOptions, TextSearchQuery2, TextSearchResult2 } from './searchExtTypes.js';
 
 export interface IFileUtils {
 	readdir: (resource: URI) => Promise<string[]>;
 	toCanonicalName: (encoding: string) => string;
 }
-interface IAITextQueryProviderPair {
-	query: IAITextQuery; provider: AITextSearchProvider;
-}
-
 interface ITextQueryProviderPair {
 	query: ITextQuery; provider: TextSearchProvider2;
 }
@@ -38,7 +34,7 @@ export class TextSearchManager {
 	private isLimitHit = false;
 	private resultCount = 0;
 
-	constructor(private queryProviderPair: IAITextQueryProviderPair | ITextQueryProviderPair,
+	constructor(private queryProviderPair: ITextQueryProviderPair,
 		private fileUtils: IFileUtils,
 		private processType: ITextSearchStats['type']) { }
 
@@ -46,7 +42,7 @@ export class TextSearchManager {
 		return this.queryProviderPair.query;
 	}
 
-	search(onProgress: (matches: IFileMatch[]) => void, token: CancellationToken, onKeywordResult?: (keyword: AISearchKeyword) => void): Promise<ISearchCompleteStats> {
+	search(onProgress: (matches: IFileMatch[]) => void, token: CancellationToken): Promise<ISearchCompleteStats> {
 		const folderQueries = this.query.folderQueries || [];
 		const tokenSource = new CancellationTokenSource(token);
 
@@ -55,10 +51,6 @@ export class TextSearchManager {
 
 			let isCanceled = false;
 			const onResult = (result: TextSearchResult2, folderIdx: number) => {
-				if (result instanceof AISearchKeyword) {
-					// Already processed by the callback.
-					return;
-				}
 				if (isCanceled) {
 					return;
 				}
@@ -84,7 +76,7 @@ export class TextSearchManager {
 			};
 
 			// For each root folder
-			this.doSearch(folderQueries, onResult, tokenSource.token, onKeywordResult).then(result => {
+			this.doSearch(folderQueries, onResult, tokenSource.token).then(result => {
 				tokenSource.dispose();
 				this.collector!.flush();
 
@@ -125,7 +117,7 @@ export class TextSearchManager {
 		return new TextSearchMatch2(result.uri, result.ranges.slice(0, size), result.previewText);
 	}
 
-	private async doSearch(folderQueries: IFolderQuery<URI>[], onResult: (result: TextSearchResult2, folderIdx: number) => void, token: CancellationToken, onKeywordResult?: (keyword: AISearchKeyword) => void): Promise<TextSearchComplete2 | null | undefined> {
+	private async doSearch(folderQueries: IFolderQuery<URI>[], onResult: (result: TextSearchResult2, folderIdx: number) => void, token: CancellationToken): Promise<TextSearchComplete2 | null | undefined> {
 		const folderMappings: FolderQuerySearchTree<FolderQueryInfo> = new FolderQuerySearchTree<FolderQueryInfo>(
 			folderQueries,
 			(fq, i) => {
@@ -137,35 +129,28 @@ export class TextSearchManager {
 
 		const testingPs: Promise<void>[] = [];
 		const progress = {
-			report: (result: TextSearchResult2 | AISearchResult) => {
-				if (result instanceof AISearchKeyword) {
-					onKeywordResult?.(result);
-				} else {
-					if (result.uri === undefined) {
-						throw Error('Text search result URI is undefined. Please check provider implementation.');
-					}
-					const folderQuery = folderMappings.findQueryFragmentAwareSubstr(result.uri);
-					if (folderQuery?.folder?.scheme) {
-						const hasSibling = folderQuery.folder.scheme === Schemas.file ?
-							hasSiblingPromiseFn(() => {
-								return this.fileUtils.readdir(resources.dirname(result.uri));
-							}) :
-							undefined;
+			report: (result: TextSearchResult2) => {
+				if (result.uri === undefined) {
+					throw Error('Text search result URI is undefined. Please check provider implementation.');
+				}
+				const folderQuery = folderMappings.findQueryFragmentAwareSubstr(result.uri);
+				if (folderQuery?.folder?.scheme) {
+					const hasSibling = folderQuery.folder.scheme === Schemas.file ?
+						hasSiblingPromiseFn(() => this.fileUtils.readdir(resources.dirname(result.uri))) :
+						undefined;
 
-						const relativePath = resources.relativePath(folderQuery.folder, result.uri);
-						if (relativePath) {
-							// This method is only async when the exclude contains sibling clauses
-							const included = folderQuery.queryTester.includedInQuery(relativePath, path.basename(relativePath), hasSibling);
-							if (isThenable(included)) {
-								testingPs.push(
-									included.then(isIncluded => {
-										if (isIncluded) {
-											onResult(result, folderQuery.folderIdx);
-										}
-									}));
-							} else if (included) {
-								onResult(result, folderQuery.folderIdx);
-							}
+					const relativePath = resources.relativePath(folderQuery.folder, result.uri);
+					if (relativePath) {
+						// This method is only async when the exclude contains sibling clauses
+						const included = folderQuery.queryTester.includedInQuery(relativePath, path.basename(relativePath), hasSibling);
+						if (isThenable(included)) {
+							testingPs.push(included.then(isIncluded => {
+								if (isIncluded) {
+									onResult(result, folderQuery.folderIdx);
+								}
+							}));
+						} else if (included) {
+							onResult(result, folderQuery.folderIdx);
 						}
 					}
 				}
@@ -181,12 +166,7 @@ export class TextSearchManager {
 			surroundingContext: this.query.surroundingContext ?? 0,
 		};
 
-		let result;
-		if (this.queryProviderPair.query.type === QueryType.aiText) {
-			result = await (this.queryProviderPair as IAITextQueryProviderPair).provider.provideAITextSearchResults(this.queryProviderPair.query.contentPattern, searchOptions, progress, token);
-		} else {
-			result = await (this.queryProviderPair as ITextQueryProviderPair).provider.provideTextSearchResults(patternInfoToQuery(this.queryProviderPair.query.contentPattern), searchOptions, progress, token);
-		}
+		const result = await this.queryProviderPair.provider.provideTextSearchResults(patternInfoToQuery(this.queryProviderPair.query.contentPattern), searchOptions, progress, token);
 		if (testingPs.length) {
 			await Promise.all(testingPs);
 		}

@@ -24,7 +24,7 @@ import { TextModelText } from '../../../../common/model/textModelText.js';
 import { InlineCompletionViewData, InlineCompletionViewKind } from '../view/inlineEdits/inlineEditsViewInterface.js';
 import { computeEditKind, InlineSuggestionEditKind } from './editKind.js';
 import { inlineCompletionIsVisible } from './inlineCompletionIsVisible.js';
-import { IInlineSuggestDataAction, IInlineSuggestDataActionEdit, InlineSuggestData, InlineSuggestionList, PartialAcceptance, RenameInfo, SnippetInfo } from './provideInlineCompletions.js';
+import { IInlineSuggestDataAction, IInlineSuggestDataActionEdit, InlineSuggestData, InlineSuggestionList, PartialAcceptance, SnippetInfo } from './provideInlineCompletions.js';
 import { InlineSuggestAlternativeAction } from './InlineSuggestAlternativeAction.js';
 import { TextModelValueReference } from './textModelValueReference.js';
 
@@ -113,7 +113,6 @@ abstract class InlineSuggestionItemBase {
 	public get semanticId(): string { return this.hash; }
 	public get gutterMenuLinkAction(): Command | undefined { return this._sourceInlineCompletion.gutterMenuLinkAction; }
 	public get command(): Command | undefined { return this._sourceInlineCompletion.command; }
-	public get supportsRename(): boolean { return this._data.supportsRename; }
 	public get warning(): InlineCompletionWarning | undefined { return this._sourceInlineCompletion.warning; }
 	public get showInlineEditMenu(): boolean { return !!this._sourceInlineCompletion.showInlineEditMenu; }
 	public get hash(): string {
@@ -180,10 +179,6 @@ abstract class InlineSuggestionItemBase {
 	*/
 	public getSourceCompletion(): InlineCompletion {
 		return this._sourceInlineCompletion;
-	}
-
-	public setRenameProcessingInfo(info: RenameInfo): void {
-		this._data.setRenameProcessingInfo(info);
 	}
 
 	public withAction(action: IInlineSuggestDataAction): InlineSuggestData {

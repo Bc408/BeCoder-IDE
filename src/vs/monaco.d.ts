@@ -6764,11 +6764,6 @@ declare namespace monaco.languages {
 	export function registerRenameProvider(languageSelector: LanguageSelector, provider: RenameProvider): IDisposable;
 
 	/**
-	 * Register a new symbol-name provider (e.g., when a symbol is being renamed, show new possible symbol-names)
-	 */
-	export function registerNewSymbolNameProvider(languageSelector: LanguageSelector, provider: NewSymbolNamesProvider): IDisposable;
-
-	/**
 	 * Register a signature help provider (used by e.g. parameter hints).
 	 */
 	export function registerSignatureHelpProvider(languageSelector: LanguageSelector, provider: SignatureHelpProvider): IDisposable;
@@ -7548,28 +7543,6 @@ declare namespace monaco.languages {
 		readonly changeHint?: IInlineCompletionChangeHint;
 	}
 
-	export interface IInlineCompletionModelInfo {
-		models: IInlineCompletionModel[];
-		currentModelId: string;
-	}
-
-	export interface IInlineCompletionModel {
-		name: string;
-		id: string;
-	}
-
-	export interface IInlineCompletionProviderOption {
-		readonly id: string;
-		readonly label: string;
-		readonly values: readonly IInlineCompletionProviderOptionValue[];
-		readonly currentValueId: string;
-	}
-
-	export interface IInlineCompletionProviderOptionValue {
-		readonly id: string;
-		readonly label: string;
-	}
-
 	export class SelectedSuggestionInfo {
 		readonly range: IRange;
 		readonly text: string;
@@ -7629,7 +7602,6 @@ declare namespace monaco.languages {
 		readonly showRange?: IRange;
 		readonly warning?: InlineCompletionWarning;
 		readonly hint?: IInlineCompletionHint;
-		readonly supportsRename?: boolean;
 		/**
 		 * Used for telemetry.
 		 */
@@ -7721,12 +7693,6 @@ declare namespace monaco.languages {
 		excludesGroupIds?: InlineCompletionProviderGroupId[];
 		displayName?: string;
 		debounceDelayMs?: number;
-		modelInfo?: IInlineCompletionModelInfo;
-		onDidModelInfoChange?: IEvent<void>;
-		setModelId?(modelId: string): Promise<void>;
-		providerOptions?: readonly IInlineCompletionProviderOption[];
-		onDidProviderOptionsChange?: IEvent<void>;
-		setProviderOption?(optionId: string, valueId: string): Promise<void>;
 		toString?(): string;
 	}
 
@@ -7784,13 +7750,6 @@ declare namespace monaco.languages {
 		typingIntervalCharacterCount: number;
 		selectedSuggestionInfo: boolean;
 		availableProviders: string;
-		skuPlan: string | undefined;
-		skuType: string | undefined;
-		renameCreated: boolean | undefined;
-		renameDuration: number | undefined;
-		renameTimedOut: boolean | undefined;
-		renameDroppedOtherEdits: number | undefined;
-		renameDroppedRenameEdits: number | undefined;
 		editKind: string | undefined;
 		longDistanceHintVisible?: boolean;
 		longDistanceHintDistance?: number;
@@ -8476,25 +8435,6 @@ declare namespace monaco.languages {
 	export interface RenameProvider {
 		provideRenameEdits(model: editor.ITextModel, position: Position, newName: string, token: CancellationToken): ProviderResult<WorkspaceEdit & Rejection>;
 		resolveRenameLocation?(model: editor.ITextModel, position: Position, token: CancellationToken): ProviderResult<RenameLocation & Rejection>;
-	}
-
-	export enum NewSymbolNameTag {
-		AIGenerated = 1
-	}
-
-	export enum NewSymbolNameTriggerKind {
-		Invoke = 0,
-		Automatic = 1
-	}
-
-	export interface NewSymbolName {
-		readonly newSymbolName: string;
-		readonly tags?: readonly NewSymbolNameTag[];
-	}
-
-	export interface NewSymbolNamesProvider {
-		supportsAutomaticNewSymbolNamesTriggerKind?: Promise<boolean | undefined>;
-		provideNewSymbolNames(model: editor.ITextModel, range: IRange, triggerKind: NewSymbolNameTriggerKind, token: CancellationToken): ProviderResult<NewSymbolName[]>;
 	}
 
 	export interface Command {

@@ -59,7 +59,6 @@
 	"electronArtifactFeed": "",
 	"urlProtocol": "becoder",
 	"trustedExtensionProtocolHandlers": [],
-	"agentsTelemetryAppName": "agents",
 	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
 	"builtInExtensions": [],
 	"onboardingKeymaps": [
@@ -137,7 +136,5 @@
 			"type": "light"
 		}
 	],
-	"builtInExtensionsEnabledWithAutoUpdates": [],
-	"sessionsWindowAllowedExtensions": [],
-	"voiceWsUrl": "wss://falcon-caas.mai.microsoft.com/voice-code/api/v1/realtime/voice"
+	"builtInExtensionsEnabledWithAutoUpdates": []
 }

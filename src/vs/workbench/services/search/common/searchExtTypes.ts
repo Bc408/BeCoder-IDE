@@ -23,7 +23,6 @@ export class Position {
 	with(change: { line?: number; character?: number }): Position;
 	with(_: any): Position { return new Position(0, 0); }
 }
-
 export class Range {
 	readonly start: Position;
 	readonly end: Position;
@@ -44,7 +43,6 @@ export class Range {
 	with(change: { start?: Position; end?: Position }): Range;
 	with(_: any): Range { return new Range(0, 0, 0, 0); }
 }
-
 export type ProviderResult<T> = T | undefined | null | Thenable<T | undefined | null>;
 
 /**
@@ -119,8 +117,6 @@ export interface TextSearchQuery2 {
 	 */
 	isWordMatch?: boolean;
 }
-
-
 export interface TextSearchProviderFolderOptions {
 	/**
 	 * The root folder to search within.
@@ -321,27 +317,9 @@ export class TextSearchContext2 {
 }
 
 /**
-/**
- * Keyword suggestion for AI search.
- */
-export class AISearchKeyword {
-	/**
-	 * @param keyword The keyword associated with the search.
-	 */
-	constructor(public keyword: string) { }
-}
-
-/**
  * A result payload for a text search, pertaining to matches within a single file.
  */
 export type TextSearchResult2 = TextSearchMatch2 | TextSearchContext2;
-
-/**
- * A result payload for an AI search.
- * This can be a {@link TextSearchMatch2 match} or a {@link AISearchKeyword keyword}.
- * The result can be a match or a keyword.
-*/
-export type AISearchResult = TextSearchResult2 | AISearchKeyword;
 
 /**
  * A FileSearchProvider provides search results for files in the given folder that match a query string. It can be invoked by quickaccess or other extensions.
@@ -420,8 +398,6 @@ export interface TextSearchCompleteMessage2 {
 	 */
 	type: TextSearchCompleteMessageType;
 }
-
-
 /**
  * A FileSearchProvider provides search results for files in the given folder that match a query string. It can be invoked by quickaccess or other extensions.
  *
@@ -543,27 +519,4 @@ export interface TextSearchCompleteMessage {
 	 * The message type, this affects how the message will be rendered.
 	 */
 	type: TextSearchCompleteMessageType;
-}
-
-
-/**
- * An AITextSearchProvider provides additional AI text search results in the workspace.
- */
-export interface AITextSearchProvider {
-
-	/**
-	 * The name of the AI searcher. Will be displayed as `{name} Results` in the Search View.
-	 */
-	readonly name?: string;
-
-	/**
-	 * WARNING: VERY EXPERIMENTAL.
-	 *
-	 * Provide results that match the given text pattern.
-	 * @param query The parameter for this query.
-	 * @param options A set of options to consider while searching.
-	 * @param progress A progress callback that must be invoked for all results.
-	 * @param token A cancellation token.
-	 */
-	provideAITextSearchResults(query: string, options: TextSearchProviderOptions, progress: IProgress<TextSearchResult2>, token: CancellationToken): ProviderResult<TextSearchComplete2>;
 }

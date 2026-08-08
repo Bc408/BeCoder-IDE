@@ -134,8 +134,6 @@ export class TerminalQuickFixAddon extends Disposable implements ITerminalAddon,
 		const actionSet = {
 			allActions: actions,
 			hasAutoFix: false,
-			hasAIFix: false,
-			allAIFixes: false,
 			validActions: actions,
 			dispose: () => { }
 		} satisfies ActionSet<TerminalQuickFixItem>;

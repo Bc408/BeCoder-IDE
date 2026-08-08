@@ -9,7 +9,6 @@ import { Emitter, Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { IBrowserViewBounds, IBrowserViewDevToolsStateEvent, IBrowserViewFocusEvent, IBrowserViewKeyDownEvent, IBrowserViewState, IBrowserViewNavigationEvent, IBrowserViewLoadingEvent, IBrowserViewLoadError, IBrowserViewTitleChangeEvent, IBrowserViewFaviconChangeEvent, IBrowserViewCaptureScreenshotOptions, IBrowserViewFindInPageOptions, IBrowserViewFindInPageResult, IBrowserViewVisibilityEvent, browserViewIsolatedWorldId, browserZoomFactors, browserZoomDefaultIndex, IBrowserViewOwner, IBrowserViewOpenOptions, IBrowserViewPermissionRequestEvent } from '../common/browserView.js';
 import { BrowserViewEmulator } from './browserViewEmulator.js';
-import { BrowserViewInspector } from './browserViewInspector.js';
 import { IWindowsMainService } from '../../windows/electron-main/windows.js';
 import { ICodeWindow, LoadReason } from '../../window/electron-main/window.js';
 import { IAuxiliaryWindowsMainService } from '../../auxiliaryWindow/electron-main/auxiliaryWindows.js';
@@ -53,7 +52,6 @@ export class BrowserView extends Disposable {
 
 	readonly debugger: BrowserViewDebugger;
 	readonly emulator: BrowserViewEmulator;
-	readonly inspector: BrowserViewInspector;
 
 	private _ownerWindow: ICodeWindow;
 	private _currentWindow: ICodeWindow | IAuxiliaryWindow | undefined;
@@ -225,7 +223,6 @@ export class BrowserView extends Disposable {
 
 		this.debugger = new BrowserViewDebugger(this, this.logService);
 		this.emulator = this._register(new BrowserViewEmulator(this, this.logService));
-		this.inspector = this._register(new BrowserViewInspector(this));
 
 		const fireRemoteStatus = () => this._onDidChangeRemoteStatus.fire(this.session.remote.isRemote);
 		this._register(this.session.remote.onDidStart(fireRemoteStatus));
@@ -517,7 +514,7 @@ export class BrowserView extends Disposable {
 			});
 		});
 
-		// Capture console messages for sharing with chat
+		// Capture console messages for the browser developer tools.
 		this._view.webContents.on('console-message', (event) => {
 			this._consoleLogs.push(`[${event.level}] ${event.message}`);
 			if (this._consoleLogs.length > BrowserView.MAX_CONSOLE_LOG_ENTRIES) {
@@ -603,9 +600,7 @@ export class BrowserView extends Disposable {
 			storageKeys: { ...this.session.history.storageKeys, ...this.session.permissions.storageKeys },
 			permissions: this.session.permissions.serialize(),
 			browserZoomIndex: this._browserZoomIndex,
-			isElementSelectionActive: this.inspector.isElementSelectionActive,
 			isRemoteSession: this.session.remote.isRemote,
-			isAreaSelectionActive: this.inspector.isAreaSelectionActive,
 			device: this.emulator.device
 		};
 	}
@@ -764,7 +759,7 @@ export class BrowserView extends Disposable {
 		if (options?.pageRect) {
 			const zoomFactor = this._view.webContents.getZoomFactor();
 			// The visual viewport scale accounts for pinch-to-zoom magnification, which is separate from the regular zoom factor.
-			const visualViewportScale = await this.inspector.getVisualViewportScale();
+			const visualViewportScale = await this._getVisualViewportScale();
 			const emulationScale = this.emulator.emulatedScaleFactor;
 			options.screenRect = {
 				x: options.pageRect.x * visualViewportScale * zoomFactor * emulationScale,
@@ -806,6 +801,18 @@ export class BrowserView extends Disposable {
 			this._lastScreenshot = screenshot;
 		}
 		return screenshot;
+	}
+
+	private async _getVisualViewportScale(): Promise<number> {
+		try {
+			const result = await this.debugger.sendCommand('Runtime.evaluate', {
+				expression: 'window.visualViewport?.scale ?? 1',
+				returnByValue: true
+			}) as { result?: { value?: number } };
+			return typeof result.result?.value === 'number' ? result.result.value : 1;
+		} catch {
+			return 1;
+		}
 	}
 
 	// Capture a screenshot of the full scrollable document (beyond the viewport) via CDP.

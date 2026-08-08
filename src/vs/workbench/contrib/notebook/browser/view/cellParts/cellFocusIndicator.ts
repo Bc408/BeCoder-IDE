@@ -80,7 +80,7 @@ export class CellFocusIndicator extends CellContentPart {
 			this.bottom.domNode.style.transform = `translateY(${indicatorPostion.bottomIndicatorTop + 6}px)`;
 			this.left.setHeight(indicatorPostion.verticalIndicatorHeight);
 			this.right.setHeight(indicatorPostion.verticalIndicatorHeight);
-			this.codeFocusIndicator.setHeight(indicatorPostion.verticalIndicatorHeight - this.getIndicatorTopMargin() * 2 - element.layoutInfo.chatHeight);
+			this.codeFocusIndicator.setHeight(indicatorPostion.verticalIndicatorHeight - this.getIndicatorTopMargin() * 2);
 		} else {
 			const cell = element as CodeCellViewModel;
 			const layoutInfo = this.notebookEditor.notebookOptions.getLayoutConfiguration();
@@ -97,7 +97,7 @@ export class CellFocusIndicator extends CellContentPart {
 	}
 
 	private updateFocusIndicatorsForTitleMenu(): void {
-		const y = (this.currentCell?.layoutInfo.chatHeight ?? 0) + this.getIndicatorTopMargin();
+		const y = this.getIndicatorTopMargin();
 		this.left.domNode.style.transform = `translateY(${y}px)`;
 		this.right.domNode.style.transform = `translateY(${y}px)`;
 	}

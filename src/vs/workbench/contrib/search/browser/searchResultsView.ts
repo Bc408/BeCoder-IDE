@@ -32,9 +32,7 @@ import { SearchContext } from '../common/constants.js';
 import { getDefaultHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import type { IManagedHover } from '../../../../base/browser/ui/hover/hover.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
-import { Codicon } from '../../../../base/common/codicons.js';
-import { ISearchTreeMatch, isSearchTreeMatch, RenderableMatch, ITextSearchHeading, ISearchTreeFolderMatch, ISearchTreeFileMatch, isSearchTreeFileMatch, isSearchTreeFolderMatch, isTextSearchHeading, ISearchModel, isSearchTreeFolderMatchWorkspaceRoot, isSearchTreeFolderMatchNoRoot, isPlainTextSearchHeading } from './searchTreeModel/searchTreeCommon.js';
-import { isSearchTreeAIFileMatch } from './AISearch/aiSearchModelBase.js';
+import { ISearchTreeMatch, isSearchTreeMatch, RenderableMatch, ITextSearchHeading, ISearchTreeFolderMatch, ISearchTreeFileMatch, isSearchTreeFileMatch, isSearchTreeFolderMatch, isTextSearchHeading, ISearchModel, isSearchTreeFolderMatchWorkspaceRoot, isSearchTreeFolderMatchNoRoot } from './searchTreeModel/searchTreeCommon.js';
 
 interface IFolderMatchTemplate {
 	label: IResourceLabel;
@@ -137,32 +135,10 @@ export class TextSearchResultRenderer extends Disposable implements ICompressibl
 	}
 
 	async renderElement(node: ITreeNode<ITextSearchHeading, any>, index: number, templateData: IFolderMatchTemplate): Promise<void> {
-		if (isPlainTextSearchHeading(node.element)) {
-			templateData.label.setLabel(nls.localize('searchFolderMatch.plainText.label', "Text Results"));
-			SearchContext.AIResultsTitle.bindTo(templateData.contextKeyService).set(false);
-			SearchContext.MatchFocusKey.bindTo(templateData.contextKeyService).set(false);
-			SearchContext.FileFocusKey.bindTo(templateData.contextKeyService).set(false);
-			SearchContext.FolderFocusKey.bindTo(templateData.contextKeyService).set(false);
-		} else {
-			try {
-				await node.element.parent().searchModel.getAITextResultProviderName();
-			} catch {
-				// ignore
-			}
-
-			const localizedLabel = nls.localize({
-				key: 'searchFolderMatch.aiText.label',
-				comment: ['This is displayed before the AI text search results, now always "AI-assisted results".']
-			}, 'AI-assisted results');
-
-			// todo: make icon extension-contributed.
-			templateData.label.setLabel(`$(${Codicon.searchSparkle.id}) ${localizedLabel}`);
-
-			SearchContext.AIResultsTitle.bindTo(templateData.contextKeyService).set(true);
-			SearchContext.MatchFocusKey.bindTo(templateData.contextKeyService).set(false);
-			SearchContext.FileFocusKey.bindTo(templateData.contextKeyService).set(false);
-			SearchContext.FolderFocusKey.bindTo(templateData.contextKeyService).set(false);
-		}
+		templateData.label.setLabel(nls.localize('searchFolderMatch.plainText.label', "Text Results"));
+		SearchContext.MatchFocusKey.bindTo(templateData.contextKeyService).set(false);
+		SearchContext.FileFocusKey.bindTo(templateData.contextKeyService).set(false);
+		SearchContext.FolderFocusKey.bindTo(templateData.contextKeyService).set(false);
 	}
 
 	disposeTemplate(templateData: IFolderMatchTemplate): void {
@@ -221,7 +197,6 @@ export class FolderMatchRenderer extends Disposable implements ICompressibleTree
 		disposables.add(elementDisposables);
 
 		const contextKeyServiceMain = disposables.add(this.contextKeyService.createScoped(container));
-		SearchContext.AIResultsTitle.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.MatchFocusKey.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.FileFocusKey.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.FolderFocusKey.bindTo(contextKeyServiceMain).set(true);
@@ -322,7 +297,6 @@ export class FileMatchRenderer extends Disposable implements ICompressibleTreeRe
 		const actionBarContainer = DOM.append(fileMatchElement, DOM.$('.actionBarContainer'));
 
 		const contextKeyServiceMain = disposables.add(this.contextKeyService.createScoped(container));
-		SearchContext.AIResultsTitle.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.MatchFocusKey.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.FileFocusKey.bindTo(contextKeyServiceMain).set(true);
 		SearchContext.FolderFocusKey.bindTo(contextKeyServiceMain).set(false);
@@ -354,7 +328,7 @@ export class FileMatchRenderer extends Disposable implements ICompressibleTreeRe
 		templateData.el.setAttribute('data-resource', fileMatch.resource.toString());
 
 		const decorationConfig = this.configurationService.getValue<ISearchConfigurationProperties>('search').decorations;
-		templateData.label.setFile(fileMatch.resource, { range: isSearchTreeAIFileMatch(fileMatch) ? fileMatch.getFullRange() : undefined, hidePath: this.searchView.isTreeLayoutViewVisible && !(isSearchTreeFolderMatchNoRoot(fileMatch.parent())), hideIcon: false, fileDecorations: { colors: decorationConfig.colors, badges: decorationConfig.badges } });
+		templateData.label.setFile(fileMatch.resource, { hidePath: this.searchView.isTreeLayoutViewVisible && !(isSearchTreeFolderMatchNoRoot(fileMatch.parent())), hideIcon: false, fileDecorations: { colors: decorationConfig.colors, badges: decorationConfig.badges } });
 		const count = fileMatch.count();
 		templateData.badge.setCount(count);
 		templateData.badge.setTitleFormat(count > 1 ? nls.localize('searchMatches', "{0} matches found", count) : nls.localize('searchMatch', "{0} match found", count));
@@ -416,7 +390,6 @@ export class MatchRenderer extends Disposable implements ICompressibleTreeRender
 		const disposables = new DisposableStore();
 
 		const contextKeyServiceMain = disposables.add(this.contextKeyService.createScoped(container));
-		SearchContext.AIResultsTitle.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.MatchFocusKey.bindTo(contextKeyServiceMain).set(true);
 		SearchContext.FileFocusKey.bindTo(contextKeyServiceMain).set(false);
 		SearchContext.FolderFocusKey.bindTo(contextKeyServiceMain).set(false);

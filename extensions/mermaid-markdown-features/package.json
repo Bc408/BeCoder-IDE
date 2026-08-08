@@ -13,9 +13,6 @@
   "engines": {
     "vscode": "^1.104.0"
   },
-  "enabledApiProposals": [
-    "chatOutputRenderer"
-  ],
   "capabilities": {
     "virtualWorkspaces": true,
     "untrustedWorkspaces": {
@@ -60,17 +57,17 @@
       "webview/context": [
         {
           "command": "_mermaid-markdown.openInEditor",
-          "when": "webviewId == 'vscode.mermaid-markdown-features.chatOutputItem' || (webviewSection == 'mermaid' && (webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor' || webviewId == 'notebook.output'))",
+          "when": "webviewSection == 'mermaid' && (webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor' || webviewId == 'notebook.output')",
           "group": "navigation@1"
         },
         {
           "command": "_mermaid-markdown.copySource",
-          "when": "webviewId == 'vscode.mermaid-markdown-features.chatOutputItem' || webviewId == 'vscode.mermaid-markdown-features.preview' || (webviewSection == 'mermaid' && (webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor' || webviewId == 'notebook.output'))",
+          "when": "webviewId == 'vscode.mermaid-markdown-features.preview' || (webviewSection == 'mermaid' && (webviewId == 'markdown.preview' || webviewId == 'vscode.markdown.preview.editor' || webviewId == 'notebook.output'))",
           "group": "navigation@2"
         },
         {
           "command": "_mermaid-markdown.resetPanZoom",
-          "when": "!mermaidError && (webviewId == 'vscode.mermaid-markdown-features.chatOutputItem' || webviewId == 'vscode.mermaid-markdown-features.preview')",
+          "when": "!mermaidError && webviewId == 'vscode.mermaid-markdown-features.preview'",
           "group": "navigation@3"
         }
       ]
@@ -195,18 +192,7 @@
         }
       }
     ],
-    "markdown.markdownItPlugins": true,
-    "chatOutputRenderers": [
-      {
-        "viewType": "vscode.mermaid-markdown-features.chatOutputItem",
-        "mimeTypes": [
-          "text/vnd.mermaid"
-        ],
-        "codeBlockLanguageIdentifiers": [
-          "mermaid"
-        ]
-      }
-    ]
+    "markdown.markdownItPlugins": true
   },
   "scripts": {
     "compile": "gulp compile-extension:mermaid-markdown-features && npm run build-webview",

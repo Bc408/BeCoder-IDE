@@ -26,9 +26,6 @@ import { Range } from '../../../common/core/range.js';
 
 const GUTTER_LIGHTBULB_ICON = registerIcon('gutter-lightbulb', Codicon.lightBulb, nls.localize('gutterLightbulbWidget', 'Icon which spawns code actions menu from the gutter when there is no space in the editor.'));
 const GUTTER_LIGHTBULB_AUTO_FIX_ICON = registerIcon('gutter-lightbulb-auto-fix', Codicon.lightbulbAutofix, nls.localize('gutterLightbulbAutoFixWidget', 'Icon which spawns code actions menu from the gutter when there is no space in the editor and a quick fix is available.'));
-const GUTTER_LIGHTBULB_AIFIX_ICON = registerIcon('gutter-lightbulb-sparkle', Codicon.lightbulbSparkle, nls.localize('gutterLightbulbAIFixWidget', 'Icon which spawns code actions menu from the gutter when there is no space in the editor and an AI fix is available.'));
-const GUTTER_LIGHTBULB_AIFIX_AUTO_FIX_ICON = registerIcon('gutter-lightbulb-aifix-auto-fix', Codicon.lightbulbSparkleAutofix, nls.localize('gutterLightbulbAIFixAutoFixWidget', 'Icon which spawns code actions menu from the gutter when there is no space in the editor and an AI fix and a quick fix is available.'));
-const GUTTER_SPARKLE_FILLED_ICON = registerIcon('gutter-lightbulb-sparkle-filled', Codicon.sparkleFilled, nls.localize('gutterLightbulbSparkleFilledWidget', 'Icon which spawns code actions menu from the gutter when there is no space in the editor and an AI fix and a quick fix is available.'));
 
 export interface LightBulbInfo {
 	readonly actions: CodeActionSet;
@@ -68,20 +65,9 @@ export function computeLightBulbInfo(actions: CodeActionSet, trigger: CodeAction
 	}
 
 	let icon: ThemeIcon;
-	let autoRun = false;
-	if (actions.allAIFixes) {
-		icon = forGutter ? GUTTER_SPARKLE_FILLED_ICON : Codicon.sparkleFilled;
-		if (actions.validActions.length === 1) {
-			autoRun = true;
-		}
-	} else if (actions.hasAutoFix) {
-		if (actions.hasAIFix) {
-			icon = forGutter ? GUTTER_LIGHTBULB_AIFIX_AUTO_FIX_ICON : Codicon.lightbulbSparkleAutofix;
-		} else {
-			icon = forGutter ? GUTTER_LIGHTBULB_AUTO_FIX_ICON : Codicon.lightbulbAutofix;
-		}
-	} else if (actions.hasAIFix) {
-		icon = forGutter ? GUTTER_LIGHTBULB_AIFIX_ICON : Codicon.lightbulbSparkle;
+	const autoRun = false;
+	if (actions.hasAutoFix) {
+		icon = forGutter ? GUTTER_LIGHTBULB_AUTO_FIX_ICON : Codicon.lightbulbAutofix;
 	} else {
 		icon = forGutter ? GUTTER_LIGHTBULB_ICON : Codicon.lightBulb;
 	}
@@ -142,10 +128,7 @@ export class LightBulbWidget extends Disposable implements IContentWidget {
 
 	private readonly lightbulbClasses = [
 		'codicon-' + GUTTER_LIGHTBULB_ICON.id,
-		'codicon-' + GUTTER_LIGHTBULB_AIFIX_AUTO_FIX_ICON.id,
-		'codicon-' + GUTTER_LIGHTBULB_AUTO_FIX_ICON.id,
-		'codicon-' + GUTTER_LIGHTBULB_AIFIX_ICON.id,
-		'codicon-' + GUTTER_SPARKLE_FILLED_ICON.id
+		'codicon-' + GUTTER_LIGHTBULB_AUTO_FIX_ICON.id
 	];
 
 	private readonly _preferredKbLabel = observableValue<string | undefined>(this, undefined);

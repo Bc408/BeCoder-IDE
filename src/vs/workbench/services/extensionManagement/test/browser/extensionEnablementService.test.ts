@@ -11,7 +11,7 @@ import { TestInstantiationService } from '../../../../../platform/instantiation/
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { IWorkspace, IWorkspaceContextService, WorkbenchState } from '../../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchEnvironmentService } from '../../../environment/common/environmentService.js';
-import { IStorageService, InMemoryStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { IStorageService, InMemoryStorageService } from '../../../../../platform/storage/common/storage.js';
 import { IExtensionContributions, ExtensionType, IExtension, IExtensionManifest, IExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { isUndefinedOrNull } from '../../../../../base/common/types.js';
 import { areSameExtensions } from '../../../../../platform/extensionManagement/common/extensionManagementUtil.js';
@@ -19,7 +19,7 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { URI } from '../../../../../base/common/uri.js';
 import { Schemas } from '../../../../../base/common/network.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
-import { productService, TestLifecycleService } from '../../../../test/browser/workbenchTestServices.js';
+import { TestLifecycleService } from '../../../../test/browser/workbenchTestServices.js';
 import { GlobalExtensionEnablementService } from '../../../../../platform/extensionManagement/common/extensionEnablementService.js';
 import { IUserDataSyncAccountService, UserDataSyncAccountService } from '../../../../../platform/userDataSync/common/userDataSyncAccount.js';
 import { IUserDataSyncEnablementService } from '../../../../../platform/userDataSync/common/userDataSync.js';
@@ -30,8 +30,8 @@ import { IHostService } from '../../../host/browser/host.js';
 import { mock } from '../../../../../base/test/common/mock.js';
 import { IExtensionBisectService } from '../../browser/extensionBisect.js';
 import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService, WorkspaceTrustRequestOptions } from '../../../../../platform/workspace/common/workspaceTrust.js';
-import { EXTENSIONS_SUPPORT_AGENTS_WINDOW, ExtensionManifestPropertiesService, IExtensionManifestPropertiesService } from '../../../extensions/common/extensionManifestPropertiesService.js';
-import { TestChatEntitlementService, TestContextService, TestProductService, TestWorkspaceTrustEnablementService, TestWorkspaceTrustManagementService } from '../../../../test/common/workbenchTestServices.js';
+import { ExtensionManifestPropertiesService, IExtensionManifestPropertiesService } from '../../../extensions/common/extensionManifestPropertiesService.js';
+import { TestContextService, TestProductService, TestWorkspaceTrustEnablementService, TestWorkspaceTrustManagementService } from '../../../../test/common/workbenchTestServices.js';
 import { TestWorkspace } from '../../../../../platform/workspace/test/common/testWorkspace.js';
 import { ExtensionManagementService } from '../../common/extensionManagementService.js';
 import { ILogService, NullLogService } from '../../../../../platform/log/common/log.js';
@@ -42,10 +42,6 @@ import { FileService } from '../../../../../platform/files/common/fileService.js
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { AllowedExtensionsService } from '../../../../../platform/extensionManagement/common/allowedExtensionsService.js';
 import { IStringDictionary } from '../../../../../base/common/collections.js';
-import { ChatEntitlementContext, IChatEntitlementService } from '../../../chat/common/chatEntitlementService.js';
-import { Lazy } from '../../../../../base/common/lazy.js';
-import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
-import { IDefaultAccountAuthenticationProvider } from '../../../../../base/common/defaultAccount.js';
 
 function createStorageService(instantiationService: TestInstantiationService, disposableStore: DisposableStore): IStorageService {
 	let service = instantiationService.get(IStorageService);
@@ -63,7 +59,7 @@ function createStorageService(instantiationService: TestInstantiationService, di
 }
 
 export class TestExtensionEnablementService extends ExtensionEnablementService {
-	constructor(instantiationService: TestInstantiationService, chatEntitlementService?: IChatEntitlementService) {
+	constructor(instantiationService: TestInstantiationService) {
 		const disposables = new DisposableStore();
 		const storageService = createStorageService(instantiationService, disposables);
 		const extensionManagementServerService = instantiationService.get(IExtensionManagementServerService) ||
@@ -92,7 +88,6 @@ export class TestExtensionEnablementService extends ExtensionEnablementService {
 			instantiationService.get(IConfigurationService),
 			extensionManagementServerService,
 			instantiationService.get(IUserDataSyncEnablementService) || instantiationService.stub(IUserDataSyncEnablementService, <Partial<IUserDataSyncEnablementService>>{ isEnabled() { return false; } }),
-			instantiationService.get(IDefaultAccountService) || instantiationService.stub(IDefaultAccountService, new class extends mock<IDefaultAccountService>() { override getDefaultAccountAuthenticationProvider(): IDefaultAccountAuthenticationProvider { return { id: 'default-auth-provider', name: 'default-auth-provider', enterprise: false }; } }),
 			instantiationService.get(IUserDataSyncAccountService) || instantiationService.stub(IUserDataSyncAccountService, UserDataSyncAccountService),
 			instantiationService.get(ILifecycleService) || instantiationService.stub(ILifecycleService, disposables.add(new TestLifecycleService())),
 			instantiationService.get(INotificationService) || instantiationService.stub(INotificationService, new TestNotificationService()),
@@ -102,7 +97,6 @@ export class TestExtensionEnablementService extends ExtensionEnablementService {
 			workspaceTrustManagementService,
 			new class extends mock<IWorkspaceTrustRequestService>() { override requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Promise<boolean> { return Promise.resolve(true); } },
 			instantiationService.get(IExtensionManifestPropertiesService) || instantiationService.stub(IExtensionManifestPropertiesService, disposables.add(new ExtensionManifestPropertiesService(TestProductService, instantiationService.get(IConfigurationService), new TestWorkspaceTrustEnablementService(), new NullLogService()))),
-			chatEntitlementService ?? new TestChatEntitlementService(),
 			instantiationService,
 			new NullLogService(),
 			instantiationService.get(IProductService)
@@ -1186,37 +1180,6 @@ suite('ExtensionEnablementService Test', () => {
 		assert.deepStrictEqual((<IExtension>target.args[0][0][0]).identifier, { id: 'pub.a' });
 	});
 
-	test('test chat extension is disabled on profile switch when setup is not completed', async () => {
-		const chatExtensionId = productService.defaultChatAgent!.chatExtensionId;
-		const chatExtension = aLocalExtension(chatExtensionId, undefined, ExtensionType.System);
-		installed.push(chatExtension);
-
-		// Clear migration flag set by the setup() instance so the migration runs fresh
-		let storageService = instantiationService.get(IStorageService);
-		storageService.store('builtinChatExtensionEnablementMigration', false, StorageScope.PROFILE, StorageTarget.MACHINE);
-
-		// Create a chat entitlement service with context where setup is not completed
-		const chatEntitlementService = new TestChatEntitlementService();
-		chatEntitlementService.context = new Lazy(() => ({ state: { completed: false }, onDidChange: Event.None })) as unknown as Lazy<ChatEntitlementContext>;
-
-		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, chatEntitlementService));
-		await testObject.waitUntilInitialized();
-
-		// Chat extension should be disabled after initial setup
-		assert.strictEqual(testObject.getEnablementState(chatExtension), EnablementState.DisabledGlobally);
-
-		// Enable the chat extension to simulate it being enabled in a previous profile
-		await testObject.setEnablement([chatExtension], EnablementState.EnabledGlobally);
-		assert.strictEqual(testObject.getEnablementState(chatExtension), EnablementState.EnabledGlobally);
-
-		// Simulate switching to a fresh profile by clearing the migration flag
-		storageService = instantiationService.get(IStorageService);
-		storageService.store('builtinChatExtensionEnablementMigration', false, StorageScope.PROFILE, StorageTarget.MACHINE);
-
-		// Chat extension should be disabled again after computing enablement state
-		assert.strictEqual(testObject.getEnablementState(chatExtension), EnablementState.DisabledGlobally);
-	});
-
 	test('test extension is disabled by allowed list', async () => {
 		const target = aLocalExtension2('unallowed.extension');
 		assert.strictEqual(testObject.getEnablementState(target), EnablementState.DisabledByAllowlist);
@@ -1254,57 +1217,7 @@ suite('ExtensionEnablementService Test', () => {
 		assert.strictEqual(testObject.getEnablementState(local), EnablementState.DisabledByMalicious);
 	});
 
-	test('test extensions are disabled in sessions window unless they only contribute themes', () => {
-		instantiationService.stub(IWorkbenchEnvironmentService, { isSessionsWindow: true });
-		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService));
-
-		const themeOnly = aLocalExtension2('pub.themeOnly', { contributes: aContributes('themes') });
-		const iconTheme = aLocalExtension2('pub.iconTheme', { contributes: aContributes('iconThemes') });
-		const productIconTheme = aLocalExtension2('pub.productIconTheme', { contributes: aContributes('productIconThemes') });
-		const grammar = aLocalExtension2('pub.grammar', { contributes: aContributes('grammars') });
-		const withMain = aLocalExtension2('pub.withMain', { main: 'main.js', contributes: aContributes('themes') });
-		const withBrowser = aLocalExtension2('pub.withBrowser', { browser: 'main.browser.js', contributes: aContributes('themes') });
-		const nonThemeContrib = aLocalExtension2('pub.nonThemeContrib', { contributes: aContributes('commands') });
-		const builtinWithMain = aLocalExtension2('pub.builtinWithMain', { main: 'main.js' }, { type: ExtensionType.System });
-
-		assert.deepStrictEqual([
-			themeOnly,
-			iconTheme,
-			productIconTheme,
-			grammar,
-			withMain,
-			withBrowser,
-			nonThemeContrib,
-			builtinWithMain,
-		].map(ext => testObject.getEnablementState(ext)), [
-			EnablementState.EnabledGlobally,
-			EnablementState.EnabledGlobally,
-			EnablementState.EnabledGlobally,
-			EnablementState.EnabledGlobally,
-			EnablementState.DisabledByEnvironment,
-			EnablementState.DisabledByEnvironment,
-			EnablementState.DisabledByEnvironment,
-			EnablementState.EnabledGlobally,
-		]);
-	});
-
-	test('test configured extensions are enabled in sessions window', async () => {
-		await (instantiationService.get(IConfigurationService) as TestConfigurationService).setUserConfiguration(EXTENSIONS_SUPPORT_AGENTS_WINDOW, { 'pub.withMain': true, 'pub.nonThemeContrib': true });
-		instantiationService.stub(IWorkbenchEnvironmentService, { isSessionsWindow: true });
-		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService));
-
-		const withMain = aLocalExtension2('pub.withMain', { main: 'main.js', contributes: aContributes('themes') });
-		const nonThemeContrib = aLocalExtension2('pub.nonThemeContrib', { contributes: aContributes('commands') });
-		const withBrowser = aLocalExtension2('pub.withBrowser', { browser: 'main.browser.js', contributes: aContributes('themes') });
-
-		assert.deepStrictEqual([withMain, nonThemeContrib, withBrowser].map(ext => testObject.getEnablementState(ext)), [
-			EnablementState.EnabledGlobally,
-			EnablementState.EnabledGlobally,
-			EnablementState.DisabledByEnvironment,
-		]);
-	});
-
-	test('test extensions are not disabled in non-sessions window', () => {
+	test('test extensions are enabled by default', () => {
 		const withMain = aLocalExtension2('pub.withMain', { main: 'main.js' });
 		const withBrowser = aLocalExtension2('pub.withBrowser', { browser: 'main.browser.js' });
 		const commandContrib = aLocalExtension2('pub.commands', { contributes: aContributes('commands') });

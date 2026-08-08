@@ -33,14 +33,13 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { isVirtualResource, isVirtualWorkspace } from '../../../../platform/workspace/common/virtualWorkspace.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { asCssVariable, buttonBackground, buttonSecondaryBackground, editorErrorForeground } from '../../../../platform/theme/common/colorRegistry.js';
+import { asCssVariable, buttonBackground, buttonSecondaryBackground, chartsGreen, editorErrorForeground } from '../../../../platform/theme/common/colorRegistry.js';
 import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { IWorkspaceTrustManagementService } from '../../../../platform/workspace/common/workspaceTrust.js';
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
 import { IEditorOpenContext } from '../../../common/editor.js';
-import { debugIconStartForeground } from '../../debug/browser/debugColors.js';
 import { IExtensionsWorkbenchService, LIST_WORKSPACE_UNSUPPORTED_EXTENSIONS_COMMAND_ID } from '../../extensions/common/extensions.js';
 import { APPLICATION_SCOPES, IWorkbenchConfigurationService } from '../../../services/configuration/common/configuration.js';
 import { IExtensionManifestPropertiesService } from '../../../services/extensions/common/extensionManifestPropertiesService.js';
@@ -721,7 +720,7 @@ export class WorkspaceTrustEditor extends EditorPane {
 
 		this.rootElement.style.setProperty('--workspace-trust-selected-color', asCssVariable(buttonBackground));
 		this.rootElement.style.setProperty('--workspace-trust-unselected-color', asCssVariable(buttonSecondaryBackground));
-		this.rootElement.style.setProperty('--workspace-trust-check-color', asCssVariable(debugIconStartForeground));
+		this.rootElement.style.setProperty('--workspace-trust-check-color', asCssVariable(chartsGreen));
 		this.rootElement.style.setProperty('--workspace-trust-x-color', asCssVariable(editorErrorForeground));
 
 		// Navigate page with keyboard

@@ -89,7 +89,6 @@ function renderRenameWidget(options: RenameFixtureOptions): void {
 		},
 		options.currentName,
 		false,
-		undefined,
 		cts
 	);
 	disposableStore.add(toDisposable(() => renameWidget.cancelInput(false, 'fixture-teardown')));

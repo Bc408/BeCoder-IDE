@@ -40,8 +40,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/tasks`, headers: { 'If-Match': '0' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '0' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '0' } },
 		]);
 
 	});
@@ -68,8 +66,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/tasks`, headers: { 'If-Match': '0' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '0' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '0' } },
 		]);
 	});
 
@@ -113,7 +109,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'GET', url: `${target.url}/v1/resource/snippets/latest`, headers: {} },
 			{ type: 'GET', url: `${target.url}/v1/resource/tasks/latest`, headers: {} },
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: {} },
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: {} },
 		]);
 	});
 
@@ -135,7 +130,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'mine.prompt.md'), VSBuffer.fromString('text'));
 		await fileService.writeFile(joinPath(dirname(userDataProfilesService.defaultProfile.settingsResource), 'tasks.json'), VSBuffer.fromString(JSON.stringify({})));
 		const testObject = testClient.instantiationService.get(IUserDataSyncService);
 
@@ -153,8 +147,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/snippets`, headers: { 'If-Match': '1' } },
 			{ type: 'GET', url: `${target.url}/v1/resource/tasks/latest`, headers: {} },
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: {} },
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: {} },
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '1' } },
 		]);
 
 	});
@@ -178,7 +170,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'my.prompt.md'), VSBuffer.fromString('some prompt text'));
 		await fileService.writeFile(joinPath(dirname(userDataProfilesService.defaultProfile.settingsResource), 'tasks.json'), VSBuffer.fromString(JSON.stringify({})));
 		const testObject = testClient.instantiationService.get(IUserDataSyncService);
 
@@ -196,8 +187,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/snippets`, headers: { 'If-Match': '1' } },
 			{ type: 'GET', url: `${target.url}/v1/resource/tasks/latest`, headers: {} },
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: {} },
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: {} },
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '1' } },
 			{ type: 'POST', url: `${target.url}/v1/collection`, headers: {} },
 			{ type: 'POST', url: `${target.url}/v1/resource/profiles`, headers: { 'If-Match': '0' } },
 		]);
@@ -240,7 +229,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'shared.prompt.md'), VSBuffer.fromString('prompt text'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 
 		// Sync from the client
@@ -257,8 +245,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/snippets`, headers: { 'If-Match': '1' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '1' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '1' } },
 		]);
 	});
 
@@ -280,7 +266,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'default.prompt.md'), VSBuffer.fromString('some prompt file contents'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 
 		// Sync from the client
@@ -297,8 +282,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/snippets`, headers: { 'If-Match': '1' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '1' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '1' } },
 			// Profiles
 			{ type: 'POST', url: `${target.url}/v1/collection`, headers: {} },
 			{ type: 'POST', url: `${target.url}/v1/resource/profiles`, headers: { 'If-Match': '0' } },
@@ -322,10 +305,8 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, '1.prompt.md'), VSBuffer.fromString('random prompt text'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		client.instantiationService.get(IUserDataSyncEnablementService).setResourceEnablement(SyncResource.Snippets, false);
-		client.instantiationService.get(IUserDataSyncEnablementService).setResourceEnablement(SyncResource.Prompts, false);
 
 		// Sync from the client
 		await (await testObject.createSyncTask(null)).run();
@@ -363,7 +344,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{ "a": "changed" }`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'unknown.prompt.md'), VSBuffer.fromString('prompt text'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		await (await client.instantiationService.get(IUserDataSyncService).createSyncTask(null)).run();
 
@@ -382,8 +362,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'GET', url: `${target.url}/v1/resource/snippets/latest`, headers: { 'If-None-Match': '1' } },
 			// Global state
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: { 'If-None-Match': '1' } },
-			// Prompts
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: { 'If-None-Match': '1' } },
 		]);
 
 	});
@@ -410,7 +388,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{ "a": "changed" }`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'global.prompt.md'), VSBuffer.fromString('some text goes here'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		await (await client.instantiationService.get(IUserDataSyncService).createSyncTask(null)).run();
 
@@ -429,8 +406,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'GET', url: `${target.url}/v1/resource/snippets/latest`, headers: { 'If-None-Match': '1' } },
 			// Global state
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: { 'If-None-Match': '1' } },
-			// Prompts
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: { 'If-None-Match': '1' } },
 			// Profiles
 			{ type: 'GET', url: `${target.url}/v1/resource/profiles/latest`, headers: { 'If-None-Match': '0' } },
 		]);
@@ -487,8 +462,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/tasks`, headers: { 'If-Match': '0' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '0' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '0' } },
 		]);
 
 	});
@@ -658,7 +631,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{}`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, '2.prompt.md'), VSBuffer.fromString('file contents'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 
 		// Sync from the client
@@ -675,8 +647,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'POST', url: `${target.url}/v1/resource/snippets`, headers: { 'If-Match': '1' } },
 			// Global state
 			{ type: 'POST', url: `${target.url}/v1/resource/globalState`, headers: { 'If-Match': '1' } },
-			// Prompts
-			{ type: 'POST', url: `${target.url}/v1/resource/prompts`, headers: { 'If-Match': '1' } },
 			// Profiles
 			{ type: 'POST', url: `${target.url}/v1/collection`, headers: {} },
 			{ type: 'POST', url: `${target.url}/v1/resource/profiles`, headers: { 'If-Match': '0' } },
@@ -705,7 +675,6 @@ suite('UserDataSyncService', () => {
 		await fileService.writeFile(userDataProfilesService.defaultProfile.settingsResource, VSBuffer.fromString(JSON.stringify({ 'editor.fontSize': 14 })));
 		await fileService.writeFile(userDataProfilesService.defaultProfile.keybindingsResource, VSBuffer.fromString(JSON.stringify([{ 'command': 'abcd', 'key': 'cmd+c' }])));
 		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.snippetsHome, 'html.json'), VSBuffer.fromString(`{ "a": "changed" }`));
-		await fileService.writeFile(joinPath(userDataProfilesService.defaultProfile.promptsHome, 'best.prompt.md'), VSBuffer.fromString('prompt prompt'));
 		await fileService.writeFile(environmentService.argvResource, VSBuffer.fromString(JSON.stringify({ 'locale': 'de' })));
 		await (await client.instantiationService.get(IUserDataSyncService).createSyncTask(null)).run();
 
@@ -724,8 +693,6 @@ suite('UserDataSyncService', () => {
 			{ type: 'GET', url: `${target.url}/v1/resource/snippets/latest`, headers: { 'If-None-Match': '1' } },
 			// Global state
 			{ type: 'GET', url: `${target.url}/v1/resource/globalState/latest`, headers: { 'If-None-Match': '1' } },
-			// Prompts
-			{ type: 'GET', url: `${target.url}/v1/resource/prompts/latest`, headers: { 'If-None-Match': '1' } },
 			// Profiles
 			{ type: 'GET', url: `${target.url}/v1/resource/profiles/latest`, headers: { 'If-None-Match': '0' } },
 		]);

@@ -7,7 +7,7 @@ import { Iterable } from '../../../../../base/common/iterator.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
 import { isEqual } from '../../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
-import { URI, UriComponents } from '../../../../../base/common/uri.js';
+import { UriComponents } from '../../../../../base/common/uri.js';
 import { ICodeEditor } from '../../../../../editor/browser/editorBrowser.js';
 import { ILanguageService } from '../../../../../editor/common/languages/language.js';
 import { localize, localize2 } from '../../../../../nls.js';
@@ -15,13 +15,11 @@ import { MenuId, MenuRegistry, registerAction2 } from '../../../../../platform/a
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
-import { IDebugService } from '../../../debug/common/debug.js';
-import { CTX_INLINE_CHAT_FOCUSED } from '../../../inlineChat/common/inlineChat.js';
 import { insertCell } from './cellOperations.js';
 import { CELL_TITLE_CELL_GROUP_ID, CellToolbarOrder, INotebookActionContext, INotebookCellActionContext, INotebookCellToolbarActionContext, INotebookCommandContext, NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT, NotebookAction, NotebookCellAction, NotebookMultiCellAction, cellExecutionArgs, getContextFromActiveEditor, getContextFromUri, parseMultiCellExecutionArgs } from './coreActions.js';
 import { CellEditState, CellFocusMode, EXECUTE_CELL_COMMAND_ID, IActiveNotebookEditor, ICellViewModel, IFocusNotebookCellOptions, ScrollToRevealBehavior } from '../notebookBrowser.js';
 import * as icons from '../notebookIcons.js';
-import { CellKind, CellUri, NotebookSetting } from '../../common/notebookCommon.js';
+import { CellKind, NotebookSetting } from '../../common/notebookCommon.js';
 import { NOTEBOOK_CELL_EXECUTING, NOTEBOOK_CELL_EXECUTION_STATE, NOTEBOOK_CELL_LIST_FOCUSED, NOTEBOOK_CELL_TYPE, NOTEBOOK_HAS_RUNNING_CELL, NOTEBOOK_HAS_SOMETHING_RUNNING, NOTEBOOK_INTERRUPTIBLE_KERNEL, NOTEBOOK_IS_ACTIVE_EDITOR, NOTEBOOK_KERNEL_COUNT, NOTEBOOK_KERNEL_SOURCE_COUNT, NOTEBOOK_LAST_CELL_FAILED, NOTEBOOK_MISSING_KERNEL_EXTENSION } from '../../common/notebookContextKeys.js';
 import { NotebookEditorInput } from '../../common/notebookEditorInput.js';
 import { INotebookExecutionStateService } from '../../common/notebookExecutionStateService.js';
@@ -507,10 +505,7 @@ registerAction2(class ExecuteCellSelectBelow extends NotebookCellAction {
 			precondition: ContextKeyExpr.or(executeThisCellCondition, NOTEBOOK_CELL_TYPE.isEqualTo('markup')),
 			title: localize('notebookActions.executeAndSelectBelow', "Execute Notebook Cell and Select Below"),
 			keybinding: {
-				when: ContextKeyExpr.and(
-					NOTEBOOK_CELL_LIST_FOCUSED,
-					CTX_INLINE_CHAT_FOCUSED.negate()
-				),
+				when: NOTEBOOK_CELL_LIST_FOCUSED,
 				primary: KeyMod.Shift | KeyCode.Enter,
 				weight: NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT
 			},
@@ -742,8 +737,7 @@ registerAction2(class RevealRunningCellAction extends NotebookAction {
 		const notebook = context.notebookEditor.textModel.uri;
 		const executingCells = notebookExecutionStateService.getCellExecutionsForNotebook(notebook);
 		if (executingCells[0]) {
-			const topStackFrameCell = this.findCellAtTopFrame(accessor, notebook);
-			const focusHandle = topStackFrameCell ?? executingCells[0].cellHandle;
+			const focusHandle = executingCells[0].cellHandle;
 			const cell = context.notebookEditor.getCellByHandle(focusHandle);
 			if (cell) {
 				context.notebookEditor.focusNotebookCell(cell, 'container');
@@ -751,22 +745,6 @@ registerAction2(class RevealRunningCellAction extends NotebookAction {
 		}
 	}
 
-	private findCellAtTopFrame(accessor: ServicesAccessor, notebook: URI): number | undefined {
-		const debugService = accessor.get(IDebugService);
-		for (const session of debugService.getModel().getSessions()) {
-			for (const thread of session.getAllThreads()) {
-				const sf = thread.getTopStackFrame();
-				if (sf) {
-					const parsed = CellUri.parse(sf.source.uri);
-					if (parsed && parsed.notebook.toString() === notebook.toString()) {
-						return parsed.handle;
-					}
-				}
-			}
-		}
-
-		return undefined;
-	}
 });
 
 registerAction2(class RevealLastFailedCellAction extends NotebookAction {

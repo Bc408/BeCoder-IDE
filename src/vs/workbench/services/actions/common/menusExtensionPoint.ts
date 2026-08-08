@@ -101,32 +101,6 @@ const apiMenus: IAPIMenu[] = [
 		proposed: 'contribShareMenu'
 	},
 	{
-		key: 'debug/callstack/context',
-		id: MenuId.DebugCallStackContext,
-		description: localize('menus.debugCallstackContext', "The debug callstack view context menu")
-	},
-	{
-		key: 'debug/variables/context',
-		id: MenuId.DebugVariablesContext,
-		description: localize('menus.debugVariablesContext', "The debug variables view context menu")
-	},
-	{
-		key: 'debug/watch/context',
-		id: MenuId.DebugWatchContext,
-		description: localize('menus.debugWatchContext', "The debug watch view context menu")
-	},
-	{
-		key: 'debug/toolBar',
-		id: MenuId.DebugToolBar,
-		description: localize('menus.debugToolBar', "The debug toolbar menu")
-	},
-	{
-		key: 'debug/createConfiguration',
-		id: MenuId.DebugCreateConfiguration,
-		proposed: 'contribDebugCreateConfiguration',
-		description: localize('menus.debugCreateConfiguation', "The debug create configuration menu")
-	},
-	{
 		key: 'notebook/variables/context',
 		id: MenuId.NotebookVariablesContext,
 		description: localize('menus.notebookVariablesContext', "The notebook variables view context menu")
@@ -142,12 +116,6 @@ const apiMenus: IAPIMenu[] = [
 		key: 'menuBar/edit/copy',
 		id: MenuId.MenubarCopy,
 		description: localize('menus.opy', "'Copy as' submenu in the top level Edit menu")
-	},
-	{
-		key: 'chat/input/status',
-		id: MenuId.ChatInputStatus,
-		description: localize('menus.chatInputStatus', "The status indicator area at the rightmost end of the toolbar shown beneath the chat input"),
-		supportsSubmenus: false
 	},
 	{
 		key: 'scm/title',
@@ -471,110 +439,6 @@ const apiMenus: IAPIMenu[] = [
 		id: MenuId.DiffEditorSelectionToolbar,
 		description: localize('menus.diffEditorGutterToolBarMenus', "The gutter toolbar in the diff editor"),
 		proposed: 'contribDiffEditorGutterToolBarMenus'
-	},
-	{
-		key: 'searchPanel/aiResults/commands',
-		id: MenuId.SearchActionMenu,
-		description: localize('searchPanel.aiResultsCommands', "The commands that will contribute to the menu rendered as buttons next to the AI search title"),
-	},
-	{
-		key: 'editor/context/chat',
-		id: MenuId.ChatTextEditorMenu,
-		description: localize('menus.chatTextEditor', "The Chat submenu in the text editor context menu."),
-		supportsSubmenus: false,
-		proposed: 'chatParticipantPrivate'
-	},
-	{
-		key: 'chat/input/editing/sessionToolbar',
-		id: MenuId.ChatEditingSessionChangesToolbar,
-		description: localize('menus.chatEditingSessionChangesToolbar', "The Chat Editing widget toolbar menu for session changes."),
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'chat/input/editing/sessionTitleToolbar',
-		id: MenuId.ChatEditingSessionTitleToolbar,
-		description: localize('menus.chatEditingSessionTitleToolbar', "The Chat Editing widget toolbar menu for session title."),
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		// TODO: rename this to something like: `chatSessions/item/inline`
-		key: 'chat/chatSessions',
-		id: MenuId.AgentSessionsContext,
-		description: localize('menus.chatSessions', "The Chat Sessions menu."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'chatSessions/item/context',
-		id: MenuId.SessionItemContextMenu,
-		description: localize('menus.chatSessionsItemContext', "The context menu for items in the Sessions window's session list."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'chatSessions/newSession',
-		id: MenuId.AgentSessionsCreateSubMenu,
-		description: localize('menus.chatSessionsNewSession', "Menu for new chat sessions."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'chat/multiDiff/context',
-		id: MenuId.ChatMultiDiffContext,
-		description: localize('menus.chatMultiDiffContext', "The Chat Multi-Diff context menu."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionsProvider',
-	},
-	{
-		key: 'chat/customizations/create',
-		id: MenuId.for('AICustomizationManagementCreate'),
-		description: localize('menus.chatCustomizationsCreate', "The create button in the Chat Customizations management editor."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionCustomizationProvider',
-	},
-	{
-		key: 'chat/customizations/item',
-		id: MenuId.for('AICustomizationManagementEditorItem'),
-		description: localize('menus.chatCustomizationsItem', "The item context menu in the Chat Customizations management editor, including inline actions."),
-		supportsSubmenus: false,
-		proposed: 'chatSessionCustomizationProvider',
-	},
-	{
-		key: 'chat/editor/inlineGutter',
-		id: MenuId.ChatEditorInlineMenu,
-		description: localize('menus.chatEditorInlineGutter', "The inline gutter menu in the chat editor."),
-		supportsSubmenus: false,
-		proposed: 'contribChatEditorInlineGutterMenu',
-	},
-	{
-		key: 'chat/contextUsage/actions',
-		id: MenuId.ChatContextUsageActions,
-		description: localize('menus.chatContextUsageActions', "Actions in the chat context usage details popup."),
-		proposed: 'chatParticipantAdditions'
-	},
-	{
-		key: 'chat/newSession',
-		id: MenuId.ChatNewMenu,
-		description: localize('menus.chatNewSession', "The Chat new session menu."),
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'agents/changes/actions',
-		id: MenuId.AgentsChangesToolbar,
-		description: localize('menus.agentsChangesToolbar', "The Changes view toolbar of the agents window."),
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'agents/changes/actions/primary',
-		id: MenuId.AgentsChangesPrimaryActionSubMenu,
-		description: localize('menus.agentsChangesPrimaryActionSubMenu', "The Changes view toolbar primary action submenu in the agents window."),
-		proposed: 'chatSessionsProvider'
-	},
-	{
-		key: 'agents/change/inline',
-		id: MenuId.AgentsChangeInlineToolbar,
-		description: localize('menus.agentsChangeInline', "The Changes view inline menu in the agents window."),
-		proposed: 'chatSessionsProvider'
 	},
 ];
 
@@ -1144,12 +1008,6 @@ menusExtensionPoint.setHandler(extensions => {
 					} else {
 						item.group = menuItem.group;
 					}
-				}
-
-				if (menu.id === MenuId.ViewContainerTitle && !menuItem.when?.includes('viewContainer == workbench.view.debug')) {
-					// Not a perfect check but enough to communicate that this proposed extension point is currently only for the debug view container
-					collector.error(localize('viewContainerTitle.when', "The {0} menu contribution must check {1} in its {2} clause.", '`viewContainer/title`', '`viewContainer == workbench.view.debug`', '"when"'));
-					continue;
 				}
 
 				item.when = ContextKeyExpr.deserialize(menuItem.when);

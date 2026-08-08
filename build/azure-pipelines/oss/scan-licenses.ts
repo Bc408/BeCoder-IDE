@@ -554,7 +554,7 @@ function collectPackagesInNodeModules(nmDir: string): string[] {
  *               @napi-rs/canvas-linux-arm-gnueabihf, @parcel/watcher-linux-x64-glibc,
  *               @esbuild/linux-x64, @esbuild/darwin-arm64.
  * DOES NOT match the arch-independent parents: sharp, @napi-rs/canvas,
- *               @parcel/watcher, @github/copilot, esbuild.
+ *               @parcel/watcher, @vendor/tool, esbuild.
  */
 export const ARCH_SUFFIX_RE = /[/-](?:darwin|linux|linuxmusl|win32|android|freebsd|openbsd|netbsd|sunos|aix)-(?:x64|arm64|arm|ia32|ppc64|ppc64le|s390x|riscv64|loong64|mips64el|universal)(?:-(?:gnu|musl|msvc|glibc|gnueabihf|eabihf|androideabi))?$/;
 
@@ -567,8 +567,7 @@ export function isArchPackageName(name: string): boolean {
  * Platforms and architectures VS Code actually ships. Used by Section 5 to
  * skip arch packages for platforms we don't target (android, freebsd, etc.).
  *
- * Source of truth: build/azure-pipelines/product-build.yml build matrix +
- * build/agent-sdk/common.ts (KNOWN_VSCODE_PLATFORMS / VscodeBuildArch).
+ * Source of truth: build/azure-pipelines/product-build.yml build matrix.
  * "alpine" in build config = "linuxmusl" in npm package names.
  */
 const VSCODE_SHIPPED_PLATFORMS = new Set(['darwin', 'linux', 'linuxmusl', 'win32']);

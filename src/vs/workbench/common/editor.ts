@@ -1198,8 +1198,7 @@ export interface IActiveEditorChangeEvent {
 
 	/**
 	 * Indicates whether the editor change is the result of an explicit
-	 * user action (`true`) or happened automatically as a side effect
-	 * (e.g. the chat agent opening files it has edited).
+	 * user action (`true`) or happened automatically as a side effect.
 	 *
 	 * When omitted, callers should treat the change as explicit.
 	 */

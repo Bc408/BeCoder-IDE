@@ -15,7 +15,6 @@ import './standaloneLayoutService.js';
 import * as dom from '../../../base/browser/dom.js';
 import { StandardKeyboardEvent } from '../../../base/browser/keyboardEvent.js';
 import { mainWindow } from '../../../base/browser/window.js';
-import { IDefaultAccount, IDefaultAccountAuthenticationProvider, IPolicyData } from '../../../base/common/defaultAccount.js';
 import { onUnexpectedError } from '../../../base/common/errors.js';
 import { Emitter, Event, IValueWithChangeEvent, ValueWithChangeEvent } from '../../../base/common/event.js';
 import { KeyCodeChord, Keybinding, ResolvedKeybinding, decodeKeybinding } from '../../../base/common/keybindings.js';
@@ -42,10 +41,8 @@ import { ContextKeyExpression, IContextKeyService } from '../../../platform/cont
 import { ContextMenuService } from '../../../platform/contextview/browser/contextMenuService.js';
 import { IContextMenuService, IContextViewDelegate, IContextViewService, IOpenContextView } from '../../../platform/contextview/browser/contextView.js';
 import { ContextViewService } from '../../../platform/contextview/browser/contextViewService.js';
-import { IDataChannelService, NullDataChannelService } from '../../../platform/dataChannel/common/dataChannel.js';
-import { IDefaultAccountService } from '../../../platform/defaultAccount/common/defaultAccount.js';
 import { IConfirmation, IConfirmationResult, IDialogService, IInputResult, IPrompt, IPromptBaseButton, IPromptResult, IPromptResultWithCancel, IPromptWithCustomCancel, IPromptWithDefaultCancel } from '../../../platform/dialogs/common/dialogs.js';
-import { ExtensionKind, IEnvironmentService, IExtensionHostDebugParams } from '../../../platform/environment/common/environment.js';
+import { ExtensionKind, IEnvironmentService } from '../../../platform/environment/common/environment.js';
 import { SyncDescriptor } from '../../../platform/instantiation/common/descriptors.js';
 import { InstantiationType, getSingletonServiceDescriptors, registerSingleton } from '../../../platform/instantiation/common/extensions.js';
 import { IInstantiationService, ServiceIdentifier, createDecorator } from '../../../platform/instantiation/common/instantiation.js';
@@ -230,7 +227,6 @@ class StandaloneEnvironmentService implements IEnvironmentService {
 	readonly sync: 'on' | 'off' | undefined = undefined;
 	readonly continueOn?: string | undefined = undefined;
 	readonly editSessionId?: string | undefined = undefined;
-	readonly debugExtensionHost: IExtensionHostDebugParams = { port: null, break: false };
 	readonly isExtensionDevelopment: boolean = false;
 	readonly disableExtensions: boolean | string[] = false;
 	readonly disableExperiments: boolean = false;
@@ -245,7 +241,6 @@ class StandaloneEnvironmentService implements IEnvironmentService {
 	readonly isBuilt: boolean = false;
 	readonly disableTelemetry: boolean = false;
 	readonly serviceMachineIdResource: URI = URI.from({ scheme: 'monaco', authority: 'serviceMachineIdResource' });
-	readonly agentSessionsWorkspace: URI = URI.from({ scheme: 'monaco', authority: 'agentSessionsWorkspace' });
 	readonly policyFile?: URI | undefined = undefined;
 }
 
@@ -1120,48 +1115,6 @@ class StandaloneAccessbilitySignalService implements IAccessibilitySignalService
 	}
 }
 
-class StandaloneDefaultAccountService implements IDefaultAccountService {
-	declare readonly _serviceBrand: undefined;
-
-	readonly onDidChangeDefaultAccount: Event<IDefaultAccount | null> = Event.None;
-	readonly onDidChangePolicyData: Event<IPolicyData | null> = Event.None;
-	readonly policyData: IPolicyData | null = null;
-	readonly currentDefaultAccount: IDefaultAccount | null = null;
-	readonly copilotTokenInfo = null;
-	readonly onDidChangeCopilotTokenInfo: Event<null> = Event.None;
-	readonly managedSettingsFetchStatus: null = null;
-	readonly managedSettingsFetchedAt: null = null;
-	readonly managedSettingsRawResponse: unknown = null;
-
-	async getDefaultAccount(): Promise<IDefaultAccount | null> {
-		return null;
-	}
-
-	setDefaultAccountProvider(): void {
-		// no-op
-	}
-
-	async refresh(): Promise<IDefaultAccount | null> {
-		return null;
-	}
-
-	getDefaultAccountAuthenticationProvider(): IDefaultAccountAuthenticationProvider {
-		return { id: 'default', name: 'Default', enterprise: false };
-	}
-
-	resolveGitHubUrl(path: string): string {
-		return `https://github.com/${path}`;
-	}
-
-	async signIn(): Promise<IDefaultAccount | null> {
-		return null;
-	}
-
-	async signOut(): Promise<void> {
-		// no-op
-	}
-}
-
 export interface IEditorOverrideServices {
 	[index: string]: unknown;
 }
@@ -1203,8 +1156,6 @@ registerSingleton(IMenuService, MenuService, InstantiationType.Eager);
 registerSingleton(IAccessibilitySignalService, StandaloneAccessbilitySignalService, InstantiationType.Eager);
 registerSingleton(ITreeSitterLibraryService, StandaloneTreeSitterLibraryService, InstantiationType.Eager);
 registerSingleton(ILoggerService, NullLoggerService, InstantiationType.Eager);
-registerSingleton(IDataChannelService, NullDataChannelService, InstantiationType.Eager);
-registerSingleton(IDefaultAccountService, StandaloneDefaultAccountService, InstantiationType.Eager);
 registerSingleton(IRenameSymbolTrackerService, NullRenameSymbolTrackerService, InstantiationType.Eager);
 registerSingleton(IUserInteractionService, UserInteractionService, InstantiationType.Eager);
 

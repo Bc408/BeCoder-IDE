@@ -126,17 +126,6 @@ const shellIntegrationSupportedShellTypes: (PosixShellType | GeneralShellType | 
 	GeneralShellType.Python,
 ];
 
-/**
- * Patterns for detecting agent CLIs from the OSC title they emit.
- */
-const agentCliTitlePatterns: ReadonlyMap<GeneralShellType, RegExp> = new Map([
-	[GeneralShellType.Claude, /claude\s*code/i],
-	// [GeneralShellType.Codex, /\bcodex\b/i], // codex does not report osc title.
-	[GeneralShellType.CommandCode, /command\s*code/i],
-	[GeneralShellType.Copilot, /\bcopilot\b/i],
-	[GeneralShellType.Gemini, /\bgemini\b/i],
-]);
-
 export class TerminalInstance extends Disposable implements ITerminalInstance {
 	private static _lastKnownCanvasDimensions: ICanvasDimensions | undefined;
 	private static _lastKnownGridDimensions: IGridDimensions | undefined;
@@ -164,7 +153,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	private _exitCode: number | undefined;
 	private _exitReason: TerminalExitReason | undefined;
 	private _shellType: TerminalShellType | undefined;
-	private _agentShellTypeFromSequence: GeneralShellType | undefined;
 	private _title: string = '';
 	private _titleSource: TitleEventSource = TitleEventSource.Process;
 	private _container: HTMLElement | undefined;
@@ -496,8 +484,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 						e.capability.promptInputModel.onDidFinishInput
 					)(refreshInfo));
 					store.add(e.capability.onCommandExecuted(async (command) => {
-						// Only generate ID if command doesn't already have one (i.e., it's a manual command, not Copilot-initiated)
-						// The tool terminal sets the command ID before command start, so this won't override it
 						if (!command.id && command.command) {
 							const commandId = generateUuid();
 							this.xterm?.shellIntegration.setNextCommandId(command.command, commandId);
@@ -1724,10 +1710,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 		// Fire onExit BEFORE running any disposition logic (in particular before
 		// `dispose()` below, which fires `onDisposed`). Consumers racing
-		// `onExit` against `onDisposed` (e.g. the chat agent run-in-terminal
-		// execute strategies) need to see the exit code event first so they can
-		// return the captured exit code. Otherwise `onDisposed` wins the race
-		// and the strategy treats the exit as the terminal having been closed
+		// `onExit` against `onDisposed` need to see the exit code event first.
 		// without an exit code, leaving commands like `exit 42` stuck in a
 		// "Running" state.
 		this._onExit.fire(exitCodeOrError);
@@ -1904,7 +1887,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 		// Set the new shell launch config
 		this._shellLaunchConfig = shell; // Must be done before calling _createProcess()
-		this._agentShellTypeFromSequence = undefined;
 		await this._processManager.relaunch(this._shellLaunchConfig, this._cols || Constants.DefaultCols, this._rows || Constants.DefaultRows, reset).then(result => {
 			if (result) {
 				if (hasKey(result, { message: true })) {
@@ -1930,25 +1912,9 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		if (this.isTitleSetByProcess) {
 			this._setTitle(title, TitleEventSource.Sequence);
 		}
-		// Agent CLIs run as `node`, so the OSC title is our only cross-platform signal.
-		for (const [shellType, pattern] of agentCliTitlePatterns) {
-			if (pattern.test(title)) {
-				this._agentShellTypeFromSequence = shellType;
-				this.setShellType(shellType);
-				break;
-			}
-		}
 	}
 
 	private _handleShellTypeChange(shellType: TerminalShellType | undefined): void {
-		// Once an agent CLI is locked in, ignore stale `node`/undefined reports from the pty
-		// until a real shell takes over (meaning the agent exited).
-		if (this._agentShellTypeFromSequence) {
-			if (shellType === GeneralShellType.Node || shellType === undefined) {
-				return;
-			}
-			this._agentShellTypeFromSequence = undefined;
-		}
 		this.setShellType(shellType);
 	}
 
@@ -2711,18 +2677,6 @@ export class TerminalLabelComputer extends Disposable {
 	private readonly _onDidChangeLabel = this._register(new Emitter<{ title: string; description: string }>());
 	readonly onDidChangeLabel = this._onDidChangeLabel.event;
 
-	/**
-	 * Agent CLIs whose tab title should come from their own escape sequences rather
-	 * than the configured template or a static profile name.
-	 */
-	static readonly agentCliShellTypes: ReadonlySet<GeneralShellType> = new Set([
-		GeneralShellType.Claude,
-		GeneralShellType.Codex,
-		GeneralShellType.CommandCode,
-		GeneralShellType.Copilot,
-		GeneralShellType.Gemini,
-	]);
-
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
 		@ITerminalConfigurationService private readonly _terminalConfigurationService: ITerminalConfigurationService,
@@ -2733,8 +2687,7 @@ export class TerminalLabelComputer extends Disposable {
 
 	refreshLabel(instance: Pick<ITerminalInstance, 'shellLaunchConfig' | 'shellType' | 'cwd' | 'fixedCols' | 'fixedRows' | 'initialCwd' | 'processName' | 'sequence' | 'userHome' | 'workspaceFolder' | 'staticTitle' | 'capabilities' | 'title' | 'description'>, reset?: boolean): void {
 		const tabs = this._terminalConfigurationService.config.tabs;
-		const useAgentCliTitle = tabs.allowAgentCliTitle && TerminalLabelComputer.agentCliShellTypes.has(instance.shellType as GeneralShellType);
-		const titleTemplate = instance.shellLaunchConfig.titleTemplate ?? (useAgentCliTitle ? '${sequence}' : tabs.title);
+		const titleTemplate = instance.shellLaunchConfig.titleTemplate ?? tabs.title;
 		this._title = this.computeLabel(instance, titleTemplate, TerminalLabelType.Title, reset);
 		this._description = this.computeLabel(instance, tabs.description, TerminalLabelType.Description);
 		if (this._title !== instance.title || this._description !== instance.description || reset) {

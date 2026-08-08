@@ -17,7 +17,6 @@ import { IInstantiationService } from '../../../../platform/instantiation/common
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IDebugService } from '../../debug/common/debug.js';
 
 export class EditorTextPropertySignalsContribution extends Disposable implements IWorkbenchContribution {
 	private readonly _textProperties: TextProperty[];
@@ -36,7 +35,6 @@ export class EditorTextPropertySignalsContribution extends Disposable implements
 			this._instantiationService.createInstance(MarkerTextProperty, AccessibilitySignal.errorAtPosition, AccessibilitySignal.errorOnLine, MarkerSeverity.Error),
 			this._instantiationService.createInstance(MarkerTextProperty, AccessibilitySignal.warningAtPosition, AccessibilitySignal.warningOnLine, MarkerSeverity.Warning),
 			this._instantiationService.createInstance(FoldedAreaTextProperty),
-			this._instantiationService.createInstance(BreakpointTextProperty),
 		];
 		this._someAccessibilitySignalIsEnabled = derived(this, reader =>
 			this._textProperties
@@ -165,14 +163,12 @@ export class EditorTextPropertySignalsContribution extends Disposable implements
 		}));
 	}
 }
-
 interface TextProperty {
 	readonly positionSignal?: AccessibilitySignal;
 	readonly lineSignal?: AccessibilitySignal;
 	readonly debounceWhileTyping?: boolean;
 	createSource(editor: ICodeEditor, model: ITextModel): TextPropertySource;
 }
-
 class TextPropertySource {
 	public static notPresent = new TextPropertySource({ isPresentAtPosition: () => false, isPresentOnLine: () => false });
 
@@ -191,7 +187,6 @@ class TextPropertySource {
 		return mode === 'line' ? this.isPresentOnLine(position.lineNumber, reader) : this.isPresentAtPosition(position, reader);
 	}
 }
-
 class MarkerTextProperty implements TextProperty {
 	public readonly debounceWhileTyping = true;
 	constructor(
@@ -252,27 +247,6 @@ class FoldedAreaTextProperty implements TextProperty {
 					: regionAtLine.isCollapsed &&
 					regionAtLine.startLineNumber === lineNumber;
 				return hasFolding;
-			}
-		});
-	}
-}
-
-class BreakpointTextProperty implements TextProperty {
-	public readonly lineSignal = AccessibilitySignal.break;
-
-	constructor(@IDebugService private readonly debugService: IDebugService) { }
-
-	createSource(editor: ICodeEditor, model: ITextModel): TextPropertySource {
-		const signal = observableSignalFromEvent('onDidChangeBreakpoints', this.debugService.getModel().onDidChangeBreakpoints);
-		const debugService = this.debugService;
-		return new TextPropertySource({
-			isPresentOnLine(lineNumber, reader): boolean {
-				signal.read(reader);
-				const breakpoints = debugService
-					.getModel()
-					.getBreakpoints({ uri: model.uri, lineNumber });
-				const hasBreakpoints = breakpoints.length > 0;
-				return hasBreakpoints;
 			}
 		});
 	}

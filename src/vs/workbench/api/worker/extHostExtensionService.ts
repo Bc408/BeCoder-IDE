@@ -10,7 +10,6 @@ import { URI } from '../../../base/common/uri.js';
 import { RequireInterceptor } from '../common/extHostRequireInterceptor.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { ExtensionRuntime } from '../common/extHostTypes.js';
-import { timeout } from '../../../base/common/async.js';
 import { ExtHostConsoleForwarder } from './extHostConsoleForwarder.js';
 import { extname } from '../../../base/common/path.js';
 
@@ -49,7 +48,6 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		await this._fakeModules.install();
 		performance.mark('code/extHost/didInitAPI');
 
-		await this._waitForDebuggerAttachment();
 	}
 
 	protected _getEntryPoint(extensionDescription: IExtensionDescription): string | undefined {
@@ -134,17 +132,6 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		return;
 	}
 
-	private async _waitForDebuggerAttachment(waitTimeout = 5000) {
-		// debugger attaches async, waiting for it fixes #106698 and #99222
-		if (!this._initData.environment.isExtensionDevelopmentDebug) {
-			return;
-		}
-
-		const deadline = Date.now() + waitTimeout;
-		while (Date.now() < deadline && !('__jsDebugIsReady' in globalThis)) {
-			await timeout(10);
-		}
-	}
 }
 
 function ensureSuffix(path: string, suffix: string): string {

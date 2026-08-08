@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.4.1** is the latest archived implementation checkpoint. Both **Stage 4.4** Open VSX and extension governance and **Stage 4.4.1** protected Simplified-Chinese and bilingual-product behavior have passed source, package, and project-owner runtime acceptance. Earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.5** is the latest archived implementation checkpoint. Stage 4.4 Open VSX and extension governance, Stage 4.4.1 protected Simplified-Chinese and bilingual-product behavior, and Stage 4.5 AI/Debug/GDB removal have passed source, package, and project-owner runtime acceptance. Earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,9 +9,9 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.4`
-- Active baseline commit: `18e7f60` (`feat(stage4.3): refine runner and visual workflow`)
-- Latest remote backup target: `origin/stage4.4.1`
+- Active development branch: `codex/stage4.5`
+- Active baseline commit: `5130bbc` (`docs(handoff): archive stage 4.4`)
+- Latest remote backup target: `origin/stage4.5`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
@@ -52,7 +52,7 @@ Core product requirements:
 - Default to C17 for C and C++20 for C++.
 - Automatically save the focused C/C++ file before Run actions.
 - Keep native PowerShell fully separate from Runner, clangd, and the diagnostic worker.
-- Do not bundle CPH, cpptools, GDB, external OJ services, account login, online submission, or ShortestPath network services.
+- Do not bundle CPH, cpptools, GDB, external OJ services, a BeCoder-owned/default AI account chain, online submission, or ShortestPath network services. Preserve the generic `vscode.authentication` API, extension-provided authentication providers, OAuth callbacks, secure credential storage, and ordinary extension account access.
 - Allow users to install optional extensions later through the public Eclipse Open VSX Registry or a user-supplied local `.vsix` file.
 - Remove the first-open custom configuration page and open directly with BeCoder defaults.
 - Keep the fork close to upstream Code - OSS and implement BeCoder-specific behavior in focused built-in extensions or narrow integration points.
@@ -406,12 +406,12 @@ Core built-in policy:
 - Protect the built-in `adpyke.codesnap` and `vscode.cpp` identities from replacement by user or workspace extensions in normal packaged use while preserving extension-development overrides, and add focused install-policy, deduplication, and package-verifier coverage for the complete protected set.
 - Better C++ Syntax grammar content belongs to the built-in `extensions/cpp` language extension, not a second installed extension.
 - User/workspace extensions must not replace protected core IDs in normal packaged use; extension-development instances remain usable for source debugging.
-- Remove `ms-vscode.js-debug`, `ms-vscode.js-debug-companion`, `ms-vscode.vscode-js-profile-table`, and `vscode.mermaid-markdown-features` from the BeCoder distribution. Prefer narrow build/package exclusions over deleting upstream source trees. CodeSnap is explicitly excluded from this cleanup.
+- Remove `ms-vscode.js-debug`, `ms-vscode.js-debug-companion`, and `ms-vscode.vscode-js-profile-table` from the BeCoder distribution. Stage 4.5 supersedes the earlier Mermaid exclusion: `vscode.mermaid-markdown-features` is an ordinary bundled Markdown-reading component and is not downloaded from Open VSX. CodeSnap is explicitly excluded from this cleanup.
 - Do not restore ShortestPath login, online submission, network OJ services, or GDB.
 
 Built-in language policy:
 
-- Bundle the exact unmodified extension payload from `ms-ceintl.vscode-language-pack-zh-hans-1.130.2026072017.vsix` as the protected system extension `ms-ceintl.vscode-language-pack-zh-hans`; pin version `1.130.2026072017`, VS Code engine `^1.130.0`, SHA-256 `265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0`, source provenance, MIT license, and third-party notice.
+- Use `ms-ceintl.vscode-language-pack-zh-hans-1.130.2026072017.vsix` as the pinned upstream source for the protected system extension `ms-ceintl.vscode-language-pack-zh-hans`; retain version `1.130.2026072017`, VS Code engine `^1.130.0`, original VSIX SHA-256 `265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0`, source provenance, MIT license, and third-party notice. Stage 4.5 removes translations for product surfaces that BeCoder no longer ships, so the bundled tree is an explicitly recorded BeCoder-modified derivative rather than a byte-identical copy of the VSIX.
 - Keep the bundled Simplified Chinese pack at the same product-management level as CodeSnap and BeCoder One Monokai. Normal Open VSX search/results, update, install, uninstall, user/workspace replacement, and profile-copy paths must not expose or replace its protected identity; extension-development overrides remain available for source work.
 - BeCoder defaults to `zh-cn` on a fresh profile. English uses the Code - OSS source messages and must not require or install an English language extension.
 - Contribute `becoder.displayLanguage` as the first `application`-scoped setting under `BeCoder IDE Features`, with exactly `zh-cn` and `en`; the `BeCoder IDE: Settings` command must open the `becoder.becoder-setup` settings page where this control is visible.
@@ -429,12 +429,65 @@ Redistribution and licensing gate:
 - Treat `resources/oi-defaults/toolchains/becoder-ucrt64.zip` as an urgent compliance item because it is already distributed through Git LFS. Inventory the exact MSYS2 binary packages, remove unrelated components only through the controlled toolchain-slimming workflow, retain every required license and notice, and provide durable equivalent access to exact corresponding sources, PKGBUILDs, patches, and hashes for GPL/LGPL components. Do not rewrite Git history or delete the accepted archive merely to conceal the gap; repair the distribution forward.
 - A Stage 4.4 package must fail verification if a bundled core component or toolchain lacks its required license/provenance record, if the Runner notice version is stale, or if packaged product configuration still references Microsoft Marketplace delivery endpoints.
 
-Complete AI removal means removing the full feature chain, not merely hiding a panel:
+### Stage 4.5 AI, Debug, and GDB Removal
 
-- chat and agent views;
-- commands, menus, keybindings, settings, configuration schemas, context keys, and startup contributions;
-- AI entries in Settings;
-- stale default-layout and persisted-state paths that can recreate the UI in clean or existing user data.
+Status: **Archived**. Stage 4.5 starts from commit `5130bbc` on branch `codex/stage4.5`. Client type checking, the 16-case focused boundary suite, bundled OI extension compilation, independent read-only review, the Windows portable build, and direct package verification with the bundled compiler passed on 2026-08-09. The project owner then completed portable GUI/runtime acceptance and approved Stage 4.5 for archive. The remaining native-terminal initial suggestion hint and Source Control product surface are separate Stage 4.6 requirements and do not reopen the accepted Stage 4.5 boundary.
+
+The governing principle is:
+
+> BeCoder does not support or preserve AI as a product capability. Remove BeCoder's AI product paths from runtime, compilation, build, and packaging, while preserving ordinary Workbench infrastructure even when upstream AI code once consumed it.
+
+The implementation target is a zero product-dependency graph, not a zero keyword count or maximum source deletion count. A component is removed only when it provides BeCoder AI, Chat, Agent, Agent Sessions, language-model, MCP, Debug Workbench, or GDB product capability, or remains on a compiled, registered, exposed, or packaged path for one of those capabilities. Do not classify a component solely because its source contains words such as `ai`, `chat`, `agent`, `attach`, or `debug`.
+
+Required product removal:
+
+- Remove AI, Chat, Agent, Agent Sessions, language-model, and MCP runtime registrations, services, commands, menus, settings, context keys, window routes, product configuration, extension-host protocols, extension API and contribution points, build entry points, runtime dependencies, prompts, skills, media, and packaged resources.
+- Remove the unregistered upstream `welcomeOnboarding` experiment as an AI-only source and media owner; retain BeCoder's generic product theme list and the independently owned One Monokai default-theme path.
+- Remove the Debug Workbench, its views, panels, commands, menus, settings, extension contribution surface, bundled debug extensions, and every packaged `gdb.exe`.
+- Remove Default Account, Copilot entitlement/quota/SKU/tracking logic, AI Account Policy Gate, Copilot Managed Settings, MCP registry/account preferences, Web Content Extractor, Agent Network Filter, and the Browser View CDP/Playwright product-automation channel.
+- Do not add AI-specific Null, Empty, or Stub services; serializers; migrations; state keys; compatibility layers; history cleanup; or future restoration interfaces.
+- Do not read, recognize, transform, migrate, or clean historical AI state. Generic Workbench recovery for unknown editors and missing views remains unchanged and contains no AI-specific branch.
+- User extensions must not regain removed Chat, Agent, language-model, MCP, or Debug product capabilities through extension API or manifest contribution points.
+
+Required retained infrastructure:
+
+- Preserve generic `vscode.authentication`, extension Authentication Providers, login/logout/account selection, OAuth callbacks, secure credential storage, and ordinary extension access to GitHub or other services. Open VSX remains usable without a BeCoder account.
+- Preserve Browser View and ordinary interactive web browsing, including third-party AI websites. BeCoder provides those pages no AI integration, content extraction, CDP access, Playwright control, or automatic interaction.
+- Preserve `src/vs/base/browser/htmlToMarkdown.ts`, its generic tests, and its `htmlToMarkdown` Trusted Types policy entry. Removed Chat paste consumers and Web Content Extractor paths stay removed.
+- Preserve generic Quick Access, `attach`, `isExplicit`, Markdown, terminal, editor, notebook, testing, search, policy, configuration, and extension infrastructure when it has an ordinary non-AI consumer.
+- Preserve native-terminal process and shell identification needed for ordinary CLI programs. Remove only Agent-specific title detection and presentation.
+- Preserve Playwright as development/test infrastructure only. It must not be a BeCoder runtime dependency or packaged browser-automation service.
+- Preserve repository-only development metadata and tools that do not compile into or ship with BeCoder. Pure unreachable upstream AI source may remain only when it has no static import, type, registration, build, runtime, or package dependency from the product.
+- Preserve and bundle `extensions/mermaid-markdown-features` as the built-in `vscode.mermaid-markdown-features` Markdown-reading component. Retain fenced Mermaid rendering in ordinary Markdown previews, Markdown-It integration, theme adaptation, zoom, source copying, standalone diagram preview, and Notebook Markdown-cell rendering.
+- Use `C:\Users\Bc\Desktop\BeCoder\shortestpath-ide-Release-v0.2.8` as the read-only behavioral reference for this retained Mermaid path. Its ordinary Markdown preview script, Markdown-It plugin, Notebook renderer, and standalone diagram preview establish the positive baseline; ShortestPath login, OJ, network, Chat, and AI product paths remain out of scope.
+- Preserve the generic Images Preview editor and its Explorer `Open in Images Preview` action. Remove only `imageCarousel.chat.enabled`, `workbench.action.chat.openImageInCarousel`, and their Chat-only translations; do not exclude the whole `imageCarousel` module or its ordinary fixtures from compilation.
+
+Mermaid has a mixed upstream implementation and therefore uses a component boundary instead of directory-level removal:
+
+- Keep the manifest contributions and build outputs for `markdown.previewScripts`, `markdown.markdownItPlugins`, `notebookRenderer`, ordinary Markdown preview, Notebook rendering, shared diagram rendering, and the standalone `vscode.mermaid-markdown-features.preview` webview.
+- Remove the `chatOutputRenderers` contribution, `chatOutputRenderer` API proposal, `vscode.chat.registerChatOutputRenderer`, `ChatOutputDataItem`, `ChatOutputWebview`, `LanguageModelTextPart`, `LanguageModelToolResult`, the `text/vnd.mermaid` Chat protocol, Chat history restoration, Chat-only context-menu conditions, and Chat-only resources.
+- If the standalone diagram preview reuses files currently named `preview-src/chat` or `chat-webview-out`, move or rename that shared implementation to a neutral diagram-preview owner. Do not delete ordinary preview behavior because of an obsolete directory or output name.
+- Keep `vscode.mermaid-markdown-features` Simplified-Chinese translations and remove only `vscode.mermaid-chat-features` translations. Preserve the extension's upstream license, third-party notices, and dependency-license records.
+- Package verification must require the Mermaid Markdown extension, Markdown and Notebook bundles, and ordinary preview assets while rejecting Chat API usage, Chat output contributions, Chat-only bundles, Chat output protocols, and AI resources.
+
+Implementation discipline and current correction points:
+
+- Classify the Stage 4.5 diff by product entry, extension API, shared infrastructure, build/dependency, localization, and verification ownership before further broad deletion.
+- Review shared files by their consumers and import graph. Restore any ordinary capability that was removed only because an AI feature called it.
+- Keep generic helpers extracted from deleted mixed modules when ordinary packaging or Workbench consumers still require them. New helper/widget files must receive focused tests and be tracked as intentional source changes.
+- Do not use repository-wide keyword deletion or keyword-only package assertions. Boundary tests must target explicit modules, registrations, schemas, product fields, imports, outputs, and resources, and must include positive assertions for retained generic capabilities.
+- The protected Simplified-Chinese pack must remain coherent with English product source. If Stage 4.5 filters AI/Debug translations from the pinned 1.130 payload, record it honestly as a BeCoder-modified derivative, preserve upstream MIT provenance, and recompute both source and packaged-content hashes. Do not continue describing the filtered payload as byte-identical to the supplied VSIX.
+
+Stage 4.5 validation gates:
+
+1. Focused boundary tests prove both removal and retention: no product AI/Debug/GDB registrations or extension surfaces; generic Authentication, Browser View, `htmlToMarkdown`, Quick Access attachment behavior, ordinary terminal identification, and Testing call-stack presentation remain.
+2. `npm run typecheck-client` passes under the 120-second timeout.
+3. The Stage 4.5 build-boundary test passes without broad false-positive keyword rules.
+4. `npm run compile-oi-extensions` passes under the 120-second timeout.
+5. The same independent read-only reviewer checks requirement completeness, ordinary-feature regressions, dependency closure, localization/provenance, package rules, and test coverage; findings are fixed and re-reviewed.
+6. `npm run gulp vscode-win32-x64-min` passes under the 300-second timeout, followed by `verify-becoder-package.ps1 -IncludeCompiler $true`.
+7. The final package contains Browser View but no Web Content Extractor or automation channel; contains generic Authentication but no AI account chain; contains the built-in Mermaid Markdown/Notebook renderer but no Mermaid Chat output chain; contains no AI/Chat/Agent/MCP runtime or independent resources; contains no Debug Workbench or `gdb.exe`.
+8. After source checks and package verification, stop and hand the portable package to the project owner. Do not launch BeCoder or claim GUI/runtime acceptance. Archive Stage 4.5 only after project-owner acceptance.
 
 ### Workbench and Product UI
 
@@ -596,7 +649,7 @@ The consolidated Stage 4 acceptance matrix includes:
 - the protected Chinese pack, CodeSnap, One Monokai, and other core identities remaining absent from normal Open VSX results and immune to user/workspace replacement;
 - BeCoder New Tab, Setup/toolchain diagnostics, extension commands, and settings labels presenting coherent Chinese and English while BC terminal protocol text keeps the accepted Stage 4.3 appearance;
 - packaged third-party inventory, notices, toolchain licenses, archive provenance, and corresponding-source records passing the redistribution gate;
-- absence of AI, debug/GDB, ShortestPath network services, and removed non-core bundled extensions;
+- absence of AI, debug/GDB, ShortestPath network services, and removed non-core bundled extensions, while built-in Mermaid Markdown and Notebook rendering remains available without Chat integration;
 - BeCoder branding, Help entries, Settings gear, and terminal cancellation visuals;
 - comparison with `portable_stage2_4_verified`, ShortestPath visual behavior, and the VS Code 1.130 reference where applicable.
 
@@ -616,9 +669,9 @@ The consolidated Stage 4 acceptance matrix includes:
 | Explorer `input` ordering | Archived | Stage 4.3 source, Electron tests, and project-owner acceptance prove that only an exact ordinary file named `input` is pinned above every sibling under all Explorer sort modes. |
 | Stage 4.3 visual closeout | Archived | The accepted visual architecture, BC detail refinements, and GCC namespace-isolation correction passed focused validation, final read-only review, replacement build, direct package verification, and project-owner acceptance. |
 | Explorer visibility toggle | Planned | Default to showing `.exe` and dot-prefixed configuration items; make `Hide Configuration and Executable Files` hide both groups and `Show All Files` restore them without changing unrelated user exclusions. |
-| Stage 4.4 Open VSX and extension governance | Archived | Source uses only Open VSX, enforces the cpptools blacklist and eight-ID core protection across install/enablement/dedup paths, excludes Mermaid and the three JS Debug downloads, and records bundled licenses plus UCRT64 provenance and corresponding source. Focused tests, the standard source/build sequence, direct package verification, independent package-content cross-checks, final read-only review, and project-owner runtime acceptance pass. |
+| Stage 4.4 Open VSX and extension governance | Archived | Source uses only Open VSX, enforces the cpptools blacklist and eight-ID core protection across install/enablement/dedup paths, and excludes the three JS Debug downloads while recording bundled licenses plus UCRT64 provenance and corresponding source. The package accepted at Stage 4.4 also excluded Mermaid; Stage 4.5 supersedes only that Mermaid product decision and restores it as a built-in Markdown component without Chat integration. |
 | Stage 4.4.1 protected Chinese and bilingual UI | Archived | The pinned 1.130 Simplified-Chinese VSIX is the eighth protected core component, fresh profiles default to Chinese, English uses source messages, `BeCoder IDE Features` owns the two-language setting, changes persist before optional restart, protected gallery results are hidden, and BeCoder-owned settings/toolchain surfaces are bilingual. Focused boundary tests 9/9, full build-script tests 239/239, client typecheck, OI extension compilation, JSON/PowerShell parsing, `git diff --check`, independent review, the replacement Windows build, direct package verification, and project-owner runtime acceptance pass. |
-| AI/debug/GDB removal | Planned | Remove complete contribution and persisted-state chains after dependency tracing. |
+| AI/debug/GDB removal | Archived | Stage 4.5 removes the AI/Chat/Agent/language-model/MCP and Debug/GDB product dependency graphs while retaining generic Authentication, Browser View, HTML/Markdown conversion, Quick Access, terminal, testing, Images Preview, Mermaid, and other ordinary Workbench infrastructure. Source checks, independent review, the Windows portable build, direct package verification, and project-owner portable acceptance passed on 2026-08-09. |
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
 | Toolchain slimming and release | Planned | Begin only after retained compiler/language-service behavior is stable and measurable. |
 
@@ -704,7 +757,7 @@ The consolidated Stage 4 acceptance matrix includes:
 
 ### Stage 4.4 Open VSX and extension governance archived checkpoint
 
-- Requirement: use the public Eclipse Open VSX Registry as BeCoder's only configured online extension registry; retain local VSIX import; block cpptools; prevent normal user, workspace, gallery, resource, or profile-copy replacement of the eight protected core IDs; remove Mermaid and the three downloaded JS Debug extensions from the OI package; and close bundled-component and UCRT64 redistribution records without deleting user assets or relying on Microsoft Marketplace.
+- Requirement at the archived Stage 4.4 checkpoint: use the public Eclipse Open VSX Registry as BeCoder's only configured online extension registry; retain local VSIX import; block cpptools; prevent normal user, workspace, gallery, resource, or profile-copy replacement of the eight protected core IDs; remove Mermaid and the three downloaded JS Debug extensions from that checkpoint's OI package; and close bundled-component and UCRT64 redistribution records without deleting user assets or relying on Microsoft Marketplace. Stage 4.5 supersedes the archived Mermaid exclusion and keeps the three JS Debug removals unchanged.
 - User-visible result: the normal Code - OSS Extensions workbench targets Open VSX for search, browse, install, update, and uninstall. Local VSIX remains available for extensions absent from Open VSX. `ms-vscode.cpptools` and its extension pack remain unavailable, while Runner, Setup, GCC Diagnostics, One Monokai, clangd, CodeSnap, and `vscode.cpp` retain their built-in identities. Extension-development overrides remain intentionally available for development.
 - Source ownership: `product.json`; extension gallery, allowed-extension, installation, enablement, and dedup services under `src/vs/`; `build/hygiene.ts`; `build/lib/extensions.ts`; `build/azure-pipelines/win32/verify-becoder-package.ps1`; `ThirdPartyNotices.txt`; bundled extension licenses; and `resources/oi-defaults/BUNDLED-COMPONENTS.json` plus the UCRT64 package, license, and corresponding-source inventories.
 - Commit/PR: included in the containing Stage 4.4.1 backup commit pushed directly to `origin/stage4.4.1`; no PR or release workflow was requested. `build/npm/stubs/cpu-features/` is unrelated user-owned untracked content and remains untouched and uncommitted.

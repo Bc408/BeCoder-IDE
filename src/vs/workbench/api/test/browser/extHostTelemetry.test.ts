@@ -26,7 +26,6 @@ suite('ExtHostTelemetry', function () {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
 	const mockEnvironment: IEnvironment = {
-		isExtensionDevelopmentDebug: false,
 		extensionDevelopmentLocationURI: undefined,
 		extensionTestsLocationURI: undefined,
 		appRoot: undefined,

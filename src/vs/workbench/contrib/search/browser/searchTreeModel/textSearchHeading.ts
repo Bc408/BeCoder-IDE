@@ -65,7 +65,6 @@ export abstract class TextSearchHeadingImpl<QueryType extends ITextSearchQuery> 
 		return this._folderMatches.length > 0;
 	}
 
-	abstract get isAIContributed(): boolean;
 	abstract id(): string;
 	abstract name(): string;
 
@@ -91,18 +90,15 @@ export abstract class TextSearchHeadingImpl<QueryType extends ITextSearchQuery> 
 				return;
 			}
 
-			// ai results go into the respective folder
 			const folderMatch = this.getFolderMatch(raw[0].resource);
 			folderMatch?.addFileMatch(raw, silent, searchInstanceID);
 		});
 
-		if (!this.isAIContributed) {
-			this._otherFilesMatch?.addFileMatch(other, silent, searchInstanceID);
-		}
+		this._otherFilesMatch?.addFileMatch(other, silent, searchInstanceID);
 		this.disposePastResults();
 	}
 
-	remove(matches: ISearchTreeFileMatch | ISearchTreeFolderMatch | (ISearchTreeFileMatch | ISearchTreeFolderMatch)[], ai = false): void {
+	remove(matches: ISearchTreeFileMatch | ISearchTreeFolderMatch | (ISearchTreeFileMatch | ISearchTreeFolderMatch)[]): void {
 		if (!Array.isArray(matches)) {
 			matches = [matches];
 		}
@@ -277,10 +273,6 @@ export class PlainTextSearchHeadingImpl extends TextSearchHeadingImpl<ITextQuery
 
 	id(): string {
 		return TEXT_SEARCH_HEADING_PREFIX + PLAIN_TEXT_SEARCH__RESULT_ID;
-	}
-
-	get isAIContributed(): boolean {
-		return false;
 	}
 
 	replace(match: ISearchTreeFileMatch): Promise<any> {

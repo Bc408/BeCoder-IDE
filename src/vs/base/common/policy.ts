@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../nls.js';
-import { IPolicyData } from './defaultAccount.js';
 
 /**
  * System-wide policy file path for Linux systems.
@@ -18,19 +17,9 @@ export type LocalizedValue = {
 };
 
 export type PolicyValue = string | number | boolean;
-export type ManagedSettingValue = PolicyValue;
-export type ManagedSettingsData = Readonly<Record<string, ManagedSettingValue>>;
-
-export interface IManagedSettingPolicyDefinition {
-	readonly type: 'string' | 'number' | 'boolean';
-}
-
-export type IManagedSettingsPolicyDefinitions = Readonly<Record<string, IManagedSettingPolicyDefinition>>;
-
 export enum PolicyCategory {
 	Extensions = 'Extensions',
 	IntegratedTerminal = 'IntegratedTerminal',
-	InteractiveSession = 'InteractiveSession',
 	Telemetry = 'Telemetry',
 	Update = 'Update',
 }
@@ -46,11 +35,6 @@ export const PolicyCategoryData: {
 	[PolicyCategory.IntegratedTerminal]: {
 		name: {
 			key: 'terminalIntegratedConfigurationTitle', value: localize('terminalIntegratedConfigurationTitle', "Integrated Terminal"),
-		}
-	},
-	[PolicyCategory.InteractiveSession]: {
-		name: {
-			key: 'interactiveSessionConfigurationTitle', value: localize('interactiveSessionConfigurationTitle', "Chat"),
 		}
 	},
 	[PolicyCategory.Telemetry]: {
@@ -93,46 +77,12 @@ export interface IPolicy {
 		/** List of localization key or key value pair. If only a key is provided, the default value will fallback to the parent configuration's enumDescriptions property. */
 		enumDescriptions?: LocalizedValue[];
 	};
-
-	/**
-	 * The value that an ACCOUNT-based feature will use when its corresponding policy is active.
-	 *
-	 * Only applicable when policy is tagged with ACCOUNT. When an account-based feature's policy is enabled,
-	 * this value determines what value the feature receives.
-	 *
-	 * For example:
-	 * - If evaluated value is `true`,  the feature's setting is locked to `true` WHEN the policy is in effect.
-	 * - If evaluated value is `foo`, the feature's setting is locked to 'foo'  WHEN the policy is in effect.
-	 *
-	 * If `undefined`, the feature's setting is not locked and can be overridden by other means.
-	 */
-	readonly value?: (policyData: IPolicyData) => string | number | boolean | undefined;
-
-	/**
-	 * Declares Copilot managed-settings keys this policy's value callback reads.
-	 * Keys are dot-separated managed-settings paths, for example
-	 * `permissions.disableBypassPermissionsMode`.
-	 */
-	readonly managedSettings?: IManagedSettingsPolicyDefinitions;
-
-	/**
-	 * The most-restrictive value that should be applied when the user is subject to the
-	 * "Require Approved Account" gate but the gate is not yet satisfied (i.e. no approved
-	 * GitHub account is signed in or the account-side policy data has not yet resolved).
-	 *
-	 * If omitted, the gate falls back to a type-driven safe default
-	 * (`false` for boolean, `0` for number, `''` for string).
-	 *
-	 * Only consulted while the gate is active and unsatisfied; ignored otherwise.
-	 */
-	readonly restrictedValue?: string | number | boolean;
 }
 
 /**
  * A subordinate attachment to an existing {@link IPolicy} (the "owner"). A setting may declare a
  * `policyReference` instead of a full `policy` to be governed by a policy owned by another setting,
- * letting a single enterprise policy lock more than one setting (e.g. gating an agent in both the
- * editor window and the Agents window).
+ * letting a single enterprise policy lock more than one related setting.
  *
  * A reference is a pure pointer: it carries no policy semantics of its own. The owner is the single
  * source of truth for the policy's catalog metadata *and* its runtime behaviour (type, value

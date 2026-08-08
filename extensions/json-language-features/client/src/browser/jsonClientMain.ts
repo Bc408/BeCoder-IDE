@@ -4,11 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, ExtensionContext, Uri, l10n, window } from 'vscode';
-import { LanguageClientOptions } from 'vscode-languageclient';
+import { DynamicFeature, LanguageClientOptions, StaticFeature } from 'vscode-languageclient';
 import { startClient, LanguageClientConstructor, SchemaRequestService, AsyncDisposable, languageServerDescription } from '../jsonClient';
 import { LanguageClient } from 'vscode-languageclient/browser';
 
 let client: AsyncDisposable | undefined;
+
+class BeCoderJSONLanguageClient extends LanguageClient {
+	override registerFeature(feature: StaticFeature | DynamicFeature<unknown>): void {
+		if ((feature as Partial<DynamicFeature<unknown>>).registrationType?.method === 'textDocument/inlineValue') {
+			return;
+		}
+		super.registerFeature(feature);
+	}
+}
 
 // this method is called when vs code is activated
 export async function activate(context: ExtensionContext) {
@@ -18,7 +27,7 @@ export async function activate(context: ExtensionContext) {
 		worker.postMessage({ i10lLocation: l10n.uri?.toString(false) ?? '' });
 
 		const newLanguageClient: LanguageClientConstructor = (id: string, name: string, clientOptions: LanguageClientOptions) => {
-			return new LanguageClient(id, name, worker, clientOptions);
+			return new BeCoderJSONLanguageClient(id, name, worker, clientOptions);
 		};
 
 		const schemaRequests: SchemaRequestService = {

@@ -36,7 +36,6 @@ import { autorun } from '../../../../../base/common/observable.js';
 import { setUnexpectedErrorHandler } from '../../../../../base/common/errors.js';
 import { IAccessibilitySignalService } from '../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import { ModifierKeyEmitter } from '../../../../../base/browser/dom.js';
 import { InlineSuggestionsView } from '../../browser/view/inlineSuggestionsView.js';
 
@@ -198,11 +197,6 @@ async function withAsyncTestCodeEditorAndInlineCompletionsModel(
 					playSignal: async () => { },
 					isSoundEnabled(signal: unknown) { return false; },
 				} as any],
-				[IDefaultAccountService, new class extends mock<IDefaultAccountService>() {
-					override onDidChangeDefaultAccount = Event.None;
-					override getDefaultAccount = async () => null;
-					override setDefaultAccountProvider = () => { };
-				}],
 			);
 
 			if (options.provider || options.inlineProvider) {

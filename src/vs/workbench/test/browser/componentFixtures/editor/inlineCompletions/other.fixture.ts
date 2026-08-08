@@ -381,10 +381,8 @@ function renderGutterMenu({ container, disposableStore, theme }: ComponentFixtur
 	const editorObs = observableCodeEditor(editor);
 	const menuData = new InlineSuggestionGutterMenuData(
 		undefined,
-		'Copilot',
+		'Extension',
 		[],
-		undefined,
-		undefined,
 		undefined,
 	);
 

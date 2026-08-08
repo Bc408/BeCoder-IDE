@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { sumBy } from '../../base/common/arrays.js';
-import { prefixedUuid } from '../../base/common/uuid.js';
 import { LineEdit } from './core/edits/lineEdit.js';
 import { BaseStringEdit } from './core/edits/stringEdit.js';
 import { StringText } from './core/text/abstractText.js';
 import { TextLength } from './core/text/textLength.js';
-import { ProviderId, VersionedExtensionId } from './languages.js';
+import { ProviderId } from './languages.js';
 
 const privateSymbol = Symbol('TextModelEditSource');
 
@@ -60,7 +59,6 @@ export class TextModelEditSource {
 		return this.metadata as any;
 	}
 }
-
 type TextModelEditSourceT<T> = TextModelEditSource & {
 	metadataT: T;
 };
@@ -69,17 +67,6 @@ type TextModelEditSourceT<T> = TextModelEditSource & {
 function createEditSource<T extends Record<string, any>>(metadata: T): TextModelEditSourceT<T> {
 	// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 	return new TextModelEditSource(metadata as any, privateSymbol) as any;
-}
-
-export function isAiEdit(source: TextModelEditSource): boolean {
-	switch (source.metadata.source) {
-		case 'inlineCompletionAccept':
-		case 'inlineCompletionPartialAccept':
-		case 'inlineChat.applyEdits':
-		case 'Chat.applyEdits':
-			return true;
-	}
-	return false;
 }
 
 export function isUserEdit(source: TextModelEditSource): boolean {
@@ -100,31 +87,6 @@ export const EditSources = {
 
 	rename: (oldName: string | undefined, newName: string) => createEditSource({ source: 'rename', $$$oldName: oldName, $$$newName: newName } as const),
 
-	chatApplyEdits(data: {
-		modelId: string | undefined;
-		sessionId: string | undefined;
-		requestId: string | undefined;
-		languageId: string;
-		mode: string | undefined;
-		extensionId: VersionedExtensionId | undefined;
-		codeBlockSuggestionId: EditSuggestionId | undefined;
-	}) {
-		return createEditSource({
-			source: 'Chat.applyEdits',
-			$modelId: avoidPathRedaction(data.modelId),
-			$extensionId: data.extensionId?.extensionId,
-			$extensionVersion: data.extensionId?.version,
-			$$languageId: data.languageId,
-			$$sessionId: data.sessionId,
-			$$requestId: data.requestId,
-			$$mode: data.mode,
-			$$codeBlockSuggestionId: data.codeBlockSuggestionId,
-		} as const);
-	},
-
-	chatUndoEdits: () => createEditSource({ source: 'Chat.undoEdits' } as const),
-	chatReset: () => createEditSource({ source: 'Chat.reset' } as const),
-
 	inlineCompletionAccept(data: { nes: boolean; requestUuid: string; languageId: string; providerId?: ProviderId; correlationId: string | undefined }) {
 		return createEditSource({
 			source: 'inlineCompletionAccept',
@@ -144,18 +106,6 @@ export const EditSources = {
 			...toProperties(data.providerId),
 			$$correlationId: data.correlationId,
 			$$requestUuid: data.requestUuid,
-			$$languageId: data.languageId,
-		} as const);
-	},
-
-	inlineChatApplyEdit(data: { modelId: string | undefined; requestId: string | undefined; sessionId: string | undefined; languageId: string; extensionId: VersionedExtensionId | undefined }) {
-		return createEditSource({
-			source: 'inlineChat.applyEdits',
-			$modelId: avoidPathRedaction(data.modelId),
-			$extensionId: data.extensionId?.extensionId,
-			$extensionVersion: data.extensionId?.version,
-			$$sessionId: data.sessionId,
-			$$requestId: data.requestId,
 			$$languageId: data.languageId,
 		} as const);
 	},
@@ -195,15 +145,6 @@ export type ITextModelEditSourceMetadata = Values<{ [TKey in keyof typeof EditSo
 type ITextModelEditSourceMetadataKeys = Values<{ [TKey in keyof typeof EditSources]: keyof ReturnType<typeof EditSources[TKey]>['metadataT'] }>;
 
 
-function avoidPathRedaction(str: string | undefined): string | undefined {
-	if (str === undefined) {
-		return undefined;
-	}
-	// To avoid false-positive file path redaction.
-	return str.replaceAll('/', '|');
-}
-
-
 export class EditDeltaInfo {
 	public static fromText(text: string): EditDeltaInfo {
 		const linesAdded = TextLength.ofText(text).lineCount;
@@ -239,26 +180,4 @@ export class EditDeltaInfo {
 		public readonly charsAdded: number,
 		public readonly charsRemoved: number
 	) { }
-}
-
-
-/**
- * This is an opaque serializable type that represents a unique identity for an edit.
- */
-export interface EditSuggestionId {
-	readonly _brand: 'EditIdentity';
-}
-
-export namespace EditSuggestionId {
-	/**
-	 * Use AiEditTelemetryServiceImpl to create a new id!
-	*/
-	export function newId(genPrefixedUuid?: (ns: string) => string): EditSuggestionId {
-		const id = genPrefixedUuid ? genPrefixedUuid('sgt') : prefixedUuid('sgt');
-		return toEditIdentity(id);
-	}
-}
-
-function toEditIdentity(id: string): EditSuggestionId {
-	return id as unknown as EditSuggestionId;
 }

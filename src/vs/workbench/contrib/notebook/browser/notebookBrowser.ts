@@ -180,7 +180,6 @@ export enum CellLayoutState {
 export interface CellLayoutInfo {
 	readonly layoutState: CellLayoutState;
 	readonly fontInfo: FontInfo | null;
-	readonly chatHeight: number;
 	readonly editorWidth: number;
 	readonly editorHeight: number;
 	readonly statusBarHeight: number;
@@ -211,7 +210,6 @@ export interface CodeCellLayoutInfo extends CellLayoutInfo {
 
 export interface CodeCellLayoutChangeEvent extends CellLayoutChangeEvent {
 	readonly source?: string;
-	readonly chatHeight?: boolean;
 	readonly editorHeight?: boolean;
 	readonly outputHeight?: boolean;
 	readonly outputShowMoreContainerHeight?: number;
@@ -261,7 +259,6 @@ export interface ICellViewModel extends IGenericCellViewModel {
 	cellKind: CellKind;
 	lineNumbers: 'on' | 'off' | 'inherit';
 	commentOptions: IEditorCommentsOptions;
-	chatHeight: number;
 	commentHeight: number;
 	focusMode: CellFocusMode;
 	focusedOutputId?: string | undefined;
@@ -907,8 +904,7 @@ export enum CellEditState {
 export enum CellFocusMode {
 	Container,
 	Editor,
-	Output,
-	ChatInput
+	Output
 }
 
 export enum CursorAtBoundary {

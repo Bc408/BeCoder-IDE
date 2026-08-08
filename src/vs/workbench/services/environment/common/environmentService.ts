@@ -36,11 +36,9 @@ export interface IWorkbenchEnvironmentService extends IEnvironmentService {
 	readonly skipWelcome: boolean;
 	readonly disableWorkspaceTrust: boolean;
 	readonly beCoderTrustWorkspace?: string;
-	readonly isSessionsWindow: boolean;
 	readonly webviewExternalEndpoint: string;
 
 	// --- Development
-	readonly debugRenderer: boolean;
 	readonly logExtensionHostCommunication?: boolean;
 	readonly enableSmokeTestDriver?: boolean;
 	readonly profDurationMarkers?: string[];

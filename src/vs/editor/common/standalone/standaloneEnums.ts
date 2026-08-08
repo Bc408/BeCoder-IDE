@@ -759,15 +759,6 @@ export enum MouseTargetType {
 	OUTSIDE_EDITOR = 13
 }
 
-export enum NewSymbolNameTag {
-	AIGenerated = 1
-}
-
-export enum NewSymbolNameTriggerKind {
-	Invoke = 0,
-	Automatic = 1
-}
-
 /**
  * A positioning preference for rendering overlay widgets.
  */

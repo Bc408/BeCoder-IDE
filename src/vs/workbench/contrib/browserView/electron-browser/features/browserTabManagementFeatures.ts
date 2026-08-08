@@ -45,7 +45,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../../pla
 import { IPreferencesService } from '../../../../services/preferences/common/preferences.js';
 import { disposableTimeout } from '../../../../../base/common/async.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
-import { IsSessionsWindowContext, ResourceContextKey } from '../../../../common/contextkeys.js';
+import { ResourceContextKey } from '../../../../common/contextkeys.js';
 import { Schemas } from '../../../../../base/common/network.js';
 
 const CONTEXT_BROWSER_EDITOR_OPEN = new RawContextKey<boolean>('browserEditorOpen', false, localize('browser.editorOpen', "Whether any browser editor is currently open"));
@@ -104,7 +104,7 @@ class BrowserTabQuickPick extends Disposable {
 		}));
 
 		this._register(this._quickPick.onDidTriggerButton(async () => {
-			for (const editor of this._browserViewService.getContextualBrowserViews().values()) {
+			for (const editor of this._browserViewService.getKnownBrowserViews().values()) {
 				editor.dispose(true);
 			}
 		}));
@@ -166,7 +166,7 @@ class BrowserTabQuickPick extends Disposable {
 		}
 
 		// Background views: known but not open in any editor group
-		const backgroundEditors = [...this._browserViewService.getContextualBrowserViews().values()].filter(e => !viewsInGroups.has(e.id));
+		const backgroundEditors = [...this._browserViewService.getKnownBrowserViews().values()].filter(e => !viewsInGroups.has(e.id));
 		const backgroundLabel = localize('browser.backgroundGroup', "Background");
 
 		// Build sections: each editor group + optional background
@@ -293,7 +293,7 @@ class OpenIntegratedBrowserAction extends Action2 {
 
 		if (options.reuseUrlFilter) {
 			const filterUri = URI.parse(options.reuseUrlFilter);
-			const matchingEditor = [...browserViewService.getContextualBrowserViews().values()].find((e) => {
+			const matchingEditor = [...browserViewService.getKnownBrowserViews().values()].find((e) => {
 				const editorUri = URI.parse(e.url || '');
 				// URIs default to putting "file" scheme. Check that the scheme is really in the filter.
 				if (filterUri.scheme && options.reuseUrlFilter!.startsWith(`${filterUri.scheme}:`) && filterUri.scheme !== editorUri.scheme) {
@@ -505,7 +505,7 @@ class OpenOrListBrowsersAction extends Action2 {
 		const browserViewService = accessor.get(IBrowserViewWorkbenchService);
 		const commandService = accessor.get(ICommandService);
 
-		const hasOpenBrowserEditor = browserViewService.getContextualBrowserViews().size > 0;
+		const hasOpenBrowserEditor = browserViewService.getKnownBrowserViews().size > 0;
 
 		if (hasOpenBrowserEditor) {
 			await commandService.executeCommand(BrowserViewCommandId.QuickOpen);
@@ -528,19 +528,6 @@ MenuRegistry.appendMenuItem(MenuId.MenubarViewMenu, {
 
 // Register as "Close All Browser Tabs" action in editor title menu to align with the regular "Close All" action
 MenuRegistry.appendMenuItem(MenuId.EditorTitleContext, { command: { id: BrowserViewCommandId.CloseAllInGroup, title: localize('browser.closeAllInGroupShort', "Close All Browser Tabs") }, group: '1_close', order: 55, when: BROWSER_EDITOR_ACTIVE });
-
-// Agents window: surface New Tab as a primary editor title toolbar icon so the
-// browser editor title bar isn't left showing only the overflow (...) menu.
-MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
-	command: {
-		id: BrowserViewCommandId.NewTab,
-		title: localize2('browser.newTabAction', "New Tab"),
-		icon: Codicon.add
-	},
-	group: 'navigation',
-	order: 1,
-	when: ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, IsSessionsWindowContext)
-});
 
 registerAction2(QuickOpenBrowserAction);
 registerAction2(OpenIntegratedBrowserAction);
@@ -570,7 +557,7 @@ class BrowserEditorOpenContextKeyContribution extends Disposable implements IWor
 		super();
 
 		const contextKey = CONTEXT_BROWSER_EDITOR_OPEN.bindTo(contextKeyService);
-		const update = () => contextKey.set(browserViewService.getContextualBrowserViews().size > 0);
+		const update = () => contextKey.set(browserViewService.getKnownBrowserViews().size > 0);
 
 		update();
 		this._register(browserViewService.onDidChangeBrowserViews(() => update()));
@@ -651,8 +638,7 @@ class LinkOpenedHintPill extends BrowserEditorContribution {
 		editor: BrowserEditor,
 		@IHoverService private readonly hoverService: IHoverService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IPreferencesService private readonly preferencesService: IPreferencesService,
-		@IContextKeyService private readonly contextKeyService: IContextKeyService
+		@IPreferencesService private readonly preferencesService: IPreferencesService
 	) {
 		super(editor);
 
@@ -703,11 +689,6 @@ class LinkOpenedHintPill extends BrowserEditorContribution {
 	}
 
 	protected override onModelAttached(_model: IBrowserViewModel, _store: DisposableStore, isNew: boolean): void {
-		if (IsSessionsWindowContext.getValue(this.contextKeyService)) {
-			this._setVisible(false);
-			return;
-		}
-
 		const input = this.editor.input;
 		if (input instanceof BrowserEditorInput && input.isDefaultLinkOpen) {
 			const dismissed = this.storageService.getBoolean(LOCALHOST_HINT_DISMISSED_KEY, StorageScope.APPLICATION, false);
@@ -824,7 +805,7 @@ class BrowserTabUrlSuggestions extends BrowserEditorContribution {
 	}
 
 	private _refreshEditorLabelListeners(): void {
-		const known = this._browserViewService.getContextualBrowserViews();
+		const known = this._browserViewService.getKnownBrowserViews();
 		for (const id of [...this._editorLabelListeners.keys()]) {
 			if (!known.has(id)) {
 				this._editorLabelListeners.deleteAndDispose(id);
@@ -853,7 +834,7 @@ class BrowserTabUrlSuggestions extends BrowserEditorContribution {
 				}
 			}
 		}
-		for (const tab of this._browserViewService.getContextualBrowserViews().values()) {
+		for (const tab of this._browserViewService.getKnownBrowserViews().values()) {
 			if (!seen.has(tab.id)) {
 				seen.add(tab.id);
 				ordered.push(tab);
@@ -926,9 +907,8 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			experiment: { mode: 'startup' },
 			markdownDescription: localize(
 				{ comment: ['This is the description for a setting.'], key: 'browser.openLocalhostLinks' },
-				'When enabled, localhost links (`localhost`, `127.0.0.1`, `[::1]`) and all-interfaces links (`0.0.0.0`, `[0:0:0:0:0:0:0:0]`, `[::]`) from the terminal, chat, and other sources will open in the Integrated Browser instead of the system browser.'
+				'When enabled, localhost links (`localhost`, `127.0.0.1`, `[::1]`) and all-interfaces links (`0.0.0.0`, `[0:0:0:0:0:0:0:0]`, `[::]`) from the terminal and other sources will open in the Integrated Browser instead of the system browser.'
 			),
-			agentsWindow: { default: true },
 		},
 		[BrowserNewTabPlacementSettingId]: {
 			type: 'string',

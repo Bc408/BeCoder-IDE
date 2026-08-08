@@ -8,7 +8,6 @@ import { URI, UriComponents } from '../../../../../base/common/uri.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
 import { IWorkbenchConfigurationService } from '../../../../services/configuration/common/configuration.js';
 import { IRemoteAuthorityResolverService } from '../../../../../platform/remote/common/remoteAuthorityResolver.js';
-import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { serializeEnvironmentDescriptionMap, serializeEnvironmentVariableCollection } from '../../../../../platform/terminal/common/environmentVariableShared.js';
 import { IConfigurationResolverService } from '../../../../services/configurationResolver/common/configurationResolver.js';
@@ -112,7 +111,6 @@ export class RemoteTerminalChannelClient implements IPtyHostController {
 		@ITerminalLogService private readonly _logService: ITerminalLogService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@ILabelService private readonly _labelService: ILabelService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 	) { }
 
 	restartPtyHost(): Promise<void> {
@@ -154,13 +152,7 @@ export class RemoteTerminalChannelClient implements IPtyHostController {
 		}
 
 		const resolverResult = await this._remoteAuthorityResolverService.resolveAuthority(this._remoteAuthority);
-		const resolverEnv = {
-			/**
-			 * If the extension host was spawned via a launch configuration,
-			 * include the environment provided by that launch configuration.
-			 */
-			...(this._environmentService.debugExtensionHost.env ?? {}), ...resolverResult.options?.extensionHostEnv
-		};
+		const resolverEnv = resolverResult.options?.extensionHostEnv ?? {};
 
 		const workspace = this._workspaceContextService.getWorkspace();
 		const workspaceFolders = workspace.folders;

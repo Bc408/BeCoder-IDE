@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
-import { registerChatSupport } from './chatOutputRenderer';
 import { MermaidEditorManager } from './editorManager';
 import { configSection, injectMermaidConfig } from './markdownMermaid/config';
 import { extendMarkdownItWithMermaid } from './markdownMermaid/markdownIt';
@@ -16,10 +15,21 @@ export function activate(context: vscode.ExtensionContext) {
 	const editorManager = new MermaidEditorManager(context.extensionUri, webviewManager);
 	context.subscriptions.push(editorManager);
 
-	// Register chat support
-	context.subscriptions.push(registerChatSupport(context, webviewManager, editorManager));
-
 	// Register commands
+	context.subscriptions.push(
+		vscode.commands.registerCommand('_mermaid-markdown.openInEditor', (ctx?: MermaidCommandContext) => {
+			if (typeof ctx?.mermaidSource === 'string') {
+				editorManager.openPreview(ctx.mermaidSource, typeof ctx.title === 'string' ? ctx.title : undefined);
+				return;
+			}
+
+			const webviewInfo = ctx?.mermaidWebviewId ? webviewManager.getWebview(ctx.mermaidWebviewId) : webviewManager.activeWebview;
+			if (webviewInfo) {
+				editorManager.openPreview(webviewInfo.mermaidSource, webviewInfo.title);
+			}
+		})
+	);
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_mermaid-markdown.resetPanZoom', (ctx?: { mermaidWebviewId?: string }) => {
 			webviewManager.resetPanZoom(ctx?.mermaidWebviewId);

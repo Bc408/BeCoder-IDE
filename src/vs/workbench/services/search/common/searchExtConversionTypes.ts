@@ -188,36 +188,6 @@ export interface TextSearchOptions extends SearchOptions {
 	afterContext?: number;
 }
 /**
- * Options that apply to AI text search.
- */
-export interface AITextSearchOptions extends SearchOptions {
-	/**
-	 * The maximum number of results to be returned.
-	 */
-	maxResults: number;
-
-	/**
-	 * Options to specify the size of the result text preview.
-	 */
-	previewOptions?: TextSearchPreviewOptions;
-
-	/**
-	 * Exclude files larger than `maxFileSize` in bytes.
-	 */
-	maxFileSize?: number;
-
-	/**
-	 * Number of lines of context to include before each match.
-	 */
-	beforeContext?: number;
-
-	/**
-	 * Number of lines of context to include after each match.
-	 */
-	afterContext?: number;
-}
-
-/**
  * Information collected when text search is complete.
  */
 export interface TextSearchComplete {

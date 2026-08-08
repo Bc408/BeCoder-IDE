@@ -13,7 +13,6 @@ import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelSc
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { IAccessibilitySignalService } from '../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { IMenu, IMenuService } from '../../../../../platform/actions/common/actions.js';
-import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IEnvironmentService } from '../../../../../platform/environment/common/environment.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { ServiceCollection } from '../../../../../platform/instantiation/common/serviceCollection.js';
@@ -1427,11 +1426,6 @@ suite('SuggestModel - offWhenInlineCompletions with InlineCompletionsController'
 					[IAccessibilitySignalService, new class extends mock<IAccessibilitySignalService>() {
 						override async playSignal() { }
 						override isSoundEnabled() { return false; }
-					}],
-					[IDefaultAccountService, new class extends mock<IDefaultAccountService>() {
-						override onDidChangeDefaultAccount = Event.None;
-						override getDefaultAccount = async () => null;
-						override setDefaultAccountProvider = () => { };
 					}],
 				);
 

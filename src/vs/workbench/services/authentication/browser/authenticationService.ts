@@ -63,14 +63,6 @@ const authenticationDefinitionSchema: IJSONSchema = {
 			type: 'string',
 			description: localize('authentication.label', 'The human readable name of the authentication provider.'),
 		},
-		authorizationServerGlobs: {
-			type: 'array',
-			items: {
-				type: 'string',
-				description: localize('authentication.authorizationServerGlobs', 'A list of globs that match the authorization servers that this provider supports.'),
-			},
-			description: localize('authentication.authorizationServerGlobsDescription', 'A list of globs that match the authorization servers that this provider supports.')
-		}
 	}
 };
 
@@ -347,20 +339,6 @@ export class AuthenticationService extends Disposable implements IAuthentication
 			}
 		}
 
-		const authServerStr = authorizationServer.toString(true);
-		const providers = this._declaredProviders
-			// Only consider providers that are not already registered since we already checked them
-			.filter(p => !this._authenticationProviders.has(p.id))
-			.filter(p => !!p.authorizationServerGlobs?.some(i => match(i, authServerStr, { ignoreCase: true })));
-
-		// TODO:@TylerLeonhardt fan out?
-		for (const provider of providers) {
-			const activeProvider = await this.tryActivateProvider(provider.id, true);
-			// Check the resolved authorization servers
-			if (this.matchesProvider(activeProvider, authorizationServer, resourceServer)) {
-				return activeProvider.id;
-			}
-		}
 		return undefined;
 	}
 
@@ -378,25 +356,6 @@ export class AuthenticationService extends Disposable implements IAuthentication
 			return provider;
 		}
 		this._logService.error(`Failed to create dynamic authentication provider: ${providerId}`);
-		return undefined;
-	}
-
-	async createOrGetXaaProvider(issuer: URI): Promise<string | undefined> {
-		const providerId = `xaa:${issuer.toString(true)}`;
-		if (this._authenticationProviders.has(providerId)) {
-			return providerId;
-		}
-		const delegate = this._delegates.find(d => !!d.createXaa);
-		if (!delegate) {
-			this._logService.error('No authentication provider host delegate supports XAA');
-			return undefined;
-		}
-		const created = await delegate.createXaa!(issuer);
-		if (this._authenticationProviders.has(created)) {
-			this._logService.debug(`Created XAA authentication provider: ${created}`);
-			return created;
-		}
-		this._logService.error(`Failed to create XAA authentication provider for issuer: ${issuer.toString(true)}`);
 		return undefined;
 	}
 

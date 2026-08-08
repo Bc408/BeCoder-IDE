@@ -10,7 +10,7 @@ declare module 'vscode' {
 	 */
 	export interface TextDocumentDetailedChangeReason {
 		/**
-		 * The source of the change (e.g., 'inline-completion', 'chat-edit', 'extension')
+		 * The source of the change (e.g., 'inline-completion', 'format', 'extension')
 		 */
 		readonly source: string;
 

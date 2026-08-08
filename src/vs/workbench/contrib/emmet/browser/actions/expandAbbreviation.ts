@@ -8,7 +8,6 @@ import { registerEditorAction } from '../../../../../editor/browser/editorExtens
 import { EditorContextKeys } from '../../../../../editor/common/editorContextKeys.js';
 import { KeyCode } from '../../../../../base/common/keyCodes.js';
 import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
-import { IsSessionsWindowContext } from '../../../../common/contextkeys.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { MenuId } from '../../../../../platform/actions/common/actions.js';
 
@@ -34,7 +33,6 @@ class ExpandAbbreviationAction extends EmmetEditorAction {
 				group: '5_insert',
 				title: nls.localize({ key: 'miEmmetExpandAbbreviation', comment: ['&& denotes a mnemonic'] }, "Emmet: E&&xpand Abbreviation"),
 				order: 3,
-				when: IsSessionsWindowContext.negate()
 			}
 		});
 

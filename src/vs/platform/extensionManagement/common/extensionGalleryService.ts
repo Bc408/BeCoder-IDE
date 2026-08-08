@@ -1202,19 +1202,10 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 			const { extensions, total } = await this.queryGalleryExtensions(query, { targetPlatform: CURRENT_TARGET_PLATFORM, compatible: false, includePreRelease: !!options.includePreRelease, productVersion: options.productVersion ?? { version: getExtensionApiVersion(this.productService), date: this.productService.date } }, extensionGalleryManifest, token);
 
 			const result: IGalleryExtension[] = [];
-			let defaultChatAgentExtension: IGalleryExtension | undefined;
-			const defaultChatAgentExtensionId = this.productService.defaultChatAgent?.extensionId;
 			for (let index = 0; index < extensions.length; index++) {
 				const extension = extensions[index];
 				setTelemetry(extension, ((query.pageNumber - 1) * query.pageSize) + index, options.source);
-				if (defaultChatAgentExtensionId && areSameExtensions(extension.identifier, { id: defaultChatAgentExtensionId })) {
-					defaultChatAgentExtension = extension;
-				} else {
-					result.push(extension);
-				}
-			}
-			if (defaultChatAgentExtension) {
-				result.push(defaultChatAgentExtension);
+				result.push(extension);
 			}
 
 			return { extensions: result, total };
@@ -2067,19 +2058,6 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 					search.push(s);
 				}
 			}
-		}
-
-		const defaultChatAgent = this.productService.defaultChatAgent;
-		if (defaultChatAgent) {
-			deprecated[defaultChatAgent.extensionId.toLowerCase()] = {
-				disallowInstall: true,
-				extension: {
-					id: defaultChatAgent.chatExtensionId,
-					displayName: 'GitHub Copilot Chat',
-					autoMigrate: { storage: false, donotDisable: true },
-					preRelease: this.productService.quality !== 'stable'
-				}
-			};
 		}
 
 		return { malicious, deprecated, search, autoUpdate };

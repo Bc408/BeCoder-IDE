@@ -17,7 +17,6 @@ import { IUndoRedoService } from '../../../../../platform/undoRedo/common/undoRe
 import { NotebookOptionsChangeEvent } from '../notebookOptions.js';
 import { ICodeEditorService } from '../../../../../editor/browser/services/codeEditorService.js';
 import { NotebookCellStateChangedEvent, NotebookLayoutInfo } from '../notebookViewEvents.js';
-import { IInlineChatSessionService } from '../../../inlineChat/browser/inlineChatSessionService.js';
 
 export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewModel {
 
@@ -44,17 +43,6 @@ export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewM
 	set renderedMarkdownHeight(newHeight: number) {
 		this._previewHeight = newHeight;
 		this._updateTotalHeight(this._computeTotalHeight());
-	}
-
-	private _chatHeight = 0;
-
-	set chatHeight(newHeight: number) {
-		this._chatHeight = newHeight;
-		this._updateTotalHeight(this._computeTotalHeight());
-	}
-
-	get chatHeight() {
-		return this._chatHeight;
 	}
 
 	private _editorHeight = 0;
@@ -121,15 +109,13 @@ export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewM
 		@IConfigurationService configurationService: IConfigurationService,
 		@ITextModelService textModelService: ITextModelService,
 		@IUndoRedoService undoRedoService: IUndoRedoService,
-		@ICodeEditorService codeEditorService: ICodeEditorService,
-		@IInlineChatSessionService inlineChatSessionService: IInlineChatSessionService
+		@ICodeEditorService codeEditorService: ICodeEditorService
 	) {
-		super(viewType, model, UUID.generateUuid(), viewContext, configurationService, textModelService, undoRedoService, codeEditorService, inlineChatSessionService);
+		super(viewType, model, UUID.generateUuid(), viewContext, configurationService, textModelService, undoRedoService, codeEditorService);
 
 		const { bottomToolbarGap } = this.viewContext.notebookOptions.computeBottomToolbarDimensions(this.viewType);
 		const layoutConfiguration = this.viewContext.notebookOptions.getLayoutConfiguration();
 		this._layoutInfo = {
-			chatHeight: 0,
 			editorHeight: 0,
 			previewHeight: 0,
 			fontInfo: initialNotebookLayoutInfo?.fontInfo || null,
@@ -237,7 +223,6 @@ export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewM
 		if (this.getEditState() === CellEditState.Editing) {
 			commentOffset = notebookLayoutConfiguration.editorToolbarHeight
 				+ notebookLayoutConfiguration.cellTopMargin // CELL_TOP_MARGIN
-				+ this._chatHeight
 				+ this._editorHeight
 				+ this._statusBarHeight;
 		} else {
@@ -250,7 +235,6 @@ export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewM
 				this.viewContext.notebookOptions
 					.computeMarkdownCellEditorWidth(state.outerWidth) :
 				this._layoutInfo.editorWidth,
-			chatHeight: this._chatHeight,
 			editorHeight: this._editorHeight,
 			statusBarHeight: this._statusBarHeight,
 			previewHeight: this._previewHeight,
@@ -279,7 +263,6 @@ export class MarkupCellViewModel extends BaseCellViewModel implements ICellViewM
 			this._layoutInfo = {
 				...this.layoutInfo,
 				totalHeight: totalHeight,
-				chatHeight: this._chatHeight,
 				editorHeight: this._editorHeight,
 				statusBarHeight: this._statusBarHeight,
 				layoutState: CellLayoutState.FromCache,

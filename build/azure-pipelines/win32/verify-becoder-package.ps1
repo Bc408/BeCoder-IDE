@@ -379,6 +379,12 @@ if ($languagePackTranslationIds -notcontains 'vscode.mermaid-markdown-features' 
 	-not (Test-Path -LiteralPath (Join-Path $languagePackPath 'translations\extensions\vscode.mermaid-markdown-features.i18n.json') -PathType Leaf)) {
 	throw 'The packaged Simplified Chinese language pack does not preserve the Mermaid Markdown-only translation boundary.'
 }
+foreach ($removedTranslationId in @('vscode.git', 'vscode.git-base', 'vscode.github', 'vscode.terminal-suggest')) {
+	if ($languagePackTranslationIds -contains $removedTranslationId -or
+		(Test-Path -LiteralPath (Join-Path $languagePackPath "translations\extensions\$removedTranslationId.i18n.json"))) {
+		throw "The packaged Simplified Chinese language pack contains a removed Stage 4.6 extension translation: $removedTranslationId"
+	}
+}
 $languagePackBoundaryVerifier = Join-Path $PSScriptRoot 'verify-becoder-language-pack.ts'
 & node $languagePackBoundaryVerifier (Join-Path $languagePackPath 'translations\main.i18n.json')
 if ($LASTEXITCODE -ne 0) {
@@ -471,8 +477,8 @@ if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne 'df9c4b94d2343c583b68688139af11bed5ea375b3a86bec036aabb4f8ef763f8' -or
-	$languagePackComponent.packagedContentSha256 -ne 'f892bef137c2210f0468b1f820be21a977ba60c0c7cbbb75ba96a6e500004f14') {
+	$languagePackComponent.contentSha256 -ne '003524d3dd4b4c9ddf294f47aa3456394758d5f61daeed589b60d77e272b3d72' -or
+	$languagePackComponent.packagedContentSha256 -ne '6c84cf72ad88a4e65b6a91fd87fb0005adaf414ce34388390927d4c8bd02634c') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or
@@ -574,11 +580,19 @@ $forbiddenPaths = @(
 	'resources\app\extensions\ms-vscode.js-debug-companion',
 	'resources\app\extensions\ms-vscode.vscode-js-profile-table',
 	'resources\app\extensions\prompt-basics',
+	'resources\app\extensions\git',
+	'resources\app\extensions\git-base',
+	'resources\app\extensions\github',
+	'resources\app\extensions\terminal-suggest',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\ms-vscode.js-debug.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-auto-launch.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-server-ready.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.mermaid-chat-features.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.prompt.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.git.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.git-base.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.github.i18n.json',
+	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.terminal-suggest.i18n.json',
 	'resources\app\out\vs\platform\accessibilitySignal\browser\media\chatEditModifiedFile.mp3',
 	'resources\app\out\vs\platform\accessibilitySignal\browser\media\chatUserActionRequired.mp3',
 	'resources\app\out\vs\platform\accessibilitySignal\browser\media\requestSent.mp3',
@@ -601,6 +615,17 @@ $forbiddenPaths = @(
 	'resources\app\out\vs\workbench\services\chat',
 	'resources\app\out\vs\workbench\services\mcp',
 	'resources\app\out\vs\workbench\contrib\welcomeOnboarding',
+	'resources\app\out\vs\platform\git',
+	'resources\app\out\vs\workbench\contrib\git',
+	'resources\app\out\vs\workbench\contrib\scm',
+	'resources\app\out\vs\workbench\contrib\terminalContrib\inlineHint',
+	'resources\app\out\vs\workbench\contrib\terminalContrib\suggest',
+	'resources\app\out\vs\workbench\api\browser\mainThreadGitExtensionService.js',
+	'resources\app\out\vs\workbench\api\browser\mainThreadQuickDiff.js',
+	'resources\app\out\vs\workbench\api\browser\mainThreadSCM.js',
+	'resources\app\out\vs\workbench\api\common\extHostGitExtensionService.js',
+	'resources\app\out\vs\workbench\api\common\extHostQuickDiff.js',
+	'resources\app\out\vs\workbench\api\common\extHostSCM.js',
 	'resources\app\resources\oi-defaults\.clangd',
 	'resources\app\resources\oi-defaults\portable-data\toolchains\.gitkeep',
 	'resources\app\resources\oi-defaults\toolchains\gdb.exe',

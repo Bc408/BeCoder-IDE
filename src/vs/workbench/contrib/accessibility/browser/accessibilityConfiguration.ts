@@ -59,7 +59,6 @@ export const enum AccessibilityVerbositySettingId {
 	Comments = 'accessibility.verbosity.comments',
 	DiffEditorActive = 'accessibility.verbosity.diffEditorActive',
 	Walkthrough = 'accessibility.verbosity.walkthrough',
-	SourceControl = 'accessibility.verbosity.sourceControl',
 	Find = 'accessibility.verbosity.find',
 	Survey = 'accessibility.verbosity.survey'
 }
@@ -174,10 +173,6 @@ const configuration: IConfigurationNode = {
 			markdownDescription: localize('terminal.integrated.accessibleView.closeOnKeyPress', "On keypress, close the Accessible View and focus the element from which it was invoked."),
 			type: 'boolean',
 			default: true
-		},
-		[AccessibilityVerbositySettingId.SourceControl]: {
-			description: localize('verbosity.scm', 'Provide information about how to access the source control accessibility help menu when the input is focused.'),
-			...baseVerbosityProperty
 		},
 		[AccessibilityVerbositySettingId.Find]: {
 			description: localize('verbosity.find', 'Provide information about how to access the find accessibility help menu when the find input is focused.'),

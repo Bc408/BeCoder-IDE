@@ -832,7 +832,6 @@ export class TimelinePane extends ViewPane {
 				this.setLoadingUriMessage();
 			} else {
 				this.updateFilename(this.labelService.getUriBasenameLabel(this.uri));
-				const scmProviderCount = this.contextKeyService.getContextKeyValue<number>('scm.providerCount');
 				if (this.timelineService.getSources().filter(({ id }) => !this.excludedSources.has(id)).length === 0) {
 					this.message = localize('timeline.noTimelineSourcesEnabled', "All timeline sources have been filtered out.");
 				} else {
@@ -843,9 +842,6 @@ export class TimelinePane extends ViewPane {
 					} else {
 						this.message = localize('timeline.noTimelineInfo', "No timeline information was provided.");
 					}
-				}
-				if (!scmProviderCount || scmProviderCount === 0) {
-					this.message += ' ' + localize('timeline.noSCM', "Source Control has not been configured.");
 				}
 			}
 		} else {

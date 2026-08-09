@@ -135,7 +135,6 @@ export const knownAcronyms = new Set<string>();
 	'ie',
 	'id',
 	'php',
-	'scm',
 ].forEach(str => knownAcronyms.add(str));
 
 export const knownTermMappings = new Map<string, string>();

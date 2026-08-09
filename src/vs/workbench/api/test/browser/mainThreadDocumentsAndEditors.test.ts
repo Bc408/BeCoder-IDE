@@ -36,7 +36,6 @@ import { LanguageService } from '../../../../editor/common/services/languageServ
 import { ILanguageConfigurationService } from '../../../../editor/common/languages/languageConfigurationRegistry.js';
 import { TestLanguageConfigurationService } from '../../../../editor/test/common/modes/testLanguageConfigurationService.js';
 import { IUndoRedoService } from '../../../../platform/undoRedo/common/undoRedo.js';
-import { IQuickDiffModelService } from '../../../contrib/scm/browser/quickDiffModel.js';
 import { ITextEditorDiffInformation } from '../../../../platform/editor/common/editor.js';
 import { ITreeSitterLibraryService } from '../../../../editor/common/services/treeSitter/treeSitterLibraryService.js';
 import { TestTreeSitterLibraryService } from '../../../../editor/test/common/services/testTreeSitterLibraryService.js';
@@ -133,12 +132,7 @@ suite('MainThreadDocumentsAndEditors', () => {
 				}
 			},
 			new TestPathService(),
-			new TestConfigurationService(),
-			new class extends mock<IQuickDiffModelService>() {
-				override createQuickDiffModelReference() {
-					return undefined;
-				}
-			}
+			new TestConfigurationService()
 		);
 	});
 

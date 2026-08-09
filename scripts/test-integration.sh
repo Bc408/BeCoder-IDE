@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Known suite names (used for help text and validation)
-KNOWN_SUITES="api-folder api-workspace colorize terminal-suggest typescript markdown emmet git git-base ipynb notebook-renderers configuration-editing github-authentication copilot css html"
+KNOWN_SUITES="api-folder api-workspace colorize typescript markdown emmet ipynb notebook-renderers configuration-editing github-authentication css html"
 
 if $HELP; then
 	echo "Usage: $0 [options]"
@@ -87,9 +87,9 @@ if $HELP; then
 	echo "  $0 --run src/vs/editor/test/browser/controller.integrationTest.ts"
 	echo "  $0 --grep 'some test name'"
 	echo "  $0 --runGlob '**/editor/**/*.integrationTest.js'"
-	echo "  $0 --suite git                             # run only Git tests"
+	echo "  $0 --suite markdown                        # run only Markdown tests"
 	echo "  $0 --suite 'api*'                          # run API folder + workspace tests"
-	echo "  $0 --suite 'git,emmet,typescript'          # run multiple suites"
+	echo "  $0 --suite 'markdown,emmet,typescript'     # run multiple suites"
 	echo "  $0 --suite api-folder --grep 'some test'     # grep within a suite"
 	exit 0
 fi
@@ -120,13 +120,10 @@ VSCODEUSERDATADIR=`mktemp -d 2>/dev/null`
 VSCODECRASHDIR=$ROOT/.build/crashes
 VSCODELOGSDIR=$ROOT/.build/logs/integration-tests
 
-# Seed user settings to disable OS notifications (dock bounce, toast, etc.)
+# Seed an empty user settings file for the isolated test profile.
 mkdir -p "$VSCODEUSERDATADIR/User"
 cat > "$VSCODEUSERDATADIR/User/settings.json" <<EOF
-{
-	"chat.notifyWindowOnConfirmation": "off",
-	"chat.notifyWindowOnResponseReceived": "off"
-}
+{}
 EOF
 
 # Figure out which Electron to use for running tests
@@ -227,14 +224,6 @@ npm run test-extension -- -l vscode-colorize-tests "${GREP_ARGS[@]}"
 kill_app
 fi
 
-if should_run_suite terminal-suggest; then
-echo
-echo "### Terminal Suggest tests"
-echo
-npm run test-extension -- -l terminal-suggest --enable-proposed-api=vscode.vscode-api-tests "${GREP_ARGS[@]}"
-kill_app
-fi
-
 if should_run_suite typescript; then
 echo
 echo "### TypeScript tests"
@@ -256,22 +245,6 @@ echo
 echo "### Emmet tests"
 echo
 "$INTEGRATION_TEST_ELECTRON_PATH" $ROOT/extensions/emmet/test-workspace --extensionDevelopmentPath=$ROOT/extensions/emmet --extensionTestsPath=$ROOT/extensions/emmet/out/test $API_TESTS_EXTRA_ARGS
-kill_app
-fi
-
-if should_run_suite git; then
-echo
-echo "### Git tests"
-echo
-"$INTEGRATION_TEST_ELECTRON_PATH" $(mktemp -d 2>/dev/null) --extensionDevelopmentPath=$ROOT/extensions/git --extensionTestsPath=$ROOT/extensions/git/out/test $API_TESTS_EXTRA_ARGS
-kill_app
-fi
-
-if should_run_suite git-base; then
-echo
-echo "### Git Base tests"
-echo
-npm run test-extension -- -l git-base "${GREP_ARGS[@]}"
 kill_app
 fi
 
@@ -304,14 +277,6 @@ echo
 echo "### GitHub Authentication tests"
 echo
 npm run test-extension -- -l github-authentication "${GREP_ARGS[@]}"
-kill_app
-fi
-
-if should_run_suite copilot; then
-echo
-echo "### Copilot tests"
-echo
-npm run test-extension -- -l copilot "${GREP_ARGS[@]}"
 kill_app
 fi
 

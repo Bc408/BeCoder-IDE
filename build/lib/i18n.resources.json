@@ -183,10 +183,6 @@
 			"project": "vscode-workbench"
 		},
 		{
-			"name": "vs/workbench/contrib/scm",
-			"project": "vscode-workbench"
-		},
-		{
 			"name": "vs/workbench/contrib/search",
 			"project": "vscode-workbench"
 		},

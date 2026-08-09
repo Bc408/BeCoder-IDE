@@ -275,13 +275,6 @@ import './contrib/search/browser/search.contribution.js';
 // Sash
 import '../workbench/contrib/sash/browser/sash.contribution.js';
 
-// Git
-import '../workbench/contrib/git/browser/git.contributions.js';
-
-// SCM
-import '../workbench/contrib/scm/browser/quickDiff.contribution.js';
-import '../workbench/contrib/scm/browser/scm.service.contribution.js';
-
 // Debug (service)
 import { NullDebugService, NullDebugVisualizerService } from '../workbench/contrib/debug/common/nullDebugService.js';
 import { IDebugService } from '../workbench/contrib/debug/common/debug.js';

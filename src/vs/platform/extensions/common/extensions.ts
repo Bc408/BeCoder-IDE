@@ -225,7 +225,6 @@ export const EXTENSION_CATEGORIES = [
 	'Linters',
 	'Notebooks',
 	'Programming Languages',
-	'SCM Providers',
 	'Snippets',
 	'Testing',
 	'Themes',

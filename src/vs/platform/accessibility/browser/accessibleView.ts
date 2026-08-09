@@ -28,7 +28,6 @@ export const enum AccessibleViewProviderId {
 	Comments = 'comments',
 	CommentThread = 'commentThread',
 	Walkthrough = 'walkthrough',
-	SourceControl = 'scm',
 	EditorFindHelp = 'editorFindHelp',
 	SearchHelp = 'searchHelp',
 	TerminalFindHelp = 'terminalFindHelp',

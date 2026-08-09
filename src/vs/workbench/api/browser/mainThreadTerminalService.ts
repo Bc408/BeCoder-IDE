@@ -24,7 +24,6 @@ import { ISerializableEnvironmentDescriptionMap, ISerializableEnvironmentVariabl
 import { ITerminalLinkProviderService } from '../../contrib/terminalContrib/links/browser/links.js';
 import { ITerminalQuickFixService, ITerminalQuickFix, TerminalQuickFixType } from '../../contrib/terminalContrib/quickFix/browser/quickFix.js';
 import { TerminalCapability } from '../../../platform/terminal/common/capabilities/capabilities.js';
-import { ITerminalCompletionService } from '../../contrib/terminalContrib/suggest/browser/terminalCompletionService.js';
 import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { hasKey } from '../../../base/common/types.js';
 
@@ -45,7 +44,6 @@ export class MainThreadTerminalService extends Disposable implements MainThreadT
 	private readonly _extHostTerminals = new Map<string, Promise<ITerminalInstance>>();
 	private readonly _terminalProcessProxies = this._register(new DisposableMap<number, TerminalProcessProxyEntry>());
 	private readonly _profileProviders = this._register(new DisposableMap<string, IDisposable>());
-	private readonly _completionProviders = this._register(new DisposableMap<string, IDisposable>());
 	private readonly _quickFixProviders = this._register(new DisposableMap<string, IDisposable>());
 	private readonly _dataEventTracker = this._register(new MutableDisposable<TerminalDataEventTracker>());
 	private readonly _sendCommandEventListener = this._register(new MutableDisposable());
@@ -73,7 +71,6 @@ export class MainThreadTerminalService extends Disposable implements MainThreadT
 		@ITerminalGroupService private readonly _terminalGroupService: ITerminalGroupService,
 		@ITerminalEditorService private readonly _terminalEditorService: ITerminalEditorService,
 		@ITerminalProfileService private readonly _terminalProfileService: ITerminalProfileService,
-		@ITerminalCompletionService private readonly _terminalCompletionService: ITerminalCompletionService,
 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 	) {
 		super();
@@ -267,40 +264,6 @@ export class MainThreadTerminalService extends Disposable implements MainThreadT
 
 	public $registerProcessSupport(isSupported: boolean): void {
 		this._terminalService.registerProcessSupport(isSupported);
-	}
-
-	public $registerCompletionProvider(id: string, extensionIdentifier: string, ...triggerCharacters: string[]): void {
-		this._completionProviders.set(id, this._terminalCompletionService.registerTerminalCompletionProvider(extensionIdentifier, id, {
-			id,
-			provideCompletions: async (commandLine, cursorIndex, token) => {
-				const completions = await this._proxy.$provideTerminalCompletions(id, { commandLine, cursorIndex }, token);
-				if (!completions) {
-					return undefined;
-				}
-				if (completions.resourceOptions) {
-					const { cwd, globPattern, ...rest } = completions.resourceOptions;
-					return {
-						items: completions.items?.map(c => ({
-							provider: `ext:${id}`,
-							...c,
-						})),
-						resourceOptions: {
-							...rest,
-							cwd,
-							globPattern
-						}
-					};
-				}
-				return completions.items?.map(c => ({
-					provider: `ext:${id}`,
-					...c,
-				}));
-			}
-		}, ...triggerCharacters));
-	}
-
-	public $unregisterCompletionProvider(id: string): void {
-		this._completionProviders.deleteAndDispose(id);
 	}
 
 	public $registerProfileProvider(id: string, extensionIdentifier: string): void {

@@ -118,7 +118,8 @@ suite('OI extension boundary', () => {
 		}
 		const eslintConfig = fs.readFileSync(path.join(repositoryRoot, 'eslint.config.js'), 'utf8');
 		const extensionGulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.extensions.ts'), 'utf8');
-		assert.doesNotMatch(`${eslintConfig}\n${extensionGulpfile}`, /extensions\/(?:media-preview|simple-browser)|mermaid-markdown-features\/preview-src\/chat/);
+		assert.match(extensionGulpfile, /extensions\/simple-browser\/tsconfig\.json/);
+		assert.doesNotMatch(`${eslintConfig}\n${extensionGulpfile}`, /mermaid-markdown-features\/preview-src\/chat/);
 		const packageVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
 		assert.match(packageVerifier, /resources\\app\\out\\vs\\workbench\\contrib\\welcomeOnboarding'/);
 		assert.doesNotMatch(packageVerifier, /welcomeOnboarding\\browser\\media/);
@@ -387,6 +388,111 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(windowsShellHelper, /(?:claude|codex|commandcode|copilot|gemini)\.exe/);
 	});
 
+	test('owns the Stage 4.6 dependency, terminal, SCM, and workspace boundary', () => {
+		const packageManifest = readJson<{
+			dependencies?: Record<string, string>;
+			devDependencies?: Record<string, string>;
+			overrides?: Record<string, unknown>;
+			allowScripts?: Record<string, boolean>;
+		}>(path.join(repositoryRoot, 'package.json'));
+		assert.ok(!('cpu-features' in (packageManifest.dependencies ?? {})));
+		assert.ok(!('cpu-features' in (packageManifest.devDependencies ?? {})));
+		assert.ok(!('cpu-features' in (packageManifest.overrides ?? {})));
+		assert.strictEqual(packageManifest.allowScripts?.['cpu-features'], false);
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'build', 'npm', 'stubs', 'cpu-features')));
+
+		const packageLock = readJson<{
+			packages?: Record<string, {
+				version?: string;
+				resolved?: string;
+				optional?: boolean;
+				dependencies?: Record<string, string>;
+				optionalDependencies?: Record<string, string>;
+			}>;
+		}>(path.join(repositoryRoot, 'package-lock.json'));
+		const cpuFeatures = packageLock.packages?.['node_modules/cpu-features'];
+		assert.strictEqual(cpuFeatures?.version, '0.0.10');
+		assert.strictEqual(cpuFeatures?.resolved, 'https://registry.npmjs.org/cpu-features/-/cpu-features-0.0.10.tgz');
+		assert.strictEqual(cpuFeatures?.optional, true);
+		assert.deepStrictEqual(cpuFeatures?.dependencies, { buildcheck: '~0.0.6', nan: '^2.19.0' });
+		assert.strictEqual(packageLock.packages?.['node_modules/ssh2']?.optionalDependencies?.['cpu-features'], '~0.0.10');
+
+		for (const removedPath of [
+			'src/vs/workbench/contrib/terminalContrib/inlineHint',
+			'src/vs/workbench/contrib/terminalContrib/suggest',
+			'src/vs/workbench/contrib/scm',
+			'src/vs/workbench/contrib/git',
+			'src/vs/platform/git',
+			'src/vs/workbench/api/browser/mainThreadSCM.ts',
+			'src/vs/workbench/api/common/extHostSCM.ts',
+		]) {
+			assert.ok(!fs.existsSync(path.join(repositoryRoot, removedPath)), `Removed Stage 4.6 source remains: ${removedPath}`);
+		}
+
+		const commonWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		const desktopWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'), 'utf8');
+		assert.doesNotMatch(commonWorkbench, /contrib\/(?:git|scm)\//);
+		assert.doesNotMatch(commonWorkbench, /terminalContrib\/(?:inlineHint|suggest)\//);
+		for (const retainedContribution of [
+			'contrib/multiDiffEditor/browser/multiDiffEditor.contribution.js',
+			'contrib/timeline/browser/timeline.contribution.js',
+			'contrib/localHistory/browser/localHistory.contribution.js',
+			'contrib/tasks/browser/task.contribution.js',
+			'contrib/markdown/browser/markdown.contribution.js',
+		]) {
+			assert.ok(commonWorkbench.includes(retainedContribution), `Ordinary Workbench contribution was lost: ${retainedContribution}`);
+		}
+		assert.match(desktopWorkbench, /contrib\/tasks\/electron-browser\/taskService\.js/);
+		assert.match(desktopWorkbench, /contrib\/browserView\/electron-browser\/browserView\.contribution\.js/);
+
+		const publicApi = fs.readFileSync(path.join(repositoryRoot, 'src', 'vscode-dts', 'vscode.d.ts'), 'utf8');
+		assert.doesNotMatch(publicApi, /namespace scm|SourceControl|withScmProgress|ProgressLocation\.SourceControl/);
+		assert.doesNotMatch(publicApi, /TerminalCompletionProvider|registerTerminalCompletionProvider/);
+		const progressTypes = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'progress', 'common', 'progress.ts'), 'utf8');
+		const progressService = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'progress', 'browser', 'progressService.ts'), 'utf8');
+		const welcomeViews = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeViews', 'common', 'viewsWelcomeExtensionPoint.ts'), 'utf8');
+		const extensionCategories = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensions', 'common', 'extensions.ts'), 'utf8');
+		const viewGroups = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'common', 'views.ts'), 'utf8');
+		const viewsSchema = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'viewsExtensionPoint.ts'), 'utf8');
+		assert.doesNotMatch(progressTypes, /\bScm\s*=/);
+		assert.doesNotMatch(progressService, /ProgressLocation\.Scm|workbench\.scm/);
+		assert.doesNotMatch(welcomeViews, /workbench\.(?:scm|debug\.welcome)|Clone Repository/);
+		assert.doesNotMatch(extensionCategories, /'SCM Providers'/);
+		assert.doesNotMatch(viewGroups, /\bSCM\s*=/);
+		assert.doesNotMatch(viewsSchema, /explorer and scm/);
+
+		const searchView = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'search', 'browser', 'searchView.ts'), 'utf8');
+		assert.doesNotMatch(searchView, /ISCMService|onlySearchInChangedFiles|changedFileUris/);
+		assert.match(searchView, /onlySearchInOpenEditors/);
+		const timelinePane = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'timeline', 'browser', 'timelinePane.ts'), 'utf8');
+		assert.doesNotMatch(timelinePane, /scm\.providerCount|timeline\.noSCM/);
+		assert.match(timelinePane, /workbench\.localHistory\.enabled/);
+
+		const workspaceConfiguration = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'configuration', 'browser', 'configuration.ts'), 'utf8');
+		const workspaceRecommendations = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'extensionRecommendations', 'common', 'workspaceExtensionsConfig.ts'), 'utf8');
+		const taskService = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'tasks', 'browser', 'abstractTaskService.ts'), 'utf8');
+		assert.match(workspaceConfiguration, /FOLDER_SETTINGS_NAME/);
+		assert.match(workspaceConfiguration, /TASKS_CONFIGURATION_KEY/);
+		assert.match(workspaceRecommendations, /\.vscode\/extensions\.json/);
+		assert.match(taskService, /\.vscode\/tasks\.json/);
+		const settingsEditor = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'preferences', 'browser', 'settingsEditor2.ts'), 'utf8');
+		const preferenceTerms = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'preferences', 'common', 'preferences.ts'), 'utf8');
+		const listService = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'list', 'browser', 'listService.ts'), 'utf8');
+		assert.doesNotMatch(settingsEditor, /FEATURE_SETTING_TAG}scm|@feature:scm/);
+		assert.doesNotMatch(preferenceTerms, /['"]scm['"]/);
+		assert.doesNotMatch(listService, /scm view/);
+		for (const integrationScriptPath of ['scripts/test-integration.sh', 'scripts/test-integration.bat']) {
+			const integrationScript = fs.readFileSync(path.join(repositoryRoot, ...integrationScriptPath.split('/')), 'utf8');
+			assert.doesNotMatch(integrationScript, /terminal-suggest|git-base|--suite git\b|\bcopilot\b|chat\.notifyWindow/);
+		}
+
+		const extensionBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'extensions.ts'), 'utf8');
+		for (const removedExtension of ['git', 'git-base', 'github', 'terminal-suggest']) {
+			assert.match(extensionBuildSource, new RegExp(`'${removedExtension}'`), `Stage 4.6 package denylist is missing ${removedExtension}`);
+		}
+		assert.match(extensionBuildSource, /'github-authentication'/);
+	});
+
 	test('uses only Open VSX and protects the complete BeCoder core set', () => {
 		const productPath = path.join(repositoryRoot, 'product.json');
 		const productText = fs.readFileSync(productPath, 'utf8');
@@ -557,9 +663,9 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, 'df9c4b94d2343c583b68688139af11bed5ea375b3a86bec036aabb4f8ef763f8');
+		assert.strictEqual(languagePack?.contentSha256, '003524d3dd4b4c9ddf294f47aa3456394758d5f61daeed589b60d77e272b3d72');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, 'f892bef137c2210f0468b1f820be21a977ba60c0c7cbbb75ba96a6e500004f14');
+		assert.strictEqual(languagePack?.packagedContentSha256, '6c84cf72ad88a4e65b6a91fd87fb0005adaf414ce34388390927d4c8bd02634c');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -578,8 +684,12 @@ suite('OI extension boundary', () => {
 			'ms-vscode.js-debug',
 			'vscode.debug-auto-launch',
 			'vscode.debug-server-ready',
+			'vscode.git',
+			'vscode.git-base',
+			'vscode.github',
 			'vscode.mermaid-chat-features',
-			'vscode.prompt'
+			'vscode.prompt',
+			'vscode.terminal-suggest'
 		]) {
 			assert.ok(!languagePackTranslations.some(translation => translation.id === removedTranslationId), `Unsupported language-pack contribution remains: ${removedTranslationId}`);
 			assert.ok(!fs.existsSync(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans', 'translations', 'extensions', `${removedTranslationId}.i18n.json`)), `Unsupported language-pack translation remains: ${removedTranslationId}`);
@@ -594,7 +704,11 @@ suite('OI extension boundary', () => {
 			/^vs\/platform\/(?:agentHost|agentPlugins|defaultAccount|localTranscription|mcp|networkFilter|otel|sandbox|webContentExtractor)\//,
 			/^vs\/workbench\/contrib\/(?:agentsVoice|chat|debug|editTelemetry|inlineChat|mcp|remoteCodingAgents|replNotebook|welcomeAgentSessions|welcomeOnboarding)\//,
 			/^vs\/workbench\/services\/(?:agentHost|aiEmbeddingVector|aiRelatedInformation|aiSettingsSearch|chat|mcp)\//,
-			/(?:^|\/)(?:mainThread|extHost)(?:Agent|Ai|Chat|CodeMapper|Debug|Embedding|LanguageModel|Mcp)/i
+			/(?:^|\/)(?:mainThread|extHost)(?:Agent|Ai|Chat|CodeMapper|Debug|Embedding|LanguageModel|Mcp)/i,
+			/^vs\/platform\/git\//,
+			/^vs\/workbench\/contrib\/(?:git|scm)\//,
+			/^vs\/workbench\/contrib\/terminalContrib\/(?:inlineHint|suggest)\//,
+			/(?:^|\/)(?:mainThread|extHost)(?:GitExtensionService|QuickDiff|SCM)$/
 		]) {
 			assert.ok(!translatedModules.some(moduleName => forbiddenModulePattern.test(moduleName)), `Unsupported language-pack module remains: ${forbiddenModulePattern}`);
 		}
@@ -611,6 +725,53 @@ suite('OI extension boundary', () => {
 		for (const removedAuthenticationKey of ['xaaResourceSecretPlaceholder', 'xaaResourceSecretPrompt', 'xaaResourceSecretTitle']) {
 			assert.ok(!(removedAuthenticationKey in authenticationTranslations), `MCP-specific authentication translation remains: ${removedAuthenticationKey}`);
 		}
+		for (const [moduleName, removedKeys] of [
+			['vs/workbench/contrib/accessibility/browser/accessibilityConfiguration', ['verbosity.scm']],
+			['vs/workbench/api/browser/viewsExtensionPoint', ['views.scm']],
+			['vs/workbench/contrib/files/browser/files.contribution', ['everything', 'formatOnSaveMode', 'modification', 'modificationIfAvailable']],
+			['vs/workbench/contrib/search/browser/patternInputWidget', ['onlySearchInChangedFiles']],
+			['vs/workbench/contrib/timeline/browser/timelinePane', ['timeline.noSCM']],
+			['vs/workbench/contrib/terminal/common/terminalContextKey', ['terminalSuggestWidgetVisible']],
+			['vs/workbench/contrib/terminal/common/terminalColorRegistry', ['terminalInitialHintForeground']],
+			['vs/workbench/contrib/terminalContrib/accessibility/browser/terminalAccessibilityHelp', ['suggest', 'suggestCommands', 'suggestCommandsMore', 'suggestConfigure', 'suggestLearnMore', 'suggestTrigger']],
+			['vs/workbench/contrib/externalTerminal/electron-browser/externalTerminal.contribution', ['sourceControlRepositories.openInTerminalKind']],
+			['vs/workbench/contrib/preferences/browser/settingsEditor2', ['moreThanOneResultWithAiAvailable', 'noAiResults', 'noResultsWithAiAvailable', 'oneResultWithAiAvailable', 'showAiResultsDisabled', 'showAiResultsEnabled']],
+			['vs/workbench/contrib/preferences/browser/settingsLayout', ['scm']],
+			['vs/workbench/contrib/welcomeOverlay/browser/welcomeOverlay', ['welcomeOverlay.git']],
+			['vs/workbench/services/actions/common/menusExtensionPoint', [
+				'menus.artifactContext',
+				'menus.artifactGroupContext',
+				'menus.changeTitle',
+				'menus.debugCallstackContext',
+				'menus.debugCreateConfiguation',
+				'menus.debugToolBar',
+				'menus.debugVariablesContext',
+				'menus.debugWatchContext',
+				'menus.historyItemContext',
+				'menus.historyItemRefContext',
+				'menus.input',
+				'menus.resourceFolderContext',
+				'menus.resourceGroupContext',
+				'menus.resourceStateContext',
+				'menus.scmHistoryTitle',
+				'menus.scmSourceControl',
+				'menus.scmSourceControlInline',
+				'menus.scmSourceControlTitle',
+				'menus.scmTitle',
+				'searchPanel.aiResultsCommands',
+			]],
+		] as const) {
+			const moduleTranslations = mainTranslation.contents?.[moduleName] ?? {};
+			for (const removedKey of removedKeys) {
+				assert.ok(!(removedKey in moduleTranslations), `Removed Stage 4.6 translation remains: ${moduleName}.${removedKey}`);
+			}
+		}
+		assert.doesNotMatch(mainTranslation.contents?.['vs/platform/list/browser/listService']?.multiSelectModifier ?? '', /\bscm\b|\u6e90\u4ee3\u7801\u7ba1\u7406/i);
+		const searchTranslations = mainTranslation.contents?.['vs/workbench/contrib/search/browser/search.contribution'] ?? {};
+		assert.strictEqual(typeof searchTranslations['search.defaultViewMode.list'], 'string');
+		assert.strictEqual(typeof searchTranslations['search.defaultViewMode.tree'], 'string');
+		assert.ok(!('scm.defaultViewMode.list' in searchTranslations));
+		assert.ok(!('scm.defaultViewMode.tree' in searchTranslations));
 		assert.strictEqual(
 			mainTranslation.contents?.['vs/workbench/contrib/issue/browser/baseIssueReporterService']?.internalPreviewMessage,
 			'\u5982\u679c\u8bca\u65ad\u65e5\u5fd7\u5305\u542b\u79c1\u4eba\u4fe1\u606f\uff1a'

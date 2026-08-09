@@ -269,8 +269,8 @@ configurationRegistry.registerConfiguration({
 			enum: [ViewMode.Tree, ViewMode.List],
 			default: ViewMode.List,
 			enumDescriptions: [
-				nls.localize('scm.defaultViewMode.tree', "Shows search results as a tree."),
-				nls.localize('scm.defaultViewMode.list', "Shows search results as a list.")
+				nls.localize('search.defaultViewMode.tree', "Shows search results as a tree."),
+				nls.localize('search.defaultViewMode.list', "Shows search results as a list.")
 			],
 			description: nls.localize('search.defaultViewMode', "Controls the default search result view mode.")
 		},

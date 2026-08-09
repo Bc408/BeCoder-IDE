@@ -15,7 +15,6 @@ import { IMarker, IMarkerData, IMarkerReadOptions, IMarkerService, IResourceMark
 
 export const unsupportedSchemas = new Set([
 	Schemas.inMemory,
-	Schemas.vscodeSourceControl,
 	Schemas.walkThrough,
 	Schemas.walkThroughSnippet,
 	Schemas.vscodeTerminal

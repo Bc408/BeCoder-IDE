@@ -710,26 +710,6 @@ export const terminalContributionsDescriptor: IExtensionPointDescriptor<ITermina
 					},
 				},
 			},
-			completionProviders: {
-				type: 'array',
-				description: nls.localize('vscode.extension.contributes.terminal.completionProviders', "Defines terminal completion providers that will be registered when the extension activates."),
-				items: {
-					type: 'object',
-					required: ['id'],
-					defaultSnippets: [{
-						body: {
-							id: '$1',
-							description: '$2'
-						}
-					}],
-					properties: {
-						description: {
-							description: nls.localize('vscode.extension.contributes.terminal.completionProviders.description', "A description of what the completion provider does. This will be shown in the settings UI."),
-							type: 'string',
-						},
-					},
-				},
-			},
 		},
 	},
 };

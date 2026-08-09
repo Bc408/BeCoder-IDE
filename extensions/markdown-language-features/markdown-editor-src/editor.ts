@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CommentModeController, CommentsModel, EditorController, EditorModel, EditorView, GutterMarker, OffsetRange, Selection, StringEdit, StringValue, VsCodeV2CommentsView, findNodeOffsetById, taskCheckboxRange } from '@vscode/markdown-editor';
+import { CommentModeController, CommentsModel, EditorController, EditorModel, EditorView, OffsetRange, Selection, StringEdit, StringValue, VsCodeV2CommentsView, findNodeOffsetById, taskCheckboxRange } from '@vscode/markdown-editor';
 import { Disposable, autorun, observableValue } from '@vscode/markdown-editor/observables';
 import mermaid from 'mermaid';
 import 'katex/dist/katex.min.css';
@@ -67,14 +67,6 @@ class Editor extends Disposable {
 					this.isUpdatingFromExtension = true;
 					this.model.sourceText.set(new StringValue(message.content), undefined);
 					this.isUpdatingFromExtension = false;
-					break;
-				}
-				case 'gutterMarkers': {
-					const markers: GutterMarker[] = message.markers.map((marker: { start: number; endExclusive: number; type: GutterMarker['type'] }) => ({
-						range: OffsetRange.fromTo(marker.start, marker.endExclusive),
-						type: marker.type,
-					}));
-					this.model.gutterMarkers.set(markers, undefined);
 					break;
 				}
 				case 'comments': {

@@ -95,20 +95,8 @@
             "path": "./translations/extensions/vscode.fsharp.i18n.json"
           },
           {
-            "id": "vscode.git-base",
-            "path": "./translations/extensions/vscode.git-base.i18n.json"
-          },
-          {
-            "id": "vscode.git",
-            "path": "./translations/extensions/vscode.git.i18n.json"
-          },
-          {
             "id": "vscode.github-authentication",
             "path": "./translations/extensions/vscode.github-authentication.i18n.json"
-          },
-          {
-            "id": "vscode.github",
-            "path": "./translations/extensions/vscode.github.i18n.json"
           },
           {
             "id": "vscode.go",
@@ -305,10 +293,6 @@
           {
             "id": "vscode.swift",
             "path": "./translations/extensions/vscode.swift.i18n.json"
-          },
-          {
-            "id": "vscode.terminal-suggest",
-            "path": "./translations/extensions/vscode.terminal-suggest.i18n.json"
           },
           {
             "id": "vscode.theme-2026",

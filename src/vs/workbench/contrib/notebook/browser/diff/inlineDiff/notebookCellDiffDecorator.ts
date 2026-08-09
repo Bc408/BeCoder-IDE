@@ -19,11 +19,11 @@ import { ModelDecorationOptions } from '../../../../../../editor/common/model/te
 import { Range } from '../../../../../../editor/common/core/range.js';
 import { NotebookCellTextModel } from '../../../common/model/notebookCellTextModel.js';
 import { DetailedLineRangeMapping } from '../../../../../../editor/common/diff/rangeMapping.js';
-import { minimapGutterAddedBackground, minimapGutterDeletedBackground, minimapGutterModifiedBackground, overviewRulerAddedForeground, overviewRulerDeletedForeground, overviewRulerModifiedForeground } from '../../../../scm/common/quickDiff.js';
+import { diffInserted, diffOverviewRulerInserted, diffOverviewRulerRemoved, diffRemoved } from '../../../../../../platform/theme/common/colorRegistry.js';
 import { INotebookOriginalCellModelFactory } from './notebookOriginalCellModelFactory.js';
 import { InlineDecoration, InlineDecorationType } from '../../../../../../editor/common/viewModel/inlineDecorations.js';
 
-//TODO: allow client to set read-only - chateditsession should set read-only while making changes
+// TODO: Allow comparison clients to make the modified notebook read-only.
 export class NotebookCellDiffDecorator extends DisposableStore {
 	private _viewZones: string[] = [];
 	private readonly throttledDecorator = this.add(new ThrottledDelayer(50));
@@ -166,9 +166,9 @@ export class NotebookCellDiffDecorator extends DisposableStore {
 				minimap: { color: themeColorFromId(minimapColor), position: MinimapPosition.Gutter },
 			});
 		};
-		const modifiedDecoration = createOverviewDecoration(overviewRulerModifiedForeground, minimapGutterModifiedBackground);
-		const addedDecoration = createOverviewDecoration(overviewRulerAddedForeground, minimapGutterAddedBackground);
-		const deletedDecoration = createOverviewDecoration(overviewRulerDeletedForeground, minimapGutterDeletedBackground);
+		const modifiedDecoration = createOverviewDecoration(diffOverviewRulerInserted, diffInserted);
+		const addedDecoration = createOverviewDecoration(diffOverviewRulerInserted, diffInserted);
+		const deletedDecoration = createOverviewDecoration(diffOverviewRulerRemoved, diffRemoved);
 
 		editor.changeViewZones((viewZoneChangeAccessor) => {
 			for (const id of this._viewZones) {

@@ -271,22 +271,22 @@ suite('SettingsTree', () => {
 				languageFilter: undefined
 			});
 		testParseQuery(
-			'@feature:scm',
+			'@feature:terminal',
 			<IParsedQuery>{
 				tags: [],
 				extensionFilters: [],
-				featureFilters: ['scm'],
+				featureFilters: ['terminal'],
 				query: '',
 				idFilters: [],
 				languageFilter: undefined
 			});
 
 		testParseQuery(
-			'@feature:scm,terminal',
+			'@feature:terminal,notebook',
 			<IParsedQuery>{
 				tags: [],
 				extensionFilters: [],
-				featureFilters: ['scm', 'terminal'],
+				featureFilters: ['terminal', 'notebook'],
 				query: '',
 				idFilters: [],
 				languageFilter: undefined

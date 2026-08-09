@@ -92,13 +92,6 @@ export const TERMINAL_OVERVIEW_RULER_FIND_MATCH_FOREGROUND_COLOR = registerColor
 }, nls.localize('terminalOverviewRuler.findMatchHighlightForeground', 'Overview ruler marker color for find matches in the terminal.'));
 export const TERMINAL_DRAG_AND_DROP_BACKGROUND = registerColor('terminal.dropBackground', EDITOR_DRAG_AND_DROP_BACKGROUND, nls.localize('terminal.dragAndDropBackground', "Background color when dragging on top of terminals. The color should have transparency so that the terminal contents can still shine through."), true);
 export const TERMINAL_TAB_ACTIVE_BORDER = registerColor('terminal.tab.activeBorder', TAB_ACTIVE_BORDER, nls.localize('terminal.tab.activeBorder', 'Border on the side of the terminal tab in the panel. This defaults to tab.activeBorder.'));
-export const TERMINAL_INITIAL_HINT_FOREGROUND = registerColor('terminal.initialHintForeground', {
-	dark: '#ffffff56',
-	light: '#0007',
-	hcDark: null,
-	hcLight: null
-}, nls.localize('terminalInitialHintForeground', 'Foreground color of the terminal initial hint.'));
-
 export const ansiColorMap: { [key: string]: { index: number; defaults: ColorDefaults } } = {
 	'terminal.ansiBlack': {
 		index: 0,

@@ -19,8 +19,6 @@ import { TerminalLinksCommandId } from '../../links/common/terminal.links.js';
 import { IAccessibleViewContentProvider, AccessibleViewProviderId, IAccessibleViewOptions, AccessibleViewType } from '../../../../../platform/accessibility/browser/accessibleView.js';
 import { accessibleViewIsShown, accessibleViewCurrentProviderId, AccessibilityVerbositySettingId } from '../../../accessibility/browser/accessibilityConfiguration.js';
 import { TerminalHistoryCommandId } from '../../history/common/terminal.history.js';
-import { TerminalSuggestCommandId } from '../../suggest/common/terminal.suggest.js';
-import { TerminalSuggestSettingId } from '../../suggest/common/terminalSuggestConfiguration.js';
 
 export const enum ClassName {
 	Active = 'active',
@@ -66,15 +64,6 @@ export class TerminalAccessibilityHelpProvider extends Disposable implements IAc
 
 		if (!this._configurationService.getValue(TerminalAccessibilitySettingId.AccessibleViewFocusOnCommandExecution)) {
 			content.push(localize('focusViewOnExecution', 'Enable `terminal.integrated.accessibleViewFocusOnCommandExecution` to automatically focus the terminal accessible view when a command is executed in the terminal.'));
-		}
-
-		if (this._configurationService.getValue(TerminalSuggestSettingId.Enabled)) {
-			content.push(localize('suggestTrigger', 'The terminal request completions command can be invoked manually<keybinding:{0}>, but also appears while typing.', TerminalSuggestCommandId.TriggerSuggest));
-			content.push(localize('suggest', 'When the terminal suggest widget is focused:'));
-			content.push(localize('suggestCommands', '- Accept the suggestion<keybinding:{0}> and configure suggest settings<keybinding:{1}>.', TerminalSuggestCommandId.AcceptSelectedSuggestion, TerminalSuggestCommandId.ConfigureSettings));
-			content.push(localize('suggestCommandsMore', '- Toggle between the widget and terminal<keybinding:{0}> and toggle details focus<keybinding:{1}> to learn more about the suggestion.', TerminalSuggestCommandId.ToggleDetails, TerminalSuggestCommandId.ToggleDetailsFocus));
-			content.push(localize('suggestLearnMore', '- Learn more about the suggestion<keybinding:{0}>.', TerminalSuggestCommandId.LearnMore));
-			content.push(localize('suggestConfigure', '-Configure suggest settings<keybinding:{0}> ', TerminalSuggestCommandId.ConfigureSettings));
 		}
 
 		if (this._instance.shellType === WindowsShellType.CommandPrompt) {

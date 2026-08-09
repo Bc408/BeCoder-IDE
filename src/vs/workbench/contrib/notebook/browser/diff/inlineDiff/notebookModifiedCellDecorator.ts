@@ -7,7 +7,7 @@ import { Disposable, DisposableStore, toDisposable } from '../../../../../../bas
 import { CellDiffInfo } from '../notebookDiffViewModel.js';
 import { INotebookEditor, NotebookOverviewRulerLane } from '../../notebookBrowser.js';
 import { NotebookCellTextModel } from '../../../common/model/notebookCellTextModel.js';
-import { overviewRulerModifiedForeground } from '../../../../scm/common/quickDiff.js';
+import { diffOverviewRulerInserted } from '../../../../../../platform/theme/common/colorRegistry.js';
 
 export class NotebookModifiedCellDecorator extends Disposable {
 	private readonly decorators = this._register(new DisposableStore());
@@ -35,7 +35,7 @@ export class NotebookModifiedCellDecorator extends Disposable {
 			handle: cell.handle,
 			options: {
 				overviewRuler: {
-					color: overviewRulerModifiedForeground,
+					color: diffOverviewRulerInserted,
 					modelRanges: [],
 					includeOutput: true,
 					position: NotebookOverviewRulerLane.Full

@@ -830,12 +830,6 @@ export enum ColorFormat {
 	HSL = 2
 }
 
-export enum SourceControlInputBoxValidationType {
-	Error = 0,
-	Warning = 1,
-	Information = 2
-}
-
 export enum TerminalExitReason {
 	Unknown = 0,
 	Shutdown = 1,
@@ -912,83 +906,6 @@ export class TerminalProfile implements vscode.TerminalProfile {
 			throw illegalArgument('options');
 		}
 	}
-}
-
-export enum TerminalCompletionItemKind {
-	File = 0,
-	Folder = 1,
-	Method = 2,
-	Alias = 3,
-	Argument = 4,
-	Option = 5,
-	OptionValue = 6,
-	Flag = 7,
-	SymbolicLinkFile = 8,
-	SymbolicLinkFolder = 9,
-	ScmCommit = 10,
-	ScmBranch = 11,
-	ScmTag = 12,
-	ScmStash = 13,
-	ScmRemote = 14,
-	PullRequest = 15,
-	PullRequestDone = 16,
-}
-
-export class TerminalCompletionItem implements vscode.TerminalCompletionItem {
-	label: string | CompletionItemLabel;
-	replacementRange: readonly [number, number];
-	detail?: string | undefined;
-	documentation?: string | vscode.MarkdownString | undefined;
-	kind?: TerminalCompletionItemKind | undefined;
-	isFile?: boolean | undefined;
-	isDirectory?: boolean | undefined;
-	isKeyword?: boolean | undefined;
-
-	constructor(label: string | CompletionItemLabel, replacementRange: readonly [number, number], kind?: TerminalCompletionItemKind, detail?: string, documentation?: string | vscode.MarkdownString, isFile?: boolean, isDirectory?: boolean, isKeyword?: boolean) {
-		this.label = label;
-		this.replacementRange = replacementRange;
-		this.kind = kind;
-		this.detail = detail;
-		this.documentation = documentation;
-		this.isFile = isFile;
-		this.isDirectory = isDirectory;
-		this.isKeyword = isKeyword;
-	}
-}
-
-/**
- * Represents a collection of {@link CompletionItem completion items} to be presented
- * in the editor.
- */
-export class TerminalCompletionList<T extends TerminalCompletionItem = TerminalCompletionItem> {
-
-	/**
-	 * Resources should be shown in the completions list
-	 */
-	resourceOptions?: TerminalCompletionResourceOptions;
-
-	/**
-	 * The completion items.
-	 */
-	items: T[];
-
-	/**
-	 * Creates a new completion list.
-	 *
-	 * @param items The completion items.
-	 * @param isIncomplete The list is not complete.
-	 */
-	constructor(items?: T[], resourceOptions?: TerminalCompletionResourceOptions) {
-		this.items = items ?? [];
-		this.resourceOptions = resourceOptions;
-	}
-}
-
-export interface TerminalCompletionResourceOptions {
-	showFiles?: boolean;
-	showDirectories?: boolean;
-	fileExtensions?: string[];
-	cwd?: vscode.Uri;
 }
 
 export enum TaskRevealKind {
@@ -1547,7 +1464,6 @@ export class Task implements vscode.Task {
 
 
 export enum ProgressLocation {
-	SourceControl = 1,
 	Window = 10,
 	Notification = 15
 }

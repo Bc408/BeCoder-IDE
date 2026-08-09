@@ -126,7 +126,6 @@ export class SettingsEditor2 extends EditorPane {
 		`@tag:${ADVANCED_SETTING_TAG}`,
 		`@${ID_SETTING_TAG}`,
 		`@${EXTENSION_SETTING_TAG}`,
-		`@${FEATURE_SETTING_TAG}scm`,
 		`@${FEATURE_SETTING_TAG}explorer`,
 		`@${FEATURE_SETTING_TAG}search`,
 		`@${FEATURE_SETTING_TAG}extensions`,

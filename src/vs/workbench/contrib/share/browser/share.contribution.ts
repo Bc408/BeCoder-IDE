@@ -36,7 +36,6 @@ import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.j
 
 const targetMenus = [
 	MenuId.EditorContextShare,
-	MenuId.SCMResourceContextShare,
 	MenuId.OpenEditorsContextShare,
 	MenuId.EditorTitleContextShare,
 	MenuId.MenubarShare,

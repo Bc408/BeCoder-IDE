@@ -6,7 +6,7 @@
 import { Disposable, DisposableStore, toDisposable } from '../../../../../../base/common/lifecycle.js';
 import { CellDiffInfo } from '../notebookDiffViewModel.js';
 import { INotebookEditor, NotebookOverviewRulerLane } from '../../notebookBrowser.js';
-import { overviewRulerAddedForeground } from '../../../../scm/common/quickDiff.js';
+import { diffOverviewRulerInserted } from '../../../../../../platform/theme/common/colorRegistry.js';
 
 export class NotebookInsertedCellDecorator extends Disposable {
 	private readonly decorators = this._register(new DisposableStore());
@@ -26,7 +26,7 @@ export class NotebookInsertedCellDecorator extends Disposable {
 			handle: cell.handle,
 			options: {
 				className: 'nb-insertHighlight', outputClassName: 'nb-insertHighlight', overviewRuler: {
-					color: overviewRulerAddedForeground,
+					color: diffOverviewRulerInserted,
 					modelRanges: [],
 					includeOutput: true,
 					position: NotebookOverviewRulerLane.Full

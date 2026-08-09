@@ -25,13 +25,11 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 import { RawContextKey, IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { isObject } from '../../../../base/common/types.js';
-import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { EditorOption, IEditorOptions as ICodeEditorOptions } from '../../../../editor/common/config/editorOptions.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { UILabelProvider } from '../../../../base/common/keybindingLabels.js';
 import { OS, OperatingSystem } from '../../../../base/common/platform.js';
 import { deepClone } from '../../../../base/common/objects.js';
-import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { addDisposableListener, Dimension, isHTMLAnchorElement, isHTMLButtonElement, isHTMLElement, size } from '../../../../base/browser/dom.js';
 import * as domSanitize from '../../../../base/browser/domSanitize.js';
 import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
@@ -77,7 +75,6 @@ export class WalkThroughPart extends EditorPane {
 		@IStorageService storageService: IStorageService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@INotificationService private readonly notificationService: INotificationService,
 		@IExtensionService private readonly extensionService: IExtensionService,
 		@IEditorGroupsService editorGroupService: IEditorGroupsService,
 	) {
@@ -188,10 +185,6 @@ export class WalkThroughPart extends EditorPane {
 	}
 
 	private open(uri: URI) {
-		if (uri.scheme === 'command' && uri.path === 'git.clone' && !CommandsRegistry.getCommand('git.clone')) {
-			this.notificationService.info(localize('walkThrough.gitNotFound', "It looks like Git is not installed on your system."));
-			return;
-		}
 		this.openerService.open(this.addFrom(uri), { allowCommands: true });
 	}
 

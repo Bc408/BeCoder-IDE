@@ -45,14 +45,12 @@ import './mainThreadManagedSockets.js';
 import './mainThreadBrowserTunnelProxy.js';
 import './mainThreadOutputService.js';
 import './mainThreadProgress.js';
-import './mainThreadQuickDiff.js';
 import './mainThreadDocumentDiff.js';
 import './mainThreadQuickOpen.js';
 import './mainThreadRemoteConnectionData.js';
 import './mainThreadSaveParticipant.js';
 import './mainThreadSpeech.js';
 import './mainThreadEditSessionIdentityParticipant.js';
-import './mainThreadSCM.js';
 import './mainThreadSearch.js';
 import './mainThreadStatusBar.js';
 import './mainThreadStorage.js';
@@ -85,8 +83,6 @@ import './mainThreadSecretState.js';
 import './mainThreadShare.js';
 import './mainThreadProfileContentHandlers.js';
 import './mainThreadMeteredConnection.js';
-import './mainThreadGitExtensionService.js';
-
 export class ExtensionPoints implements IWorkbenchContribution {
 
 	static readonly ID = 'workbench.contrib.extensionPoints';

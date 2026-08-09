@@ -22,7 +22,6 @@ import { CommentContextKeys } from '../common/commentContextKeys.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { CommentsModel, ICommentsModel } from './commentsModel.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
-import { Schemas } from '../../../../base/common/network.js';
 
 export const ICommentService = createDecorator<ICommentService>('commentService');
 
@@ -237,10 +236,6 @@ export class CommentService extends Disposable implements ICommentService {
 		}));
 
 		this._register(this.modelService.onModelAdded(model => {
-			// Excluded schemes
-			if ((model.uri.scheme === Schemas.vscodeSourceControl)) {
-				return;
-			}
 			// Allows comment providers to cause their commenting ranges to be prefetched by opening text documents in the background.
 			if (!this._commentingRangeResources.has(model.uri.toString())) {
 				this.getDocumentComments(model.uri);

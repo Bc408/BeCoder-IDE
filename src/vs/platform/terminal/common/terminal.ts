@@ -732,7 +732,6 @@ export interface IShellLaunchConfigDto {
 export interface ITerminalProcessOptions {
 	shellIntegration: {
 		enabled: boolean;
-		suggestEnabled: boolean;
 		nonce: string;
 	};
 	windowsUseConptyDll: boolean;
@@ -998,13 +997,8 @@ export interface IDecorationAddon {
 	registerMenuItems(command: ITerminalCommand, items: IAction[]): IDisposable;
 }
 
-export interface ITerminalCompletionProviderContribution {
-	description?: string;
-}
-
 export interface ITerminalContributions {
 	profiles?: ITerminalProfileContribution[];
-	completionProviders?: ITerminalCompletionProviderContribution[];
 }
 
 export const enum ShellIntegrationStatus {

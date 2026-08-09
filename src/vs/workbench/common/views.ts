@@ -359,7 +359,6 @@ export interface IViewContainerModel {
 export enum ViewContentGroups {
 	Open = '2_open',
 	Debug = '4_debug',
-	SCM = '5_scm',
 	More = '9_more'
 }
 

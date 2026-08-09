@@ -193,7 +193,6 @@
     "c8": "^9.1.0",
     "chromium-pickle-js": "^0.2.0",
     "cookie": "^0.7.2",
-    "cpu-features": "file:build/npm/stubs/cpu-features",
     "debounce": "^1.0.0",
     "deemon": "^1.13.6",
     "electron": "42.6.0",
@@ -256,7 +255,6 @@
   },
 	"overrides": {
 		"node-gyp-build": "4.8.1",
-		"cpu-features": "$cpu-features",
     "kerberos@2.1.1": {
       "node-addon-api": "7.1.0"
     },

@@ -20,7 +20,6 @@ import '../terminalContrib/environmentChanges/browser/terminal.environmentChange
 import '../terminalContrib/find/browser/terminal.find.contribution.js';
 import '../terminalContrib/commandGuide/browser/terminal.commandGuide.contribution.js';
 import '../terminalContrib/history/browser/terminal.history.contribution.js';
-import '../terminalContrib/inlineHint/browser/terminal.initialHint.contribution.js';
 import '../terminalContrib/links/browser/terminal.links.contribution.js';
 import '../terminalContrib/notification/browser/terminal.notification.contribution.js';
 import '../terminalContrib/zoom/browser/terminal.zoom.contribution.js';
@@ -31,7 +30,6 @@ import '../terminalContrib/typeAhead/browser/terminal.typeAhead.contribution.js'
 import '../terminalContrib/resizeDimensionsOverlay/browser/terminal.resizeDimensionsOverlay.contribution.js';
 import '../terminalContrib/sendSequence/browser/terminal.sendSequence.contribution.js';
 import '../terminalContrib/sendSignal/browser/terminal.sendSignal.contribution.js';
-import '../terminalContrib/suggest/browser/terminal.suggest.contribution.js';
 import '../terminalContrib/telemetry/browser/terminal.telemetry.contribution.js';
 import '../terminalContrib/wslRecommendation/browser/terminal.wslRecommendation.contribution.js';
 import '../terminalContrib/voice/browser/terminal.voice.contribution.js';

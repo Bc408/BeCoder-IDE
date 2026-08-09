@@ -1,6 +1,6 @@
 # BeCoder Project Handoff
 
-This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.5** is the latest archived implementation checkpoint. Stage 4.4 Open VSX and extension governance, Stage 4.4.1 protected Simplified-Chinese and bilingual-product behavior, and Stage 4.5 AI/Debug/GDB removal have passed source, package, and project-owner runtime acceptance. Earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
+This is the authoritative development handoff for BeCoder. Starting on 2026-08-07, all unfinished and newly approved work belongs to **Stage 4**. **Stage 4.6** is the latest archived implementation checkpoint. Stage 4.4 Open VSX and extension governance, Stage 4.4.1 protected Simplified-Chinese and bilingual-product behavior, Stage 4.5 AI/Debug/GDB removal, and Stage 4.6 terminal-suggestion/SCM removal have passed source, package, and project-owner runtime acceptance. Earlier pre-Stage-4 labels are historical only and must not be used to split, prioritize, or infer current requirements.
 
 The active requirements in this document override older implementation directions when they conflict. In particular, Stage 4 replaces the previous clangd-diagnostics, managed `.clangd`, and semantic-token-highlighting design.
 
@@ -9,14 +9,14 @@ The active requirements in this document override older implementation direction
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.5`
-- Active baseline commit: `5130bbc` (`docs(handoff): archive stage 4.4`)
-- Latest remote backup target: `origin/stage4.5`
+- Active development branch: `codex/stage4.6`
+- Active baseline commit: `505d026` (`feat(stage4.5): remove AI debug and GDB`)
+- Latest remote backup target: `origin/stage4.6`
 - Current `main` commit: `c028603`
 - Stable runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference package is outside the repository and must not be modified.
 - Open VSX implementation reference: `C:\Users\Bc\Desktop\BeCoder\vscodium-1.126.04524`; use its `prepare_vscode.sh` and extension documentation as a read-only compatibility reference rather than copying the VSCodium product wholesale.
-- The untracked `build/npm/stubs/cpu-features/` directory predates this handoff rewrite and must not be staged, modified, or removed without separate authorization.
+- Stage 4.6 removed the untracked `build/npm/stubs/cpu-features/` directory and restored the root dependency metadata to the Code - OSS 1.130 optional-dependency model. The local stub must not be recreated, staged, or packaged.
 
 The bundled toolchain archives are intentional Git LFS assets:
 
@@ -489,6 +489,35 @@ Stage 4.5 validation gates:
 7. The final package contains Browser View but no Web Content Extractor or automation channel; contains generic Authentication but no AI account chain; contains the built-in Mermaid Markdown/Notebook renderer but no Mermaid Chat output chain; contains no AI/Chat/Agent/MCP runtime or independent resources; contains no Debug Workbench or `gdb.exe`.
 8. After source checks and package verification, stop and hand the portable package to the project owner. Do not launch BeCoder or claim GUI/runtime acceptance. Archive Stage 4.5 only after project-owner acceptance.
 
+### Stage 4.6 Terminal Suggestion and Source Control Removal
+
+Status: **Archived**. Stage 4.6 started from archived commit `505d026` on branch `codex/stage4.6`. Client and build-script type checking, bundled OI extension compilation, the Simplified-Chinese boundary verifier, the focused Stage 4.6 test, the complete 17-case OI boundary suite, all 223 build-script tests, repeated independent read-only review, the Windows portable build, and direct package verification with `-IncludeCompiler $true` passed on 2026-08-09. The project owner then completed portable GUI/runtime acceptance and approved Stage 4.6 for archive.
+
+The repository-wide `valid-layers-check` still reports the pre-existing direct `ipcMain` dependency in `src/vs/code/electron-main/app.ts`. Stage 4.6 did not modify that file or introduce the dependency. Record this as a separate upstream layering debt for a later dedicated investigation; it does not reopen the accepted Stage 4.6 product boundary or justify unrelated changes during this archive.
+
+Stage 4.6 first closes the local `cpu-features` dependency debt. Remove the root direct development dependency on `file:build/npm/stubs/cpu-features`, remove its root override, delete the untracked stub without committing it, and restore the exact Code - OSS 1.130 `cpu-features@0.0.10` optional transitive dependency records for `ssh2`, including `buildcheck` and `nan`. Keep `allowScripts.cpu-features` set to `false`; do not change the already-upstream-aligned `remote/` dependency configuration or run the native module build script.
+
+Remove the native-terminal initial hint and the complete Workbench Terminal Suggest overlay rather than merely hiding the visible prose. This includes their runtime contributions, commands, keybindings, settings, context keys, completion-provider protocol and proposed extension API, state, telemetry, tests, styles, and localized resources. Preserve the native PowerShell process, PSReadLine behavior, shell integration, command detection and decorations, terminal history, arbitrary CLI execution, and all BC Runner behavior. After removal, Workbench must not intercept `Ctrl+Space` for the deleted suggestion feature.
+
+Remove Source Control as a BeCoder product capability rather than hiding its Activity Bar icon. Remove SCM and Quick Diff views, services, actions, menus, settings, context keys, colors, protocols, stable and proposed extension API, contribution points, Git-extension bridge, shared-process local-Git channel, build resources, tests, and localized resources. Remove only SCM-owned integration from mixed consumers: keep the generic Diff and Multi Diff editors, ordinary file comparison, unsaved-file indicators, Markdown editing and Mermaid rendering, Timeline local history, Explorer, Search, Formatting Document/Selection, terminal, Authentication, Browser View, and ordinary extension infrastructure. User-installed SCM providers must not be able to recreate a Source Control product surface through `vscode.scm`, `views.scm`, SCM menu contribution points, or Quick Diff APIs.
+
+Workspace `.vscode` is explicitly retained as a protected user project asset and BeCoder workspace capability. Continue reading `.vscode/settings.json`, `.vscode/tasks.json`, and `.vscode/extensions.json`; preserve multi-root, workspace-level, and folder-level configuration; and retain ordinary extension access to its own workspace settings. Never delete, rewrite, migrate, hide, or clean user-created `.vscode/launch.json`, `c_cpp_properties.json`, or any other `.vscode` file merely because its former consumer is absent. Existing `scm.*` settings may remain as untouched unknown settings after their schema is removed. Preserve `.git`, `.gitignore`, `.gitattributes`, and every other version-control asset. Native PowerShell may still run `git` as an ordinary user command.
+
+System VS Code remains outside BeCoder's configuration boundary: do not read or modify `%APPDATA%\Code`, `%USERPROFILE%\.vscode\extensions`, system VS Code settings, extensions, cache, clangd configuration, or clangd cache. BeCoder profile settings, installed extensions, cache, and locale state remain under BeCoder-owned data paths.
+
+Stage 4.6 must also rerun the complete Stage 4.5 boundary suite. AI, Chat, Agent, language-model, MCP, Debug, and GDB product paths remain absent, while the generic infrastructure accepted in Stage 4.5 remains available. Any Stage 4.5 residual that is still on a live Git/SCM runtime path may be removed as part of Stage 4.6; unrelated unreachable upstream source is not a license for another keyword-driven sweep.
+
+Stage 4.6 validation gates:
+
+1. `npm ci` succeeds from the restored lockfile without a local `cpu-features` stub or native build script execution, and the relevant lock entries structurally match Code - OSS 1.130.
+2. Focused boundary tests prove absence of terminal hint/suggestion and SCM runtime/API/package surfaces while positively retaining PowerShell, shell integration, BC Runner, generic Diff, Markdown/Mermaid, Timeline local history, Authentication, Browser View, Tasks, workspace configuration, and extension recommendations.
+3. The complete Stage 4.5 boundary suite passes without broad keyword-only assertions.
+4. `npm run typecheck-client` and `npm run compile-oi-extensions` pass under their standard 120-second limits.
+5. The protected Simplified-Chinese pack removes only deleted terminal-suggestion and SCM product translations, retains generic Authentication and other retained-product translations, and has updated source and packaged-content hashes.
+6. An independent read-only reviewer checks dependency restoration, runtime/API closure, mixed-consumer preservation, `.vscode` protection, localization, package rules, and Stage 4.5 regressions; findings are fixed and re-reviewed.
+7. `npm run gulp vscode-win32-x64-min` passes under the 300-second limit, followed by `verify-becoder-package.ps1 -IncludeCompiler $true`.
+8. Stop after direct package verification and hand the package to the project owner. Runtime GUI acceptance, archive, commit, and remote backup occur only after project-owner approval.
+
 ### Workbench and Product UI
 
 Use `C:\Users\Bc\Desktop\BeCoder\vscode-1.130.0` as the interaction and visual reference where it does not conflict with BeCoder's product boundary.
@@ -672,6 +701,7 @@ The consolidated Stage 4 acceptance matrix includes:
 | Stage 4.4 Open VSX and extension governance | Archived | Source uses only Open VSX, enforces the cpptools blacklist and eight-ID core protection across install/enablement/dedup paths, and excludes the three JS Debug downloads while recording bundled licenses plus UCRT64 provenance and corresponding source. The package accepted at Stage 4.4 also excluded Mermaid; Stage 4.5 supersedes only that Mermaid product decision and restores it as a built-in Markdown component without Chat integration. |
 | Stage 4.4.1 protected Chinese and bilingual UI | Archived | The pinned 1.130 Simplified-Chinese VSIX is the eighth protected core component, fresh profiles default to Chinese, English uses source messages, `BeCoder IDE Features` owns the two-language setting, changes persist before optional restart, protected gallery results are hidden, and BeCoder-owned settings/toolchain surfaces are bilingual. Focused boundary tests 9/9, full build-script tests 239/239, client typecheck, OI extension compilation, JSON/PowerShell parsing, `git diff --check`, independent review, the replacement Windows build, direct package verification, and project-owner runtime acceptance pass. |
 | AI/debug/GDB removal | Archived | Stage 4.5 removes the AI/Chat/Agent/language-model/MCP and Debug/GDB product dependency graphs while retaining generic Authentication, Browser View, HTML/Markdown conversion, Quick Access, terminal, testing, Images Preview, Mermaid, and other ordinary Workbench infrastructure. Source checks, independent review, the Windows portable build, direct package verification, and project-owner portable acceptance passed on 2026-08-09. |
+| Stage 4.6 dependency, terminal-suggestion, and SCM cleanup | Archived | Restored the Code - OSS 1.130 optional `cpu-features` dependency model, removed the ineffective Workbench terminal hint/suggestion stack, and removed Source Control across runtime, API, localization, build, and package boundaries while preserving `.vscode`, user Git assets, native PowerShell Git commands, and ordinary Workbench infrastructure. Source checks, repeated independent review, the Windows portable build, direct package verification, and project-owner portable acceptance passed on 2026-08-09. The pre-existing `app.ts` `ipcMain` `valid-layers-check` finding remains separately documented as upstream layering debt. |
 | Workbench/branding alignment | Planned | Apply Settings, Help, terminal-status, first-run, and VS Code 1.130 alignment requirements. |
 | Toolchain slimming and release | Planned | Begin only after retained compiler/language-service behavior is stable and measurable. |
 
@@ -776,6 +806,17 @@ The consolidated Stage 4 acceptance matrix includes:
 - Package/build validation: passed on 2026-08-08. The final replacement `npm run gulp vscode-win32-x64-min` build completed in approximately 119 seconds, then `verify-becoder-package.ps1 -IncludeCompiler $true` passed for `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The verifier recomputed the packaged language pack's 101-file tree, core protection set, bundled licenses, component inventory, and compiler/toolchain hashes.
 - User acceptance: passed on 2026-08-08. The project owner confirmed satisfaction after verifying clean-profile Chinese startup, Chinese-to-English and English-to-Chinese switching with both immediate restart and `Later`, persistence across restart, the visible settings entry, bilingual BeCoder surfaces, protected-pack invisibility, and complete isolation from system VS Code settings. No agent-run GUI acceptance is claimed.
 - Remaining risks or follow-up: the pinned language pack is compatible with the current 1.130 baseline; future Code - OSS baseline upgrades must update and re-audit the bundled pack as a product component rather than accepting Open VSX replacement or automatic updates. The broader Stage 4.4 Marketplace and local-VSIX acceptance matrix is archived by the project owner's separate acceptance recorded above.
+
+### Stage 4.6 terminal suggestion, Source Control, and dependency cleanup
+
+- Requirement: restore the Code - OSS 1.130 optional `cpu-features` dependency model without a BeCoder-owned stub; remove the ineffective native-terminal initial hint and complete Workbench Terminal Suggest stack; remove Source Control and Quick Diff as BeCoder product capabilities across runtime, extension API, localization, build, and package boundaries; preserve native PowerShell, BC Runner, generic Diff/Multi Diff, Markdown/Mermaid, Timeline local history, Tasks, Authentication, Browser View, workspace `.vscode`, user Git assets, and ordinary Workbench infrastructure; and rerun the complete Stage 4.5 boundary suite.
+- User-visible result: native PowerShell opens without the ineffective suggestion hint or `Ctrl+Space` suggestion overlay, while retaining normal PowerShell, PSReadLine, shell integration, command decorations, history, and arbitrary CLI behavior. Source Control no longer appears through the Activity Bar, commands, menus, settings, views, Quick Diff, built-in Git bridge, or extension contribution APIs. User projects keep `.vscode`, `.git`, `.gitignore`, `.gitattributes`, and native-terminal `git` behavior unchanged.
+- Source ownership: root `package.json` and `package-lock.json`; terminal hint/suggest contributions under `src/vs/workbench/contrib/terminalContrib`; SCM, Quick Diff, Git bridge, shared-process Git, extension-host protocols, stable/proposed API, mixed-consumer cleanup, build entry points, integration scripts, protected Simplified-Chinese resources, package verification, bundled-component inventory, and `build/lib/test/oiExtensionBoundary.test.ts`.
+- Commit/PR: the containing Stage 4.6 backup commit is pushed directly to `origin/stage4.6`; no PR or release workflow was requested.
+- Source validation: `npm ci`, client and build-script type checking, bundled OI extension compilation, the Simplified-Chinese boundary verifier, the focused Stage 4.6 test, the complete 17-case OI boundary suite, all 223 build-script tests, dependency and package-boundary probes, `git diff --check`, and repeated independent read-only review passed on 2026-08-09. The final review found no remaining P1/P2 issue in the accepted Stage 4.6 scope.
+- Package/build validation: passed on 2026-08-09. The replacement `npm run gulp vscode-win32-x64-min` build completed under the required timeout, followed by successful `verify-becoder-package.ps1 -IncludeCompiler $true` verification of `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The package retained the bundled compiler, protected language pack, Markdown/Mermaid, Authentication, Browser View, native terminal, and ordinary workspace support while excluding terminal suggestion and SCM product resources.
+- User acceptance: passed on 2026-08-09. The project owner completed portable GUI/runtime acceptance, confirmed satisfaction with the removed terminal hint/suggestion and Source Control surfaces plus the retained ordinary functionality, and approved Stage 4.6 for archive. No agent-run GUI acceptance is claimed.
+- Remaining risks or follow-up: repository-wide `valid-layers-check` still reports the pre-existing direct Electron `ipcMain` dependency in `src/vs/code/electron-main/app.ts`. Stage 4.6 did not modify that file or introduce the dependency. Treat it as separate upstream layering debt for a later dedicated investigation; it does not reopen Stage 4.6 or justify broad cleanup.
 
 ### Baseline: Runner, toolchain, and language isolation
 

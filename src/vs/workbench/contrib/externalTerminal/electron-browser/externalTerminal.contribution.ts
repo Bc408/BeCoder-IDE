@@ -140,10 +140,6 @@ export class ExternalTerminalContribution implements IWorkbenchContribution {
 					...terminalKindProperties,
 					description: nls.localize('explorer.openInTerminalKind', "When opening a file from the Explorer in a terminal, determines what kind of terminal will be launched"),
 				},
-				'terminal.sourceControlRepositoriesKind': {
-					...terminalKindProperties,
-					description: nls.localize('sourceControlRepositories.openInTerminalKind', "When opening a repository from the Source Control Repositories view in a terminal, determines what kind of terminal will be launched"),
-				},
 				'terminal.external.windowsExec': {
 					type: 'string',
 					description: nls.localize('terminal.external.windowsExec', "Customizes which terminal to run on Windows."),

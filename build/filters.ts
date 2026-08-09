@@ -55,7 +55,6 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/ipynb/notebook-out/**',
 	'!extensions/notebook-renderers/renderer-out/**',
 	'!extensions/php-language-features/src/features/phpGlobalFunctions.ts',
-	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/test-workspace/**',
 	'!extensions/vscode-api-tests/testWorkspace/**',
 	'!extensions/vscode-api-tests/testWorkspace2/**',
@@ -63,7 +62,6 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/**/out/**',
 	'!extensions/**/snippets/**',
 	'!extensions/**/colorize-fixtures/**',
-	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 	// This file contains localized UI text and generated configuration comments.
 	'!extensions/becoder.setup/src/extension.ts',
 	'!extensions/becoder.setup/src/simpleSettings.ts',
@@ -109,9 +107,6 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!test/automation/out/**',
 	'!test/monaco/out/**',
 	'!test/smoke/out/**',
-	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
-	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
-	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/test-workspace/**',
 	'!extensions/typescript-language-features/resources/walkthroughs/**',
 	'!extensions/typescript-language-features/package-manager/node-maintainer/**',
@@ -212,7 +207,6 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/markdown-math/notebook-out/**',
 	'!extensions/ipynb/notebook-out/**',
 	'!extensions/simple-browser/media/codicon.css',
-	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/node-maintainer/**',
 	'!extensions/html-language-features/server/src/modes/typescript/*',
 	'!extensions/*/server/bin/*',
@@ -244,8 +238,6 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	'!extensions/vscode-api-tests/testWorkspace2/**',
 	'!extensions/**/*.test.ts',
 	'!extensions/html-language-features/server/lib/jquery.d.ts',
-	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
-	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 
 	// These bundled upstream extensions have their own code style
 	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',

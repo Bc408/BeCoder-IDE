@@ -204,11 +204,6 @@ export const tocData: ITOCEntry<string> = {
 					settings: ['testing.*']
 				},
 				{
-					id: 'features/scm',
-					label: localize('scm', "Source Control"),
-					settings: ['scm.*']
-				},
-				{
 					id: 'features/extensions',
 					label: localize('extensions', "Extensions"),
 					settings: ['extensions.*']

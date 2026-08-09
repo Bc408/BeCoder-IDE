@@ -228,14 +228,6 @@ import './contrib/searchEditor/browser/searchEditor.contribution.js';
 // Sash
 import './contrib/sash/browser/sash.contribution.js';
 
-// Git
-import './contrib/git/browser/git.contributions.js';
-
-// SCM
-import './contrib/scm/browser/scm.contribution.js';
-import './contrib/scm/browser/quickDiff.contribution.js';
-import './contrib/scm/browser/scm.service.contribution.js';
-
 // Markers
 import './contrib/markers/browser/markers.contribution.js';
 
@@ -368,7 +360,6 @@ import './contrib/userDataSync/browser/userDataSync.contribution.js';
 import './contrib/userDataProfile/browser/userDataProfile.contribution.js';
 
 // Continue Edit Session
-import './contrib/editSessions/browser/editSessions.contribution.js';
 
 // Code Actions
 import './contrib/codeActions/browser/codeActions.contribution.js';

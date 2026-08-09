@@ -13,8 +13,8 @@ import { ITerminalProcessOptions } from '../../common/terminal.js';
 import { getShellIntegrationInjection, IShellIntegrationConfigInjection, type IShellIntegrationInjectionFailure, sanitizeEnvForLogging } from '../../node/terminalEnvironment.js';
 import { getWindowsBuildNumberSync } from '../../../../base/node/windowsVersion.js';
 
-const enabledProcessOptions: ITerminalProcessOptions = { shellIntegration: { enabled: true, suggestEnabled: false, nonce: '' }, windowsUseConptyDll: false, environmentVariableCollections: undefined, workspaceFolder: undefined, isScreenReaderOptimized: false };
-const disabledProcessOptions: ITerminalProcessOptions = { shellIntegration: { enabled: false, suggestEnabled: false, nonce: '' }, windowsUseConptyDll: false, environmentVariableCollections: undefined, workspaceFolder: undefined, isScreenReaderOptimized: false };
+const enabledProcessOptions: ITerminalProcessOptions = { shellIntegration: { enabled: true, nonce: '' }, windowsUseConptyDll: false, environmentVariableCollections: undefined, workspaceFolder: undefined, isScreenReaderOptimized: false };
+const disabledProcessOptions: ITerminalProcessOptions = { shellIntegration: { enabled: false, nonce: '' }, windowsUseConptyDll: false, environmentVariableCollections: undefined, workspaceFolder: undefined, isScreenReaderOptimized: false };
 const pwshExe = process.platform === 'win32' ? 'pwsh.exe' : 'pwsh';
 const repoRoot = process.platform === 'win32' ? process.cwd()[0].toLowerCase() + process.cwd().substring(1) : process.cwd();
 const logService = new NullLogService();
@@ -243,7 +243,7 @@ suite('platform - terminalEnvironment', async () => {
 		suite('custom shell integration nonce', async () => {
 			test('should fail for unsupported shell but nonce should still be available', async () => {
 				const customProcessOptions: ITerminalProcessOptions = {
-					shellIntegration: { enabled: true, suggestEnabled: false, nonce: 'custom-nonce-12345' },
+					shellIntegration: { enabled: true, nonce: 'custom-nonce-12345' },
 
 					windowsUseConptyDll: false,
 					environmentVariableCollections: undefined,

@@ -43,7 +43,6 @@ export interface IProgressIndicator {
 
 export const enum ProgressLocation {
 	Explorer = 1,
-	Scm = 3,
 	Extensions = 5,
 	Window = 10,
 	Notification = 15,
@@ -81,7 +80,7 @@ export interface IProgressWindowOptions extends IProgressOptions {
 }
 
 export interface IProgressCompositeOptions extends IProgressOptions {
-	readonly location: ProgressLocation.Explorer | ProgressLocation.Extensions | ProgressLocation.Scm | string;
+	readonly location: ProgressLocation.Explorer | ProgressLocation.Extensions | string;
 	readonly delay?: number;
 }
 

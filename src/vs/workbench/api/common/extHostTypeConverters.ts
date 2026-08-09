@@ -39,7 +39,6 @@ import { IViewBadge } from '../../common/views.js';
 import * as notebooks from '../../contrib/notebook/common/notebookCommon.js';
 import { CellEditType } from '../../contrib/notebook/common/notebookCommon.js';
 import { ICellRange } from '../../contrib/notebook/common/notebookRange.js';
-import { InputValidationType } from '../../contrib/scm/common/scm.js';
 import * as search from '../../contrib/search/common/search.js';
 import { TestId } from '../../contrib/testing/common/testId.js';
 import { CoverageDetails, DetailType, ICoverageCount, IFileCoverage, ISerializedTestResults, ITestErrorMessage, ITestItem, ITestRunProfileReference, ITestTag, TestMessageType, TestResultItem, TestRunProfileBitset, denamespaceTestTag, namespaceTestTag } from '../../contrib/testing/common/testTypes.js';
@@ -118,7 +117,6 @@ export namespace Range {
 		return new types.Range(startLineNumber - 1, startColumn - 1, endLineNumber - 1, endColumn - 1);
 	}
 }
-
 export namespace Location {
 
 	export function from(location: vscode.Location): Dto<languages.Location> {
@@ -132,7 +130,6 @@ export namespace Location {
 		return new types.Location(URI.revive(location.uri), Range.to(location.range));
 	}
 }
-
 export namespace TokenType {
 	export function to(type: encodedTokenAttributes.StandardTokenType): types.StandardTokenType {
 		switch (type) {
@@ -143,7 +140,6 @@ export namespace TokenType {
 		}
 	}
 }
-
 export namespace Position {
 	export function to(position: IPosition): types.Position {
 		return new types.Position(position.lineNumber - 1, position.column - 1);
@@ -152,7 +148,6 @@ export namespace Position {
 		return { lineNumber: position.line + 1, column: position.character + 1 };
 	}
 }
-
 export namespace DocumentSelector {
 
 	export function from(value: vscode.DocumentSelector, uriTransformer?: IURITransformer, extension?: IExtensionDescription): extHostProtocol.IDocumentFilterDto[] {
@@ -1388,7 +1383,6 @@ export namespace ProgressLocation {
 		}
 
 		switch (loc) {
-			case types.ProgressLocation.SourceControl: return MainProgressLocation.Scm;
 			case types.ProgressLocation.Window: return MainProgressLocation.Window;
 			case types.ProgressLocation.Notification: return MainProgressLocation.Notification;
 		}
@@ -2217,40 +2211,6 @@ export namespace TerminalQuickFix {
 		return converter.toInternal(quickFix, disposables);
 	}
 }
-export namespace TerminalCompletionItemDto {
-	export function from(item: vscode.TerminalCompletionItem): extHostProtocol.ITerminalCompletionItemDto {
-		return {
-			...item,
-			documentation: MarkdownString.fromStrict(item.documentation),
-		};
-	}
-}
-
-export namespace TerminalCompletionList {
-	export function from(completions: vscode.TerminalCompletionList | vscode.TerminalCompletionItem[], pathSeparator: string): extHostProtocol.TerminalCompletionListDto {
-		if (Array.isArray(completions)) {
-			return {
-				items: completions.map(i => TerminalCompletionItemDto.from(i)),
-			};
-		}
-		return {
-			items: completions.items.map(i => TerminalCompletionItemDto.from(i)),
-			resourceOptions: completions.resourceOptions ? TerminalCompletionResourceOptions.from(completions.resourceOptions, pathSeparator) : undefined,
-		};
-	}
-}
-
-export namespace TerminalCompletionResourceOptions {
-	export function from(resourceOptions: vscode.TerminalCompletionResourceOptions, pathSeparator: string): extHostProtocol.TerminalCompletionResourceOptionsDto {
-		return {
-			...resourceOptions,
-			pathSeparator,
-			cwd: resourceOptions.cwd,
-			globPattern: GlobPattern.from(resourceOptions.globPattern) ?? undefined
-		};
-	}
-}
-
 export namespace PartialAcceptInfo {
 	export function to(info: languages.PartialAcceptInfo): types.PartialAcceptInfo {
 		return {
@@ -2366,21 +2326,6 @@ export namespace IconPath {
 				light: URI.revive(icon.light),
 				dark: URI.revive(icon.dark)
 			};
-		}
-	}
-}
-
-export namespace SourceControlInputBoxValidationType {
-	export function from(type: number): InputValidationType {
-		switch (type) {
-			case types.SourceControlInputBoxValidationType.Error:
-				return InputValidationType.Error;
-			case types.SourceControlInputBoxValidationType.Warning:
-				return InputValidationType.Warning;
-			case types.SourceControlInputBoxValidationType.Information:
-				return InputValidationType.Information;
-			default:
-				throw new Error('Unknown SourceControlInputBoxValidationType');
 		}
 	}
 }

@@ -43,6 +43,7 @@
 		"vs/workbench/contrib/accessibilitySignals/browser/accessibilitySignalDebuggerContribution.ts",
 		"vs/workbench/contrib/chat/**",
 		"vs/workbench/contrib/debug/**",
+		"vs/workbench/contrib/editSessions/**",
 		"vs/workbench/contrib/editTelemetry/**",
 		"vs/workbench/contrib/extensions/electron-browser/debugExtensionHostAction.ts",
 		"vs/workbench/contrib/inlineChat/**",

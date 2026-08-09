@@ -55,9 +55,9 @@ if defined SHOW_HELP (
 	echo   --help, -h                    show this help
 	echo.
 	echo Available suites:
-	echo   api-folder, api-workspace, colorize, terminal-suggest, typescript,
-	echo   markdown, emmet, git, git-base, ipynb, notebook-renderers,
-	echo   configuration-editing, github-authentication, copilot, css, html
+	echo   api-folder, api-workspace, colorize, typescript, markdown, emmet,
+	echo   ipynb, notebook-renderers, configuration-editing,
+	echo   github-authentication, css, html
 	echo.
 	echo All other options are forwarded to the node.js test runner ^(see scripts\test.bat --help^).
 	echo Note: extra options are not forwarded to extension host suites ^(--suite mode^).
@@ -67,7 +67,7 @@ if defined SHOW_HELP (
 	echo   %~nx0 --run src\vs\editor\test\browser\controller.integrationTest.ts
 	echo   %~nx0 --grep "some test name"
 	echo   %~nx0 --runGlob "**\*.integrationTest.js"
-	echo   %~nx0 --suite git                             # run only Git tests
+	echo   %~nx0 --suite markdown                        # run only Markdown tests
 	echo   %~nx0 --suite "api-folder,api-workspace"       # run multiple suites
 	echo   %~nx0 --suite api-folder --grep "some test"   # grep within a suite
 	exit /b 0
@@ -77,13 +77,10 @@ set VSCODEUSERDATADIR=%TEMP%\vscodeuserfolder-%RANDOM%-%TIME:~6,2%
 set VSCODECRASHDIR=%SCRIPT_DIR%\..\.build\crashes
 set VSCODELOGSDIR=%SCRIPT_DIR%\..\.build\logs\integration-tests
 
-:: Seed user settings to disable OS notifications (dock bounce, toast, etc.)
+:: Seed an empty user settings file for the isolated test profile.
 if not exist "%VSCODEUSERDATADIR%\User" mkdir "%VSCODEUSERDATADIR%\User"
 (
-echo {
-echo 	"chat.notifyWindowOnConfirmation": "off",
-echo 	"chat.notifyWindowOnResponseReceived": "off"
-echo }
+echo {}
 ) > "%VSCODEUSERDATADIR%\User\settings.json"
 
 :: Figure out which Electron to use for running tests
@@ -107,12 +104,12 @@ echo Storing log files into '%VSCODELOGSDIR%'.
 :: Validate --suite filter matches at least one known suite
 if defined SUITE_FILTER (
 	set "_any_match="
-	for %%s in (api-folder api-workspace colorize terminal-suggest typescript markdown emmet git git-base ipynb notebook-renderers configuration-editing github-authentication copilot css html) do (
+	for %%s in (api-folder api-workspace colorize typescript markdown emmet ipynb notebook-renderers configuration-editing github-authentication css html) do (
 		call :should_run_suite %%s && set "_any_match=1"
 	)
 	if not defined _any_match (
 		echo Error: no suites match filter '%SUITE_FILTER%'
-		echo Available suites: api-folder api-workspace colorize terminal-suggest typescript markdown emmet git git-base ipynb notebook-renderers configuration-editing github-authentication copilot css html
+		echo Available suites: api-folder api-workspace colorize typescript markdown emmet ipynb notebook-renderers configuration-editing github-authentication css html
 		exit /b 1
 	)
 )
@@ -174,17 +171,6 @@ if defined GREP_PATTERN (
 if %errorlevel% neq 0 exit /b %errorlevel%
 :skip_colorize
 
-call :should_run_suite terminal-suggest || goto skip_terminal_suggest
-echo.
-echo ### Terminal Suggest tests
-if defined GREP_PATTERN (
-	call npm run test-extension -- -l terminal-suggest --enable-proposed-api=vscode.vscode-api-tests --grep "%GREP_PATTERN%"
-) else (
-	call npm run test-extension -- -l terminal-suggest --enable-proposed-api=vscode.vscode-api-tests
-)
-if %errorlevel% neq 0 exit /b %errorlevel%
-:skip_terminal_suggest
-
 call :should_run_suite typescript || goto skip_typescript
 echo.
 echo ### TypeScript tests
@@ -209,27 +195,6 @@ echo ### Emmet tests
 call "%INTEGRATION_TEST_ELECTRON_PATH%" %SCRIPT_DIR%\..\extensions\emmet\test-workspace --extensionDevelopmentPath=%SCRIPT_DIR%\..\extensions\emmet --extensionTestsPath=%SCRIPT_DIR%\..\extensions\emmet\out\test %API_TESTS_EXTRA_ARGS%
 if %errorlevel% neq 0 exit /b %errorlevel%
 :skip_emmet
-
-call :should_run_suite git || goto skip_git
-echo.
-echo ### Git tests
-for /f "delims=" %%i in ('node -p "require('fs').realpathSync.native(require('os').tmpdir())"') do set TEMPDIR=%%i
-set GITWORKSPACE=%TEMPDIR%\git-%RANDOM%
-mkdir %GITWORKSPACE%
-call "%INTEGRATION_TEST_ELECTRON_PATH%" %GITWORKSPACE% --extensionDevelopmentPath=%SCRIPT_DIR%\..\extensions\git --extensionTestsPath=%SCRIPT_DIR%\..\extensions\git\out\test %API_TESTS_EXTRA_ARGS%
-if %errorlevel% neq 0 exit /b %errorlevel%
-:skip_git
-
-call :should_run_suite git-base || goto skip_git_base
-echo.
-echo ### Git Base tests
-if defined GREP_PATTERN (
-	call npm run test-extension -- -l git-base --grep "%GREP_PATTERN%"
-) else (
-	call npm run test-extension -- -l git-base
-)
-if %errorlevel% neq 0 exit /b %errorlevel%
-:skip_git_base
 
 call :should_run_suite ipynb || goto skip_ipynb
 echo.
@@ -274,17 +239,6 @@ if defined GREP_PATTERN (
 )
 if %errorlevel% neq 0 exit /b %errorlevel%
 :skip_github_authentication
-
-call :should_run_suite copilot || goto skip_copilot
-echo.
-echo ### Copilot tests
-if defined GREP_PATTERN (
-	call npm run test-extension -- -l copilot --grep "%GREP_PATTERN%"
-) else (
-	call npm run test-extension -- -l copilot
-)
-if %errorlevel% neq 0 exit /b %errorlevel%
-:skip_copilot
 
 :: Tests standalone (CommonJS)
 

@@ -129,6 +129,7 @@
     "http-proxy-agent": "^7.0.0",
     "https-proxy-agent": "^7.0.2",
     "jschardet": "3.1.4",
+    "jsonc-parser": "3.3.1",
     "katex": "^0.16.22",
     "kerberos": "2.1.1",
     "minimist": "^1.2.8",
@@ -263,10 +264,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/microsoft/vscode.git"
+    "url": "https://github.com/Bc408/BeCoder.git"
   },
   "bugs": {
-    "url": "https://github.com/microsoft/vscode/issues"
+    "url": "https://github.com/Bc408/BeCoder/issues"
   },
   "optionalDependencies": {
     "windows-foreground-love": "0.6.1"

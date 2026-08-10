@@ -91,7 +91,7 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
 			ExeBasename: product.nameShort,
 			RegValueName: product.win32RegValueName,
 			ShellNameShort: product.win32ShellNameShort,
-			AppMutex: product.win32MutexName,
+			AppMutex: (product as typeof product & { win32MutexName?: string }).win32MutexName ?? '',
 			TunnelMutex: product.win32TunnelMutex,
 			TunnelServiceMutex: product.win32TunnelServiceMutex,
 			TunnelApplicationName: product.tunnelApplicationName,
@@ -132,10 +132,39 @@ function defineWin32SetupTasks(arch: string, target: string) {
 	task.task(task.define(`vscode-win32-${arch}-${target}-setup`, task.series(cleanTask, buildWin32Setup(arch, target))));
 }
 
+function buildBeCoderSetup(arch: string): task.CallbackTask {
+	return cb => {
+		const sourcePath = buildPath(arch);
+		const outputPath = setupDir(arch, 'becoder');
+		const toolchainManifest = path.join(sourcePath, 'data', 'toolchains', 'becoder-toolchain-manifest.json');
+		if (!fs.existsSync(toolchainManifest)) {
+			cb?.(new Error(`The staged BeCoder toolchain manifest is missing: ${toolchainManifest}`));
+			return;
+		}
+		fs.mkdirSync(outputPath, { recursive: true });
+		packageInnoSetup(path.join(import.meta.dirname, 'win32', 'becoder.iss'), {
+			definitions: {
+				NameLong: product.nameLong,
+				Version: pkg.version,
+				ExeBasename: product.nameShort,
+				SourceDir: sourcePath,
+				RepoDir: repoPath,
+				OutputDir: outputPath
+			}
+		}, cb as (err?: Error | null) => void);
+	};
+}
+
+function defineBeCoderSetupTask(arch: string): void {
+	const outputPath = setupDir(arch, 'becoder');
+	task.task(task.define(`vscode-win32-${arch}-becoder-setup`, task.series(util.rimraf(outputPath), buildBeCoderSetup(arch))));
+}
+
 defineWin32SetupTasks('x64', 'system');
 defineWin32SetupTasks('arm64', 'system');
 defineWin32SetupTasks('x64', 'user');
 defineWin32SetupTasks('arm64', 'user');
+defineBeCoderSetupTask('x64');
 
 function copyInnoUpdater(arch: string) {
 	return () => {

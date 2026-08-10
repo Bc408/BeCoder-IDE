@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { suite, test } from 'node:test';
 
@@ -857,6 +859,10 @@ suite('OI extension boundary', () => {
 		const displayLanguageSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'becoder', 'electron-browser', 'beCoderDisplayLanguage.contribution.ts'), 'utf8');
 		assert.match(displayLanguageSource, /ConfigurationTarget\.USER_LOCAL/);
 		assert.match(displayLanguageSource, /BeCoderSimplifiedChineseLanguagePackId/);
+		assert.match(displayLanguageSource, /await this\.extensionService\.whenInstalledExtensionsRegistered\(\)/);
+		assert.ok(displayLanguageSource.indexOf('whenInstalledExtensionsRegistered()') < displayLanguageSource.indexOf('await this.updateSetting(toBeCoderDisplayLanguage(Language.value()))'));
+		assert.match(displayLanguageSource, /BeCoderSetupExtensionId/);
+		assert.match(displayLanguageSource, /this\.logService\.error/);
 		assert.match(displayLanguageSource, /setLocale\(languagePack, false, \(\) => this\.controller\.isLatestRequest\(language\)\)/);
 
 		const localeServiceSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'localization', 'electron-browser', 'localeService.ts'), 'utf8');
@@ -1024,16 +1030,22 @@ suite('OI extension boundary', () => {
 		const setupManifest = readJson<{
 			contributes?: { configurationDefaults?: Record<string, unknown> };
 		}>(path.join(extensionsRoot, 'becoder.setup', 'package.json'));
-		assert.deepStrictEqual(setupManifest.contributes?.configurationDefaults, {
-			'editor.unicodeHighlight.nonBasicASCII': false,
-			'editor.unicodeHighlight.ambiguousCharacters': false,
-			'editor.unicodeHighlight.invisibleCharacters': true
+		const setupDefaults = setupManifest.contributes?.configurationDefaults ?? {};
+		assert.deepStrictEqual({
+			nonBasicASCII: setupDefaults['editor.unicodeHighlight.nonBasicASCII'],
+			ambiguousCharacters: setupDefaults['editor.unicodeHighlight.ambiguousCharacters'],
+			invisibleCharacters: setupDefaults['editor.unicodeHighlight.invisibleCharacters']
+		}, {
+			nonBasicASCII: false,
+			ambiguousCharacters: false,
+			invisibleCharacters: true
 		});
+		assert.ok(!Object.hasOwn(setupDefaults, 'files.exclude'));
 		const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
 		assert.doesNotMatch(mainSource, /createBeCoderClangdConfig|createBeCoderClangFormatConfig/);
 		assert.doesNotMatch(mainSource, /'clangd\.(?:path|arguments|fallbackFlags|enable)'/);
-		const firstRunSource = fs.readFileSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'first-run.html'), 'utf8');
-		assert.doesNotMatch(firstRunSource, /create \.clangd|创建 \.clangd|clangdVariableTypeHints/);
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'first-run.html')));
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'first-run-preload.js')));
 	});
 
 	test('owns Stage 4.2 diagnostics in a private bundled GCC extension', () => {
@@ -1116,6 +1128,16 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(processSource, /powershell(?:\.exe)?|cmd(?:\.exe)?/i);
 		assert.match(processSource, /'runtime-error'/);
 		assert.match(processSource, /new Osc633Filter\(\)/);
+		assert.match(processSource, /finalizePublishedExecutable/);
+		assert.match(processSource, /publishedExecutableIdentity/);
+		assert.ok(processSource.indexOf('readExecutableIdentity(stagingPath)') < processSource.indexOf('dependencies.rename(stagingPath, destination)'));
+		assert.ok(processSource.indexOf('dependencies.rename(stagingPath, destination)') < processSource.indexOf('readExecutableIdentity(destination)'));
+		assert.match(processSource, /samePublishedFileIdentity\(stagingIdentity, destinationIdentity\)/);
+		assert.match(processSource, /sameExecutableIdentity\(currentIdentity, result\.publishedExecutableIdentity\)[\s\S]*fs\.rmSync\(executablePath/);
+		assert.match(processSource, /fs\.rmSync\(executablePath/);
+		assert.doesNotMatch(processSource, /finally \{[\s\S]*removePath\(\s*request\.source\.executablePath/);
+		assert.match(managerSource, /performWhileOpen/);
+		assert.match(managerSource, /finalizePublishedExecutable/);
 		assert.match(fs.readFileSync(path.join(extensionPath, 'src', 'terminalVisuals.ts'), 'utf8'), /===== \$\{message\} =====/);
 		for (const obsoleteFile of [
 			'resources/becoder-runner.ps1',
@@ -1129,5 +1151,324 @@ suite('OI extension boundary', () => {
 			repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'files', 'browser', 'views', 'explorerViewer.ts'), 'utf8');
 		assert.ok(explorerSource.indexOf('comparePinnedInput(statA, statB)') < explorerSource.indexOf('const reverse ='));
 		assert.match(explorerSource, /stat\.name === 'input' && !stat\.isDirectory && !stat\.isSymbolicLink && !stat\.isUnknown/);
+	});
+
+	test('owns the Stage 4.7 Explorer, startup, toolchain, and branding boundary', () => {
+		const setupPath = path.join(extensionsRoot, 'becoder.setup');
+		const setupManifest = readJson<{
+			contributes?: {
+				configurationDefaults?: Record<string, unknown>;
+				configuration?: { properties?: Record<string, unknown> };
+				commands?: readonly { command?: string }[];
+				menus?: Record<string, readonly { command?: string; when?: string }[]>;
+			};
+		}>(path.join(setupPath, 'package.json'));
+		const defaults = setupManifest.contributes?.configurationDefaults ?? {};
+		assert.ok(!Object.hasOwn(defaults, 'files.exclude'));
+		assert.deepStrictEqual(defaults['becoder.runner.cppFlags'], ['-O2', '-Wall', '-DDEBUG']);
+		assert.deepStrictEqual(defaults['becoder.runner.cFlags'], ['-O2', '-Wall', '-DDEBUG']);
+		assert.ok(!Object.hasOwn(setupManifest.contributes?.configuration?.properties ?? {}, 'becoder.setup.completed'));
+		assert.ok(!Object.hasOwn(setupManifest.contributes?.configuration?.properties ?? {}, 'becoder.setup.pending'));
+		assert.ok(!setupManifest.contributes?.commands?.some(command => command.command === 'becoder.rerunFirstRunSetup'));
+		assert.deepStrictEqual(
+			setupManifest.contributes?.menus?.['view/title']?.map(item => ({ command: item.command, when: item.when })),
+			[
+				{ command: 'becoder.showAllFiles', when: 'view == workbench.explorer.fileView && becoder.filesHiddenByBeCoder' },
+				{ command: 'becoder.hideSetupFiles', when: 'view == workbench.explorer.fileView && !becoder.filesHiddenByBeCoder' }
+			]
+		);
+
+		const visibilitySource = fs.readFileSync(path.join(setupPath, 'src', 'fileVisibility.ts'), 'utf8');
+		for (const pattern of ['**/.*', '**/*.exe', '**/*.bin', '**/*.bin.dSYM', '**/*.dSYM']) {
+			assert.ok(visibilitySource.includes(`'${pattern}'`), `Missing managed Explorer pattern: ${pattern}`);
+		}
+		assert.match(visibilitySource, /updatedExcludes\[pattern\] !== true/);
+		assert.match(visibilitySource, /state\?\.version === 1/);
+
+		const setupSource = fs.readFileSync(path.join(setupPath, 'src', 'extension.ts'), 'utf8');
+		assert.match(setupSource, /vscode\.ConfigurationTarget\.Global/);
+		assert.doesNotMatch(setupSource, /vscode\.ConfigurationTarget\.(?:Workspace|WorkspaceFolder)/);
+		assert.doesNotMatch(setupSource, /becoder\.setup\.(?:completed|pending)|rerunFirstRunSetup|first-run/);
+		for (const command of ['becoder.exportUserData', 'becoder.importUserData']) {
+			assert.ok(setupManifest.contributes?.commands?.some(candidate => candidate.command === command));
+		}
+		assert.ok(!setupManifest.contributes?.commands?.some(command => ['becoder.setupEnvironment', 'becoder.redetectToolchain', 'becoder.repairToolchain'].includes(command.command ?? '')));
+
+		for (const removedResource of ['first-run.html', 'first-run-preload.js']) {
+			assert.ok(!fs.existsSync(path.join(repositoryRoot, 'resources', 'oi-defaults', removedResource)));
+		}
+		for (const obsoleteResource of ['windows.js', 'windows.json', 'mac.js', 'mac.json', 'linux.js', 'linux.json']) {
+			assert.ok(!fs.existsSync(path.join(setupPath, 'resources', obsoleteResource)));
+		}
+
+		const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
+		assert.doesNotMatch(mainSource, /ipcMain\.(?:on|handle|removeHandler|removeListener)/);
+		assert.doesNotMatch(mainSource, /becoder:onboarding|becoder\.setup\.(?:completed|pending)|showBeCoderFirstRun|onboardingWorkspaceFolder/);
+		assert.doesNotMatch(mainSource, /prepareBeCoderWindowsToolchain|installBeCoderPortableAssets|extractBeCoderAsset|becoder-(?:repair-requested|preparation-error|toolchain-ready)/);
+		const toolchainSource = fs.readFileSync(path.join(setupPath, 'src', 'toolchain.ts'), 'utf8');
+		for (const requiredToolchainFile of ['bin/g++.exe', 'bin/gcc.exe', 'x86_64-w64-mingw32/bits/stdc++.h', 'bits/debugger.h', 'clangd_22.1.6/bin/clangd.exe']) {
+			assert.ok(toolchainSource.includes(requiredToolchainFile), `Windows toolchain readiness omits ${requiredToolchainFile}`);
+		}
+		assert.match(toolchainSource, /Get BeCoder Setup/);
+		assert.doesNotMatch(toolchainSource, /Repair Toolchain|Retry|extract|download/i);
+
+		const buildToolchainSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'becoderToolchain.ts'), 'utf8');
+		assert.match(buildToolchainSource, /stageBeCoderWindowsToolchain/);
+		assert.match(buildToolchainSource, /stageSlimCompiler/);
+		assert.match(buildToolchainSource, /collectToolchainFiles/);
+		assert.match(buildToolchainSource, /schemaVersion: 2/);
+		assert.match(buildToolchainSource, /const compilerBinFiles = \[/);
+		for (const forbiddenCompilerPayload of ['python.exe', 'objdump.exe', 'lto1.exe', 'lto-wrapper.exe']) {
+			assert.ok(!buildToolchainSource.match(new RegExp(`compilerBinFiles = \\[\\s\\S]*?'${forbiddenCompilerPayload.replaceAll('.', '\\\.')}'`)));
+		}
+		assert.match(buildToolchainSource, /becoder-toolchain-manifest\.json/);
+		const setupScript = fs.readFileSync(path.join(repositoryRoot, 'build', 'win32', 'becoder.iss'), 'utf8');
+		assert.match(setupScript, /PrivilegesRequired=lowest/);
+		assert.match(setupScript, /Uninstallable=no/);
+		assert.match(setupScript, /CreateUninstallRegKey=no/);
+		assert.doesNotMatch(setupScript, /^AppId=/m);
+		assert.doesNotMatch(setupScript, /^\[Tasks\]$/m);
+		assert.doesNotMatch(setupScript, /^\[Icons\]$/m);
+		assert.doesNotMatch(setupScript, /^\[Registry\]$/m);
+		assert.doesNotMatch(setupScript, /^\[UninstallDelete\]$/m);
+		assert.doesNotMatch(setupScript, /DesktopShortcut|autodesktop|DefaultGroupName/);
+		assert.doesNotMatch(setupScript, /InitializeUninstall|UninstallWarning|SilentUninstall|uninstallexe|ScheduleMovedInstallationRemoval/);
+		assert.doesNotMatch(setupScript, /\bReg(?:Write|Delete)\w*\s*\(/i);
+		for (const previousSetting of ['AppDir', 'Group', 'Language', 'Privileges', 'SetupType', 'Tasks', 'UserInfo']) {
+			assert.match(setupScript, new RegExp(`UsePrevious${previousSetting}=no`));
+		}
+		assert.match(setupScript, /\.becoder-installation\.json/);
+		assert.match(setupScript, /schemaVersion\\?":2/);
+		assert.match(setupScript, /installationId/);
+		assert.match(setupScript, /CoCreateGuid/);
+		assert.match(setupScript, /TryReadInstallationId/);
+		assert.match(setupScript, /MaximumInstallPathLength = 70/);
+		assert.match(setupScript, /GetFileAttributesW/);
+		assert.match(setupScript, /FileAttributeReparsePoint/);
+		assert.match(setupScript, /GetLongPathNameW/);
+		assert.match(setupScript, /TryResolveSupportedInstallPath/);
+		assert.strictEqual(setupScript.match(/TryResolveSupportedInstallPath\(WizardDirValue, Target\)/g)?.length, 2);
+		const nextButtonClick = setupScript.match(/function NextButtonClick\(CurPageID: Integer\): Boolean;[\s\S]*?\r?\nend;\r?\n\r?\nfunction PrepareToInstall/)?.[0];
+		assert.ok(nextButtonClick);
+		for (const message of ['UnsafeDirectory', 'UnsupportedPath', 'ForeignDirectory']) {
+			assert.match(nextButtonClick, new RegExp(`SuppressibleMsgBox\\(ExpandConstant\\('\\{cm:${message}\\}'\\), mbError, MB_OK, IDOK\\)`));
+		}
+		assert.doesNotMatch(nextButtonClick, /\bMsgBox\(/);
+		assert.match(setupScript, /\(not WizardSilent\) and \(MsgBox\(ExpandConstant\('\{cm:ReplaceWarning\}'\), mbConfirmation, MB_YESNO or MB_DEFBUTTON2\) <> IDYES\)/);
+		assert.match(setupScript, /Ord\(Value\[Index\]\) > 127/);
+		assert.match(setupScript, /DelTree\(Target, True, True, True\)/);
+		assert.match(setupScript, /BECODERALLOWDATALOSS=1/);
+		assert.match(setupScript, /WizardSilent and not HasDataLossConsent\(\)/);
+		assert.match(setupScript, /SaveStringToFile[\s\S]*RaiseException/);
+		assert.match(setupScript, /ReplaceDeleteFailed/);
+		for (const forbiddenSetupCapability of ['ChangesAssociations=yes', 'ChangesEnvironment=yes', 'addtopath', 'addcontextmenu', 'Software\\Classes', 'App Paths', 'URL Protocol', 'scheduled task']) {
+			assert.ok(!setupScript.toLowerCase().includes(forbiddenSetupCapability.toLowerCase()), `Setup contains forbidden integration: ${forbiddenSetupCapability}`);
+		}
+		const productConfiguration = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
+		assert.ok(!Object.hasOwn(productConfiguration, 'win32MutexName'));
+		const installationIdentitySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'node', 'beCoderInstallation.ts'), 'utf8');
+		assert.match(installationIdentitySource, /schemaVersion !== 2/);
+		assert.match(installationIdentitySource, /resolveBeCoderAppUserModelId/);
+		assert.ok(installationIdentitySource.indexOf('lstat(journalPath)') < installationIdentitySource.indexOf('userDataImportHelper.js'));
+		assert.match(installationIdentitySource, /journal\.isFile\(\)[\s\S]*journal\.isSymbolicLink\(\)/);
+		assert.match(installationIdentitySource, /helper\.isFile\(\)[\s\S]*helper\.isSymbolicLink\(\)/);
+		const startupSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main.ts'), 'utf8');
+		const packagedDataBinding = startupSource.indexOf('configureBeCoderPackagedDataRoot({');
+		assert.ok(packagedDataBinding >= 0);
+		assert.ok(packagedDataBinding < startupSource.indexOf('configurePortable(product)'));
+		assert.ok(packagedDataBinding < startupSource.indexOf('parseCLIArgs()'));
+		assert.ok(packagedDataBinding < startupSource.indexOf('getUserDataPath(args'));
+		assert.match(installationIdentitySource, /mkdirSync\(dataRoot, \{ recursive: true \}\)[\s\S]*environment\['VSCODE_PORTABLE'\] = dataRoot[\s\S]*delete options\.environment\['VSCODE_APPDATA'\]/);
+		const applicationSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
+		assert.match(applicationSource, /app\.setAppUserModelId\(resolveBeCoderAppUserModelId\(win32AppUserModelId, process\.execPath\)\)/);
+		assert.ok(!Object.hasOwn(setupManifest.contributes?.configuration?.properties ?? {}, 'becoder.executableCleanupDelaySeconds'));
+
+		const portabilitySource = fs.readFileSync(path.join(setupPath, 'src', 'userDataPortability.ts'), 'utf8');
+		assert.match(portabilitySource, /\.becoder-backup/);
+		assert.match(portabilitySource, /helper\.once\('spawn'/);
+		assert.doesNotMatch(portabilitySource, /os\.tmpdir/);
+		assert.match(portabilitySource, /validateImportedPayload\(extractedRoot\)/);
+		for (const excludedData of ['Backups', 'credentials', 'tokens', 'logs', 'caches']) {
+			assert.ok(!portabilitySource.includes(`copyIfPresent(path.join(dataRoot, '${excludedData}`));
+		}
+		const payloadSource = fs.readFileSync(path.join(setupPath, 'src', 'userDataPayload.ts'), 'utf8');
+		assert.match(payloadSource, /from 'jsonc-parser'/);
+		assert.match(payloadSource, /state', 'locale\.json/);
+		assert.match(payloadSource, /prepareImportedPayload/);
+		const importHelperSource = fs.readFileSync(path.join(setupPath, 'src', 'userDataImportHelper.ts'), 'utf8');
+		assert.match(importHelperSource, /name\.startsWith\('ELECTRON_'\)/);
+		assert.match(importHelperSource, /waitForProcesses\(configuration\.waitPids\)[\s\S]*prepareImportedPayload/);
+		assert.match(importHelperSource, /rollback was incomplete/);
+		assert.match(importHelperSource, /\.becoder-data-root/);
+		assert.match(importHelperSource, /Promise\.allSettled/);
+		assert.match(importHelperSource, /importTransactionJournalName = '\.becoder-import-transaction\.json'/);
+		assert.match(importHelperSource, /recoverInterruptedImport/);
+		assert.match(importHelperSource, /@vscode\/windows-mutex/);
+		assert.match(importHelperSource, /ImportTransactionLockActiveError/);
+		assert.match(portabilitySource, /node_modules\.asar\.unpacked/);
+		assert.match(portabilitySource, /environment\['ELECTRON_RUN_AS_NODE'\] = '1'/);
+
+		const electronMainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'main.ts'), 'utf8');
+		assert.match(electronMainSource, /await this\.recoverInterruptedBeCoderImport\(\)[\s\S]*this\.createServices\(\)/);
+		assert.doesNotMatch(electronMainSource, /configureBeCoderPortableMode/);
+		assert.match(electronMainSource, /resolveBeCoderImportRecovery\(dataRoot, applicationRoot\)[\s\S]*spawn\(process\.execPath/);
+		assert.match(electronMainSource, /node_modules\.asar\.unpacked/);
+		assert.match(electronMainSource, /environment\['ELECTRON_RUN_AS_NODE'\] = '1'/);
+		assert.match(importHelperSource, /runImportRecovery[\s\S]*await acquireTransactionLock\(dataRoot\)[\s\S]*recoverTransaction\(resolvedJournalPath\)[\s\S]*transactionLock\.release\(\)/);
+		assert.match(importHelperSource, /process\.argv\[2\] === '--recover'[\s\S]*runImportRecovery\(process\.argv\[3\]\)/);
+		assert.doesNotMatch(electronMainSource, /acquireBeCoderImportTransactionLock/);
+		const setupVerifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-setup.ps1'), 'utf8');
+		assert.match(setupVerifierSource, /New-Item -ItemType Junction/);
+		assert.match(setupVerifierSource, /unicode-junction\.log/);
+		assert.match(setupVerifierSource, /long-junction\.log/);
+		assert.match(setupVerifierSource, /junction target must survive/);
+
+		const checkerBoundary = readJson<{ extends?: string; exclude?: readonly string[] }>(path.join(repositoryRoot, 'build', 'checker', 'tsconfig.becoder.json'));
+		assert.strictEqual(checkerBoundary.extends, '../../src/tsconfig.base.json');
+		assert.deepStrictEqual(checkerBoundary.exclude, [
+			'../../src/**/test/**',
+			'../../src/**/fixtures/**',
+			'../../src/vs/sessions/**',
+			'../../src/vs/platform/agentHost/**',
+			'../../src/vs/platform/agentPlugins/**',
+			'../../src/vs/platform/mcp/**',
+			'../../src/vs/workbench/contrib/agentsVoice/**',
+			'../../src/vs/workbench/contrib/accessibilitySignals/browser/accessibilitySignalDebuggerContribution.ts',
+			'../../src/vs/workbench/contrib/chat/**',
+			'../../src/vs/workbench/contrib/debug/**',
+			'../../src/vs/workbench/contrib/editSessions/**',
+			'../../src/vs/workbench/contrib/editTelemetry/**',
+			'../../src/vs/workbench/contrib/extensions/electron-browser/debugExtensionHostAction.ts',
+			'../../src/vs/workbench/contrib/inlineChat/**',
+			'../../src/vs/workbench/contrib/inlineCompletions/browser/inlineCompletionLanguageStatusBarContribution.ts',
+			'../../src/vs/workbench/contrib/mcp/**',
+			'../../src/vs/workbench/contrib/remoteCodingAgents/**',
+			'../../src/vs/workbench/contrib/replNotebook/**',
+			'../../src/vs/workbench/contrib/markers/browser/markersChatContext.ts',
+			'../../src/vs/workbench/contrib/notebook/browser/controller/chat/**',
+			'../../src/vs/workbench/contrib/notebook/browser/contrib/debug/**',
+			'../../src/vs/workbench/contrib/notebook/browser/contrib/chat/**',
+			'../../src/vs/workbench/contrib/notebook/browser/contrib/editorHint/emptyCellEditorHint.ts',
+			'../../src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/**',
+			'../../src/vs/workbench/contrib/notebook/browser/view/cellParts/chat/**',
+			'../../src/vs/workbench/contrib/scm/browser/scmHistoryChatContext.ts',
+			'../../src/vs/workbench/contrib/search/browser/searchChatContext.ts',
+			'../../src/vs/workbench/contrib/terminal/browser/chatTerminalCommandMirror.ts',
+			'../../src/vs/workbench/contrib/terminalContrib/chat/**',
+			'../../src/vs/workbench/contrib/terminalContrib/chatAgentTools/**',
+			'../../src/vs/workbench/contrib/surveys/browser/survey.contribution.ts',
+			'../../src/vs/workbench/contrib/welcomeAgentSessions/**',
+			'../../src/vs/workbench/services/agentHost/**',
+			'../../src/vs/workbench/services/aiEmbeddingVector/**',
+			'../../src/vs/workbench/services/aiRelatedInformation/**',
+			'../../src/vs/workbench/services/aiSettingsSearch/**',
+			'../../src/vs/workbench/services/assignment/common/assignmentFilters.ts',
+			'../../src/vs/workbench/services/chat/**',
+			'../../src/vs/workbench/services/mcp/**',
+			'../../src/vs/workbench/services/policies/browser/accountPolicyGate.contribution.ts',
+			'../../src/vs/workbench/services/policies/browser/accountPolicyGateContribution.ts',
+			'../../src/vs/workbench/api/browser/mainThreadAgent*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadAi*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadChat*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadDebug*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadEmbedding*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadLanguageModel*.ts',
+			'../../src/vs/workbench/api/browser/mainThreadMcp*.ts',
+			'../../src/vs/workbench/api/common/extHostAgent*.ts',
+			'../../src/vs/workbench/api/common/extHostAi*.ts',
+			'../../src/vs/workbench/api/common/extHostChat*.ts',
+			'../../src/vs/workbench/api/common/extHostCodeMapper.ts',
+			'../../src/vs/workbench/api/common/extHostDebug*.ts',
+			'../../src/vs/workbench/api/common/extHostEmbedding*.ts',
+			'../../src/vs/workbench/api/common/extHostLanguageModel*.ts',
+			'../../src/vs/workbench/api/common/extHostMcp*.ts',
+			'../../src/vs/workbench/api/node/extHostDebug*.ts',
+			'../../src/vs/workbench/api/node/extHostMcp*.ts',
+			'../../src/vs/base/parts/sandbox/electron-browser/preload.ts',
+			'../../src/vs/base/parts/sandbox/electron-browser/preload-aux.ts',
+			'../../src/vs/platform/browserView/electron-browser/preload-browserView.ts'
+		]);
+		for (const checkerConfig of ['tsconfig.browser.json', 'tsconfig.worker.json', 'tsconfig.node.json']) {
+			assert.strictEqual(
+				readJson<{ extends?: string }>(path.join(repositoryRoot, 'build', 'checker', checkerConfig)).extends,
+				'./tsconfig.becoder.json'
+			);
+		}
+
+		const product = readJson<{ licenseUrl?: string; serverLicenseUrl?: string; reportIssueUrl?: string }>(path.join(repositoryRoot, 'product.json'));
+		assert.strictEqual(product.licenseUrl, 'https://github.com/Bc408/BeCoder/blob/main/LICENSE');
+		assert.strictEqual(product.serverLicenseUrl, 'https://github.com/Bc408/BeCoder/blob/main/LICENSE');
+		assert.strictEqual(product.reportIssueUrl, 'https://github.com/Bc408/BeCoder/issues/new');
+		const packageManifest = readJson<{ repository?: { url?: string }; bugs?: { url?: string } }>(path.join(repositoryRoot, 'package.json'));
+		assert.strictEqual(packageManifest.repository?.url, 'https://github.com/Bc408/BeCoder.git');
+		assert.strictEqual(packageManifest.bugs?.url, 'https://github.com/Bc408/BeCoder/issues');
+	});
+
+	test('enumerates only real Windows shortcut files in Setup snapshots', { skip: process.platform !== 'win32' }, () => {
+		const verifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-setup.ps1'), 'utf8');
+		const shortcutFunction = verifierSource.match(/^function Get-ShortcutSnapshot \{[\s\S]*?^\}/m)?.[0];
+		assert.ok(shortcutFunction, 'Setup verifier shortcut snapshot function is missing');
+		assert.match(shortcutFunction, /GetFolderPath\('Desktop'\)/);
+		assert.match(shortcutFunction, /GetFolderPath\('StartMenu'\)/);
+		assert.match(shortcutFunction, /-Filter '\*\.lnk' -File -Recurse/);
+		assert.match(shortcutFunction, /Get-FileHash -LiteralPath \$_\.FullName -Algorithm SHA256/);
+		assert.doesNotMatch(shortcutFunction, /-Filter '\*BeCoder\*'/);
+		assert.match(verifierSource, /if \(Compare-Object \$shortcutsBefore \$shortcutsAfter\)/);
+
+		const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-shortcut-snapshot-'));
+		const desktopRoot = path.join(testRoot, 'Desktop');
+		const startMenuRoot = path.join(testRoot, 'Start Menu');
+		fs.mkdirSync(path.join(desktopRoot, 'BeCoder B'), { recursive: true });
+		fs.mkdirSync(path.join(startMenuRoot, 'Programs', 'BeCoder'), { recursive: true });
+		const ordinaryFile = path.join(desktopRoot, 'BeCoder B.txt');
+		const desktopShortcut = path.join(desktopRoot, 'BeCoder.lnk');
+		const startMenuShortcut = path.join(startMenuRoot, 'Programs', 'BeCoder', 'BeCoder.lnk');
+		fs.writeFileSync(ordinaryFile, 'not a shortcut');
+		fs.writeFileSync(desktopShortcut, 'shortcut fixture');
+		fs.writeFileSync(startMenuShortcut, 'shortcut fixture');
+		const snapshotEntry = (filePath: string): string => `${filePath}|${createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase()}`;
+
+		const getSnapshot = (): string[] => {
+			const functionBase64 = Buffer.from(shortcutFunction, 'utf8').toString('base64');
+			const pathsBase64 = Buffer.from(JSON.stringify([desktopRoot, startMenuRoot]), 'utf8').toString('base64');
+			const command = [
+				"$functionSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_FUNCTION))",
+				'Invoke-Expression $functionSource',
+				"$paths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_PATHS)) | ConvertFrom-Json",
+				'$snapshot = @(Get-ShortcutSnapshot -Paths $paths)',
+				'ConvertTo-Json -InputObject $snapshot -Compress'
+			].join('; ');
+			const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					BECODER_SHORTCUT_FUNCTION: functionBase64,
+					BECODER_SHORTCUT_PATHS: pathsBase64
+				}
+			});
+			assert.ifError(result.error);
+			assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+			return JSON.parse(result.stdout.trim()) as string[];
+		};
+
+		try {
+			const before = getSnapshot();
+			assert.deepStrictEqual(before, [snapshotEntry(desktopShortcut), snapshotEntry(startMenuShortcut)].sort());
+			assert.ok(!before.includes(path.join(desktopRoot, 'BeCoder B')));
+			assert.ok(!before.includes(ordinaryFile));
+
+			const addedShortcut = path.join(startMenuRoot, 'BeCoder B.lnk');
+			fs.writeFileSync(addedShortcut, 'new shortcut fixture');
+			const after = getSnapshot();
+			assert.deepStrictEqual(after, [snapshotEntry(addedShortcut), snapshotEntry(desktopShortcut), snapshotEntry(startMenuShortcut)].sort());
+			assert.notDeepStrictEqual(after, before);
+
+			fs.writeFileSync(desktopShortcut, 'changed shortcut fixture');
+			const changed = getSnapshot();
+			assert.deepStrictEqual(changed, [snapshotEntry(addedShortcut), snapshotEntry(desktopShortcut), snapshotEntry(startMenuShortcut)].sort());
+			assert.notDeepStrictEqual(changed, after);
+		} finally {
+			fs.rmSync(testRoot, { recursive: true, force: true });
+		}
 	});
 });

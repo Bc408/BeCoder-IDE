@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { suite, test } from 'node:test';
 
-import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart, Osc633Filter, renderBcCommand, renderBcPrompt, renderBcStatus } from '../src/terminalVisuals';
+import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart, Osc633Filter, renderBcCommand, renderBcFlowFailure, renderBcPrompt, renderBcStatus } from '../src/terminalVisuals';
 
 suite('BC terminal visuals', () => {
 	test('colors supported command parts and clearly invalid input', () => {
@@ -27,7 +27,23 @@ suite('BC terminal visuals', () => {
 		assert.strictEqual(stripAnsi(renderBcPrompt('\\\\server\\share')), 'BC \\\\server\\share> ');
 		assert.strictEqual(stripAnsi(renderBcPrompt('/workspace')), 'BC /workspace> ');
 		assert.match(renderBcStatus('Run Complete', 'success'), /^\x1b\[92m===== Run Complete =====\x1b\[0m$/);
+		assert.match(renderBcStatus('Executable Program Removed', 'success'), /^\x1b\[92m===== Executable Program Removed =====\x1b\[0m$/);
 		assert.match(renderBcStatus('Runtime Error (exit code 7)', 'error'), /^\x1b\[91m===== Runtime Error \(exit code 7\) =====\x1b\[0m$/);
+	});
+
+	test('renders fixed Runner flow failures entirely in yellow and resets the color', () => {
+		const failures = [
+			['Unable to Start', 'Old .exe is in use, run cancelled, close it and retry'],
+			['Compilation Failed', 'No executable remains, build artifacts removed'],
+			['Executable Creation Failed', 'New .exe creation failed, build artifacts removed, no stale executable will run'],
+			['Cleanup Failed', 'Could not remove .exe, close the related process and retry']
+		] as const;
+		for (const [title, description] of failures) {
+			const rendered = renderBcFlowFailure(title, description);
+			assert.strictEqual(rendered, `\x1b[93m===== ${title} =====\r\n${description}\x1b[0m`);
+			assert.ok(rendered.endsWith('\x1b[0m'));
+			assert.strictEqual(`${rendered}plain`, `\x1b[93m===== ${title} =====\r\n${description}\x1b[0mplain`);
+		}
 	});
 
 	test('emits complete OSC 633 command lifecycle markers', () => {

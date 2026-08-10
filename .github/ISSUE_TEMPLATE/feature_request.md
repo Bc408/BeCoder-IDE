@@ -1,14 +1,15 @@
 ---
-name: Feature request
-about: Suggest an idea for this project
+name: BeCoder feature request
+about: Propose a BeCoder product improvement
 title: ''
 labels: ''
 assignees: ''
-
 ---
 
-<!-- ⚠️⚠️ Do Not Delete This! feature_request_template ⚠️⚠️ -->
-<!-- Please read our Rules of Conduct: https://opensource.microsoft.com/codeofconduct/ -->
-<!-- Please search existing issues to avoid creating duplicates. -->
+Problem or workflow to improve:
 
-<!-- Describe the feature you'd like. -->
+Proposed behavior:
+
+Why this belongs in BeCoder rather than a user-installed extension:
+
+Interaction with Runner, native PowerShell, bundled toolchains, project files, or Setup distribution:

@@ -14,16 +14,34 @@ if (-not (Test-Path -LiteralPath $PackagePath -PathType Container)) {
 
 $requiredFiles = @(
 	'BeCoder.exe',
-	'data\toolchains\.gitkeep',
+	'data\.becoder-data-root',
+	'data\toolchains\becoder-toolchain-manifest.json',
+	'data\toolchains\becoder-ucrt64\bin\g++.exe',
+	'data\toolchains\becoder-ucrt64\bin\gcc.exe',
+	'data\toolchains\clangd\clangd_22.1.6\bin\clangd.exe',
 	'resources\app\ThirdPartyNotices.txt',
 	'resources\app\licenses\MIT-VSCode.txt',
+	'resources\app\package.json',
 	'resources\app\product.json',
 	'resources\app\extensions\aadityanarayan.code-snap\package.json',
 	'resources\app\extensions\aadityanarayan.code-snap\LICENSE',
 	'resources\app\extensions\becoder.setup\LICENSE',
+	'resources\app\extensions\becoder.setup\package.json',
 	'resources\app\extensions\becoder.setup\package.nls.json',
 	'resources\app\extensions\becoder.setup\package.nls.zh-cn.json',
 	'resources\app\extensions\becoder.setup\out\extension.js',
+	'resources\app\extensions\becoder.setup\out\fileVisibility.js',
+	'resources\app\extensions\becoder.setup\out\storageDatabase.js',
+	'resources\app\extensions\becoder.setup\out\toolchain.js',
+	'resources\app\extensions\becoder.setup\out\toolchainDiagnostics.js',
+	'resources\app\extensions\becoder.setup\out\toolchainManifest.js',
+	'resources\app\extensions\becoder.setup\out\userDataArchive.js',
+	'resources\app\extensions\becoder.setup\out\userDataImportHelper.js',
+	'resources\app\extensions\becoder.setup\out\userDataPayload.js',
+	'resources\app\extensions\becoder.setup\out\userDataPortability.js',
+	'resources\app\node_modules.asar',
+	'resources\app\node_modules.asar.unpacked\@vscode\sqlite3\build\Release\vscode-sqlite3.node',
+	'resources\app\node_modules.asar.unpacked\@vscode\windows-mutex\build\Release\CreateMutex.node',
 	'resources\app\extensions\becoder.gcc-diagnostics\LICENSE',
 	'resources\app\extensions\becoder.gcc-diagnostics\package.json',
 	'resources\app\extensions\becoder.gcc-diagnostics\package.nls.json',
@@ -41,6 +59,7 @@ $requiredFiles = @(
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\package.json',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\README.md',
 	'resources\app\extensions\llvm-vs-code-extensions.vscode-clangd\out\bundle.js',
+	'resources\app\out\main.js',
 	'resources\app\resources\oi-defaults\BUNDLED-COMPONENTS.json',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-packages.json',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\gcc-libs\COPYING3',
@@ -74,12 +93,99 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $appPath = Join-Path $PackagePath 'resources\app'
+$helperProbePath = Join-Path ([System.IO.Path]::GetTempPath()) "becoder-package-helper-probe-$PID.js"
+$helperProbeOutputPath = "$helperProbePath.stdout"
+$helperProbeErrorPath = "$helperProbePath.stderr"
+$helperProbe = @'
+const path = require('path');
+
+const applicationRoot = process.argv[2];
+require(path.join(applicationRoot, 'extensions', 'becoder.setup', 'out', 'userDataImportHelper.js'));
+const { parse } = require('jsonc-parser');
+if (parse('{"ready":true}').ready !== true) {
+	throw new Error('jsonc-parser did not parse the helper probe.');
+}
+
+const sqlite3 = require('@vscode/sqlite3');
+const WindowsMutex = require('@vscode/windows-mutex');
+const mutexName = `Local\\BeCoder.PackageProbe.${process.pid}`;
+const mutex = new WindowsMutex.Mutex(mutexName);
+if (!mutex.isActive() || !WindowsMutex.isActive(mutexName)) {
+	throw new Error('Windows import transaction mutex probe did not become active.');
+}
+mutex.release();
+if (WindowsMutex.isActive(mutexName)) {
+	throw new Error('Windows import transaction mutex probe did not release.');
+}
+function openDatabase() {
+	return new Promise((resolve, reject) => {
+		const database = new sqlite3.Database(':memory:', error => error ? reject(error) : resolve(database));
+	});
+}
+function run(database, statement, parameters = []) {
+	return new Promise((resolve, reject) => database.run(statement, parameters, error => error ? reject(error) : resolve()));
+}
+function get(database, statement) {
+	return new Promise((resolve, reject) => database.get(statement, (error, row) => error ? reject(error) : resolve(row)));
+}
+function close(database) {
+	return new Promise((resolve, reject) => database.close(error => error ? reject(error) : resolve()));
+}
+
+(async () => {
+	const database = await openDatabase();
+	try {
+		await run(database, 'CREATE TABLE probe (value TEXT NOT NULL)');
+		await run(database, 'INSERT INTO probe (value) VALUES (?)', ['ready']);
+		const row = await get(database, 'SELECT value FROM probe');
+		if (!row || row.value !== 'ready') {
+			throw new Error('SQLite helper probe returned an unexpected value.');
+		}
+	} finally {
+		await close(database);
+	}
+})().catch(error => {
+	console.error(error);
+	process.exitCode = 1;
+});
+'@
+try {
+	[System.IO.File]::WriteAllText($helperProbePath, $helperProbe, [System.Text.UTF8Encoding]::new($false))
+	$previousElectronRunAsNode = $env:ELECTRON_RUN_AS_NODE
+	$previousNodePath = $env:NODE_PATH
+	$previousNodeOptions = $env:NODE_OPTIONS
+	try {
+		$env:ELECTRON_RUN_AS_NODE = '1'
+		$env:NODE_PATH = "$(Join-Path $appPath 'node_modules.asar');$(Join-Path $appPath 'node_modules.asar.unpacked')"
+		Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
+		$probeProcess = Start-Process -FilePath (Join-Path $PackagePath 'BeCoder.exe') `
+			-ArgumentList @("`"$helperProbePath`"", "`"$appPath`"") `
+			-Wait -PassThru -WindowStyle Hidden `
+			-RedirectStandardOutput $helperProbeOutputPath `
+			-RedirectStandardError $helperProbeErrorPath
+		if ($probeProcess.ExitCode -ne 0) {
+			$probeOutput = @(
+				Get-Content -LiteralPath $helperProbeOutputPath -Raw -ErrorAction SilentlyContinue
+				Get-Content -LiteralPath $helperProbeErrorPath -Raw -ErrorAction SilentlyContinue
+			) -join "`n"
+			throw "The packaged BeCoder import helper dependency probe failed with exit code $($probeProcess.ExitCode).`n$probeOutput"
+		}
+	} finally {
+		if ($null -eq $previousElectronRunAsNode) { Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue } else { $env:ELECTRON_RUN_AS_NODE = $previousElectronRunAsNode }
+		if ($null -eq $previousNodePath) { Remove-Item Env:NODE_PATH -ErrorAction SilentlyContinue } else { $env:NODE_PATH = $previousNodePath }
+		if ($null -eq $previousNodeOptions) { Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue } else { $env:NODE_OPTIONS = $previousNodeOptions }
+	}
+} finally {
+	Remove-Item -LiteralPath $helperProbePath, $helperProbeOutputPath, $helperProbeErrorPath -Force -ErrorAction SilentlyContinue
+}
+
 $packagedNotices = Get-Content -LiteralPath (Join-Path $appPath 'ThirdPartyNotices.txt') -Raw
 foreach ($requiredNotice in @(
 	'BeCoder Runner 0.3.0',
 	'CodeSnap 1.3.4',
 	'clangd 22.1.6 Windows binary bundle',
-	'BeCoder UCRT64 GCC 14.1.0 bundle'
+	'BeCoder UCRT64 GCC 14.1.0 bundle',
+	'jsonc-parser 3.3.1'
 )) {
 	if (-not $packagedNotices.Contains($requiredNotice)) {
 		throw "The packaged third-party notices are missing the required entry: $requiredNotice"
@@ -120,10 +226,19 @@ if (($runnerEditorActions -join ',') -ne 'becoder.runner.run,becoder.runner.runW
 	throw "The packaged editor title must contain exactly the two BC Run actions: $($runnerEditorActions -join ',')"
 }
 $runnerBundle = Get-Content -LiteralPath (Join-Path $runnerPath 'dist\extension.js') -Raw
-foreach ($requiredBoundary in @('BeCoder Runner Trace', '-Wall', '-DDEBUG', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always', 'taskkill.exe', 'runtime-error', 'Compilation Successful, Running', 'Run Complete', 'Runtime Error', 'Executable Program Removed', '===== ', ']633;')) {
+foreach ($requiredBoundary in @('BeCoder Runner Trace', '-Wall', '-DDEBUG', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always', 'taskkill.exe', 'runtime-error', 'publishedExecutable', 'performWhileOpen', 'Compilation Successful, Running', 'Run Complete', 'Runtime Error', 'Executable Program Removed', 'Unable to Start', 'Old .exe is in use, run cancelled, close it and retry', 'Compilation Failed', 'No executable remains, build artifacts removed', 'Executable Creation Failed', 'New .exe creation failed, build artifacts removed, no stale executable will run', 'Cleanup Failed', 'Could not remove .exe, close the related process and retry', '===== ', ']633;')) {
 	if (-not $runnerBundle.Contains($requiredBoundary)) {
 		throw "The packaged Runner extension is missing boundary content: $requiredBoundary"
 	}
+}
+foreach ($obsoleteRunnerBoundary in @('cleanupExecutable', 'No executable generated, build artifacts and old .exe removed', 'canRemove')) {
+	if ($runnerBundle.Contains($obsoleteRunnerBoundary)) {
+		throw "The packaged Runner extension still contains obsolete executable cleanup behavior: $obsoleteRunnerBoundary"
+	}
+}
+$runnerProperties = $runnerManifest.contributes.configuration.properties.PSObject.Properties.Name
+if ($runnerProperties -contains 'becoder.runner.cleanupExecutable') {
+	throw 'The packaged Runner still exposes the obsolete executable cleanup setting.'
 }
 foreach ($requiredDiagnosticBoundary in @('-DDEBUGER_H', 'diagnostic-include')) {
 	if (-not $gccDiagnosticsBundle.Contains($requiredDiagnosticBoundary)) {
@@ -180,6 +295,97 @@ if ($setupDefaults.'editor.unicodeHighlight.nonBasicASCII' -ne $false -or
 	$setupDefaults.'editor.unicodeHighlight.invisibleCharacters' -ne $true) {
 	throw 'The packaged BeCoder Unicode highlighting defaults are invalid.'
 }
+if ($setupDefaults.PSObject.Properties.Name -contains 'files.exclude') {
+	throw 'The packaged BeCoder defaults must not hide Explorer files before an explicit user command.'
+}
+if ((@($setupDefaults.'becoder.runner.cppFlags') -join ',') -ne '-O2,-Wall,-DDEBUG' -or
+	(@($setupDefaults.'becoder.runner.cFlags') -join ',') -ne '-O2,-Wall,-DDEBUG') {
+	throw 'The packaged BeCoder Runner defaults do not match the accepted contest profile.'
+}
+if ($setupDefaults.PSObject.Properties.Name -contains 'becoder.runner.cleanupExecutable') {
+	throw 'The packaged BeCoder defaults still expose executable cleanup as an optional setting.'
+}
+$setupProperties = $setupManifest.contributes.configuration.properties.PSObject.Properties.Name
+if ($setupProperties -contains 'becoder.setup.completed' -or $setupProperties -contains 'becoder.setup.pending') {
+	throw 'The packaged Setup extension still exposes removed first-launch state.'
+}
+$setupCommands = @($setupManifest.contributes.commands | ForEach-Object { $_.command })
+if ($setupCommands -contains 'becoder.rerunFirstRunSetup') {
+	throw 'The packaged Setup extension still exposes the removed first-launch command.'
+}
+foreach ($requiredExplorerCommand in @('becoder.showAllFiles', 'becoder.hideSetupFiles')) {
+	if ($setupCommands -notcontains $requiredExplorerCommand) {
+		throw "The packaged Setup extension is missing Explorer command: $requiredExplorerCommand"
+	}
+}
+$setupExplorerMenu = @($setupManifest.contributes.menus.'view/title')
+if (-not ($setupExplorerMenu | Where-Object { $_.command -eq 'becoder.showAllFiles' -and $_.when -eq 'view == workbench.explorer.fileView && becoder.filesHiddenByBeCoder' }) -or
+	-not ($setupExplorerMenu | Where-Object { $_.command -eq 'becoder.hideSetupFiles' -and $_.when -eq 'view == workbench.explorer.fileView && !becoder.filesHiddenByBeCoder' })) {
+	throw 'The packaged Setup extension does not expose the owned Explorer hide/show menu states.'
+}
+$setupNls = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\package.nls.json') -Encoding utf8 -Raw | ConvertFrom-Json
+$setupNlsZhCn = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\package.nls.zh-cn.json') -Encoding utf8 -Raw | ConvertFrom-Json
+foreach ($requiredExplorerLabel in @('command.showAllFiles', 'command.hideSetupFiles')) {
+	if (-not $setupNls.$requiredExplorerLabel -or -not $setupNlsZhCn.$requiredExplorerLabel) {
+		throw "The packaged Setup extension is missing a bilingual Explorer label: $requiredExplorerLabel"
+	}
+}
+$setupBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\extension.js') -Raw
+if (-not $setupBundle.Contains('becoder.filesHiddenByBeCoder')) {
+	throw 'The packaged Setup extension is missing the Explorer ownership context.'
+}
+if ($setupBundle -notmatch 'require\(["'']\./fileVisibility["'']\)') {
+	throw 'The packaged Setup extension does not load its Explorer visibility implementation.'
+}
+$fileVisibilityBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\fileVisibility.js') -Raw
+$managedExplorerFilesMatch = [regex]::Match(
+	$fileVisibilityBundle,
+	'exports\.beCoderHiddenFiles\s*=\s*\{(?<body>[\s\S]*?)\};'
+)
+if (-not $managedExplorerFilesMatch.Success) {
+	throw 'The packaged Setup extension is missing its managed Explorer pattern object.'
+}
+$managedExplorerPatterns = @([regex]::Matches(
+	$managedExplorerFilesMatch.Groups['body'].Value,
+	'["''](?<pattern>[^"'']+)["'']\s*:\s*true'
+) | ForEach-Object { $_.Groups['pattern'].Value })
+$requiredExplorerPatterns = @('**/.*', '**/*.exe', '**/*.bin', '**/*.bin.dSYM', '**/*.dSYM')
+if (($managedExplorerPatterns -join ',') -ne ($requiredExplorerPatterns -join ',')) {
+	throw "The packaged Setup extension has an unexpected managed Explorer pattern set: $($managedExplorerPatterns -join ',')"
+}
+foreach ($removedSetupBoundary in @('becoder.setup.completed', 'becoder.setup.pending', 'rerunFirstRunSetup', 'first-run.html', 'first-run-preload.js')) {
+	if ($setupBundle.Contains($removedSetupBoundary)) {
+		throw "The packaged Setup extension contains a removed first-launch boundary: $removedSetupBoundary"
+	}
+}
+$setupOutRoot = Join-Path $appPath 'extensions\becoder.setup\out'
+$setupJavaScript = ((Get-ChildItem -LiteralPath $setupOutRoot -Filter '*.js' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n")
+foreach ($removedPreparationBoundary in @('.becoder-repair-requested', '.becoder-preparation-error', '.becoder-toolchain-ready', 'prepareBeCoderWindowsToolchain', '.becoder-asset-ready.json')) {
+	if ($setupJavaScript.Contains($removedPreparationBoundary)) {
+		throw "The packaged Setup extension contains a removed runtime toolchain-preparation boundary: $removedPreparationBoundary"
+	}
+}
+foreach ($requiredSetupCommand in @('becoder.openToolchainDiagnostics', 'becoder.exportUserData', 'becoder.importUserData')) {
+	if ($setupCommands -notcontains $requiredSetupCommand) {
+		throw "The packaged Setup extension is missing command: $requiredSetupCommand"
+	}
+}
+$portabilityBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\userDataPortability.js') -Raw
+$importHelperBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\userDataImportHelper.js') -Raw
+if ($portabilityBundle.Contains('os.tmpdir') -or $importHelperBundle.Contains('os.tmpdir') -or
+	$importHelperBundle -notmatch 'require\(["'']\./userDataPayload["'']\)') {
+	throw 'The packaged user-data transfer path does not keep staging under authenticated BeCoder data or does not defer payload preparation to the detached helper.'
+}
+$toolchainBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchain.js') -Raw
+$toolchainDiagnosticsBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchainDiagnostics.js') -Raw
+foreach ($requiredHealthBoundary in @('becoder-toolchain-manifest.json', 'Get BeCoder Setup', 'Open Diagnostics')) {
+	if (-not $toolchainBundle.Contains($requiredHealthBoundary)) {
+		throw "The packaged installed-toolchain health check is missing: $requiredHealthBoundary"
+	}
+}
+if ($toolchainDiagnosticsBundle -notmatch 'validateInstalledToolchain\)\([^,]+,\s*true\)') {
+	throw 'The packaged diagnostics page does not request explicit full toolchain integrity verification.'
+}
 $displayLanguage = $setupManifest.contributes.configuration.properties.'becoder.displayLanguage'
 if ($displayLanguage.default -ne 'zh-cn' -or
 	(@($displayLanguage.enum) -join ',') -ne 'zh-cn,en' -or
@@ -217,6 +423,16 @@ if ($grammarOwners.Count -ne 1 -or
 }
 
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
+if ($product.licenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
+	$product.serverLicenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
+	$product.reportIssueUrl -ne 'https://github.com/Bc408/BeCoder/issues/new') {
+	throw 'The packaged product contains stale BeCoder license or issue URLs.'
+}
+$packageManifest = Get-Content -LiteralPath (Join-Path $appPath 'package.json') -Raw | ConvertFrom-Json
+if ($packageManifest.repository.url -ne 'https://github.com/Bc408/BeCoder.git' -or
+	$packageManifest.bugs.url -ne 'https://github.com/Bc408/BeCoder/issues') {
+	throw 'The packaged root manifest contains stale repository metadata.'
+}
 if (-not (@($product.onboardingThemes) | Where-Object { $_.id -eq 'becoder-one-monokai' -and $_.themeId -eq 'BeCoder One Monokai' })) {
 	throw 'The packaged onboarding themes do not contain BeCoder One Monokai.'
 }
@@ -254,6 +470,31 @@ if (@($product.builtInExtensionsEnabledWithAutoUpdates).Count -ne 0) {
 }
 if ((@($product.linkProtectionTrustedDomains) -join ',') -ne 'https://open-vsx.org') {
 	throw 'The packaged product does not trust only the approved Open VSX registry domain.'
+}
+
+$appMainBundle = Get-Content -LiteralPath (Join-Path $appPath 'out\main.js') -Raw
+foreach ($requiredImportRecoveryBoundary in @('.becoder-import-transaction.json', 'userDataImportHelper.js', '--recover', 'node_modules.asar.unpacked', 'ELECTRON_RUN_AS_NODE')) {
+	if (-not $appMainBundle.Contains($requiredImportRecoveryBoundary)) {
+		throw "The packaged main process is missing the user-data import recovery boundary: $requiredImportRecoveryBoundary"
+	}
+}
+foreach ($requiredHelperRecoveryBoundary in @('BeCoder.UserDataImport.', '@vscode/windows-mutex', 'runImportRecovery')) {
+	if (-not $importHelperBundle.Contains($requiredHelperRecoveryBoundary)) {
+		throw "The packaged import helper does not own the recovery mutex boundary: $requiredHelperRecoveryBoundary"
+	}
+}
+if ($appMainBundle.Contains('acquireBeCoderImportTransactionLock')) {
+	throw 'The packaged main process still owns the import recovery mutex instead of the recovery helper.'
+}
+foreach ($removedMainBoundary in @('becoder:onboarding', 'becoder.setup.completed', 'becoder.setup.pending', 'first-run.html', 'first-run-preload.js')) {
+	if ($appMainBundle.Contains($removedMainBoundary)) {
+		throw "The packaged main process contains a removed first-launch boundary: $removedMainBoundary"
+	}
+}
+foreach ($removedPreparationBoundary in @('.becoder-repair-requested', '.becoder-preparation-error', '.becoder-toolchain-ready', 'prepareBeCoderWindowsToolchain', '.becoder-asset-ready.json')) {
+	if ($appMainBundle.Contains($removedPreparationBoundary)) {
+		throw "The packaged main process contains a removed runtime toolchain-preparation boundary: $removedPreparationBoundary"
+	}
 }
 
 $clangdExtensionPath = Join-Path $appPath 'extensions\llvm-vs-code-extensions.vscode-clangd'
@@ -391,43 +632,105 @@ if ($LASTEXITCODE -ne 0) {
 	throw 'The packaged Simplified Chinese language pack failed its product-boundary verification.'
 }
 
-$clangdArchiveRelativePath = 'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip'
-$clangdArchivePath = Join-Path $PackagePath $clangdArchiveRelativePath
-if (-not (Test-Path -LiteralPath $clangdArchivePath -PathType Leaf)) {
-	throw "The Windows package is missing the bundled BeCoder clangd archive: $clangdArchiveRelativePath"
-}
-if ((Get-Item -LiteralPath $clangdArchivePath).Length -lt 10MB) {
-	throw "The bundled BeCoder clangd archive is unexpectedly small: $clangdArchiveRelativePath"
-}
 $expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
-if ((Get-FileHash -LiteralPath $clangdArchivePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedClangdHash) {
-	throw 'The bundled clangd archive does not match its pinned SHA-256.'
+$expectedCompilerHash = '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2'
+if (-not $IncludeCompiler) {
+	throw 'Stage 4.7 Setup-only packages must always include the expanded BeCoder toolchain.'
 }
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$clangdZip = [System.IO.Compression.ZipFile]::OpenRead($clangdArchivePath)
-try {
-	if (-not $clangdZip.GetEntry('clangd_22.1.6/LICENSE.TXT')) {
-		throw 'The bundled clangd archive is missing its Apache-2.0 WITH LLVM-exception license.'
+foreach ($obsoleteArchive in @(
+	'resources\app\resources\oi-defaults\toolchains\clangd-windows-22.1.6.zip',
+	'resources\app\resources\oi-defaults\toolchains\becoder-ucrt64.zip'
+)) {
+	if (Test-Path -LiteralPath (Join-Path $PackagePath $obsoleteArchive)) {
+		throw "The staged package contains a forbidden runtime toolchain archive: $obsoleteArchive"
 	}
-} finally {
-	$clangdZip.Dispose()
 }
 
-$compilerRelativePath = 'resources\app\resources\oi-defaults\toolchains\becoder-ucrt64.zip'
-$compilerPath = Join-Path $PackagePath $compilerRelativePath
-if ($IncludeCompiler) {
-	if (-not (Test-Path -LiteralPath $compilerPath -PathType Leaf)) {
-		throw "The Include Compiler package is missing the bundled BeCoder compiler archive: $compilerRelativePath"
+$toolchainRoot = Join-Path $PackagePath 'data\toolchains'
+$toolchainManifestPath = Join-Path $toolchainRoot 'becoder-toolchain-manifest.json'
+$toolchainManifest = Get-Content -LiteralPath $toolchainManifestPath -Raw | ConvertFrom-Json
+if ($toolchainManifest.schemaVersion -ne 2 -or $toolchainManifest.toolchainVersion -ne 'gcc-14.1.0-clangd-22.1.6') {
+	throw 'The staged toolchain manifest has an unsupported format or version.'
+}
+$requiredToolchainFiles = @(
+	'becoder-ucrt64/bin/g++.exe',
+	'becoder-ucrt64/bin/gcc.exe',
+	'becoder-ucrt64/bin/libgcc_s_seh-1.dll',
+	'becoder-ucrt64/bin/libstdc++-6.dll',
+	'becoder-ucrt64/bin/libwinpthread-1.dll',
+	'becoder-ucrt64/bin/libgmp-10.dll',
+	'becoder-ucrt64/bin/libisl-23.dll',
+	'becoder-ucrt64/bin/libmpc-3.dll',
+	'becoder-ucrt64/bin/libmpfr-6.dll',
+	'becoder-ucrt64/bin/zlib1.dll',
+	'becoder-ucrt64/bin/libzstd.dll',
+	'becoder-ucrt64/bin/libintl-8.dll',
+	'becoder-ucrt64/bin/libiconv-2.dll',
+	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h',
+	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
+	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/debugger.h',
+	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1.exe',
+	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1plus.exe',
+	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/as.exe',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/ld.exe',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
+	'becoder-ucrt64/x86_64-w64-mingw32/bin/zlib1.dll',
+	'clangd/clangd_22.1.6/bin/clangd.exe',
+	'clangd/clangd_22.1.6/LICENSE.TXT'
+)
+$manifestPaths = @($toolchainManifest.files.path)
+foreach ($requiredToolchainFile in $requiredToolchainFiles) {
+	if ($manifestPaths -notcontains $requiredToolchainFile) {
+		throw "The staged toolchain manifest is missing a critical component: $requiredToolchainFile"
 	}
-	if ((Get-Item -LiteralPath $compilerPath).Length -lt 100MB) {
-		throw "The bundled BeCoder compiler archive is unexpectedly small: $compilerRelativePath"
+}
+if ($manifestPaths.Count -lt 3500 -or (@($manifestPaths | Sort-Object -Unique)).Count -ne $manifestPaths.Count -or
+	(@($manifestPaths | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)).Count -ne $manifestPaths.Count) {
+	throw 'The staged toolchain manifest is incomplete or contains duplicate paths.'
+}
+foreach ($file in @($toolchainManifest.files)) {
+	if ($file.path -notmatch '^[^\\/:*?""<>|]+(?:/[^\\/:*?""<>|]+)*$' -or $file.path -match '(^|/)\.\.(/|$)' -or
+		$file.size -lt 0 -or $file.sha256 -notmatch '^[0-9a-f]{64}$') {
+		throw "The staged toolchain manifest contains an invalid entry: $($file.path)"
 	}
-	$expectedCompilerHash = '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2'
-	if ((Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedCompilerHash) {
-		throw 'The bundled UCRT64 compiler archive does not match its pinned SHA-256.'
+	$filePath = Join-Path $toolchainRoot $file.path.Replace('/', '\')
+	if (-not (Test-Path -LiteralPath $filePath -PathType Leaf) -or
+		(Get-Item -LiteralPath $filePath).Length -ne $file.size -or
+		(Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $file.sha256) {
+		throw "The staged toolchain file does not match its manifest: $($file.path)"
 	}
-} elseif (Test-Path -LiteralPath $compilerPath) {
-	throw "The Exclude Compiler package unexpectedly contains the bundled compiler: $compilerRelativePath"
+}
+$actualToolchainPaths = @(Get-ChildItem -LiteralPath $toolchainRoot -Recurse -File | Where-Object {
+	$_.FullName -ne $toolchainManifestPath
+} | ForEach-Object {
+	$_.FullName.Substring($toolchainRoot.Length + 1).Replace('\', '/')
+})
+[Array]::Sort($actualToolchainPaths, [StringComparer]::Ordinal)
+$sortedManifestPaths = @($manifestPaths)
+[Array]::Sort($sortedManifestPaths, [StringComparer]::Ordinal)
+if (($actualToolchainPaths -join "`n") -ne ($sortedManifestPaths -join "`n")) {
+	throw 'The staged toolchain tree does not exactly match its full integrity manifest.'
+}
+
+$compilerRoot = Join-Path $toolchainRoot 'becoder-ucrt64'
+foreach ($forbiddenCompilerEntry in @(
+	'bin\python.exe',
+	'bin\objdump.exe',
+	'lib\gcc\x86_64-w64-mingw32\14.1.0\plugin',
+	'lib\gcc\x86_64-w64-mingw32\14.1.0\lto1.exe',
+	'lib\gcc\x86_64-w64-mingw32\14.1.0\lto-wrapper.exe'
+)) {
+	if (Test-Path -LiteralPath (Join-Path $compilerRoot $forbiddenCompilerEntry)) {
+		throw "The staged compiler contains a forbidden non-runtime payload: $forbiddenCompilerEntry"
+	}
+}
+$compilerSize = (Get-ChildItem -LiteralPath $compilerRoot -File -Recurse | Measure-Object Length -Sum).Sum
+if ($compilerSize -gt 400MB) {
+	throw "The staged compiler exceeds the audited 400 MiB boundary: $compilerSize bytes"
 }
 
 $componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\BUNDLED-COMPONENTS.json') -Raw | ConvertFrom-Json
@@ -472,8 +775,8 @@ $clangdComponent = @($componentInventory.components) | Where-Object { $_.id -eq 
 $ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 'becoder-ucrt64' }
 $languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
 $mermaidComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'vscode.mermaid-markdown-features' }
-if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2') {
-	throw 'The bundled component inventory does not match the shipped toolchain archives.'
+if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne $expectedCompilerHash) {
+	throw 'The bundled component inventory does not pin the audited source toolchain archives.'
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
@@ -584,6 +887,8 @@ $forbiddenPaths = @(
 	'resources\app\extensions\git-base',
 	'resources\app\extensions\github',
 	'resources\app\extensions\terminal-suggest',
+	'resources\app\resources\oi-defaults\first-run.html',
+	'resources\app\resources\oi-defaults\first-run-preload.js',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\ms-vscode.js-debug.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-auto-launch.i18n.json',
 	'resources\app\extensions\MS-CEINTL.vscode-language-pack-zh-hans\translations\extensions\vscode.debug-server-ready.i18n.json',

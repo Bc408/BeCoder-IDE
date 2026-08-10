@@ -4,14 +4,16 @@
 		"../../src/**/common/**/*.ts",
 		"../../src/**/node/**/*.ts",
 		"../../src/**/electron-utility/**/*.ts",
-		"../../src/typings/*.d.ts",
+		"../../src/typings/base-common.d.ts",
+		"../../src/typings/crypto.d.ts",
+		"../../src/typings/css.d.ts",
+		"../../src/typings/thenable.d.ts",
+		"../../src/typings/vscode-globals-nls.d.ts",
+		"../../src/typings/vscode-globals-product.d.ts",
+		"../../src/typings/vscode-globals-ttp.d.ts",
 		"../../src/vs/monaco.d.ts",
 		"../../src/vscode-dts/vscode.proposed.*.d.ts",
 		"../../src/vscode-dts/vscode.d.ts",
-		"../../node_modules/@types/trusted-types/index.d.ts",
-	],
-	"exclude": [
-		"../../src/**/test/**",
-		"../../src/**/fixtures/**",
+		"../../node_modules/@types/trusted-types/index.d.ts"
 	]
 }

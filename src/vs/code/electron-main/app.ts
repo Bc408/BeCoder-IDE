@@ -3,23 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, BrowserWindow, desktopCapturer, Details, dialog, globalShortcut, GPUFeatureStatus, ipcMain, net, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
+import { app, BrowserWindow, desktopCapturer, Details, globalShortcut, GPUFeatureStatus, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
 import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 import { hostname, release } from 'os';
-import { spawn } from 'child_process';
-import { createRequire } from 'module';
-import { Readable } from 'stream';
 import { initWindowsVersionInfo } from '../../base/node/windowsVersion.js';
 import { VSBuffer } from '../../base/common/buffer.js';
-import { CancellationToken } from '../../base/common/cancellation.js';
 import { toErrorMessage } from '../../base/common/errorMessage.js';
 import { Event } from '../../base/common/event.js';
 import { parse } from '../../base/common/jsonc.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
-import { equals } from '../../base/common/objects.js';
 import { join, posix } from '../../base/common/path.js';
 import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { assertType } from '../../base/common/types.js';
@@ -34,7 +29,7 @@ import { IProxyAuthService, ProxyAuthService } from '../../platform/native/elect
 import { localize } from '../../nls.js';
 import { IBackupMainService } from '../../platform/backup/electron-main/backup.js';
 import { BackupMainService } from '../../platform/backup/electron-main/backupMainService.js';
-import { ConfigurationTarget, IConfigurationService } from '../../platform/configuration/common/configuration.js';
+import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { IDiagnosticsService, IGPULogMessage } from '../../platform/diagnostics/common/diagnostics.js';
 import { DiagnosticsMainService, IDiagnosticsMainService } from '../../platform/diagnostics/electron-main/diagnosticsMainService.js';
 import { DialogMainService, IDialogMainService } from '../../platform/dialogs/electron-main/dialogMainService.js';
@@ -103,6 +98,7 @@ import { ActiveWindowManager } from '../../platform/windows/node/windowTracker.j
 import { hasWorkspaceFileExtension } from '../../platform/workspace/common/workspace.js';
 import { IWorkspacesService } from '../../platform/workspaces/common/workspaces.js';
 import { IWorkspacesHistoryMainService, WorkspacesHistoryMainService } from '../../platform/workspaces/electron-main/workspacesHistoryMainService.js';
+import { resolveBeCoderAppUserModelId } from '../node/beCoderInstallation.js';
 import { WorkspacesMainService } from '../../platform/workspaces/electron-main/workspacesMainService.js';
 import { IWorkspacesManagementMainService, WorkspacesManagementMainService } from '../../platform/workspaces/electron-main/workspacesManagementMainService.js';
 import { IPolicyService } from '../../platform/policy/common/policy.js';
@@ -129,81 +125,8 @@ import { Lazy } from '../../base/common/lazy.js';
 import { IAuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindows.js';
 import { AuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.js';
 import { normalizeNFC } from '../../base/common/normalization.js';
-import { extract as extractZip } from '../../base/node/zip.js';
 import { ICSSDevelopmentService, CSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
-
-interface IBeCoderSetupRequest {
-	readonly mode: 'recommended';
-	readonly editor: boolean;
-	readonly installToolchain: boolean;
-	readonly fontLigatures: boolean;
-	readonly fontSize: number;
-	readonly autoFormat: boolean;
-	readonly workspaceFolder: string;
-}
-
-interface IBeCoderOnboardingResult {
-	readonly workspaceFolder: string | undefined;
-	dispose(): void;
-}
-
-interface IBeCoderToolchainPreset {
-	readonly pages: readonly IBeCoderOnboardingPage[];
-	readonly downloadSources?: readonly IBeCoderDownloadSource[];
-}
-
-interface IBeCoderOnboardingPage {
-	readonly commands?: string;
-	readonly controls?: readonly IBeCoderOnboardingControl[];
-	readonly [key: string]: unknown;
-}
-
-interface IBeCoderOnboardingControl {
-	readonly key?: string;
-	readonly default?: unknown;
-	readonly [key: string]: unknown;
-}
-
-interface IBeCoderDownloadSource {
-	readonly id: string;
-	readonly unavailable?: boolean;
-	readonly label?: unknown;
-}
-
-interface IBeCoderPlatformInstaller {
-	createProcess?(input: { readonly toolchainRoot: string; readonly source?: IBeCoderDownloadSource; readonly stage?: string; readonly locale?: string }): { readonly executable: string; readonly args: readonly string[]; readonly displayName: string };
-	getPortableAssets?(input: { readonly toolchainRoot: string; readonly source?: IBeCoderDownloadSource; readonly stage?: string }): readonly IBeCoderPortableAsset[];
-}
-
-interface IBeCoderPortableAsset {
-	readonly id: string;
-	readonly urls: readonly string[];
-	readonly archiveName: string;
-	readonly bundledArchivePath?: string;
-	readonly targetDirectory: string;
-	readonly requiredFile: string;
-}
-
-const nodeRequire = createRequire(import.meta.url);
-const fs: typeof import('fs') = nodeRequire('original-fs');
-const { isAbsolute } = nodeRequire('path') as typeof import('path');
-const { finished } = nodeRequire('stream/promises') as typeof import('stream/promises');
-
-function isBeCoderSetupRequest(candidate: unknown): candidate is IBeCoderSetupRequest {
-	if (!candidate || typeof candidate !== 'object') {
-		return false;
-	}
-	const value = candidate as Partial<IBeCoderSetupRequest>;
-	return value.mode === 'recommended'
-		&& typeof value.editor === 'boolean'
-		&& typeof value.installToolchain === 'boolean'
-		&& typeof value.fontLigatures === 'boolean'
-		&& typeof value.fontSize === 'number'
-		&& typeof value.autoFormat === 'boolean'
-		&& typeof value.workspaceFolder === 'string'
-		&& isAbsolute(value.workspaceFolder);
-}
 
 type OSProxyConfigEvent = {
 	readonly success: boolean;
@@ -271,7 +194,6 @@ export class CodeApplication extends Disposable {
 	private windowsMainService: IWindowsMainService | undefined;
 	private auxiliaryWindowsMainService: IAuxiliaryWindowsMainService | undefined;
 	private nativeHostMainService: INativeHostMainService | undefined;
-
 	constructor(
 		private readonly mainProcessNodeIpcServer: NodeIPCServer,
 		private readonly userEnv: IProcessEnvironment,
@@ -736,7 +658,7 @@ export class CodeApplication extends Disposable {
 		// two icons in the taskbar for the same app.
 		const win32AppUserModelId = this.productService.win32AppUserModelId;
 		if (isWindows && win32AppUserModelId) {
-			app.setAppUserModelId(win32AppUserModelId);
+			app.setAppUserModelId(resolveBeCoderAppUserModelId(win32AppUserModelId, process.execPath));
 		}
 
 		// Fix native tabs on macOS 10.13
@@ -805,25 +727,8 @@ export class CodeApplication extends Disposable {
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
 
-		// Portable paths can change between launches. Refresh them before the
-		// workbench starts so clangd never observes stale paths during activation.
-		try {
-			await this.refreshBeCoderWindowsToolchainSettings();
-		} catch (error) {
-			this.logService.error('Unable to refresh BeCoder portable toolchain settings before workbench startup.', error);
-		}
-
-		// The competitive-programming setup is intentionally shown before the
-		// workbench is created, so a first launch never flashes a VS Code window.
-		const onboarding = await this.showBeCoderFirstRun();
-
-		// Open Windows. Keep the hidden onboarding window alive until the workbench
-		// has been created: Windows quits the application when its last window closes.
-		try {
-			await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls, onboarding?.workspaceFolder));
-		} finally {
-			onboarding?.dispose();
-		}
+		// Open Windows
+		await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
 
 		// Signal phase: after window open
 		this.lifecycleMainService.phase = LifecycleMainPhase.AfterWindowOpen;
@@ -843,395 +748,6 @@ export class CodeApplication extends Disposable {
 			}, 2500));
 		}, 2500));
 		eventuallyPhaseScheduler.schedule();
-	}
-
-	private async showBeCoderFirstRun(): Promise<IBeCoderOnboardingResult | undefined> {
-		if (this.environmentMainService.exportPolicyData !== undefined) {
-			return undefined;
-		}
-
-		if (this.configurationService.getValue<boolean>('becoder.setup.completed')) {
-			return undefined;
-		}
-
-		const onboardingPath = join(this.environmentMainService.appRoot, 'resources', 'oi-defaults', 'first-run.html');
-		const preloadPath = join(this.environmentMainService.appRoot, 'resources', 'oi-defaults', 'first-run-preload.js');
-		const onboardingWindow = new BrowserWindow({
-			show: false,
-			frame: false,
-			width: 980,
-			height: 720,
-			minWidth: 760,
-			minHeight: 560,
-			resizable: true,
-			center: true,
-			backgroundColor: '#0f1117',
-			webPreferences: {
-				preload: preloadPath,
-				contextIsolation: true,
-				nodeIntegration: false,
-				devTools: false
-			}
-		});
-
-		return new Promise<IBeCoderOnboardingResult | undefined>(resolve => {
-			const channel = 'becoder:onboarding-complete';
-			const installChannel = 'becoder:onboarding-install-toolchain';
-			const scriptChannel = 'becoder:onboarding-script';
-			const localeChannel = 'becoder:onboarding-locale';
-			const workspaceChannel = 'becoder:onboarding-pick-workspace';
-			let finished = false;
-			const cleanup = () => {
-				ipcMain.removeListener(channel, listener);
-				ipcMain.removeHandler(installChannel);
-				ipcMain.removeHandler(scriptChannel);
-				ipcMain.removeHandler(localeChannel);
-				ipcMain.removeHandler(workspaceChannel);
-			};
-			const dispose = () => {
-				cleanup();
-				if (!onboardingWindow.isDestroyed()) {
-					onboardingWindow.destroy();
-				}
-			};
-			const finish = async (request: IBeCoderSetupRequest | undefined) => {
-				if (finished) { return; }
-				finished = true;
-				cleanup();
-				if (request) {
-					if (isWindows) { await this.applyBeCoderWindowsSetup(request); }
-					else { await this.configurationService.updateValue('becoder.setup.pending', request, ConfigurationTarget.USER); }
-				}
-				onboardingWindow.hide();
-				resolve({ workspaceFolder: request?.workspaceFolder, dispose });
-			};
-			const listener = (event: Electron.IpcMainEvent, candidate: unknown) => {
-				if (event.sender !== onboardingWindow.webContents) { return; }
-				void finish(isBeCoderSetupRequest(candidate) ? candidate : undefined);
-			};
-			ipcMain.on(channel, listener);
-			ipcMain.handle(installChannel, async (event, sourceId: unknown, stage: unknown) => {
-				if (event.sender !== onboardingWindow.webContents) { throw new Error('Unexpected sender for BeCoder toolchain installation.'); }
-				return this.installBeCoderToolchain(sourceId, typeof stage === 'string' ? stage : undefined, message => onboardingWindow.webContents.send('becoder:onboarding-progress', message));
-			});
-			ipcMain.handle(scriptChannel, async event => {
-				if (event.sender !== onboardingWindow.webContents) { throw new Error('Unexpected sender for BeCoder onboarding script.'); }
-				return this.getBeCoderOnboardingScript();
-			});
-			ipcMain.handle(localeChannel, async event => {
-				if (event.sender !== onboardingWindow.webContents) { throw new Error('Unexpected sender for BeCoder onboarding locale.'); }
-				return this.environmentMainService.args.locale ?? 'zh-cn';
-			});
-			ipcMain.handle(workspaceChannel, async event => {
-				if (event.sender !== onboardingWindow.webContents) { throw new Error('Unexpected sender for BeCoder workspace selection.'); }
-				const result = await dialog.showOpenDialog(onboardingWindow, { properties: ['openDirectory', 'createDirectory'] });
-				return result.canceled ? undefined : result.filePaths[0];
-			});
-			onboardingWindow.once('closed', () => {
-				cleanup();
-				if (!finished) { finished = true; resolve(undefined); }
-			});
-			onboardingWindow.once('ready-to-show', () => onboardingWindow.show());
-			const onboardingHtml = fs.readFileSync(onboardingPath, 'utf8');
-			void onboardingWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(onboardingHtml)}`);
-		});
-	}
-
-	private async applyBeCoderWindowsSetup(request: IBeCoderSetupRequest): Promise<void> {
-		const toolchainRoot = this.getBeCoderToolchainRoot();
-		const compiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe');
-		const existingFileExcludes = this.configurationService.getValue<Record<string, boolean>>('files.exclude') ?? {};
-		const settings: Record<string, unknown> = {
-			'editor.fontLigatures': request.fontLigatures,
-			'editor.cursorSmoothCaretAnimation': 'on',
-			'editor.smoothScrolling': true,
-			'workbench.list.smoothScrolling': true,
-			'terminal.integrated.smoothScrolling': true,
-			'editor.cursorBlinking': 'smooth',
-			'editor.fontSize': request.fontSize,
-			'files.autoSave': 'onFocusChange',
-			'editor.formatOnSave': request.autoFormat,
-			'editor.formatOnPaste': request.autoFormat,
-			'editor.mouseWheelZoom': true,
-			'window.systemColorTheme': 'auto',
-			'window.titleBarStyle': 'custom',
-			'window.commandCenter': false,
-			'workbench.startupEditor': 'welcomePage',
-			'workbench.navigationControl.enabled': false,
-			'workbench.layoutControl.enabled': true,
-			'workbench.layoutControl.type': 'both',
-			'workbench.statusBar.visible': false,
-			'files.exclude': {
-				...existingFileExcludes,
-				'**/*.exe': true,
-				'**/*.bin': true
-			},
-			'becoder.toolchain.compilerPath': compiler,
-			'becoder.toolchain.cCompilerPath': join(toolchainRoot, 'becoder-ucrt64', 'bin', 'gcc.exe'),
-			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
-			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h'),
-			'becoder.runner.cppFlags': ['-O2', '-Wall', '-DDEBUG'],
-			'becoder.runner.cFlags': ['-O2', '-Wall', '-DDEBUG'],
-			'becoder.runner.cleanupExecutable': true
-		};
-
-		await this.updateBeCoderSettings(settings);
-		await this.configurationService.updateValue('becoder.setup.pending', undefined, ConfigurationTarget.USER);
-		await this.configurationService.updateValue('becoder.setup.completed', true, ConfigurationTarget.USER);
-	}
-
-	private async refreshBeCoderWindowsToolchainSettings(): Promise<void> {
-		if (!isWindows || !this.configurationService.getValue<boolean>('becoder.setup.completed')) {
-			return;
-		}
-		const toolchainRoot = this.getBeCoderToolchainRoot();
-		const compiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe');
-		const cCompiler = join(toolchainRoot, 'becoder-ucrt64', 'bin', 'gcc.exe');
-		const clangd = join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'bin', 'clangd.exe');
-		const missingComponents = [compiler, cCompiler, clangd].filter(candidate => !fs.existsSync(candidate));
-		if (missingComponents.length > 0) {
-			this.logService.warn(`BeCoder portable toolchain is incomplete: ${missingComponents.join(', ')}`);
-		}
-		const settings: Record<string, unknown> = {
-			'becoder.toolchain.compilerPath': compiler,
-			'becoder.toolchain.cCompilerPath': cCompiler,
-			'becoder.toolchain.stdIncludePath': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0'),
-			'becoder.toolchain.debuggerHeader': join(toolchainRoot, 'becoder-ucrt64', 'include', 'c++', '14.1.0', 'x86_64-w64-mingw32', 'bits', 'debugger.h')
-		};
-		await this.updateBeCoderSettings(settings);
-	}
-
-	private async updateBeCoderSettings(settings: Record<string, unknown>): Promise<void> {
-		for (const [key, value] of Object.entries(settings)) {
-			if (!equals(this.configurationService.getValue(key), value)) {
-				await this.configurationService.updateValue(key, value, ConfigurationTarget.USER);
-			}
-		}
-	}
-
-	private getBeCoderOnboardingScript(): IBeCoderToolchainPreset {
-		const presetName = this.getBeCoderPlatformName() + '.json';
-		const presetPath = join(this.environmentMainService.appRoot, 'extensions', 'becoder.setup', 'resources', presetName);
-		const preset = JSON.parse(fs.readFileSync(presetPath, 'utf8')) as IBeCoderToolchainPreset;
-		// Product defaults are normalized here so every platform presents the
-		// same choices even when an older preset still contains legacy defaults.
-		return {
-			...preset,
-			pages: preset.pages.map(page => {
-				const controls = page.controls?.map(control => {
-					if (control.key === 'fontLigatures') {
-						return { ...control, default: false };
-					}
-					return control;
-				});
-				if (controls && !controls.some(control => control.key === 'autoFormat')) {
-					controls.push({
-						key: 'autoFormat',
-						type: 'boolean',
-						default: false,
-						label: { en: 'Enable automatic formatting', 'zh-CN': '\u542f\u7528\u81ea\u52a8\u683c\u5f0f\u5316' }
-					});
-				}
-				return { ...page, controls };
-			})
-		};
-	}
-
-	private getBeCoderPlatformName(): 'windows' | 'mac' | 'linux' {
-		return isWindows ? 'windows' : isMacintosh ? 'mac' : 'linux';
-	}
-
-	private getBeCoderPlatformInstaller(): IBeCoderPlatformInstaller {
-		const installerPath = join(this.environmentMainService.appRoot, 'extensions', 'becoder.setup', 'resources', `${this.getBeCoderPlatformName()}.js`);
-		return nodeRequire(installerPath) as IBeCoderPlatformInstaller;
-	}
-
-	private async installBeCoderToolchain(sourceId: unknown, stage: string | undefined, reportProgress: (message: string) => void): Promise<{ readonly success: boolean; readonly message: string }> {
-		const presetName = this.getBeCoderPlatformName() + '.json';
-		const preset = this.getBeCoderOnboardingScript();
-		const source = typeof sourceId === 'string'
-			? preset.downloadSources?.find(candidate => candidate.id === sourceId && !candidate.unavailable)
-			: undefined;
-		const toolchainRoot = this.getBeCoderToolchainRoot();
-		const installer = this.getBeCoderPlatformInstaller();
-		const assets = stage === 'toolchain' || !stage ? installer.getPortableAssets?.({ toolchainRoot, source, stage }) : undefined;
-		if (assets?.length) {
-			const result = await this.installBeCoderPortableAssets(toolchainRoot, assets, reportProgress);
-			if (!result.success) {
-				return result;
-			}
-			if (!installer.createProcess) {
-				return { success: true, message: 'Toolchain download completed.' };
-			}
-		}
-
-		let processDefinition: NonNullable<ReturnType<NonNullable<IBeCoderPlatformInstaller['createProcess']>>>;
-		try {
-			if (!installer.createProcess) {
-				throw new Error('No installer is available for this platform.');
-			}
-			processDefinition = installer.createProcess({
-				toolchainRoot,
-				source,
-				stage,
-				locale: this.environmentMainService.args.locale ?? 'zh-cn'
-			});
-		} catch (error) {
-			return Promise.resolve({ success: false, message: `Unable to load ${presetName} installer: ${toErrorMessage(error)}` });
-		}
-
-		reportProgress(`Preparing ${processDefinition.displayName}${source ? ` via ${source.id}` : ''}…`);
-		return new Promise(resolve => {
-			const process = spawn(processDefinition.executable, processDefinition.args, { windowsHide: true });
-			const onData = (data: Buffer) => {
-				for (const line of data.toString().split(/\r?\n/)) {
-					if (line.trim()) {
-						reportProgress(line.trim());
-					}
-				}
-			};
-			process.stdout.on('data', onData);
-			process.stderr.on('data', onData);
-			process.on('error', error => resolve({ success: false, message: error.message }));
-			process.on('close', code => {
-				resolve(code === 0
-					? { success: true, message: 'Toolchain download completed.' }
-					: { success: false, message: `Toolchain installer exited with code ${code ?? 'unknown'}.` });
-			});
-		});
-	}
-
-	private getBeCoderToolchainRoot(): string {
-		const packagedRoot = join(this.environmentMainService.appRoot, '..', '..', 'data', 'toolchains');
-		if (fs.existsSync(packagedRoot)) {
-			return packagedRoot;
-		}
-		const portableRoot = process.env['VSCODE_PORTABLE'];
-		return portableRoot
-			? join(portableRoot, 'toolchains')
-			: join(this.environmentMainService.userDataPath, 'toolchains');
-	}
-
-	private async installBeCoderPortableAssets(toolchainRoot: string, assets: readonly IBeCoderPortableAsset[], reportProgress: (message: string) => void): Promise<{ readonly success: boolean; readonly message: string }> {
-		try {
-			await fs.promises.mkdir(toolchainRoot, { recursive: true });
-			for (const asset of assets) {
-				const targetPath = join(toolchainRoot, asset.targetDirectory);
-				const bundledArchivePath = asset.bundledArchivePath
-					? join(this.environmentMainService.appRoot, asset.bundledArchivePath)
-					: undefined;
-				const useBundledArchive = !!bundledArchivePath && fs.existsSync(bundledArchivePath);
-				const archivePath = useBundledArchive ? bundledArchivePath : join(toolchainRoot, asset.archiveName);
-				if (fs.existsSync(join(targetPath, asset.requiredFile))) {
-					reportProgress(`${asset.id} is already installed; skipping extraction.`);
-					continue;
-				}
-				if (useBundledArchive) {
-					reportProgress(`Installing bundled ${asset.id}…`);
-				} else {
-					reportProgress(`Downloading ${asset.id}… 0%`);
-					await this.downloadBeCoderAsset(asset.urls, archivePath, asset.id, reportProgress);
-				}
-				let lastReportedPercent = -1;
-				reportProgress(`Extracting ${asset.id}… 0%`);
-				await this.extractBeCoderAsset(archivePath, targetPath, (extractedEntries, totalEntries) => {
-					const percent = totalEntries > 0 ? Math.floor(extractedEntries * 100 / totalEntries) : 0;
-					if (percent === 100 || percent - lastReportedPercent >= 2) {
-						lastReportedPercent = percent;
-						reportProgress(`Extracting ${asset.id}… ${percent}% (${extractedEntries}/${totalEntries} files)`);
-					}
-				});
-				if (!useBundledArchive) {
-					await fs.promises.unlink(archivePath);
-				}
-				if (!fs.existsSync(join(targetPath, asset.requiredFile))) {
-					throw new Error(`${asset.id} archive did not contain ${asset.requiredFile}.`);
-				}
-			}
-			reportProgress('Portable toolchain installation complete.');
-			return { success: true, message: 'Toolchain download completed.' };
-		} catch (error) {
-			return { success: false, message: toErrorMessage(error) };
-		}
-	}
-
-	private async extractBeCoderAsset(archivePath: string, targetPath: string, onProgress: (extractedEntries: number, totalEntries: number) => void): Promise<void> {
-		return extractZip(archivePath, targetPath, { overwrite: true, onProgress }, CancellationToken.None);
-	}
-
-	private async downloadBeCoderAsset(urls: readonly string[], targetPath: string, label: string, reportProgress: (message: string) => void): Promise<void> {
-		let lastError: unknown;
-		for (const [index, url] of urls.entries()) {
-			try {
-				if (index > 0) {
-					reportProgress(`Mirror unavailable for ${label}; retrying with the official source…`);
-				}
-				await this.downloadBeCoderAssetFromUrl(url, targetPath, label, reportProgress);
-				return;
-			} catch (error) {
-				lastError = error;
-				await fs.promises.rm(targetPath, { force: true });
-			}
-		}
-		throw lastError ?? new Error('No download source is configured.');
-	}
-
-	private async downloadBeCoderAssetFromUrl(url: string, targetPath: string, label: string, reportProgress: (message: string) => void): Promise<void> {
-		const controller = new AbortController();
-		let timeoutMessage = 'Download connection timed out.';
-		let timeout: ReturnType<typeof setTimeout> | undefined;
-		const resetTimeout = (message: string, delay: number) => {
-			clearTimeout(timeout);
-			timeoutMessage = message;
-			timeout = setTimeout(() => controller.abort(), delay);
-		};
-		try {
-			reportProgress(`Connecting to download source for ${label}…`);
-			resetTimeout('Download connection timed out.', 45_000);
-			const response = await net.fetch(url, { signal: controller.signal });
-			if (!response.ok || !response.body) {
-				throw new Error(`Download failed with HTTP ${response.status}.`);
-			}
-			resetTimeout('Download stalled while waiting for data.', 60_000);
-			const totalBytes = Number(response.headers.get('content-length') ?? 0);
-			let receivedBytes = 0;
-			let lastReportedPercent = -1;
-			let lastProgressReport = 0;
-			const input = Readable.fromWeb(response.body as never);
-			input.on('data', (chunk: Buffer) => {
-				receivedBytes += chunk.length;
-				resetTimeout('Download stalled while receiving data.', 60_000);
-				if (totalBytes > 0) {
-					const percent = Math.floor(receivedBytes * 100 / totalBytes);
-					if (percent !== lastReportedPercent && (percent === 100 || percent - lastReportedPercent >= 5)) {
-						lastReportedPercent = percent;
-						reportProgress(`Downloading ${label}… ${percent}% (${this.formatBeCoderBytes(receivedBytes)} / ${this.formatBeCoderBytes(totalBytes)})`);
-					}
-				} else if (Date.now() - lastProgressReport >= 1_000) {
-					lastProgressReport = Date.now();
-					reportProgress(`Downloading ${label}… ${(receivedBytes / 1024 / 1024).toFixed(1)} MB`);
-				}
-			});
-			try {
-				await finished(input.pipe(fs.createWriteStream(targetPath)));
-			} catch (error) {
-				if (controller.signal.aborted) {
-					throw new Error(timeoutMessage);
-				}
-				throw error;
-			}
-		} catch (error) {
-			if (controller.signal.aborted) {
-				throw new Error(timeoutMessage);
-			}
-			throw error;
-		} finally {
-			clearTimeout(timeout);
-		}
-	}
-
-	private formatBeCoderBytes(bytes: number): string {
-		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 	}
 
 	private async setupProtocolUrlHandlers(accessor: ServicesAccessor, mainProcessElectronServer: ElectronIPCServer): Promise<IInitialProtocolUrls | undefined> {
@@ -1851,21 +1367,12 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel(ipcUtilityProcessWorkerChannelName, utilityProcessWorkerChannel);
 	}
 
-	private async openFirstWindow(accessor: ServicesAccessor, initialProtocolUrls: IInitialProtocolUrls | undefined, onboardingWorkspaceFolder?: string): Promise<ICodeWindow[]> {
+	private async openFirstWindow(accessor: ServicesAccessor, initialProtocolUrls: IInitialProtocolUrls | undefined): Promise<ICodeWindow[]> {
 		const windowsMainService = this.windowsMainService = accessor.get(IWindowsMainService);
 		this.auxiliaryWindowsMainService = accessor.get(IAuxiliaryWindowsMainService);
 
 		const context = isLaunchedFromCli(process.env) ? OpenContext.CLI : OpenContext.DESKTOP;
 		const args = this.environmentMainService.args;
-
-		if (onboardingWorkspaceFolder) {
-			return windowsMainService.open({
-				context,
-				cli: { ...args, 'becoder-trust-workspace': onboardingWorkspaceFolder },
-				urisToOpen: [{ folderUri: URI.file(onboardingWorkspaceFolder) }],
-				initialStartup: true
-			});
-		}
 
 		// Then check for windows from protocol links to open
 		if (initialProtocolUrls) {

@@ -6,13 +6,18 @@
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Language } from '../../../../base/common/platform.js';
+import { localize } from '../../../../nls.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ILanguagePackItem, ILanguagePackService } from '../../../../platform/languagePacks/common/languagePacks.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
+import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { ILocaleService } from '../../../services/localization/common/locale.js';
 
 export const BeCoderDisplayLanguageSetting = 'becoder.displayLanguage';
 export const BeCoderSimplifiedChineseLanguagePackId = 'ms-ceintl.vscode-language-pack-zh-hans';
+const BeCoderSetupExtensionId = 'becoder.becoder-setup';
 
 export type BeCoderDisplayLanguage = 'en' | 'zh-cn';
 
@@ -92,8 +97,11 @@ class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenc
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExtensionService private readonly extensionService: IExtensionService,
 		@ILanguagePackService private readonly languagePackService: ILanguagePackService,
 		@ILocaleService private readonly localeService: ILocaleService,
+		@ILogService private readonly logService: ILogService,
+		@INotificationService private readonly notificationService: INotificationService,
 	) {
 		super();
 		this.controller = new BeCoderDisplayLanguageController(
@@ -110,6 +118,17 @@ class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenc
 	}
 
 	private async initialize(): Promise<void> {
+		await this.extensionService.whenInstalledExtensionsRegistered();
+		const setupExtensionInstalled = this.extensionService.extensions.some(extension => extension.identifier.value.toLowerCase() === BeCoderSetupExtensionId);
+		if (!setupExtensionInstalled || !this.configurationService.inspect(BeCoderDisplayLanguageSetting)) {
+			const message = localize(
+				'becoderDisplayLanguageRegistrationMissing',
+				"BeCoder's protected Setup extension is missing or damaged. Display language settings are unavailable. Reinstall BeCoder with the official Setup package."
+			);
+			this.logService.error(`[BeCoder] ${message}`);
+			this.notificationService.error(message);
+			return;
+		}
 		await this.updateSetting(toBeCoderDisplayLanguage(Language.value()));
 		this.initialized = true;
 	}

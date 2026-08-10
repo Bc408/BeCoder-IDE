@@ -88,4 +88,20 @@ suite('BC pseudoterminal protocol', () => {
 		assert.ok(output.includes('BC D:\\c++> '));
 		terminal.close();
 	});
+
+	test('runs a final presentation transaction only while the terminal is open', () => {
+		let operationCount = 0;
+		const terminal = new BcTerminal('D:\\c++', new CommandHistory(), {
+			phase: () => 'ready',
+			submit: () => undefined,
+			cancel: () => undefined,
+			programInput: () => false,
+			busyAttempt: () => undefined,
+			close: () => undefined
+		});
+		assert.strictEqual(terminal.performWhileOpen(() => operationCount++), true);
+		terminal.close();
+		assert.strictEqual(terminal.performWhileOpen(() => operationCount++), false);
+		assert.strictEqual(operationCount, 1);
+	});
 });

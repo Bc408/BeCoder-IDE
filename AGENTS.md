@@ -4,6 +4,20 @@
 
 BeCoder is a Code - OSS fork for OI/ICPC workflows. Core TypeScript lives in `src/vs/`: utilities in `base/`, services in `platform/`, editor code in `editor/`, and desktop UI in `workbench/`. Bundled extensions live in `extensions/`. Build tooling is under `build/` and `scripts/`; tests are colocated in `src/vs/**/test/` or grouped under `test/`. Assets belong in `resources/`. Do not edit generated `out/` or `.build/` files.
 
+## Mandatory Project Orientation
+
+After reading this file completely, and before analyzing a new stage or making a nontrivial change, read these files completely in order:
+
+1. `BECODER_HANDOFF.md`
+2. `BECODER_PHILOSOPHY.md`
+3. `BECODER_CURRENT.md`
+4. `docs/contracts/README.md`
+5. every product contract related to the task
+
+Read archive documents only for historical evidence. They do not override current philosophy, current state, or a current product contract.
+
+Before proposing or starting implementation for a new stage or nontrivial change, provide an understanding proof covering the product purpose, relevant ownership boundaries, current repository/stage facts, requested change, protected/out-of-scope behavior, and validation/project-owner acceptance boundary. This requirement also applies when the user directly authorizes implementation. Wait for explicit plan approval before editing unless the user directly requested implementation.
+
 ## Build, Test, and Development Commands
 
 Run commands from the repository root:
@@ -15,20 +29,33 @@ Run commands from the repository root:
 - `npm run test-node -- --run <test-file>` runs a focused Node test.
 - `./scripts/test.sh --glob '**/feature*.test.js'` runs focused Electron tests.
 - `npm run test-browser-no-install` runs browser tests.
-- `npm run gulp vscode-darwin-arm64-min` or `npm run gulp vscode-win32-x64-min` creates platform packages.
+- `npm run gulp vscode-win32-x64-min` creates the staged Windows application used to build the BeCoder Setup.
 
-Before tests, follow `.github/copilot-instructions.md`: use the build watch task when available, otherwise the typecheck or extension gulp task. Do not use `npm run compile` for TypeScript validation.
+Before tests, use the build watch task when available; otherwise run the owning typecheck or extension Gulp task. Do not use `npm run compile` for TypeScript validation. `.github/copilot-instructions.md` is a short BeCoder entry point and must not override this file, `BECODER_PHILOSOPHY.md`, `BECODER_CURRENT.md`, or current product contracts.
 
 ### BeCoder Build Workflow
 
 - The standard Windows validation sequence is `npm run typecheck-client`, `npm run compile-oi-extensions`, then `npm run gulp vscode-win32-x64-min`.
-- The Codex command runner timeout is external to npm and Gulp. Use a 120-second timeout for type checking and OI extension compilation, and a 300-second (5-minute) timeout for the Windows portable Gulp build.
+- The Codex command runner timeout is external to npm and Gulp. Use a 120-second timeout for type checking and OI extension compilation, and a 300-second (5-minute) timeout for the staged Windows application build.
 - A non-zero exit code or an external timeout is a failed step. Stop the workflow and report the command and output; do not retry automatically or continue to packaging and runtime checks.
 - A build-only request authorizes only the requested build and its direct validation. Do not clean caches, delete artifacts, initialize Git, stage files, commit, push, or change user environment variables unless explicitly requested.
-- After a successful Windows package build, the BeCoder package verifier may be run against the produced package with `-IncludeCompiler $true`. Runtime GUI verification is a separate step and must not be claimed from a successful Gulp build alone.
-- After the requested source checks, package build, and direct package verification succeed, stop and hand the package to the user for manual portable acceptance. Do not launch the package, click through onboarding, run Run/Run With Input, or claim runtime acceptance unless the user explicitly requests agent-run verification in a later instruction.
+- After a successful staged Windows application build, run the direct package verifier with `-IncludeCompiler $true`, then build and directly verify the BeCoder Setup when the request includes release packaging. Runtime GUI verification is a separate step and must not be claimed from a successful Gulp or Setup build alone.
+- After the requested source checks, staged application build, package verification, Setup build, and Setup verification succeed, stop and hand the Setup artifact to the user for manual acceptance. Do not launch the installed product, run Run/Run With Input, or claim runtime acceptance unless the user explicitly requests agent-run verification in a later instruction.
 - `node_modules/`, `.build/`, `out/`, `out-build/`, and `out-vscode-min/` are local dependencies or generated build data. They are ignored by Git and must not be added to the repository or removed during a normal build.
 - The bundled archives under `resources/oi-defaults/toolchains/` are intentional release assets. They are tracked with Git LFS and must be preserved; do not replace them with extracted toolchain directories in the source tree.
+
+### Validation Command Preflight
+
+Before formal validation, perform a read-only preflight of the complete command list:
+
+- Derive command entry points from this file, the relevant `package.json` scripts, or executables that actually exist. Prefer npm scripts and `node_modules\.bin`; do not guess dependency-internal paths.
+- Confirm every executable, Node module, project file, configuration file, and input path before invoking the target validator.
+- Classify changed paths by Git status. Content parsers and linters must receive only existing ordinary files; deleted paths and directories require separate treatment.
+- Avoid complex ad hoc PowerShell one-liners. When shell logic is unavoidable, check its parsing, interpolation, quoting, encoding, and Windows-path behavior before formal validation.
+- Before adding a file, inspect at least two nearby files in the same ownership area for the correct copyright header, import style, naming, and test conventions.
+- Freeze the command list after preflight and keep a validation ledger containing the exact command, inputs, exit code, failure class, affected later checks, and required reruns.
+
+A missing entry point or dependency, invalid shell syntax, or incorrect input enumeration is a validation-orchestration failure, not a source result. It must not be reported as a source failure or a passing check. Once a formal validator actually starts, any non-zero exit code or external timeout stops the workflow under the existing build rules. Do not improvise a replacement command and silently continue.
 
 ## Coding Style & Naming Conventions
 

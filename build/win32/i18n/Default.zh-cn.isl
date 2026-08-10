@@ -1,9 +1,10 @@
-﻿; *** Inno Setup version 6.0.3+ Chinese Simplified messages ***
+﻿; *** Inno Setup version 6.4.0+ Chinese Simplified messages ***
 ;
 ; Maintained by Zhenghan Yang
 ; Email: 847320916@QQ.com
 ; Translation based on network resource
-; The latest Translation is on https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation
+; Synchronized with upstream Inno Setup 6.4.0+ commit 77622446218e7e8371d0f858c81dbe13590c936b
+; https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation
 ;
 
 [LangOptions]
@@ -225,6 +226,21 @@ PrepareToInstallNeedsRestart=安装程序必须重新启动计算机。重新启
 ; *** “正在安装”向导页
 WizardInstalling=正在安装
 InstallingLabel=安装程序正在安装 [name] 到您的电脑中，请稍等。
+ExtractionLabel=正在提取附加文件...
+ButtonStopExtraction=停止提取(&S)
+StopExtraction=您确定要停止提取吗？
+ErrorExtractionAborted=提取已中止
+ErrorExtractionFailed=提取失败：%1
+DownloadingLabel=正在下载附加文件...
+ButtonStopDownload=停止下载(&S)
+StopDownload=您确定要停止下载吗？
+ErrorDownloadAborted=下载已中止
+ErrorDownloadFailed=下载失败：%1 %2
+ErrorDownloadSizeFailed=获取下载大小失败：%1 %2
+ErrorFileHash1=校验文件哈希失败：%1
+ErrorFileHash2=无效的文件哈希：预期 %1，实际 %2
+ErrorProgress=无效的进度：%1 / %2
+ErrorFileSize=文件大小错误：预期 %1，实际 %2
 
 ; *** “安装完成”向导页
 FinishedHeadingLabel=[name] 安装完成
@@ -292,8 +308,16 @@ ExistingFileReadOnly2=无法替换现有文件，因为它是只读的。
 ExistingFileReadOnlyRetry=移除只读属性并重试(&R)
 ExistingFileReadOnlyKeepExisting=保留现有文件(&K)
 ErrorReadingExistingDest=尝试读取现有文件时发生一个错误:
-FileExists=文件已经存在。%n%n您想要安装程序覆盖它吗？
-ExistingFileNewer=现有的文件新与安装程序要安装的文件。推荐您保留现有文件。%n%n您想要保留现有的文件吗？
+FileExistsSelectAction=选择操作
+FileExists2=文件已经存在。
+FileExistsOverwriteExisting=覆盖已存在的文件(&O)
+FileExistsKeepExisting=保留现有的文件(&K)
+FileExistsOverwriteOrKeepAll=为所有冲突文件执行此操作(&D)
+ExistingFileNewerSelectAction=选择操作
+ExistingFileNewer2=现有的文件比安装程序将要安装的文件还要新。
+ExistingFileNewerOverwriteExisting=覆盖已存在的文件(&O)
+ExistingFileNewerKeepExisting=保留现有的文件(&K) (推荐)
+ExistingFileNewerOverwriteOrKeepAll=为所有冲突文件执行此操作(&D)
 ErrorChangingAttr=尝试改变下列现有的文件的属性时发生一个错误:
 ErrorCreatingTemp=尝试在目标目录创建文件时发生一个错误:
 ErrorReadingSource=尝试读取下列源文件时发生一个错误:
@@ -362,4 +386,3 @@ AssocingFileExtension=正在将 %2 文件扩展名与 %1 建立关联...
 AutoStartProgramGroupDescription=启动组:
 AutoStartProgram=自动启动 %1
 AddonHostProgramNotFound=%1无法找到您所选择的文件夹。%n%n您想要继续吗？
-

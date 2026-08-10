@@ -5,6 +5,7 @@
 
 import '../../platform/update/common/update.config.contribution.js';
 
+import { spawn } from 'child_process';
 import { app, dialog } from 'electron';
 import { existsSync, unlinkSync, promises } from 'fs';
 import { URI } from '../../base/common/uri.js';
@@ -16,7 +17,7 @@ import { IPathWithLineAndColumn, isValidBasename, parseLineAndColumnAware, sanit
 import { Event } from '../../base/common/event.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Schemas } from '../../base/common/network.js';
-import { basename, dirname, join, resolve } from '../../base/common/path.js';
+import { basename, delimiter, join, resolve } from '../../base/common/path.js';
 import { mark } from '../../base/common/performance.js';
 import { IProcessEnvironment, isLinux, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { cwd } from '../../base/common/process.js';
@@ -75,6 +76,7 @@ import { FileUserDataProvider } from '../../platform/userData/common/fileUserDat
 import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
 import { ThemeMainService } from '../../platform/theme/electron-main/themeMainServiceImpl.js';
 import { LINUX_SYSTEM_POLICY_FILE_PATH } from '../../base/common/policy.js';
+import { resolveBeCoderImportRecovery } from '../node/beCoderInstallation.js';
 
 /**
  * The main VS Code entry point.
@@ -96,11 +98,21 @@ class CodeMain {
 	}
 
 	private async startup(): Promise<void> {
-		this.configureBeCoderPortableMode();
-
 		// Set the error handler early enough so that we are not getting the
 		// default electron error dialog popping up
 		setUnexpectedErrorHandler(err => console.error(err));
+
+		try {
+			await this.recoverInterruptedBeCoderImport();
+		} catch (error) {
+			console.error(error);
+			dialog.showErrorBox(
+				localize('becoderImportRecoveryError', "Unable to recover BeCoder user data"),
+				localize('becoderImportRecoveryErrorDetail', "BeCoder cannot start because an interrupted user-data import could not be safely recovered. Do not delete the BeCoder data folder.\n\n{0}", toErrorMessage(error))
+			);
+			app.exit(1);
+			return;
+		}
 
 		// Create services
 		const [instantiationService, instanceEnvironment, environmentMainService, configurationService, stateMainService, bufferLogger, productService, userDataProfilesMainService] = this.createServices();
@@ -161,15 +173,47 @@ class CodeMain {
 		}
 	}
 
-	private configureBeCoderPortableMode(): void {
-		if (!app.isPackaged || process.env['VSCODE_PORTABLE']) {
+	private async recoverInterruptedBeCoderImport(): Promise<void> {
+		const dataRoot = process.env['VSCODE_PORTABLE'];
+		if (!dataRoot || !existsSync(join(dataRoot, '.becoder-data-root'))) {
 			return;
 		}
-		const packageRoot = dirname(dirname(app.getAppPath()));
-		const portableDataPath = join(packageRoot, 'data');
-		if (existsSync(portableDataPath)) {
-			process.env['VSCODE_PORTABLE'] = portableDataPath;
+
+		const applicationRoot = app.getAppPath();
+		const recovery = await resolveBeCoderImportRecovery(dataRoot, applicationRoot);
+		if (!recovery) {
+			return;
 		}
+		const { journalPath, helperPath } = recovery;
+
+		const environment = { ...process.env };
+		for (const name of Object.keys(environment)) {
+			if (name === 'NODE_OPTIONS' || name === 'NODE_PATH' || name.startsWith('VSCODE_') || name.startsWith('ELECTRON_')) {
+				delete environment[name];
+			}
+		}
+		const archivePath = join(applicationRoot, 'node_modules.asar');
+		const unpackedPath = join(applicationRoot, 'node_modules.asar.unpacked');
+		environment['ELECTRON_RUN_AS_NODE'] = '1';
+		environment['NODE_PATH'] = existsSync(archivePath)
+			? [archivePath, unpackedPath].join(delimiter)
+			: join(applicationRoot, 'node_modules');
+
+		await new Promise<void>((resolve, reject) => {
+			const helper = spawn(process.execPath, [helperPath, '--recover', journalPath], {
+				env: environment,
+				stdio: 'ignore',
+				windowsHide: true
+			});
+			helper.once('error', reject);
+			helper.once('exit', (code, signal) => {
+				if (code === 0) {
+					resolve();
+				} else {
+					reject(new Error(`BeCoder import recovery helper exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
+				}
+			});
+		});
 	}
 
 	private createServices(): [IInstantiationService, IProcessEnvironment, IEnvironmentMainService, ConfigurationService, StateService, BufferLogger, IProductService, UserDataProfilesMainService] {

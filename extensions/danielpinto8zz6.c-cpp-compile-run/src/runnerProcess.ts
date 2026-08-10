@@ -26,11 +26,24 @@ export type RunnerTimings = {
 };
 
 export type RunnerExecutionResult = {
-	readonly status: 'completed' | 'compile-error' | 'runtime-error' | 'cancelled' | 'runner-error';
+	readonly status: 'completed' | 'compile-error' | 'executable-creation-error' | 'runtime-error' | 'cancelled' | 'unable-to-start' | 'runner-error';
 	readonly exitCode?: number;
 	readonly message?: string;
+	readonly publishedExecutable: boolean;
+	readonly publishedExecutableIdentity?: RunnerExecutableIdentity;
 	readonly executableRemoved: boolean;
+	readonly cleanupFailed: boolean;
 	readonly timings: RunnerTimings;
+};
+
+export type RunnerExecutableIdentity = {
+	readonly device: string;
+	readonly inode: string;
+	readonly size: string;
+	readonly modified: string;
+	readonly changed: string;
+	readonly created: string;
+	readonly sha256: string;
 };
 
 export type RunnerExecutionRequest = {
@@ -54,16 +67,34 @@ type ChildResult = {
 	readonly closeAt: number;
 };
 
+type RemovalResult = 'absent' | 'removed' | 'failed';
+
 class RunnerProcessCancellationError extends Error { }
+class RunnerUnableToStartError extends Error { }
+
+class ExecutablePublicationError extends Error {
+	constructor(
+		readonly cause: unknown,
+		readonly cleanupFailed: boolean
+	) {
+		super(cause instanceof Error ? cause.message : String(cause));
+	}
+}
 
 export type RunnerProcessDependencies = {
 	readonly spawn: typeof spawn;
 	readonly terminate: (child: ChildProcessWithoutNullStreams) => Promise<void>;
+	readonly copyFile: typeof fs.promises.copyFile;
+	readonly rename: typeof fs.promises.rename;
+	readonly rm: typeof fs.promises.rm;
 };
 
 const defaultProcessDependencies: RunnerProcessDependencies = {
 	spawn,
-	terminate: terminateProcessTree
+	terminate: terminateProcessTree,
+	copyFile: fs.promises.copyFile,
+	rename: fs.promises.rename,
+	rm: fs.promises.rm
 };
 
 export class RunnerExecutor {
@@ -71,11 +102,14 @@ export class RunnerExecutor {
 	private activeProgram: ChildProcessWithoutNullStreams | undefined;
 	private cancellationRequested = false;
 	private executing = false;
+	private readonly dependencies: RunnerProcessDependencies;
 
 	constructor(
 		private readonly sessionRoot: string,
-		private readonly dependencies: RunnerProcessDependencies = defaultProcessDependencies
-	) { }
+		dependencies: Partial<RunnerProcessDependencies> = {}
+	) {
+		this.dependencies = { ...defaultProcessDependencies, ...dependencies };
+	}
 
 	async execute(request: RunnerExecutionRequest, callbacks: RunnerExecutionCallbacks): Promise<RunnerExecutionResult> {
 		if (this.executing) {
@@ -84,8 +118,11 @@ export class RunnerExecutor {
 		this.executing = true;
 		this.cancellationRequested = false;
 		const requestRoot = path.join(this.sessionRoot, 'runner-sessions', crypto.randomUUID());
-		const temporaryExecutable = path.join(request.source.directory, `.becoder-${path.basename(request.source.executablePath, '.exe')}-${process.pid}-${crypto.randomUUID()}.exe`);
+		const temporaryExecutable = path.join(requestRoot, `program-${process.pid}-${crypto.randomUUID()}.exe`);
 		let publishedExecutable = false;
+		let publishedExecutableIdentity: RunnerExecutableIdentity | undefined;
+		let taskArtifactsCreated = false;
+		let publicationCleanupFailed = false;
 		let compilerSpawnMs = 0;
 		let compileMs = 0;
 		let processStartMs: number | undefined;
@@ -95,9 +132,14 @@ export class RunnerExecutor {
 		let exitCode: number | undefined;
 		let message: string | undefined;
 		let cleanupMs = 0;
-		let executableRemoved = false;
+		const executableRemoved = false;
+		let cleanupFailed = false;
 
 		try {
+			if (await removePath(request.source.executablePath, false, this.dependencies.rm) === 'failed') {
+				throw new RunnerUnableToStartError();
+			}
+			taskArtifactsCreated = true;
 			const environment = privateRunnerEnvironment(requestRoot, request.compilerPath);
 			await preparePrivateEnvironment(environment);
 			this.throwIfCancellationRequested();
@@ -124,12 +166,12 @@ export class RunnerExecutor {
 				status = 'compile-error';
 				exitCode = compilerResult.exitCode;
 			} else if (!await isOrdinaryFile(temporaryExecutable)) {
-				status = 'runner-error';
+				status = 'executable-creation-error';
 				exitCode = 1;
 				message = 'BeCoder bundled compiler did not produce an executable.';
 			} else {
 				this.throwIfCancellationRequested();
-				await replaceExecutable(temporaryExecutable, request.source.executablePath);
+				publishedExecutableIdentity = await publishExecutable(temporaryExecutable, request.source.executablePath, this.dependencies);
 				publishedExecutable = true;
 				this.throwIfCancellationRequested();
 				const processRequestedAt = Date.now();
@@ -157,6 +199,13 @@ export class RunnerExecutor {
 		} catch (error) {
 			if (this.cancellationRequested || error instanceof RunnerProcessCancellationError) {
 				status = 'cancelled';
+			} else if (error instanceof RunnerUnableToStartError) {
+				status = 'unable-to-start';
+			} else if (error instanceof ExecutablePublicationError) {
+				status = 'executable-creation-error';
+				exitCode = 1;
+				message = error.message;
+				publicationCleanupFailed = error.cleanupFailed;
 			} else {
 				status = 'runner-error';
 				message = error instanceof Error ? error.message : String(error);
@@ -165,11 +214,14 @@ export class RunnerExecutor {
 			const cleanupStartedAt = Date.now();
 			this.activeProgram = undefined;
 			this.activeChild = undefined;
-			await fs.promises.rm(temporaryExecutable, { force: true }).catch((): void => undefined);
-			if (publishedExecutable && request.settings.cleanupExecutable) {
-				executableRemoved = await removeFile(request.source.executablePath);
+			let cleanupComplete = !publicationCleanupFailed;
+			if (taskArtifactsCreated) {
+				cleanupComplete = await removePath(requestRoot, true, this.dependencies.rm) !== 'failed' && cleanupComplete;
 			}
-			await fs.promises.rm(requestRoot, { recursive: true, force: true }).catch((): void => undefined);
+			if (this.cancellationRequested) {
+				status = 'cancelled';
+			}
+			cleanupFailed = !cleanupComplete;
 			cleanupMs = Date.now() - cleanupStartedAt;
 			this.executing = false;
 		}
@@ -178,7 +230,10 @@ export class RunnerExecutor {
 			status,
 			exitCode,
 			message,
+			publishedExecutable,
+			publishedExecutableIdentity,
 			executableRemoved,
+			cleanupFailed,
 			timings: {
 				panelReadyMs: request.panelReadyMs,
 				saveMs: request.saveMs,
@@ -385,18 +440,148 @@ async function isOrdinaryFile(candidate: string): Promise<boolean> {
 	}
 }
 
-async function removeFile(candidate: string): Promise<boolean> {
+async function isPathAbsent(candidate: string): Promise<boolean> {
 	try {
-		await fs.promises.rm(candidate, { force: true });
-		return !await isOrdinaryFile(candidate);
-	} catch {
+		await fs.promises.lstat(candidate);
 		return false;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === 'ENOENT';
 	}
 }
 
-async function replaceExecutable(source: string, destination: string): Promise<void> {
-	await fs.promises.rm(destination, { force: true });
-	await fs.promises.rename(source, destination);
+async function removePath(
+	candidate: string,
+	recursive: boolean,
+	rm: typeof fs.promises.rm
+): Promise<RemovalResult> {
+	try {
+		await fs.promises.lstat(candidate);
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'failed';
+	}
+	try {
+		await rm(candidate, { recursive, force: true });
+		return await isPathAbsent(candidate) ? 'removed' : 'failed';
+	} catch {
+		return 'failed';
+	}
+}
+
+export function finalizePublishedExecutable(result: RunnerExecutionResult, executablePath: string): RunnerExecutionResult {
+	if (!result.publishedExecutable || result.cleanupFailed || result.status === 'cancelled') {
+		return result;
+	}
+	if (!result.publishedExecutableIdentity) {
+		return { ...result, cleanupFailed: true };
+	}
+	try {
+		const currentIdentity = readExecutableIdentitySync(executablePath);
+		if (!sameExecutableIdentity(currentIdentity, result.publishedExecutableIdentity)) {
+			return { ...result, cleanupFailed: true };
+		}
+		fs.rmSync(executablePath, { force: true });
+		if (fs.existsSync(executablePath)) {
+			return { ...result, cleanupFailed: true };
+		}
+		return { ...result, executableRemoved: true };
+	} catch {
+		return { ...result, cleanupFailed: true };
+	}
+}
+
+export async function publishExecutable(
+	source: string,
+	destination: string,
+	dependencies: Pick<RunnerProcessDependencies, 'copyFile' | 'rename' | 'rm'> = defaultProcessDependencies
+): Promise<RunnerExecutableIdentity> {
+	const stagingPath = path.join(
+		path.dirname(destination),
+		`.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`
+	);
+	let publicationError: unknown;
+	let stagingIdentity: RunnerExecutableIdentity | undefined;
+	try {
+		await dependencies.copyFile(source, stagingPath, fs.constants.COPYFILE_EXCL);
+		stagingIdentity = await readExecutableIdentity(stagingPath);
+		await dependencies.rename(stagingPath, destination);
+	} catch (error) {
+		publicationError = error;
+	}
+	const stagingRemoval = await removePath(stagingPath, false, dependencies.rm);
+	if (publicationError !== undefined || stagingRemoval === 'failed') {
+		throw new ExecutablePublicationError(
+			publicationError ?? new Error('Executable publication staging cleanup failed.'),
+			stagingRemoval === 'failed'
+		);
+	}
+	try {
+		const destinationIdentity = await readExecutableIdentity(destination);
+		if (!stagingIdentity || !samePublishedFileIdentity(stagingIdentity, destinationIdentity)) {
+			throw new Error('Published executable identity differs from the request-owned staging file.');
+		}
+		return destinationIdentity;
+	} catch (error) {
+		throw new ExecutablePublicationError(error, true);
+	}
+}
+
+async function readExecutableIdentity(candidate: string): Promise<RunnerExecutableIdentity> {
+	const before = await fs.promises.lstat(candidate, { bigint: true });
+	if (!before.isFile() || before.isSymbolicLink()) {
+		throw new Error('Published executable is not an ordinary file.');
+	}
+	const sha256 = crypto.createHash('sha256').update(await fs.promises.readFile(candidate)).digest('hex');
+	const after = await fs.promises.lstat(candidate, { bigint: true });
+	const beforeIdentity = executableIdentityFromStat(before, sha256);
+	const afterIdentity = executableIdentityFromStat(after, sha256);
+	if (!after.isFile() || after.isSymbolicLink() || !sameExecutableIdentity(beforeIdentity, afterIdentity)) {
+		throw new Error('Published executable changed while its identity was captured.');
+	}
+	return afterIdentity;
+}
+
+function readExecutableIdentitySync(candidate: string): RunnerExecutableIdentity {
+	const before = fs.lstatSync(candidate, { bigint: true });
+	if (!before.isFile() || before.isSymbolicLink()) {
+		throw new Error('Published executable is not an ordinary file.');
+	}
+	const sha256 = crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+	const after = fs.lstatSync(candidate, { bigint: true });
+	const beforeIdentity = executableIdentityFromStat(before, sha256);
+	const afterIdentity = executableIdentityFromStat(after, sha256);
+	if (!after.isFile() || after.isSymbolicLink() || !sameExecutableIdentity(beforeIdentity, afterIdentity)) {
+		throw new Error('Published executable changed while its identity was captured.');
+	}
+	return afterIdentity;
+}
+
+function executableIdentityFromStat(stat: fs.BigIntStats, sha256: string): RunnerExecutableIdentity {
+	return {
+		device: stat.dev.toString(),
+		inode: stat.ino.toString(),
+		size: stat.size.toString(),
+		modified: stat.mtimeNs.toString(),
+		changed: stat.ctimeNs.toString(),
+		created: stat.birthtimeNs.toString(),
+		sha256
+	};
+}
+
+function sameExecutableIdentity(first: RunnerExecutableIdentity, second: RunnerExecutableIdentity): boolean {
+	return first.device === second.device
+		&& first.inode === second.inode
+		&& first.size === second.size
+		&& first.modified === second.modified
+		&& first.changed === second.changed
+		&& first.created === second.created
+		&& first.sha256 === second.sha256;
+}
+
+function samePublishedFileIdentity(first: RunnerExecutableIdentity, second: RunnerExecutableIdentity): boolean {
+	return first.device === second.device
+		&& first.inode === second.inode
+		&& first.size === second.size
+		&& first.sha256 === second.sha256;
 }
 
 function toTerminalText(text: string): string {

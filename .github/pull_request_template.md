@@ -1,7 +1,9 @@
-<!-- Thank you for submitting a Pull Request. Please:
-* Read our Pull Request guidelines:
-  https://github.com/microsoft/vscode/wiki/How-to-Contribute#pull-requests
-* Associate an issue with the Pull Request.
-* Ensure that the code is up-to-date with the `main` branch.
-* Include a description of the proposed changes and how to test them.
+<!--
+BeCoder pull request checklist:
+- Describe the user-visible behavior and the owning product boundary.
+- Link the relevant issue or handoff requirement when one exists.
+- List the exact source checks, tests, package checks, and runtime checks completed.
+- State packaging, bundled-extension, localization, and license impact.
+- Include screenshots for visible UI changes.
+- Do not claim GUI/runtime acceptance from a successful source or Setup build alone.
 -->

@@ -14,18 +14,41 @@
 			"supported": true
 		}
 	},
-	"activationEvents": ["*", "onCommand:becoder.setupEnvironment", "onCommand:becoder.redetectToolchain", "onCommand:becoder.repairToolchain", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.openToolchainDiagnostics"],
+	"activationEvents": ["*", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.openToolchainDiagnostics", "onCommand:becoder.exportUserData", "onCommand:becoder.importUserData"],
 	"main": "./out/extension.js",
 	"scripts": {
-		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
+		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true }); require('fs').rmSync('out-test', { recursive: true, force: true })\"",
 		"compile": "npm run clean && node ../../node_modules/typescript/bin/tsc6 -p ./",
+		"test": "node -e \"require('fs').rmSync('out-test', { recursive: true, force: true })\" && node ../../node_modules/typescript/bin/tsc6 -p ./tsconfig.test.json && node --test out-test/test/*.test.js",
 		"vscode:prepublish": "npm run compile"
 	},
 	"contributes": {
 		"configurationDefaults": {
 			"editor.unicodeHighlight.nonBasicASCII": false,
 			"editor.unicodeHighlight.ambiguousCharacters": false,
-			"editor.unicodeHighlight.invisibleCharacters": true
+			"editor.unicodeHighlight.invisibleCharacters": true,
+			"editor.fontLigatures": false,
+			"editor.cursorSmoothCaretAnimation": "on",
+			"editor.smoothScrolling": true,
+			"workbench.list.smoothScrolling": true,
+			"terminal.integrated.smoothScrolling": true,
+			"editor.cursorBlinking": "smooth",
+			"editor.fontSize": 14,
+			"files.autoSave": "onFocusChange",
+			"editor.formatOnSave": false,
+			"editor.formatOnPaste": false,
+			"editor.mouseWheelZoom": true,
+			"window.systemColorTheme": "auto",
+			"window.titleBarStyle": "custom",
+			"window.commandCenter": false,
+			"workbench.startupEditor": "welcomePage",
+			"workbench.navigationControl.enabled": false,
+			"workbench.layoutControl.enabled": true,
+			"workbench.layoutControl.type": "both",
+			"workbench.activityBar.location": "top",
+			"workbench.statusBar.visible": false,
+			"becoder.runner.cppFlags": ["-O2", "-Wall", "-DDEBUG"],
+			"becoder.runner.cFlags": ["-O2", "-Wall", "-DDEBUG"]
 		},
 		"configuration": {
 			"title": "%configuration.title%",
@@ -40,75 +63,16 @@
 					"title": "%configuration.displayLanguage.title%",
 					"description": "%configuration.displayLanguage.description%"
 				},
-				"becoder.setup.completed": {
-					"type": "boolean",
-					"default": false,
-					"scope": "window",
-					"title": "%configuration.completed.title%",
-					"description": "%configuration.completed%"
-				},
-				"becoder.setup.pending": {
-					"type": "object",
-					"default": {},
-					"scope": "window",
-					"title": "%configuration.pending.title%",
-					"description": "%configuration.pending%"
-				},
-				"becoder.executableCleanupDelaySeconds": {
-					"type": "number",
-					"default": 60,
-					"minimum": 0,
-					"maximum": 86400,
-					"scope": "window",
-					"title": "%configuration.executableCleanupDelaySeconds.title%",
-					"description": "%configuration.executableCleanupDelaySeconds%"
-				},
 				"becoder.newFile.defaultLanguage": {
 					"type": "string",
 					"default": "cpp",
 					"scope": "window",
 					"title": "%configuration.newFileDefaultLanguage.title%",
 					"description": "%configuration.newFileDefaultLanguage%"
-				},
-				"becoder.toolchain.compilerPath": {
-					"type": "string",
-					"default": "",
-					"scope": "window",
-					"title": "%configuration.compilerPath.title%",
-					"description": "%configuration.compilerPath%"
-				},
-				"becoder.toolchain.cCompilerPath": {
-					"type": "string",
-					"default": "",
-					"scope": "window",
-					"title": "%configuration.cCompilerPath.title%",
-					"description": "%configuration.cCompilerPath%"
-				},
-				"becoder.toolchain.stdIncludePath": {
-					"type": "string",
-					"default": "",
-					"scope": "window",
-					"title": "%configuration.stdIncludePath.title%",
-					"description": "%configuration.stdIncludePath%"
-				},
-				"becoder.toolchain.debuggerHeader": {
-					"type": "string",
-					"default": "",
-					"scope": "window",
-					"title": "%configuration.debuggerHeader.title%",
-					"description": "%configuration.debuggerHeader%"
 				}
 			}
 		},
 		"commands": [
-			{
-				"command": "becoder.setupEnvironment",
-				"title": "%command.configure%"
-			},
-			{
-				"command": "becoder.rerunFirstRunSetup",
-				"title": "%command.rerunFirstRun%"
-			},
 			{
 				"command": "becoder.openSettings",
 				"title": "%command.openSettings%",
@@ -128,14 +92,14 @@
 				"icon": "$(pulse)"
 			},
 			{
-				"command": "becoder.redetectToolchain",
-				"title": "%command.redetectToolchain%",
-				"icon": "$(refresh)"
+				"command": "becoder.exportUserData",
+				"title": "%command.exportUserData%",
+				"icon": "$(export)"
 			},
 			{
-				"command": "becoder.repairToolchain",
-				"title": "%command.repairToolchain%",
-				"icon": "$(tools)"
+				"command": "becoder.importUserData",
+				"title": "%command.importUserData%",
+				"icon": "$(import)"
 			},
 			{
 				"command": "becoder.showAllFiles",
@@ -152,12 +116,12 @@
 			"view/title": [
 				{
 					"command": "becoder.showAllFiles",
-					"when": "view == workbench.explorer.fileView && !becoder.showAllFiles",
+					"when": "view == workbench.explorer.fileView && becoder.filesHiddenByBeCoder",
 					"group": "navigation@10"
 				},
 				{
 					"command": "becoder.hideSetupFiles",
-					"when": "view == workbench.explorer.fileView && becoder.showAllFiles",
+					"when": "view == workbench.explorer.fileView && !becoder.filesHiddenByBeCoder",
 					"group": "navigation@10"
 				}
 			]

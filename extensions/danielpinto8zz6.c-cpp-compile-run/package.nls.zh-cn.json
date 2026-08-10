@@ -8,6 +8,5 @@
 	"configuration.cStandard": "BeCoder Runner 使用的 C 语言标准。",
 	"configuration.cppStandard": "BeCoder Runner 使用的 C++ 语言标准。",
 	"configuration.cppFlags": "在必需的 -O2、-Wall 和 -DDEBUG 参数之后附加的 C++ 编译参数。",
-	"configuration.cFlags": "在必需的 -O2、-Wall 和 -DDEBUG 参数之后附加的 C 编译参数。",
-	"configuration.cleanupExecutable": "程序退出后删除源码同目录下生成的可执行文件。"
+	"configuration.cFlags": "在必需的 -O2、-Wall 和 -DDEBUG 参数之后附加的 C 编译参数。"
 }

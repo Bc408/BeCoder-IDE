@@ -9,7 +9,7 @@ import { BcLineEditor, CommandHistory, LineEditorAction } from './bcLineEditor';
 import { RunnerPhase } from './runnerLifecycle';
 import { ProgramInputAction, ProgramInputEditor, TerminalOpenTracker } from './terminalInput';
 import { terminalCellWidth } from './terminalText';
-import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart, renderBcCommand, renderBcPrompt, renderBcStatus } from './terminalVisuals';
+import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart, renderBcCommand, renderBcFlowFailure, renderBcPrompt, renderBcStatus } from './terminalVisuals';
 
 export type BcTerminalCallbacks = {
 	readonly phase: () => RunnerPhase;
@@ -133,6 +133,14 @@ export class BcTerminal implements vscode.Pseudoterminal {
 		return this.openTracker.wait(startedAt);
 	}
 
+	performWhileOpen(operation: () => void): boolean {
+		if (this.closed) {
+			return false;
+		}
+		operation();
+		return true;
+	}
+
 	echoCommand(command: string): void {
 		this.clearEscapeFlush();
 		this.lineEditor.reset();
@@ -163,6 +171,12 @@ export class BcTerminal implements vscode.Pseudoterminal {
 	writeStatus(message: string, kind: 'success' | 'error'): void {
 		this.ensureLineBoundary();
 		this.writeRaw(`${renderBcStatus(message, kind)}\r\n`);
+		this.outputEndsOnLineBoundary = true;
+	}
+
+	writeFlowFailure(title: string, description: string): void {
+		this.ensureLineBoundary();
+		this.writeRaw(`${renderBcFlowFailure(title, description)}\r\n`);
 		this.outputEndsOnLineBoundary = true;
 	}
 

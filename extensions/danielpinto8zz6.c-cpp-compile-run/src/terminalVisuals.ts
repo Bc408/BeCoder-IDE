@@ -41,6 +41,10 @@ export function renderBcStatus(message: string, kind: BcStatusKind): string {
 	return `${kind === 'success' ? ansiBrightGreen : ansiBrightRed}===== ${message} =====${ansiReset}`;
 }
 
+export function renderBcFlowFailure(title: string, description: string): string {
+	return `${ansiBrightYellow}===== ${title} =====\r\n${description}${ansiReset}`;
+}
+
 export function osc633PromptStart(): string {
 	return osc633('A');
 }

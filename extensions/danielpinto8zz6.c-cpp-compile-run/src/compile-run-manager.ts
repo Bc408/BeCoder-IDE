@@ -9,9 +9,9 @@ import * as vscode from 'vscode';
 import { BcCommand, formatRunCommand, parseBcCommand, resolveCommandSource } from './bcCommand';
 import { CommandHistory } from './bcLineEditor';
 import { BcTerminal } from './bcTerminal';
-import { BeCoderSource, PreparedSource, bundledCompiler, exactInputPath, prepareActiveSource, prepareCommandSource, runnerSettings } from './compiler';
+import { BeCoderSource, PreparedSource, RunnerRequestError, bundledCompiler, exactInputPath, prepareActiveSource, prepareCommandSource, runnerSettings } from './compiler';
 import { RunnerLifecycle } from './runnerLifecycle';
-import { RunnerExecutionResult, RunnerExecutor } from './runnerProcess';
+import { finalizePublishedExecutable, RunnerExecutionResult, RunnerExecutor } from './runnerProcess';
 import { presentRunnerResult } from './runnerPresentation';
 
 const runnerName = 'BeCoder Runner';
@@ -69,7 +69,10 @@ export class CompileRunManager implements vscode.Disposable {
 			const panelReadyMs = await pseudoterminal.waitForOpen(panelStartedAt);
 			this.throwIfCancelled(request);
 			if (panelReadyMs === undefined) {
-				throw new Error(vscode.l10n.t('BeCoder Runner panel was closed before the request started.'));
+				throw new RunnerRequestError(
+					'BeCoder Runner panel was closed before the request started.',
+					vscode.l10n.t('BeCoder Runner panel was closed before the request started.')
+				);
 			}
 			const commandText = formatRunCommand(prepared.source.path, pseudoterminal.cwd, withInput);
 			const parsed = parseBcCommand(commandText);
@@ -157,32 +160,48 @@ export class CompileRunManager implements vscode.Disposable {
 				}
 				pseudoterminal.setPhase(phase);
 				if (phase === 'running') {
-					pseudoterminal.writeStatus(vscode.l10n.t('Compilation Successful, Running'), 'success');
+					pseudoterminal.writeStatus('Compilation Successful, Running', 'success');
 				}
 			}
 		});
-		this.traceResult(prepared.source, command.withInput, result);
-		const presentation = presentRunnerResult(result);
-		request.exitCode = presentation.exitCode;
-		switch (presentation.outcome) {
-			case 'run-complete':
-				pseudoterminal.writeStatus(vscode.l10n.t('Run Complete'), 'success');
-				break;
-			case 'runtime-error':
-				pseudoterminal.writeStatus(vscode.l10n.t('Runtime Error (exit code {0})', request.exitCode ?? 1), 'error');
-				break;
-			case 'runner-error': {
-				const message = result.message ?? vscode.l10n.t('BeCoder Runner could not start the command.');
-				pseudoterminal.writeError(message);
-				void vscode.window.showErrorMessage(message);
-				break;
+		if (result.status === 'cancelled' || request.cancelled || pseudoterminal !== this.pseudoterminal || this.disposed) {
+			this.traceResult(prepared.source, command.withInput, result);
+			return;
+		}
+		let finalResult = result;
+		const presented = pseudoterminal.performWhileOpen(() => {
+			finalResult = finalizePublishedExecutable(result, prepared.source.executablePath);
+			const presentation = presentRunnerResult(finalResult);
+			request.exitCode = presentation.exitCode;
+			switch (presentation.outcome) {
+				case 'run-complete':
+					pseudoterminal.writeStatus('Run Complete', 'success');
+					break;
+				case 'runtime-error':
+					pseudoterminal.writeStatus(`Runtime Error (exit code ${request.exitCode ?? 1})`, 'error');
+					break;
+				case 'runner-error': {
+					const protocolMessage = finalResult.message ?? 'BeCoder Runner could not start the command.';
+					const localizedMessage = finalResult.message ?? vscode.l10n.t('BeCoder Runner could not start the command.');
+					pseudoterminal.writeError(protocolMessage);
+					void vscode.window.showErrorMessage(localizedMessage);
+					break;
+				}
+				case undefined:
+					break;
 			}
-			case undefined:
-				break;
+			if (presentation.flowFailure) {
+				pseudoterminal.writeFlowFailure(presentation.flowFailure.title, presentation.flowFailure.description);
+			}
+			if (presentation.showExecutableRemoved) {
+				pseudoterminal.writeStatus('Executable Program Removed', 'success');
+			}
+		});
+		if (!presented) {
+			this.traceResult(prepared.source, command.withInput, result);
+			return;
 		}
-		if (presentation.showExecutableRemoved) {
-			pseudoterminal.writeStatus(vscode.l10n.t('Executable Program Removed'), 'success');
-		}
+		this.traceResult(prepared.source, command.withInput, finalResult);
 	}
 
 	private beginRequest(): ActiveRequest | undefined {
@@ -206,10 +225,11 @@ export class CompileRunManager implements vscode.Disposable {
 		if (request.cancelled || error instanceof RunnerCancellationError) {
 			return;
 		}
-		const message = error instanceof Error ? error.message : String(error);
+		const protocolMessage = error instanceof Error ? error.message : String(error);
+		const localizedMessage = error instanceof RunnerRequestError ? error.localizedMessage : protocolMessage;
 		request.exitCode = 1;
-		pseudoterminal?.writeError(message);
-		void vscode.window.showErrorMessage(message);
+		pseudoterminal?.writeError(protocolMessage);
+		void vscode.window.showErrorMessage(localizedMessage);
 	}
 
 	private finishRequest(request: ActiveRequest): void {
@@ -274,10 +294,11 @@ export class CompileRunManager implements vscode.Disposable {
 	}
 
 	private rejectUnsupportedCommand(pseudoterminal: BcTerminal): void {
-		const message = vscode.l10n.t('BC accepts only run <source>, run <source> -WithInput, clear, and help. Use native PowerShell for system commands.');
-		pseudoterminal.writeError(message);
+		const protocolMessage = 'BC accepts only run <source>, run <source> -WithInput, clear, and help. Use native PowerShell for system commands.';
+		const localizedMessage = vscode.l10n.t(protocolMessage);
+		pseudoterminal.writeError(protocolMessage);
 		pseudoterminal.finishCommand(1);
-		void vscode.window.showWarningMessage(message);
+		void vscode.window.showWarningMessage(localizedMessage);
 	}
 
 	private rejectBusy(): void {
@@ -291,6 +312,9 @@ export class CompileRunManager implements vscode.Disposable {
 			withInput,
 			status: result.status,
 			exitCode: result.exitCode,
+			publishedExecutable: result.publishedExecutable,
+			executableRemoved: result.executableRemoved,
+			cleanupFailed: result.cleanupFailed,
 			targetExceeded: typeof result.timings.compileToRunStartMs === 'number' && result.timings.compileToRunStartMs > 2000,
 			...result.timings
 		}));

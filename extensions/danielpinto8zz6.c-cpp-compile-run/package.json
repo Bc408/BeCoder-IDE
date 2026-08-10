@@ -43,8 +43,7 @@
 				"becoder.runner.cStandard": { "type": "string", "enum": ["c11", "c17", "c23"], "default": "c17", "description": "%configuration.cStandard%" },
 				"becoder.runner.cppStandard": { "type": "string", "enum": ["c++11", "c++14", "c++17", "c++20", "c++23"], "default": "c++20", "description": "%configuration.cppStandard%" },
 				"becoder.runner.cppFlags": { "type": "array", "items": { "type": "string" }, "default": [], "description": "%configuration.cppFlags%" },
-				"becoder.runner.cFlags": { "type": "array", "items": { "type": "string" }, "default": [], "description": "%configuration.cFlags%" },
-				"becoder.runner.cleanupExecutable": { "type": "boolean", "default": true, "description": "%configuration.cleanupExecutable%" }
+				"becoder.runner.cFlags": { "type": "array", "items": { "type": "string" }, "default": [], "description": "%configuration.cFlags%" }
 			}
 		}
 	},

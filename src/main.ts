@@ -20,6 +20,7 @@ import { getUNCHost, addUNCHostToAllowlist } from './vs/base/node/unc.js';
 import { INLSConfiguration } from './vs/nls.js';
 import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
 import { resolveUserLocale } from './vs/platform/environment/node/userLocale.js';
+import { configureBeCoderPackagedDataRoot } from './vs/code/node/beCoderInstallation.js';
 
 perf.mark('code/didStartMain');
 
@@ -30,6 +31,14 @@ perf.mark('code/willLoadMainBundle', {
 	startTime: Math.floor(performance.timeOrigin)
 });
 perf.mark('code/didLoadMainBundle');
+
+configureBeCoderPackagedDataRoot({
+	isPackaged: app.isPackaged,
+	productName: product.nameShort,
+	applicationName: product.applicationName,
+	applicationPath: app.getAppPath(),
+	environment: process.env
+});
 
 // Enable portable support
 const portable = configurePortable(product);

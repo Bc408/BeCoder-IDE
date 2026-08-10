@@ -252,13 +252,6 @@ export function activate(context: vscode.ExtensionContext): void {
 				scheduleRecentEligible();
 			}
 		}),
-		vscode.workspace.onDidChangeConfiguration(event => {
-			if ((event.affectsConfiguration('becoder.toolchain.compilerPath')
-				|| event.affectsConfiguration('becoder.setup.completed')) && vscode.window.activeTextEditor) {
-				stopToolchainRetry();
-				scheduleRecentEligible();
-			}
-		}),
 		vscode.workspace.onDidCloseTextDocument(document => removeOwner(document.uri)),
 		vscode.workspace.onDidDeleteFiles(event => {
 			const deleted = new Set(event.files.map(uri => uri.toString()));

@@ -22,25 +22,39 @@ export type PreparedSource = {
 	readonly saveMs: number;
 };
 
+export class RunnerRequestError extends Error {
+	constructor(message: string, readonly localizedMessage: string) {
+		super(message);
+	}
+}
+
 export type RunnerSettings = {
 	readonly cStandard: string;
 	readonly cppStandard: string;
 	readonly cFlags: readonly string[];
 	readonly cppFlags: readonly string[];
-	readonly cleanupExecutable: boolean;
 };
 
 export async function prepareActiveSource(): Promise<PreparedSource> {
 	const editor = vscode.window.activeTextEditor;
 	if (!editor || !['c', 'cpp'].includes(editor.document.languageId)) {
-		throw new Error(vscode.l10n.t('BeCoder Runner supports only C and C++ source files.'));
+		throw new RunnerRequestError(
+			'BeCoder Runner supports only C and C++ source files.',
+			vscode.l10n.t('BeCoder Runner supports only C and C++ source files.')
+		);
 	}
 	const saveStartedAt = Date.now();
 	if ((editor.document.isUntitled || editor.document.isDirty) && !await editor.document.save()) {
-		throw new Error(vscode.l10n.t('Save the source file before using BeCoder Runner.'));
+		throw new RunnerRequestError(
+			'Save the source file before using BeCoder Runner.',
+			vscode.l10n.t('Save the source file before using BeCoder Runner.')
+		);
 	}
 	if (editor.document.isUntitled) {
-		throw new Error(vscode.l10n.t('Save the source file before using BeCoder Runner.'));
+		throw new RunnerRequestError(
+			'Save the source file before using BeCoder Runner.',
+			vscode.l10n.t('Save the source file before using BeCoder Runner.')
+		);
 	}
 	return {
 		source: await sourceFromPath(editor.document.fileName),
@@ -53,7 +67,10 @@ export async function prepareCommandSource(sourcePath: string): Promise<Prepared
 	const document = vscode.workspace.textDocuments.find(candidate => samePath(candidate.fileName, absolutePath));
 	const saveStartedAt = Date.now();
 	if (document?.isDirty && !await document.save()) {
-		throw new Error(vscode.l10n.t('Unable to save {0} before running.', path.basename(absolutePath)));
+		throw new RunnerRequestError(
+			`Unable to save ${path.basename(absolutePath)} before running.`,
+			vscode.l10n.t('Unable to save {0} before running.', path.basename(absolutePath))
+		);
 	}
 	return {
 		source: await sourceFromPath(absolutePath),
@@ -64,10 +81,16 @@ export async function prepareCommandSource(sourcePath: string): Promise<Prepared
 export async function exactInputPath(source: BeCoderSource): Promise<string> {
 	const inspection = await inspectExactInput(source.directory);
 	if (inspection.status === 'missing') {
-		throw new Error(vscode.l10n.t('Run With Input requires an ordinary file named input beside {0}.', source.name));
+		throw new RunnerRequestError(
+			`Run With Input requires an ordinary file named input beside ${source.name}.`,
+			vscode.l10n.t('Run With Input requires an ordinary file named input beside {0}.', source.name)
+		);
 	}
 	if (inspection.status !== 'valid') {
-		throw new Error(vscode.l10n.t('Run With Input requires input to be an ordinary file beside {0}.', source.name));
+		throw new RunnerRequestError(
+			`Run With Input requires input to be an ordinary file beside ${source.name}.`,
+			vscode.l10n.t('Run With Input requires input to be an ordinary file beside {0}.', source.name)
+		);
 	}
 	return inspection.path;
 }
@@ -93,24 +116,32 @@ export function runnerSettings(): RunnerSettings {
 		cStandard: setting('becoder.runner.cStandard', 'c17'),
 		cppStandard: setting('becoder.runner.cppStandard', 'c++20'),
 		cFlags: setting('becoder.runner.cFlags', []),
-		cppFlags: setting('becoder.runner.cppFlags', []),
-		cleanupExecutable: setting('becoder.runner.cleanupExecutable', true)
+		cppFlags: setting('becoder.runner.cppFlags', [])
 	};
 }
 
 async function sourceFromPath(sourcePath: string): Promise<BeCoderSource> {
 	const extension = path.extname(sourcePath).toLowerCase();
 	if (extension !== '.c' && !['.cc', '.cpp', '.cxx'].includes(extension)) {
-		throw new Error(vscode.l10n.t('BeCoder Runner supports .c, .cc, .cpp, and .cxx files.'));
+		throw new RunnerRequestError(
+			'BeCoder Runner supports .c, .cc, .cpp, and .cxx files.',
+			vscode.l10n.t('BeCoder Runner supports .c, .cc, .cpp, and .cxx files.')
+		);
 	}
 	let stat: fs.Stats;
 	try {
 		stat = await fs.promises.stat(sourcePath);
 	} catch {
-		throw new Error(vscode.l10n.t('Source file was not found: {0}', sourcePath));
+		throw new RunnerRequestError(
+			`Source file was not found: ${sourcePath}`,
+			vscode.l10n.t('Source file was not found: {0}', sourcePath)
+		);
 	}
 	if (!stat.isFile()) {
-		throw new Error(vscode.l10n.t('Source path is not an ordinary file: {0}', sourcePath));
+		throw new RunnerRequestError(
+			`Source path is not an ordinary file: ${sourcePath}`,
+			vscode.l10n.t('Source path is not an ordinary file: {0}', sourcePath)
+		);
 	}
 	const baseName = path.basename(sourcePath, extension);
 	return {

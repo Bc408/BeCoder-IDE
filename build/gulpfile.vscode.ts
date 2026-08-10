@@ -37,6 +37,7 @@ import globCallback from 'glob';
 import rceditCallback from 'rcedit';
 import { spawnTsgo } from './lib/tsgo.ts';
 import { runEsbuildTranspile, runEsbuildBundle } from './lib/esbuild.ts';
+import { stageBeCoderWindowsToolchain } from './lib/becoderToolchain.ts';
 
 
 const glob = promisify(globCallback);
@@ -117,7 +118,7 @@ const vscodeResources = [
 	// Includes
 	...vscodeResourceIncludes,
 
-	// BeCoder first-run onboarding window
+	// BeCoder product resources and bundled component notices
 	'resources/oi-defaults/**',
 	'!resources/oi-defaults/toolchains/*.zip',
 
@@ -276,10 +277,8 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const beCoderOnboarding = gulp.src([
 			'resources/oi-defaults/**',
 			'!resources/oi-defaults/portable-data/**',
-			...(platform === 'win32' ? [] : [
-				'!resources/oi-defaults/toolchains/becoder-ucrt64.zip',
-				'!resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip'
-			])
+			'!resources/oi-defaults/toolchains/becoder-ucrt64.zip',
+			'!resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip'
 		], { base: '.' });
 		const beCoderRecipeDotfiles = gulp.src('resources/oi-defaults/toolchains/ucrt64-sources/recipes/**/.gitignore', { base: '.', dot: true });
 		const sourceFilterPattern = stripSourceMapsInPackagingTasks
@@ -409,7 +408,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		];
 		let all = es.merge(...mergeStreams);
 
-		if (platform === 'win32') {
+		if (platform === 'win32' && arch === 'x64') {
 			all = es.merge(all, gulp.src([
 				'resources/win32/bower.ico',
 				'resources/win32/c.ico',
@@ -643,6 +642,11 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 	};
 }
 
+function stageBeCoderWindowsToolchainTask(destinationFolderName: string, platform: string, arch: string) {
+	const packageRoot = path.join(path.dirname(root), destinationFolderName);
+	return () => stageBeCoderWindowsToolchain(root, packageRoot, platform, arch);
+}
+
 const buildRoot = path.dirname(root);
 
 const BUILD_TARGETS = [
@@ -672,6 +676,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 		if (platform === 'win32') {
 			packageTasks.push(patchWin32DependenciesTask(destinationFolderName));
+			packageTasks.push(stageBeCoderWindowsToolchainTask(destinationFolderName, platform, arch));
 		}
 
 		const vscodeTaskCI = task.define(`vscode${dashed(platform)}${dashed(arch)}${dashed(minified)}-ci`, task.series(...packageTasks));

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop BeCoder"
+  short_description: "Plan, implement, verify, and hand off BeCoder work"
+  default_prompt: "Use $develop-becoder to continue BeCoder work from its authoritative project documents."

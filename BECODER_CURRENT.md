@@ -9,18 +9,17 @@ This is the live development status for BeCoder. Update it whenever the active b
 - Release branch: `main`
 - Active development branch: `codex/stage4.7`
 - Stage 4.7 parent commit: `928aec1` (`feat(stage4.6): remove terminal suggestions and source control`)
-- Planned Stage 4.7 archival commit subject: `feat(stage4.7): archive self-contained Windows distribution`
-- Latest completed remote backup: `origin/stage4.6`
-- Pending plain backup target: `origin/codex/stage4.7`
+- Stage 4.7 archival commit: `e7b5d6d` (`feat(stage4.7): archive self-contained Windows distribution`)
+- Latest completed remote backup: `origin/codex/stage4.7`
 - Current `main`: `c028603`
 - Stable historical runtime reference: `C:\Users\Bc\Desktop\BeCoder\portable_stage2_4_verified`
 - The stable reference is outside the repository and must not be modified.
 
-The accepted Stage 4.7 source, tests, build policy, legal records, and project documentation are awaiting the authorized archival commit and branch backup. Local generated data under `.build/` and `extensions/becoder.setup/out-test-review/` is not part of that commit and must not be staged, committed, or removed without separate authorization.
+The accepted Stage 4.7 source, tests, build policy, legal records, and project documentation were archived in `e7b5d6d` and backed up to `origin/codex/stage4.7`. Local generated data under `.build/` and `extensions/becoder.setup/out-test-review/` is not part of that commit and must not be staged, committed, or removed without separate authorization.
 
 ## 2. Stage Status
 
-**Stage 4.7 was project-owner accepted on 2026-08-10; its archival commit and remote backup are pending.**
+**Stage 4.7 was project-owner accepted, archived, and backed up on 2026-08-10.**
 
 **Stage 4.8 is in progress.** Its implementation foundation exists, but its user-facing delivery is not accepted or archived. Starting or changing Stage 4.8 still requires a new scoped plan and explicit project-owner authorization.
 
@@ -96,12 +95,12 @@ Stage 4.8 is not authorized by the Stage 4.7 archive or backup request.
 
 - Stage 4.8 export/import requires discoverable settings UX and end-to-end runtime acceptance.
 - Inherited component documentation and non-document GitHub triage metadata may receive a separately scoped audit; do not perform keyword-driven deletion.
-- The accepted source and history have not yet been backed up to `origin/codex/stage4.7`; no PR, Release, tag, or public binary publication is authorized or implied.
+- The accepted source and history are backed up to `origin/codex/stage4.7`; no PR, Release, tag, or public binary publication was created or implied.
 - Generated validation data under `.build/si` and `extensions/becoder.setup/out-test-review/` remains local and outside Git.
 
 ## 7. Archived Checkpoints
 
-The latest completed archived checkpoint is Stage 4.6 at `928aec1`, backed up to `origin/stage4.6`. Stage 4.7 is accepted and awaiting its archival commit and `origin/codex/stage4.7` backup.
+The latest completed archived checkpoint is Stage 4.7 at `e7b5d6d`, backed up to `origin/codex/stage4.7`.
 
 Archived and project-owner accepted areas include:
 

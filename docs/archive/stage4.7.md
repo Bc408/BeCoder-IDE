@@ -1,6 +1,6 @@
 # Stage 4.7 Self-Contained Windows Distribution Archive
 
-Status: **Project-owner accepted on 2026-08-10; archival commit and remote backup pending.**
+Status: **Project-owner accepted, archived in `e7b5d6d`, and backed up to `origin/codex/stage4.7` on 2026-08-10.**
 
 ## Accepted Scope
 
@@ -62,4 +62,4 @@ The project owner explicitly confirmed Stage 4.7 GUI/runtime and installation ac
 - Generated `.build/si` validation data and `extensions/becoder.setup/out-test-review/` output remain local and are not part of the Git archive.
 - Repository-wide ESLint retains inherited third-party/generated baseline findings and was not reported as passing.
 
-The planned archival commit subject is `feat(stage4.7): archive self-contained Windows distribution`; the pending plain backup target is `origin/codex/stage4.7`.
+The archival commit is `e7b5d6d` (`feat(stage4.7): archive self-contained Windows distribution`), and the plain backup target `origin/codex/stage4.7` contains that accepted checkpoint. No PR, Release, or tag was created.

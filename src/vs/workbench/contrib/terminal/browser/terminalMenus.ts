@@ -856,7 +856,9 @@ function addContributedProfileActions(
 	disposableStore: DisposableStore
 ): void {
 	const isDefault = contributed.title === defaultProfileName;
-	const title = isDefault ? localize('defaultTerminalProfile', "{0} (Default)", contributed.title.replace(/[\n\r\t]/g, '')) : contributed.title.replace(/[\n\r\t]/g, '');
+	const sanitizedTitle = contributed.title.replace(/[\n\r\t]/g, '');
+	const showDefaultMarker = isDefault && !(contributed.extensionIdentifier === 'becoder.runner' && contributed.id === 'becoder.runner');
+	const title = showDefaultMarker ? localize('defaultTerminalProfile', "{0} (Default)", sanitizedTitle) : sanitizedTitle;
 	dropdownActions.push(disposableStore.add(new Action('contributed', title, undefined, true, () => terminalService.createAndFocusTerminal({
 		config: {
 			extensionIdentifier: contributed.extensionIdentifier,

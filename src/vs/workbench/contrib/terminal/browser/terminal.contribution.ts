@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { getFontSnippets } from '../../../../base/browser/fonts.js';
-import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 import * as nls from '../../../../nls.js';
@@ -120,10 +119,6 @@ Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry).registerViews
 	openCommandActionDescriptor: {
 		id: TerminalCommandId.Toggle,
 		mnemonicTitle: nls.localize({ key: 'miToggleIntegratedTerminal', comment: ['&& denotes a mnemonic'] }, "&&Terminal"),
-		keybindings: {
-			primary: KeyMod.CtrlCmd | KeyCode.Backquote,
-			mac: { primary: KeyMod.WinCtrl | KeyCode.Backquote }
-		},
 		order: 3
 	}
 }], VIEW_CONTAINER);

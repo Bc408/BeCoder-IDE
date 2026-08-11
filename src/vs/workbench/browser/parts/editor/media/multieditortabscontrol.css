@@ -644,6 +644,10 @@
 	margin-right: 4px;
 }
 
+.monaco-workbench.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title .editor-actions .action-item[data-command-id="becoder.runner.runWithInput"] {
+	margin-right: calc(var(--becoder-windows-window-controls-width) - 56px);
+}
+
 .monaco-workbench .part.editor > .content .editor-group-container > .title > .tabs-and-actions-container.wrapping .editor-actions {
 
 	/* When tabs are wrapped, position the editor actions at the end of the very last row */

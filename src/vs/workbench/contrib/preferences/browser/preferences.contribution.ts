@@ -248,18 +248,10 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 					}],
 				});
 			}
-			run(accessor: ServicesAccessor, args: string | IOpenSettingsActionOptions | undefined) {
-				const opts = typeof args === 'string' ? undefined : sanitizeOpenSettingsArgs(args);
-				const hasSettingsTarget = typeof args === 'string'
-					|| opts?.openToSide === true
-					|| opts?.focusSearch === true
-					|| opts?.query !== undefined
-					|| opts?.revealSetting !== undefined;
-				if (!hasSettingsTarget) {
-					return accessor.get(ICommandService).executeCommand('becoder.openSettings');
-				}
+			run(accessor: ServicesAccessor, args: string | IOpenSettingsActionOptions) {
 				// args takes a string for backcompat
-				return accessor.get(IPreferencesService).openSettings(typeof args === 'string' ? { query: args } : { ...opts });
+				const opts = typeof args === 'string' ? { query: args } : sanitizeOpenSettingsArgs(args);
+				return accessor.get(IPreferencesService).openSettings({ ...opts });
 			}
 		}));
 		this._register(registerAction2(class extends Action2 {

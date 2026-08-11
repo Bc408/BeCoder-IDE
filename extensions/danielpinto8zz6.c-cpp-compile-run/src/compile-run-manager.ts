@@ -28,18 +28,46 @@ export class CompileRunManager implements vscode.Disposable {
 	private readonly lifecycle = new RunnerLifecycle();
 	private readonly executor: RunnerExecutor;
 	private readonly trace = vscode.window.createOutputChannel('BeCoder Runner Trace', { log: true });
+	private readonly terminalOpenListener: vscode.Disposable;
 	private readonly terminalCloseListener: vscode.Disposable;
 	private terminal: vscode.Terminal | undefined;
 	private pseudoterminal: BcTerminal | undefined;
+	private pendingPseudoterminal: BcTerminal | undefined;
 	private activeRequest: ActiveRequest | undefined;
 	private disposed = false;
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.executor = new RunnerExecutor(context.globalStorageUri.fsPath);
+		this.terminalOpenListener = vscode.window.onDidOpenTerminal(terminal => {
+			const creationOptions = terminal.creationOptions;
+			if (!('pty' in creationOptions) || creationOptions.pty !== this.pendingPseudoterminal) {
+				return;
+			}
+			const previousTerminal = this.terminal;
+			this.terminal = terminal;
+			this.pseudoterminal = this.pendingPseudoterminal;
+			this.pendingPseudoterminal = undefined;
+			if (previousTerminal && previousTerminal !== terminal && !previousTerminal.exitStatus) {
+				previousTerminal.dispose();
+			}
+		});
 		this.terminalCloseListener = vscode.window.onDidCloseTerminal(terminal => {
 			if (terminal === this.terminal) {
-				this.handleTerminalClosed();
+				this.handleTerminalClosed(terminal);
 			}
+		});
+	}
+
+	provideTerminalProfile(): vscode.TerminalProfile {
+		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+			?? (vscode.window.activeTextEditor ? path.dirname(vscode.window.activeTextEditor.document.fileName) : process.cwd());
+		const pseudoterminal = this.createPseudoterminal(cwd);
+		this.pendingPseudoterminal = pseudoterminal;
+		return new vscode.TerminalProfile({
+			name: runnerName,
+			pty: pseudoterminal,
+			iconPath: new vscode.ThemeIcon('terminal'),
+			isTransient: true
 		});
 	}
 
@@ -264,30 +292,51 @@ export class CompileRunManager implements vscode.Disposable {
 		if (this.terminal && !this.terminal.exitStatus && this.pseudoterminal) {
 			return { terminal: this.terminal, pseudoterminal: this.pseudoterminal };
 		}
-		const pseudoterminal = new BcTerminal(cwd, this.history, {
-			phase: () => this.lifecycle.phase,
-			submit: command => void this.submitTypedCommand(command, pseudoterminal),
-			cancel: () => void this.cancelActive(),
-			programInput: text => this.executor.writeProgramInput(text),
-			busyAttempt: () => this.rejectBusy(),
-			close: () => this.handleTerminalClosed()
-		});
+		const pseudoterminal = this.createPseudoterminal(cwd);
 		const terminal = vscode.window.createTerminal({
 			name: runnerName,
 			pty: pseudoterminal,
-			iconPath: new vscode.ThemeIcon('terminal')
+			iconPath: new vscode.ThemeIcon('terminal'),
+			isTransient: true
 		});
 		this.pseudoterminal = pseudoterminal;
 		this.terminal = terminal;
 		return { terminal, pseudoterminal };
 	}
 
-	private handleTerminalClosed(): void {
-		if (!this.terminal && !this.pseudoterminal) {
+	private createPseudoterminal(cwd: string): BcTerminal {
+		let pseudoterminal: BcTerminal;
+		pseudoterminal = new BcTerminal(cwd, this.history, {
+			phase: () => this.lifecycle.phase,
+			submit: command => void this.submitTypedCommand(command, pseudoterminal),
+			cancel: () => void this.cancelActive(),
+			programInput: text => this.executor.writeProgramInput(text),
+			busyAttempt: () => this.rejectBusy(),
+			close: () => this.handlePseudoterminalClosed(pseudoterminal)
+		});
+		return pseudoterminal;
+	}
+
+	private handleTerminalClosed(terminal: vscode.Terminal): void {
+		if (terminal !== this.terminal) {
 			return;
 		}
 		this.terminal = undefined;
 		this.pseudoterminal = undefined;
+		if (this.lifecycle.busy) {
+			void this.cancelActive();
+		}
+	}
+
+	private handlePseudoterminalClosed(pseudoterminal: BcTerminal): void {
+		if (pseudoterminal === this.pendingPseudoterminal) {
+			this.pendingPseudoterminal = undefined;
+		}
+		if (pseudoterminal !== this.pseudoterminal) {
+			return;
+		}
+		this.pseudoterminal = undefined;
+		this.terminal = undefined;
 		if (this.lifecycle.busy) {
 			void this.cancelActive();
 		}
@@ -325,6 +374,7 @@ export class CompileRunManager implements vscode.Disposable {
 		if (this.activeRequest) {
 			this.activeRequest.cancelled = true;
 		}
+		this.terminalOpenListener.dispose();
 		this.terminalCloseListener.dispose();
 		void this.executor.cancel();
 		this.terminal?.dispose();

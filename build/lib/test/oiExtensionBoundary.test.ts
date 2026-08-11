@@ -1165,6 +1165,21 @@ suite('OI extension boundary', () => {
 			'becoder.runner.runWithInput'
 		]);
 
+		const menuItemSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'actions', 'browser', 'menuEntryActionViewItem.ts'), 'utf8');
+		assert.match(menuItemSource, /container\.dataset\.commandId = this\._menuItemAction\.id/);
+		const partCss = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'media', 'part.css'), 'utf8');
+		assert.match(partCss, /\.monaco-workbench\.windows \{\s*--becoder-windows-window-controls-width:/);
+		const knownStyleVariables = readJson<{ sizes?: readonly string[] }>(path.join(repositoryRoot, 'build', 'lib', 'stylelint', 'vscode-known-variables.json'));
+		assert.ok(knownStyleVariables.sizes?.includes('--becoder-windows-window-controls-width'));
+		for (const cssPath of [
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'parts', 'editor', 'media', 'multieditortabscontrol.css'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'parts', 'editor', 'media', 'singleeditortabscontrol.css')
+		]) {
+			const css = fs.readFileSync(cssPath, 'utf8');
+			assert.match(css, /\.monaco-workbench\.windows [^{]*\.editor-group-container\.window-controls-overlay-right-host [^{]*\[data-command-id="becoder\.runner\.runWithInput"\] \{\s*margin-right: calc\(var\(--becoder-windows-window-controls-width\) - 56px\)/);
+			assert.doesNotMatch(css, /custom-titlebar-hidden\.windows [^{]*\[data-command-id="becoder\.runner\.runWithInput"\]/);
+		}
+
 		const terminalSource = fs.readFileSync(path.join(extensionPath, 'src', 'bcTerminal.ts'), 'utf8');
 		assert.match(terminalSource, /implements vscode\.Pseudoterminal/);
 		assert.match(terminalSource, /osc633CommandFinished/);

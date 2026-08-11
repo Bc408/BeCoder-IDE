@@ -152,6 +152,10 @@
 	margin-right: 4px;
 }
 
+.monaco-workbench.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .title-actions .action-item[data-command-id="becoder.runner.runWithInput"] {
+	margin-right: calc(var(--becoder-windows-window-controls-width) - 56px);
+}
+
 .monaco-workbench .part.editor > .content .editor-group-container.active > .title > .title-actions {
 	opacity: 1;
 }

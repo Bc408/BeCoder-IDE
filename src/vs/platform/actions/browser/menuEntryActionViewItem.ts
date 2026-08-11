@@ -224,6 +224,7 @@ export class MenuEntryActionViewItem<T extends IMenuEntryActionViewItemOptions =
 	override render(container: HTMLElement): void {
 		super.render(container);
 		container.classList.add('menu-entry');
+		container.dataset.commandId = this._menuItemAction.id;
 
 		if (this.options.icon) {
 			this._updateItemClass(this._menuItemAction.item);

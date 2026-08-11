@@ -8,10 +8,9 @@
 	overflow: hidden;
 }
 
-/* Desktop Windows places the native window buttons in the first workbench row
- * when the custom title bar is hidden. Parts that occupy that row use this
- * shared reservation instead of each hard-coding the control width. */
-.monaco-workbench.custom-titlebar-hidden.windows {
+/* Desktop Windows reserves this width for native window buttons. Workbench
+ * controls that align across rows share it instead of hard-coding the width. */
+.monaco-workbench.windows {
 	--becoder-windows-window-controls-width: calc(138px / var(--zoom-factor, 1));
 }
 

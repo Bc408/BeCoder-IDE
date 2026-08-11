@@ -1071,6 +1071,7 @@
 		"--slide-from-y"
 	],
 	"sizes": [
+		"--becoder-windows-window-controls-width",
 		"--vscode-agents-fontSize-body1",
 		"--vscode-agents-fontSize-body2",
 		"--vscode-agents-fontSize-heading1",

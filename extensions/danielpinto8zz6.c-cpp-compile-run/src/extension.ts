@@ -10,6 +10,9 @@ import { CompileRunManager } from './compile-run-manager';
 export function activate(context: vscode.ExtensionContext): void {
 	const manager = new CompileRunManager(context);
 	context.subscriptions.push(manager);
+	context.subscriptions.push(vscode.window.registerTerminalProfileProvider('becoder.runner', {
+		provideTerminalProfile: () => manager.provideTerminalProfile()
+	}));
 	const commands: Array<[string, () => Promise<void>]> = [
 		['becoder.runner.openPanel', () => manager.openPanel()],
 		['becoder.runner.run', () => manager.run(false)],

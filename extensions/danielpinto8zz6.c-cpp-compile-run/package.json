@@ -8,7 +8,7 @@
 	"engines": { "vscode": "^1.130.0" },
 	"main": "./dist/extension.js",
 	"categories": ["Programming Languages", "Other"],
-	"activationEvents": ["onLanguage:c", "onLanguage:cpp"],
+	"activationEvents": ["onLanguage:c", "onLanguage:cpp", "onTerminalProfile:becoder.runner"],
 	"extensionDependencies": ["becoder.becoder-setup"],
 	"capabilities": {
 		"untrustedWorkspaces": {
@@ -17,6 +17,14 @@
 		}
 	},
 	"contributes": {
+		"configurationDefaults": {
+			"terminal.integrated.defaultProfile.windows": "BeCoder Runner"
+		},
+		"terminal": {
+			"profiles": [
+				{ "id": "becoder.runner", "title": "BeCoder Runner", "icon": "terminal" }
+			]
+		},
 		"commands": [
 			{ "command": "becoder.runner.openPanel", "title": "%command.openPanel%", "icon": "$(terminal)" },
 			{ "command": "becoder.runner.run", "title": "%command.run%", "icon": "$(play)" },
@@ -34,6 +42,7 @@
 			]
 		},
 		"keybindings": [
+			{ "key": "ctrl+`", "command": "becoder.runner.openPanel" },
 			{ "key": "f6", "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp" },
 			{ "key": "shift+f6", "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp" }
 		],

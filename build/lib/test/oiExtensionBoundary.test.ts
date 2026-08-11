@@ -1031,7 +1031,6 @@ suite('OI extension boundary', () => {
 			'config-file-watcher.ts',
 			'config.ts',
 			'file-status.ts',
-			'inactive-regions.ts',
 			'inlay-hints.ts',
 			'memory-usage.ts',
 			'open-config.ts',
@@ -1048,6 +1047,9 @@ suite('OI extension boundary', () => {
 		assert.match(contextSource, /configureManagedDocumentBeforeOpen/);
 		assert.match(contextSource, /handleDiagnostics: \(uri, _diagnostics, next\) => next\(uri, \[\]\)/);
 		assert.doesNotMatch(contextSource, /provideDocumentSemanticTokens/);
+		const inactiveRegionsSource = fs.readFileSync(path.join(extensionPath, 'src', 'inactive-regions.ts'), 'utf8');
+		assert.match(inactiveRegionsSource, /'textDocument\/inactiveRegions'/);
+		assert.match(inactiveRegionsSource, /opacity: '0\.55'/);
 		const formattingSource = fs.readFileSync(path.join(extensionPath, 'src', 'formatting.ts'), 'utf8');
 		assert.match(formattingSource, /return `0:\$\{path\.sep\}`/);
 		assert.doesNotMatch(formattingSource, /writeFile|mkdir/);

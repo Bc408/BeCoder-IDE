@@ -60,6 +60,7 @@ suite('BeCoder clangd capability boundary', () => {
     assert.ok(!registeredFeatureNames.includes('ConfigurationFeature'));
     assert.deepStrictEqual([...approvedStaticFeatureNames].sort(), [
       'EnableEditsNearCursorFeature',
+      'InactiveRegionsFeature',
       'ProgressFeature'
     ]);
   });

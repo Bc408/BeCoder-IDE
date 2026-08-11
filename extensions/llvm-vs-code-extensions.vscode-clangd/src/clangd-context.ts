@@ -13,6 +13,7 @@ import {
   provideDocumentFormattingEdits,
   provideDocumentRangeFormattingEdits
 } from './formatting';
+import * as inactiveRegions from './inactive-regions';
 import * as install from './install';
 
 export const clangdDocumentSelector = [
@@ -41,6 +42,7 @@ export const approvedTextDocumentFeatureMethods = new Set([
 
 export const approvedStaticFeatureNames = new Set([
   'EnableEditsNearCursorFeature',
+  'InactiveRegionsFeature',
   'ProgressFeature'
 ]);
 
@@ -284,6 +286,7 @@ export class ClangdContext implements vscode.Disposable {
   private stopping = false;
 
   private constructor(readonly client: ClangdLanguageClient) {
+    inactiveRegions.activate(this);
     stopHandlers.set(this, async () => {
       if (this.stopping) {
         return;

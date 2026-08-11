@@ -9,19 +9,20 @@ import { DomScrollableElement } from '../../../../base/browser/ui/scrollbar/scro
 import { Toggle } from '../../../../base/browser/ui/toggle/toggle.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../base/common/codicons.js';
-import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
-import { splitRecentLabel } from '../../../../base/common/labels.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { parse } from '../../../../base/common/marshalling.js';
+import { Schemas } from '../../../../base/common/network.js';
+import { basename, dirname } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, ContextKeyExpression, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { IResourceEditorInput } from '../../../../platform/editor/common/editor.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
+import { ILabelService } from '../../../../platform/label/common/label.js';
 import { IMarkdownRendererService } from '../../../../platform/markdown/browser/markdownRenderer.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
@@ -30,15 +31,13 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { defaultToggleStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
-import { IWindowOpenable } from '../../../../platform/window/common/window.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IRecentFolder, IRecentWorkspace, IRecentlyOpened, IWorkspacesService, isRecentFolder, isRecentWorkspace } from '../../../../platform/workspaces/common/workspaces.js';
-import { OpenRecentAction } from '../../../browser/actions/windowActions.js';
-import { OpenFolderViaWorkspaceAction } from '../../../browser/actions/workspaceActions.js';
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
-import { WorkbenchStateContext } from '../../../common/contextkeys.js';
-import { IEditorOpenContext, IEditorSerializer } from '../../../common/editor.js';
+import { EditorResourceAccessor, IEditorOpenContext, IEditorSerializer, SideBySideEditor } from '../../../common/editor.js';
+import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../services/editor/common/editorGroupsService.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IHistoryService } from '../../../services/history/common/history.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { startEntries } from '../common/gettingStartedStartEntries.js';
 import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
@@ -82,7 +81,11 @@ type GettingStartedActionEvent = {
 	readonly argument: string | undefined;
 };
 
-type RecentEntry = (IRecentFolder | IRecentWorkspace) & { readonly id: string };
+type RecentEntry = {
+	readonly id: string;
+	readonly input: EditorInput | IResourceEditorInput;
+	readonly resource: URI;
+};
 
 export class GettingStartedPage extends EditorPane {
 
@@ -97,7 +100,6 @@ export class GettingStartedPage extends EditorPane {
 	private readonly contextService: IContextKeyService;
 	private categoriesSlide!: HTMLElement;
 	private categoriesPageScrollbar: DomScrollableElement | undefined;
-	private recentlyOpened: Promise<IRecentlyOpened>;
 
 	get editorInput(): GettingStartedInput | undefined {
 		return this._input as GettingStartedInput | undefined;
@@ -113,10 +115,11 @@ export class GettingStartedPage extends EditorPane {
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
 		@IContextKeyService contextService: IContextKeyService,
-		@IWorkspacesService private readonly workspacesService: IWorkspacesService,
 		@ILabelService private readonly labelService: ILabelService,
 		@IHostService private readonly hostService: IHostService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
+		@IEditorService private readonly editorService: IEditorService,
+		@IHistoryService private readonly historyService: IHistoryService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 	) {
@@ -130,11 +133,7 @@ export class GettingStartedPage extends EditorPane {
 		this.contextService = this._register(contextService.createScoped(this.container));
 		inWelcomeContext.bindTo(this.contextService).set(true);
 
-		this.recentlyOpened = this.workspacesService.getRecentlyOpened();
-		this._register(this.workspacesService.onDidChangeRecentlyOpened(() => {
-			this.recentlyOpened = this.workspacesService.getRecentlyOpened();
-			this.refreshRecentlyOpened();
-		}));
+		this._register(this.editorService.onDidActiveEditorChange(() => this.refreshRecentlyOpened()));
 	}
 
 	override async setInput(input: GettingStartedInput, options: GettingStartedEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
@@ -187,11 +186,11 @@ export class GettingStartedPage extends EditorPane {
 
 		const header = $('.header', {},
 			$('h1.product-name.caption', {}, this.productService.nameLong),
-			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "Editing evolved"))
+			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "All set"))
 		);
 		const leftColumn = $('.categories-column.categories-column-left', {}, this.buildStartList().getDomElement());
 		const recentList = this.buildRecentlyOpenedList();
-		recentList.setLimit(10);
+		recentList.setLimit(5);
 		const rightColumn = $('.categories-column.categories-column-right', {}, recentList.getDomElement());
 		const footer = $('.footer', {}, $('p.showOnStartup', {}, showOnStartupCheckbox.domNode, showOnStartupLabel));
 
@@ -233,14 +232,7 @@ export class GettingStartedPage extends EditorPane {
 		this.telemetryService.publicLog2<GettingStartedActionEvent, GettingStartedActionClassification>('gettingStarted.ActionExecuted', { command, argument });
 		switch (command) {
 			case 'showMoreRecents':
-				await this.commandService.executeCommand(OpenRecentAction.ID);
-				break;
-			case 'openFolder':
-				await this.commandService.executeCommand(
-					this.contextService.contextMatchesRules(ContextKeyExpr.and(WorkbenchStateContext.isEqualTo('workspace')))
-						? OpenFolderViaWorkspaceAction.ID
-						: 'workbench.action.files.openFolder'
-				);
+				this.recentlyOpenedList.value?.setLimit(15);
 				break;
 			case 'selectStartEntry': {
 				const selected = startEntries.find(entry => entry.id === argument);
@@ -295,48 +287,44 @@ export class GettingStartedPage extends EditorPane {
 	}
 
 	private buildRecentlyOpenedList(): GettingStartedIndexList<RecentEntry> {
+		const hasWorkspace = this.workspaceContextService.getWorkspace().folders.length > 0;
 		const list = this.recentlyOpenedList.value = new GettingStartedIndexList({
-			title: localize('recent', "Recent"),
+			title: localize('recentInFolder', "Recently Opened in Folder"),
 			klass: 'recently-opened',
-			limit: 10,
-			empty: $('.empty-recent', {},
-				localize('noRecents', "You have no recent folders,"),
-				$('button.button-link', { 'x-dispatch': 'openFolder' }, localize('openFolder', "open a folder")),
-				localize('toStart', "to start.")),
+			limit: 5,
+			empty: $('.empty-recent', {}, hasWorkspace
+				? localize('noFolderFileRecents', "No files have been opened in this folder yet.")
+				: localize('noWorkspaceFileRecents', "Open a folder to see recently opened files here.")),
 			more: $('.more', {}, $('button.button-link', {
 				'x-dispatch': 'showMoreRecents',
-				title: localize('show more recents', "Show All Recent Folders {0}", this.getKeybindingLabel(OpenRecentAction.ID))
+				title: localize('showMoreFolderRecents', "Show more files recently opened in this folder")
 			}, localize('showAll', "More..."))),
 			renderElement: recent => this.renderRecent(recent),
 			contextService: this.contextService
 		});
 		list.onDidChange(() => this.registerDispatchListeners());
-		this.recentlyOpened.then(({ workspaces }) => {
-			const entries = this.filterRecentlyOpened(workspaces);
-			const updateEntries = () => list.setEntries(entries);
-			updateEntries();
-			list.register(this.labelService.onDidChangeFormatters(updateEntries));
-		}).catch(onUnexpectedError);
+		const updateEntries = () => list.setEntries(this.getFolderHistory());
+		updateEntries();
+		list.register(this.labelService.onDidChangeFormatters(updateEntries));
 		return list;
 	}
 
 	private renderRecent(recent: RecentEntry): HTMLElement {
-		const isFolder = isRecentFolder(recent);
-		const fullPath = recent.label || this.labelService.getWorkspaceLabel(isFolder ? recent.folderUri : recent.workspace, { verbose: Verbosity.LONG });
-		const openable: IWindowOpenable = isFolder ? { folderUri: recent.folderUri } : { workspaceUri: recent.workspace.configPath };
-		const resource = isFolder ? recent.folderUri : recent.workspace.configPath;
-		const { name, parentPath } = splitRecentLabel(fullPath);
+		const fullPath = this.labelService.getUriLabel(recent.resource);
+		const name = basename(recent.resource);
+		const parentPath = this.labelService.getUriLabel(dirname(recent.resource), { relative: true });
 		const item = $('li');
 		const link = $('button.button-link', {
 			title: fullPath,
-			'aria-label': localize('welcomePage.openFolderWithPath', "Open folder {0} with path {1}", name, parentPath)
+			'aria-label': localize('welcomePage.openFileWithPath', "Open file {0} with path {1}", name, fullPath)
 		}, name);
 		link.addEventListener('click', event => {
 			this.telemetryService.publicLog2<GettingStartedActionEvent, GettingStartedActionClassification>('gettingStarted.ActionExecuted', { command: 'openRecent', argument: undefined });
-			this.hostService.openWindow([openable], {
-				forceNewWindow: event.ctrlKey || event.metaKey,
-				remoteAuthority: recent.remoteAuthority || null
-			});
+			if (event.ctrlKey || event.metaKey) {
+				void this.hostService.openWindow([{ fileUri: recent.resource }], { forceNewWindow: true });
+			} else {
+				void this.editorService.openEditor({ resource: recent.resource });
+			}
 			event.preventDefault();
 			event.stopPropagation();
 		});
@@ -348,10 +336,11 @@ export class GettingStartedPage extends EditorPane {
 			title: localize('welcomePage.removeRecent', "Remove from Recently Opened"),
 			'aria-label': localize('welcomePage.removeRecentAriaLabel', "Remove {0} from Recently Opened", name)
 		});
-		const remove = async (event: Event) => {
+		const remove = (event: Event) => {
 			event.preventDefault();
 			event.stopPropagation();
-			await this.workspacesService.removeRecentlyOpened([resource]);
+			this.historyService.removeFromHistory(recent.input);
+			this.refreshRecentlyOpened();
 		};
 		removeButton.addEventListener('click', remove);
 		removeButton.addEventListener('keydown', event => {
@@ -364,16 +353,36 @@ export class GettingStartedPage extends EditorPane {
 		return item;
 	}
 
-	private filterRecentlyOpened(workspaces: readonly (IRecentFolder | IRecentWorkspace)[]): RecentEntry[] {
-		return workspaces
-			.filter(recent => !this.workspaceContextService.isCurrentWorkspace(isRecentWorkspace(recent) ? recent.workspace : recent.folderUri))
-			.map(recent => ({ ...recent, id: isRecentWorkspace(recent) ? recent.workspace.id : recent.folderUri.toString() }));
+	private getFolderHistory(): RecentEntry[] {
+		if (this.workspaceContextService.getWorkspace().folders.length === 0) {
+			return [];
+		}
+
+		const entries: RecentEntry[] = [];
+		const seen = new Set<string>();
+		for (const input of this.historyService.getHistory()) {
+			const resource = EditorResourceAccessor.getOriginalUri(input, {
+				filterByScheme: Schemas.file,
+				supportSideBySide: SideBySideEditor.PRIMARY
+			});
+			if (!resource || !this.workspaceContextService.getWorkspaceFolder(resource)) {
+				continue;
+			}
+
+			const id = resource.toString();
+			if (seen.has(id)) {
+				continue;
+			}
+
+			seen.add(id);
+			entries.push({ id, input, resource });
+		}
+
+		return entries;
 	}
 
 	private refreshRecentlyOpened(): void {
-		this.recentlyOpened.then(({ workspaces }) => {
-			this.recentlyOpenedList.value?.setEntries(this.filterRecentlyOpened(workspaces));
-		}).catch(onUnexpectedError);
+		this.recentlyOpenedList.value?.setEntries(this.getFolderHistory());
 	}
 
 	private iconWidgetFor(entry: IWelcomePageStartEntry): HTMLElement {

@@ -63,20 +63,4 @@ export const startEntries: readonly IGettingStartedStartEntry[] = [
 		when: '!openFolderWorkspaceSupport && workbenchState == \'workspace\'',
 		command: 'command:workbench.action.files.openFolderViaWorkspace',
 	},
-	{
-		id: 'topLevelRemoteOpen',
-		title: localize('gettingStarted.topLevelRemoteOpen.title', "Connect to..."),
-		description: localize('gettingStarted.topLevelRemoteOpen.description', "Connect to remote development workspaces."),
-		icon: Codicon.remote,
-		when: '!isWeb',
-		command: 'command:workbench.action.remote.showMenu',
-	},
-	{
-		id: 'topLevelOpenTunnel',
-		title: localize('gettingStarted.topLevelOpenTunnel.title', "Open Tunnel..."),
-		description: localize('gettingStarted.topLevelOpenTunnel.description', "Connect to a remote machine through a Tunnel"),
-		icon: Codicon.remote,
-		when: 'isWeb && showRemoteStartEntryInWeb',
-		command: 'command:workbench.action.remote.showWebStartEntryActions',
-	},
 ];

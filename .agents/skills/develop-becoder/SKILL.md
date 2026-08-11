@@ -116,13 +116,13 @@ Stop on a nonzero exit or external timeout. Do not automatically retry or contin
 
 After a source fix, rerun the smallest checks invalidated by that fix. Before declaring source validation complete, rerun the final required matrix so its evidence corresponds to the final worktree rather than an earlier intermediate state.
 
-## Run the Independent Review Loop
+## Run the Review Loop
 
-After substantial implementation, use an independent read-only reviewer as required by `AGENTS.md`.
+Do not start a sub-agent or review thread unless the project owner explicitly requests one. By default, the primary agent performs a separate read-only review pass covering requirement completeness, logic, edge cases, ordinary-feature regressions, code quality, tests, localization, build/package boundaries, and actual runtime evidence.
 
-Ask the reviewer to check requirement completeness, logic, edge cases, ordinary-feature regressions, code quality, tests, localization, build/package boundaries, and actual runtime evidence. Fix concrete findings, then ask the same reviewer to verify again. Continue until no blocking finding remains or the blocker is explicitly documented.
+When the project owner explicitly requests an independent reviewer, the reviewer must not modify files. Fix concrete findings, then ask the same reviewer to verify again. Continue until no blocking finding remains or the blocker is explicitly documented.
 
-Do not describe an earlier focused review as approval of later closeout changes.
+Do not describe a primary-agent review as independent agent approval, and do not describe an earlier focused review as approval of later closeout changes.
 
 ## Separate Build From Acceptance
 
@@ -135,6 +135,8 @@ Keep these facts distinct:
 - agent-run checks do not replace project-owner acceptance unless explicitly requested.
 
 After authorized source, package, and Setup verification, stop and hand the artifact and exact check results to the project owner. Do not launch or claim runtime acceptance without authorization.
+
+After the specifically requested build succeeds, stop by default. Do not automatically run another verifier, build Setup, launch the product, review, update documentation, inspect additional state, clean files, or perform Git operations unless the same project-owner request explicitly authorizes those follow-up actions.
 
 ## Archive and Back Up
 

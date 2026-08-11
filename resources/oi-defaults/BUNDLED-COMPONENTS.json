@@ -25,6 +25,18 @@
 			"correspondingSourcePath": "extensions/danielpinto8zz6.c-cpp-compile-run"
 		},
 		{
+			"id": "vscode.vscode-theme-seti",
+			"version": "10.0.0",
+			"source": "https://github.com/microsoft/vscode/tree/1.130.0/extensions/theme-seti",
+			"modificationStatus": "Unmodified upstream Code OSS 1.130 built-in extension.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) Microsoft Corporation and seti-ui contributors",
+			"licensePath": "licenses/MIT-VSCode.txt",
+			"thirdPartyNoticesPath": "extensions/theme-seti/ThirdPartyNotices.txt",
+			"dependencyManifestPath": "extensions/theme-seti/cgmanifest.json"
+		},
+		{
 			"id": "becoder.becoder-setup",
 			"version": "0.1.0",
 			"source": "https://github.com/Bc408/BeCoder",

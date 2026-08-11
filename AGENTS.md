@@ -40,9 +40,14 @@ Before tests, use the build watch task when available; otherwise run the owning 
 - A non-zero exit code or an external timeout is a failed step. Stop the workflow and report the command and output; do not retry automatically or continue to packaging and runtime checks.
 - A build-only request authorizes only the requested build and its direct validation. Do not clean caches, delete artifacts, initialize Git, stage files, commit, push, or change user environment variables unless explicitly requested.
 - After a successful staged Windows application build, run the direct package verifier with `-IncludeCompiler $true`, then build and directly verify the BeCoder Setup when the request includes release packaging. Runtime GUI verification is a separate step and must not be claimed from a successful Gulp or Setup build alone.
+- After the requested build succeeds, stop by default. Do not automatically run package verification, build or verify Setup, launch the GUI, review, update documentation, inspect further state, clean files, or perform Git operations unless the same user request explicitly authorizes those follow-up actions.
 - After the requested source checks, staged application build, package verification, Setup build, and Setup verification succeed, stop and hand the Setup artifact to the user for manual acceptance. Do not launch the installed product, run Run/Run With Input, or claim runtime acceptance unless the user explicitly requests agent-run verification in a later instruction.
 - `node_modules/`, `.build/`, `out/`, `out-build/`, and `out-vscode-min/` are local dependencies or generated build data. They are ignored by Git and must not be added to the repository or removed during a normal build.
 - The bundled archives under `resources/oi-defaults/toolchains/` are intentional release assets. They are tracked with Git LFS and must be preserved; do not replace them with extracted toolchain directories in the source tree.
+
+### Atomic Visual Fast Path
+
+For project-owner-authorized Stage 4.9.x atomic visual tasks, default to the lightweight delivery path: inspect only the owning UI/resource route, make the smallest requested change, run only checks required to keep the build valid, build the staged Windows application once, and hand it to the project owner for visual acceptance. Do not expand into unrelated tests, broad review, package or Setup work, documentation updates beyond an explicitly requested workflow/status note, cleanup, or Git operations. If the task proves difficult or crosses its frozen boundary, report that before continuing and wait for explicit authorization.
 
 ### Validation Command Preflight
 
@@ -67,7 +72,7 @@ Place tests beside the owning component as `*.test.ts`; integration cases use `*
 
 ## Agent Workflow for Difficult Tasks
 
-For difficult tasks, create a plan before development. After implementation, start an independent review agent/thread that must not modify code. It should validate requirement completeness, logical correctness, edge cases, code quality, test coverage, and actual runtime results, then return a concrete fix list to the primary agent. The primary agent must address the findings and ask the same reviewer to verify again. Repeat until validation passes or the remaining blocker is clearly documented.
+For difficult tasks, create a plan before development. Do not start a sub-agent or review thread unless the project owner explicitly requests one. Without that request, the primary agent performs a separate read-only review pass covering requirement completeness, logical correctness, edge cases, code quality, test coverage, and actual runtime results. When the project owner explicitly requests a review agent, that reviewer must not modify code; the primary agent addresses its findings and asks the same reviewer to verify again until validation passes or the remaining blocker is clearly documented.
 
 ## Clarification Before Assumptions
 

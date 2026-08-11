@@ -22,5 +22,6 @@ Archived checkpoints:
 - `stage4.5.md`
 - `stage4.6.md`
 - `stage4.7.md`
+- `stage4.9.1.md`
 
 `stage4-development-record.md` preserves the former monolithic `BECODER_HANDOFF.md` as a detailed development record. It contains historical plans, superseded requirements, old Portable evidence, and the Stage 4.7 state at the time of documentation restructuring. Do not use it as the live handoff.

@@ -40,7 +40,7 @@ export const excludedForOIDistribution = new Set([
 	'references-view', 'restructuredtext', 'ruby', 'rust', 'scss', 'search-result', 'shaderlab', 'simple-browser', 'sql', 'swift',
 	'terminal-suggest', 'tunnel-forwarding', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests',
 	'vscode-colorize-perf-tests', 'vscode-colorize-tests', 'vscode-test-resolver', 'xml',
-	'theme-abyss', 'theme-kimbie-dark', 'theme-monokai', 'theme-monokai-dimmed', 'theme-quietlight', 'theme-red', 'theme-seti', 'theme-solarized-dark', 'theme-solarized-light', 'theme-tomorrow-night-blue'
+	'theme-abyss', 'theme-kimbie-dark', 'theme-monokai', 'theme-monokai-dimmed', 'theme-quietlight', 'theme-red', 'theme-solarized-dark', 'theme-solarized-light', 'theme-tomorrow-night-blue'
 ]);
 
 // Third-party extensions are compiled by their own upstream build scripts. Keep their

@@ -40,6 +40,12 @@ Keep the downloaded JS Debug extensions absent. Keep Mermaid as a built-in ordin
 
 Do not restore ShortestPath login, submission, network OJ services, GDB, AI, or removed product extension points through an installed extension.
 
+## Seti File Icons
+
+`vscode.vscode-theme-seti` is an ordinary built-in extension restored unchanged from Code OSS 1.130. Fresh profiles default to its `vs-seti` file-icon theme. An explicit user-selected file-icon theme remains authoritative, and Seti is not added to the protected-extension list.
+
+Keep the other removed upstream color and file-icon themes absent. Preserve Seti's upstream manifest, icon font, theme data, localization, MIT provenance, third-party notices, and source-side dependency manifest. Source-only governance and development files excluded by the upstream `.vscodeignore` are not runtime package requirements.
+
 ## Simplified Chinese
 
 The pinned 1.130 Simplified-Chinese pack is a protected built-in component. Fresh profiles default to `zh-cn`; English uses source messages. The protected pack does not appear as a normal gallery item and cannot be updated or replaced through Open VSX.
@@ -59,10 +65,11 @@ Project GPL licensing does not replace third-party licenses. Preserve `ThirdPart
 - `extensions/aadityanarayan.code-snap`
 - `extensions/becoder.one-monokai`
 - `extensions/MS-CEINTL.vscode-language-pack-zh-hans`
+- `extensions/theme-seti`
 - `build/lib/extensions.ts`
 - package boundary tests and verifiers
 - bundled-component and third-party notice inventories
 
 ## Acceptance Boundary
 
-Validate Open VSX and local VSIX behavior, blacklist closure, protected identity closure across all install/update/enablement/copy paths, development overrides, gallery invisibility of protected components, bilingual behavior, retained Mermaid, removed JS Debug, package contents, and complete license/provenance records.
+Validate Open VSX and local VSIX behavior, blacklist closure, protected identity closure across all install/update/enablement/copy paths, development overrides, gallery invisibility of protected components, bilingual behavior, retained Mermaid, removed JS Debug, the ordinary built-in Seti identity and runtime resources, fresh-profile `vs-seti` selection without overriding explicit user choice, package contents, and complete license/provenance records.

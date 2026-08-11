@@ -7,7 +7,7 @@ This is the live development status for BeCoder. Update it whenever the active b
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.7`
+- Active development branch: `codex/stage4.9.1`
 - Stage 4.7 parent commit: `928aec1` (`feat(stage4.6): remove terminal suggestions and source control`)
 - Stage 4.7 archival commit: `e7b5d6d` (`feat(stage4.7): archive self-contained Windows distribution`)
 - Latest completed remote backup: `origin/codex/stage4.7`
@@ -21,7 +21,7 @@ The accepted Stage 4.7 source, tests, build policy, legal records, and project d
 
 **Stage 4.7 was project-owner accepted, archived, and backed up on 2026-08-10.**
 
-**Stage 4.8 is in progress.** Its implementation foundation exists, but its user-facing delivery is not accepted or archived. Starting or changing Stage 4.8 still requires a new scoped plan and explicit project-owner authorization.
+**Stage 4.9.x is in progress.** Stage 4.9.1 was project-owner accepted and archived on 2026-08-11. Its focused result restores the upstream Code OSS 1.130 Seti file-icon theme as an ordinary built-in and selects `vs-seti` for fresh profiles while preserving an explicit user-selected file-icon theme. The next atomic Stage 4.9.x scope has not been authorized. Stage 4.8 was rejected; its dirty worktree was deliberately discarded before this series began.
 
 ## 3. Accepted Stage 4.7 Result
 
@@ -77,30 +77,36 @@ The final Setup verifier covered two independent installations, non-ASCII and ov
 
 Repository-wide ESLint still has inherited third-party/generated CodeSnap, clangd, Mermaid, and older-extension baseline findings. It was not a Stage 4.7 acceptance gate and must not be reported as passing.
 
-## 5. Stage 4.8 Entry
+## 5. Stage 4.9.1 Entry
 
-The source already contains protected commands, `.becoder-backup` archive/import machinery, transaction journaling, detached replacement, startup recovery, integrity checks, and package boundaries.
+The branch was reset to the accepted Stage 4.7 content at `88371c0`, and all non-ignored Stage 4.8 worktree changes were discarded. The Stage 4.9.1 source implementation now:
 
-Stage 4.8 must begin by reviewing that foundation again, then:
+- restores the complete upstream Code OSS 1.130 `extensions/theme-seti` source;
+- removes only `theme-seti` from the OI distribution exclusion list;
+- selects `vs-seti` through the existing BeCoder fresh-profile configuration defaults, with explicit user choice remaining authoritative;
+- retains the pinned Simplified-Chinese pack's existing Seti translation mapping;
+- records Seti as an unmodified ordinary built-in with its MIT and `seti-ui` provenance;
+- leaves every other removed theme and rejected Stage 4.8 feature unchanged.
 
-- expose clear English and Simplified-Chinese controls under BeCoder IDE Features;
-- verify settings, extensions, history, locale, exclusion, integrity, rollback, and startup-recovery boundaries;
-- confirm secrets, source projects, system VS Code, and unrelated installations remain outside authority;
-- perform complete end-to-end project-owner runtime acceptance;
-- update current state and archive only after that acceptance.
+The accepted Stage 4.9.1 staged Windows build completed on 2026-08-11:
 
-Stage 4.8 is not authorized by the Stage 4.7 archive or backup request.
+1. `npm run typecheck-client`: exit code 0 in 5.8 seconds;
+2. `npm run compile-oi-extensions`: exit code 0 in 9.1 seconds;
+3. `npm run gulp vscode-win32-x64-min`: exit code 0 in 84.6 seconds.
+
+The staged application is at `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The project owner accepted this atomic Seti delivery for archive. Direct package verification, Setup construction, Setup verification, and agent-run GUI acceptance were not performed and are not implied by the staged build.
 
 ## 6. Known Remaining Work
 
-- Stage 4.8 export/import requires discoverable settings UX and end-to-end runtime acceptance.
+- Wait for the project owner to define and authorize the next atomic Stage 4.9.x visual task.
+- Stage 4.9.1 intentionally added and ran no tests under the approved fast visual delivery mode.
 - Inherited component documentation and non-document GitHub triage metadata may receive a separately scoped audit; do not perform keyword-driven deletion.
 - The accepted source and history are backed up to `origin/codex/stage4.7`; no PR, Release, tag, or public binary publication was created or implied.
 - Generated validation data under `.build/si` and `extensions/becoder.setup/out-test-review/` remains local and outside Git.
 
 ## 7. Archived Checkpoints
 
-The latest completed archived checkpoint is Stage 4.7 at `e7b5d6d`, backed up to `origin/codex/stage4.7`.
+The latest completed archived checkpoint is Stage 4.9.1 on `codex/stage4.9.1`, with a local Git backup only. The latest remote backup remains Stage 4.7 at `origin/codex/stage4.7`.
 
 Archived and project-owner accepted areas include:
 
@@ -117,7 +123,10 @@ Historical details belong under `docs/archive/` and must not override current ph
 
 ## 8. Current Stop Rules
 
-- Do not treat the Stage 4.8 foundation as accepted product delivery.
+- Do not restore any rejected Stage 4.8 feature; each Stage 4.9.x task requires its own atomic scope.
+- Do not start a sub-agent or review thread unless the project owner explicitly requests one.
+- After a requested build succeeds, stop by default and perform no follow-up action unless that same request explicitly authorizes it.
+- Do not treat the Stage 4.9.1 staged build as direct package verification, Setup verification, or agent-run GUI acceptance.
 - Do not modify or launch the accepted Stage 4.7 artifact without new authorization.
 - Do not commit, push, open a PR, publish a release, or create a tag without explicit authorization for that action.
 - Do not modify system VS Code, user environment variables, external reference packages, or user project assets.

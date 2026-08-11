@@ -261,11 +261,11 @@ import product from '../../platform/product/common/product.js';
 				'markdownEnumDescriptions': [
 					localize(`window.customTitleBarVisibility.auto`, "Automatically changes custom title bar visibility."),
 					localize(`window.customTitleBarVisibility.windowed`, "Hide custom titlebar in full screen. When not in full screen, automatically change custom title bar visibility."),
-					localize(`window.customTitleBarVisibility.never`, "Hide the custom title bar while keeping the window controls available in the workbench."),
+					localize(`window.customTitleBarVisibility.never`, "Hide the custom title bar when {0} is set to `native`.", '`#window.titleBarStyle#`'),
 				],
-				'default': 'never',
+				'default': 'auto',
 				'scope': ConfigurationScope.APPLICATION,
-				'markdownDescription': localize('window.customTitleBarVisibility', "Adjust when the custom title bar should be shown. The custom title bar can be hidden with `never` while window controls remain available in the workbench."),
+				'markdownDescription': localize('window.customTitleBarVisibility', "Adjust when the custom title bar should be shown. The custom title bar can be hidden when in full screen mode with `windowed`. The custom title bar can only be hidden in non full screen mode with `never` when {0} is set to `native`.", '`#window.titleBarStyle#`'),
 			},
 			'window.menuStyle': {
 				'type': 'string',

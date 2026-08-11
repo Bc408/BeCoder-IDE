@@ -17,47 +17,10 @@ import { IQuickInputService, IQuickPickItem } from '../../../../../platform/quic
 import { NOTEBOOK_ACTIONS_CATEGORY } from './coreActions.js';
 import { getNotebookEditorFromEditorPane } from '../notebookBrowser.js';
 import { INotebookEditorService } from '../services/notebookEditorService.js';
-import { NotebookSetting } from '../../common/notebookCommon.js';
 import { NOTEBOOK_EDITOR_FOCUSED, NOTEBOOK_IS_ACTIVE_EDITOR } from '../../common/notebookContextKeys.js';
 import { INotebookService } from '../../common/notebookService.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IPreferencesService } from '../../../../services/preferences/common/preferences.js';
-
-registerAction2(class NotebookConfigureLayoutAction extends Action2 {
-	constructor() {
-		super({
-			id: 'workbench.notebook.layout.select',
-			title: localize2('workbench.notebook.layout.select.label', "Select between Notebook Layouts"),
-			f1: true,
-			precondition: ContextKeyExpr.equals(`config.${NotebookSetting.openGettingStarted}`, true),
-			category: NOTEBOOK_ACTIONS_CATEGORY,
-			menu: [
-				{
-					id: MenuId.EditorTitle,
-					group: 'notebookLayout',
-					when: ContextKeyExpr.and(
-						NOTEBOOK_IS_ACTIVE_EDITOR,
-						ContextKeyExpr.notEquals('config.notebook.globalToolbar', true),
-						ContextKeyExpr.equals(`config.${NotebookSetting.openGettingStarted}`, true)
-					),
-					order: 0
-				},
-				{
-					id: MenuId.NotebookToolbar,
-					group: 'notebookLayout',
-					when: ContextKeyExpr.and(
-						ContextKeyExpr.equals('config.notebook.globalToolbar', true),
-						ContextKeyExpr.equals(`config.${NotebookSetting.openGettingStarted}`, true)
-					),
-					order: 0
-				}
-			]
-		});
-	}
-	run(accessor: ServicesAccessor): void {
-		accessor.get(ICommandService).executeCommand('workbench.action.openWalkthrough', { category: 'notebooks', step: 'notebookProfile' }, true);
-	}
-});
 
 registerAction2(class NotebookConfigureLayoutAction extends Action2 {
 	constructor() {

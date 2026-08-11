@@ -56,7 +56,7 @@ GCC 14.1.0 imposes a current product boundary: the canonical installation root m
 
 Reinstall is complete replacement, not a hidden data-preserving upgrade. Interactive replacement warns that program files, toolchains, settings, extensions, history, caches, and other BeCoder data will be deleted and recommends explicit export. Silent replacement requires `/BECODERALLOWDATALOSS=1`.
 
-The warning does not prove that a usable export/import workflow is available. That workflow requires clear settings controls and separate runtime acceptance before it can be treated as delivered.
+The native Code OSS Profiles workflow can export supported configuration as `.code-profile`; it is not a complete installation backup and does not preserve projects, toolchains, caches, logs, or arbitrary installation-local data. Project-owner runtime acceptance remains separate from Setup verification.
 
 ## Toolchain Payload
 

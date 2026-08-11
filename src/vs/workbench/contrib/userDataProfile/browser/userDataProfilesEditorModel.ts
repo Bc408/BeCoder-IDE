@@ -892,6 +892,7 @@ export class UserDataProfilesEditorModel extends EditorModel {
 	}
 
 	private newProfileElement: NewProfileElement | undefined;
+	private saveNewProfilePromise: Promise<IUserDataProfile | undefined> | undefined;
 
 	private _onDidChange = this._register(new Emitter<AbstractUserDataProfileElement | undefined>());
 	readonly onDidChange = this._onDidChange.event;
@@ -1175,6 +1176,22 @@ export class UserDataProfilesEditorModel extends EditorModel {
 	}
 
 	async saveNewProfile(transient?: boolean, token?: CancellationToken): Promise<IUserDataProfile | undefined> {
+		if (this.saveNewProfilePromise) {
+			return this.saveNewProfilePromise;
+		}
+
+		const savePromise = Promise.resolve().then(() => this.doSaveNewProfile(transient, token));
+		this.saveNewProfilePromise = savePromise;
+		try {
+			return await savePromise;
+		} finally {
+			if (this.saveNewProfilePromise === savePromise) {
+				this.saveNewProfilePromise = undefined;
+			}
+		}
+	}
+
+	private async doSaveNewProfile(transient?: boolean, token?: CancellationToken): Promise<IUserDataProfile | undefined> {
 		if (!this.newProfileElement) {
 			return undefined;
 		}

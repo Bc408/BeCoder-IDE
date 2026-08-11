@@ -13,6 +13,8 @@ The public Eclipse Open VSX Registry is BeCoder's only product-configured online
 
 Open VSX being open infrastructure does not prove every listed extension is open source or appropriate for BeCoder.
 
+BeCoder does not distribute Microsoft's proprietary `@vscode/vsce-sign` verifier. Extension signature verification is disabled by default so the unavailable verifier cannot block normal Open VSX installation. A user may explicitly enable the upstream verification setting, but BeCoder must not claim that a signature was verified when the verifier did not execute. Invalid packages, the blacklist, and protected built-in boundaries remain enforced independently.
+
 ## Blacklist
 
 `ms-vscode.cpptools` and `ms-vscode.cpptools-extension-pack` are prohibited. BeCoder must not bundle, download, install, update, enable, or run them through Open VSX, local VSIX, profile copy, existing-install, or resource paths.

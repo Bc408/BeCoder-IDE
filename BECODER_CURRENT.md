@@ -7,7 +7,7 @@ This is the live development status for BeCoder. Update it whenever the active b
 - Repository root: `C:\Users\Bc\Desktop\BeCoder\BeCoder_new`
 - GitHub repository: `https://github.com/Bc408/BeCoder.git`
 - Release branch: `main`
-- Active development branch: `codex/stage4.9.1`
+- Active development branch: `codex/stage4.9.5`
 - Stage 4.7 parent commit: `928aec1` (`feat(stage4.6): remove terminal suggestions and source control`)
 - Stage 4.7 archival commit: `e7b5d6d` (`feat(stage4.7): archive self-contained Windows distribution`)
 - Latest completed remote backup: `origin/codex/stage4.7`
@@ -21,7 +21,7 @@ The accepted Stage 4.7 source, tests, build policy, legal records, and project d
 
 **Stage 4.7 was project-owner accepted, archived, and backed up on 2026-08-10.**
 
-**Stage 4.9.x is in progress.** Stage 4.9.1 was project-owner accepted and archived on 2026-08-11. Its focused result restores the upstream Code OSS 1.130 Seti file-icon theme as an ordinary built-in and selects `vs-seti` for fresh profiles while preserving an explicit user-selected file-icon theme. The next atomic Stage 4.9.x scope has not been authorized. Stage 4.8 was rejected; its dirty worktree was deliberately discarded before this series began.
+**Stage 4.9.x is in progress.** Stage 4.9.1 was project-owner accepted and archived on 2026-08-11. Its focused result restores the upstream Code OSS 1.130 Seti file-icon theme as an ordinary built-in and selects `vs-seti` for fresh profiles while preserving an explicit user-selected file-icon theme. Stage 4.9.5 is an uncommitted working candidate and has not been project-owner accepted. Its current corrections prevent BeCoder's unavailable Microsoft-proprietary extension signature verifier from blocking normal Open VSX installation by default, remove the rejected `.becoder-backup` implementation in favor of native Code OSS Profiles, and serialize concurrent native profile creation triggered by BeCoder's focus-change auto-save default. Source validation passed on 2026-08-11; the current source has not been rebuilt or runtime accepted. Stage 4.8 was rejected; its dirty worktree was deliberately discarded before this series began.
 
 ## 3. Accepted Stage 4.7 Result
 
@@ -39,7 +39,7 @@ Stage 4.7 delivered:
 - Runner executable publication, cleanup, cancellation, and terminal-observability closeout;
 - product repository, workflow, legal, and bundled-component metadata corrections;
 - strengthened package and Setup verification, including true `.lnk` snapshots and broader zero-registry checks;
-- the Stage 4.8 export/import transaction and startup-recovery foundation, without claiming Stage 4.8 delivery;
+- the now-retired Stage 4.8 export/import transaction and startup-recovery foundation, which the current Stage 4.9.5 worktree removes in favor of native Code OSS Profiles;
 - restructured project knowledge with current contracts, historical archives, a mandatory handoff entry, and the repository-local `develop-becoder` Skill.
 
 The only accepted Windows artifact is the Setup executable recorded in the prepared `docs/archive/stage4.7.md` checkpoint. There is no Portable ZIP release and no first-launch toolchain extraction workflow.
@@ -98,7 +98,8 @@ The staged application is at `C:\Users\Bc\Desktop\BeCoder\VSCode-win32-x64`. The
 
 ## 6. Known Remaining Work
 
-- Wait for the project owner to define and authorize the next atomic Stage 4.9.x visual task.
+- Build the current Stage 4.9.5 working candidate when separately authorized, then have the project owner verify normal Open VSX installation, the retained explicit signature-verification setting, native `.code-profile` export/import, one same-name replacement confirmation, and one extension-install sequence per import. Current source evidence does not prove runtime acceptance.
+- After the current Stage 4.9.5 candidate is accepted or rejected, wait for the project owner to define and authorize the next atomic Stage 4.9.x task.
 - Stage 4.9.1 intentionally added and ran no tests under the approved fast visual delivery mode.
 - Inherited component documentation and non-document GitHub triage metadata may receive a separately scoped audit; do not perform keyword-driven deletion.
 - The accepted source and history are backed up to `origin/codex/stage4.7`; no PR, Release, tag, or public binary publication was created or implied.
@@ -124,6 +125,7 @@ Historical details belong under `docs/archive/` and must not override current ph
 ## 8. Current Stop Rules
 
 - Do not restore any rejected Stage 4.8 feature; each Stage 4.9.x task requires its own atomic scope.
+- Do not restore `.becoder-backup`, its custom commands, detached helper, transaction journal, startup recovery, or package requirements. Native Code OSS Profiles are the sole configuration export/import authority.
 - Do not start a sub-agent or review thread unless the project owner explicitly requests one.
 - After a requested build succeeds, stop by default and perform no follow-up action unless that same request explicitly authorizes it.
 - Do not treat the Stage 4.9.1 staged build as direct package verification, Setup verification, or agent-run GUI acceptance.

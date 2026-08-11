@@ -20,7 +20,7 @@ Contracts:
 - `gcc-diagnostics.md`: editor error authority and background compiler coordination.
 - `extension-governance.md`: Open VSX, local VSIX, protected identities, and blacklists.
 - `setup-distribution.md`: Setup-only, directory identity, toolchains, and zero-system-integration boundary.
-- `workspace-and-user-data.md`: project assets, system VS Code isolation, Explorer visibility, and backup boundary.
+- `workspace-and-user-data.md`: project assets, system VS Code isolation, Explorer visibility, and native Profiles boundary.
 - `product-removal-boundary.md`: AI/Debug/GDB/SCM removal and generic infrastructure retention.
 
 Each contract records current intent. Stage labels, commit hashes, test counts, and candidate paths belong in `BECODER_CURRENT.md` or `docs/archive/`.

@@ -75,6 +75,50 @@ function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativ
 }
 
 suite('OI extension boundary', () => {
+	test('packages the BeCoder Welcome tab icon through the Getting Started resource route', () => {
+		const iconPath = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'common', 'media', 'becoder-icon.png');
+		assert.ok(fs.existsSync(iconPath), 'BeCoder Welcome tab icon is missing');
+
+		const inputSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'browser', 'gettingStartedInput.ts'), 'utf8');
+		assert.match(inputSource, /FileAccess\.asBrowserUri\('vs\/workbench\/contrib\/welcomeGettingStarted\/common\/media\/becoder-icon\.png'\)/);
+
+		const gulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
+		assert.match(gulpfile, /out-build\/vs\/workbench\/contrib\/welcomeGettingStarted\/common\/media\/becoder-icon\.png/);
+		assert.doesNotMatch(gulpfile, /welcomeGettingStarted\/common\/media\/\*\*/);
+	});
+
+	test('keeps Welcome while removing walkthrough runtime and extension injection', () => {
+		const welcomeRoot = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'browser');
+		const page = fs.readFileSync(path.join(welcomeRoot, 'gettingStarted.ts'), 'utf8');
+		const contribution = fs.readFileSync(path.join(welcomeRoot, 'gettingStarted.contribution.ts'), 'utf8');
+		const input = fs.readFileSync(path.join(welcomeRoot, 'gettingStartedInput.ts'), 'utf8');
+		const startup = fs.readFileSync(path.join(welcomeRoot, 'startupPage.ts'), 'utf8');
+		const remote = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remote', 'browser', 'remote.ts'), 'utf8');
+		const help = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'actions', 'helpActions.ts'), 'utf8');
+		const notebookLayout = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'controller', 'layoutActions.ts'), 'utf8');
+		const notebookStartup = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'contrib', 'gettingStarted', 'notebookGettingStarted.ts'), 'utf8');
+
+		assert.match(contribution, /workbench\.action\.openWelcomePage/);
+		assert.doesNotMatch(`${page}\n${contribution}\n${input}\n${startup}`, /IWalkthroughsService|openWalkthrough|walkthroughsExtensionPoint|selectedCategory|selectedStep|restorableWalkthroughs|showAllWalkthroughs|walkthroughs\.openOnInstall|experimentalOnboarding/);
+		assert.doesNotMatch(`${remote}\n${help}\n${notebookLayout}\n${notebookStartup}`, /IWalkthroughsService|workbench\.action\.openWalkthrough/);
+		assert.ok(!fs.existsSync(path.join(welcomeRoot, 'gettingStartedAccessibleView.ts')));
+		assert.match(page, /buildStartList\(\)/);
+		assert.match(page, /buildRecentlyOpenedList\(\)/);
+		assert.match(page, /Show welcome page on startup/);
+	});
+
+	test('keeps the native user snippets configuration flow', () => {
+		const workbenchMain = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		const configureSnippets = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'snippets', 'browser', 'commands', 'configureSnippets.ts'), 'utf8');
+
+		assert.match(workbenchMain, /contrib\/snippets\/browser\/snippets\.contribution\.js/);
+		assert.match(configureSnippets, /id: 'workbench\.action\.openSnippets'/);
+		assert.match(configureSnippets, /snippetService\.getSnippetFiles\(\)/);
+		assert.match(configureSnippets, /currentProfile\.snippetsHome/);
+		assert.match(configureSnippets, /workspaceService\.getWorkspace\(\)\.folders/);
+		assert.doesNotMatch(configureSnippets, /becoder\.configureCppSnippets/);
+	});
+
 	test('does not build or package AI, local transcription, sessions, or debug workbench entrypoints', () => {
 		const product = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
 		for (const property of ['agentsTelemetryAppName', 'agentSdks', 'defaultChatAgent', 'sessionsWindowAllowedExtensions', 'voiceWsUrl']) {
@@ -545,6 +589,13 @@ suite('OI extension boundary', () => {
 
 		const extensionManagementSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'node', 'extensionManagementService.ts'), 'utf8');
 		assert.match(extensionManagementSource, /installExtensionsFromProfile[\s\S]*allowedExtensionsService\.isAllowed\(extension\)[\s\S]*addExtensionsToProfile/);
+		assert.match(extensionManagementSource, /verifySignature = isBoolean\(value\) \? value : false/);
+
+		const extensionsContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'extensions', 'browser', 'extensions.contribution.ts'), 'utf8');
+		assert.match(extensionsContribution, /\[VerifyExtensionSignatureConfigKey\]: \{[\s\S]*?default: false,[\s\S]*?scope: ConfigurationScope\.APPLICATION/);
+
+		const packageManifest = readJson<{ dependencies?: Record<string, string> }>(path.join(repositoryRoot, 'package.json'));
+		assert.ok(!Object.hasOwn(packageManifest.dependencies ?? {}, '@vscode/vsce-sign'), 'The proprietary Microsoft signature verifier must not be distributed with BeCoder');
 	});
 
 	test('bundles Mermaid Markdown and Notebook rendering without Chat output integration', () => {
@@ -630,6 +681,7 @@ suite('OI extension boundary', () => {
 		assert.deepStrictEqual(components.map(component => component.id), [
 			'code-oss',
 			'becoder.runner',
+			'vscode.vscode-theme-seti',
 			'becoder.becoder-setup',
 			'becoder.gcc-diagnostics',
 			'llvm-vs-code-extensions.vscode-clangd',
@@ -1190,7 +1242,7 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(setupSource, /vscode\.ConfigurationTarget\.(?:Workspace|WorkspaceFolder)/);
 		assert.doesNotMatch(setupSource, /becoder\.setup\.(?:completed|pending)|rerunFirstRunSetup|first-run/);
 		for (const command of ['becoder.exportUserData', 'becoder.importUserData']) {
-			assert.ok(setupManifest.contributes?.commands?.some(candidate => candidate.command === command));
+			assert.ok(!setupManifest.contributes?.commands?.some(candidate => candidate.command === command));
 		}
 		assert.ok(!setupManifest.contributes?.commands?.some(command => ['becoder.setupEnvironment', 'becoder.redetectToolchain', 'becoder.repairToolchain'].includes(command.command ?? '')));
 
@@ -1269,9 +1321,7 @@ suite('OI extension boundary', () => {
 		const installationIdentitySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'node', 'beCoderInstallation.ts'), 'utf8');
 		assert.match(installationIdentitySource, /schemaVersion !== 2/);
 		assert.match(installationIdentitySource, /resolveBeCoderAppUserModelId/);
-		assert.ok(installationIdentitySource.indexOf('lstat(journalPath)') < installationIdentitySource.indexOf('userDataImportHelper.js'));
-		assert.match(installationIdentitySource, /journal\.isFile\(\)[\s\S]*journal\.isSymbolicLink\(\)/);
-		assert.match(installationIdentitySource, /helper\.isFile\(\)[\s\S]*helper\.isSymbolicLink\(\)/);
+		assert.doesNotMatch(installationIdentitySource, /resolveBeCoderImportRecovery|\.becoder-import-transaction\.json|userDataImportHelper/);
 		const startupSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main.ts'), 'utf8');
 		const packagedDataBinding = startupSource.indexOf('configureBeCoderPackagedDataRoot({');
 		assert.ok(packagedDataBinding >= 0);
@@ -1283,40 +1333,30 @@ suite('OI extension boundary', () => {
 		assert.match(applicationSource, /app\.setAppUserModelId\(resolveBeCoderAppUserModelId\(win32AppUserModelId, process\.execPath\)\)/);
 		assert.ok(!Object.hasOwn(setupManifest.contributes?.configuration?.properties ?? {}, 'becoder.executableCleanupDelaySeconds'));
 
-		const portabilitySource = fs.readFileSync(path.join(setupPath, 'src', 'userDataPortability.ts'), 'utf8');
-		assert.match(portabilitySource, /\.becoder-backup/);
-		assert.match(portabilitySource, /helper\.once\('spawn'/);
-		assert.doesNotMatch(portabilitySource, /os\.tmpdir/);
-		assert.match(portabilitySource, /validateImportedPayload\(extractedRoot\)/);
-		for (const excludedData of ['Backups', 'credentials', 'tokens', 'logs', 'caches']) {
-			assert.ok(!portabilitySource.includes(`copyIfPresent(path.join(dataRoot, '${excludedData}`));
+		for (const removedUserDataTransferFile of [
+			'src/storageDatabase.ts',
+			'src/userDataArchive.ts',
+			'src/userDataImportHelper.ts',
+			'src/userDataPayload.ts',
+			'src/userDataPortability.ts',
+			'test/storageDatabase.test.ts',
+			'test/userDataArchive.test.ts',
+			'test/userDataPayload.test.ts'
+		]) {
+			assert.ok(!fs.existsSync(path.join(setupPath, removedUserDataTransferFile)), `Removed BeCoder user-data transfer file still exists: ${removedUserDataTransferFile}`);
 		}
-		const payloadSource = fs.readFileSync(path.join(setupPath, 'src', 'userDataPayload.ts'), 'utf8');
-		assert.match(payloadSource, /from 'jsonc-parser'/);
-		assert.match(payloadSource, /state', 'locale\.json/);
-		assert.match(payloadSource, /prepareImportedPayload/);
-		const importHelperSource = fs.readFileSync(path.join(setupPath, 'src', 'userDataImportHelper.ts'), 'utf8');
-		assert.match(importHelperSource, /name\.startsWith\('ELECTRON_'\)/);
-		assert.match(importHelperSource, /waitForProcesses\(configuration\.waitPids\)[\s\S]*prepareImportedPayload/);
-		assert.match(importHelperSource, /rollback was incomplete/);
-		assert.match(importHelperSource, /\.becoder-data-root/);
-		assert.match(importHelperSource, /Promise\.allSettled/);
-		assert.match(importHelperSource, /importTransactionJournalName = '\.becoder-import-transaction\.json'/);
-		assert.match(importHelperSource, /recoverInterruptedImport/);
-		assert.match(importHelperSource, /@vscode\/windows-mutex/);
-		assert.match(importHelperSource, /ImportTransactionLockActiveError/);
-		assert.match(portabilitySource, /node_modules\.asar\.unpacked/);
-		assert.match(portabilitySource, /environment\['ELECTRON_RUN_AS_NODE'\] = '1'/);
 
 		const electronMainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'main.ts'), 'utf8');
-		assert.match(electronMainSource, /await this\.recoverInterruptedBeCoderImport\(\)[\s\S]*this\.createServices\(\)/);
 		assert.doesNotMatch(electronMainSource, /configureBeCoderPortableMode/);
-		assert.match(electronMainSource, /resolveBeCoderImportRecovery\(dataRoot, applicationRoot\)[\s\S]*spawn\(process\.execPath/);
-		assert.match(electronMainSource, /node_modules\.asar\.unpacked/);
-		assert.match(electronMainSource, /environment\['ELECTRON_RUN_AS_NODE'\] = '1'/);
-		assert.match(importHelperSource, /runImportRecovery[\s\S]*await acquireTransactionLock\(dataRoot\)[\s\S]*recoverTransaction\(resolvedJournalPath\)[\s\S]*transactionLock\.release\(\)/);
-		assert.match(importHelperSource, /process\.argv\[2\] === '--recover'[\s\S]*runImportRecovery\(process\.argv\[3\]\)/);
-		assert.doesNotMatch(electronMainSource, /acquireBeCoderImportTransactionLock/);
+		assert.doesNotMatch(electronMainSource, /recoverInterruptedBeCoderImport|resolveBeCoderImportRecovery|\.becoder-import-transaction\.json|userDataImportHelper/);
+		const profilesEditorModelSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'userDataProfile', 'browser', 'userDataProfilesEditorModel.ts'), 'utf8');
+		assert.match(profilesEditorModelSource, /private saveNewProfilePromise: Promise<IUserDataProfile \| undefined> \| undefined/);
+		assert.match(profilesEditorModelSource, /if \(this\.saveNewProfilePromise\) \{\s*return this\.saveNewProfilePromise;\s*\}/);
+		assert.match(profilesEditorModelSource, /const savePromise = Promise\.resolve\(\)\.then\(\(\) => this\.doSaveNewProfile\(transient, token\)\);\s*this\.saveNewProfilePromise = savePromise/);
+		const packageVerifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
+		assert.match(packageVerifierSource, /removed BeCoder user-data transfer module/);
+		assert.match(packageVerifierSource, /removed BeCoder user-data transfer command/);
+		assert.match(packageVerifierSource, /removed BeCoder user-data import recovery boundary/);
 		const setupVerifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-setup.ps1'), 'utf8');
 		assert.match(setupVerifierSource, /New-Item -ItemType Junction/);
 		assert.match(setupVerifierSource, /unicode-junction\.log/);

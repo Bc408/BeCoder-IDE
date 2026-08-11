@@ -264,8 +264,7 @@ const desktopResourcePatterns = [
 	'vs/platform/accessibilitySignal/browser/media/*.mp3',
 
 	// Media - images
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.svg',
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.png',
+	'vs/workbench/contrib/welcomeGettingStarted/common/media/becoder-icon.png',
 	'vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
 	'vs/workbench/services/extensionManagement/common/media/*.svg',
 	'vs/workbench/services/extensionManagement/common/media/*.png',
@@ -318,8 +317,7 @@ const serverWebResourcePatterns = [
 	'vs/platform/accessibilitySignal/browser/media/*.mp3',
 
 	// Media - images
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.svg',
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.png',
+	'vs/workbench/contrib/welcomeGettingStarted/common/media/becoder-icon.png',
 	'vs/workbench/contrib/extensions/browser/media/*.svg',
 	'vs/workbench/contrib/extensions/browser/media/*.png',
 	'vs/workbench/services/extensionManagement/common/media/*.svg',
@@ -344,8 +342,7 @@ const webResourcePatterns = [
 	'vs/platform/accessibilitySignal/browser/media/*.mp3',
 
 	// Media - images
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.svg',
-	'vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.png',
+	'vs/workbench/contrib/welcomeGettingStarted/common/media/becoder-icon.png',
 	'vs/workbench/contrib/extensions/browser/media/*.svg',
 	'vs/workbench/contrib/extensions/browser/media/*.png',
 	'vs/workbench/services/extensionManagement/common/media/*.svg',

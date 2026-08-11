@@ -94,7 +94,7 @@ const vscodeResourceIncludes = [
 	'out-build/vs/platform/accessibilitySignal/browser/media/*.mp3',
 
 	// Welcome
-	'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.{svg,png}',
+	'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/becoder-icon.png',
 
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',

@@ -10,7 +10,7 @@ import { join } from '../../../base/common/path.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
 import { OPTIONS, parseArgs } from '../../../platform/environment/node/argv.js';
 import { getUserDataPath } from '../../../platform/environment/node/userDataPath.js';
-import { configureBeCoderPackagedDataRoot, readBeCoderInstallationId, resolveBeCoderAppUserModelId, resolveBeCoderImportRecovery } from '../../node/beCoderInstallation.js';
+import { configureBeCoderPackagedDataRoot, readBeCoderInstallationId, resolveBeCoderAppUserModelId } from '../../node/beCoderInstallation.js';
 
 suite('BeCoder installation identity', () => {
 
@@ -130,42 +130,4 @@ suite('BeCoder installation identity', () => {
 		}
 	});
 
-	test('does not require the recovery helper without a transaction journal', async () => {
-		const root = fs.mkdtempSync(join(os.tmpdir(), 'becoder-recovery-none-'));
-		try {
-			assert.strictEqual(await resolveBeCoderImportRecovery(join(root, 'data'), join(root, 'application')), undefined);
-		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
-		}
-	});
-
-	test('requires an ordinary helper only after finding an ordinary recovery journal', async () => {
-		const root = fs.mkdtempSync(join(os.tmpdir(), 'becoder-recovery-required-'));
-		try {
-			const dataRoot = join(root, 'data');
-			const applicationRoot = join(root, 'application');
-			const journalPath = join(dataRoot, '.becoder-import-transaction.json');
-			const helperPath = join(applicationRoot, 'extensions', 'becoder.setup', 'out', 'userDataImportHelper.js');
-			fs.mkdirSync(dataRoot, { recursive: true });
-			fs.writeFileSync(journalPath, '{}');
-			await assert.rejects(resolveBeCoderImportRecovery(dataRoot, applicationRoot), /recovery helper is missing/);
-
-			fs.mkdirSync(join(helperPath, '..'), { recursive: true });
-			fs.writeFileSync(helperPath, 'helper');
-			assert.deepStrictEqual(await resolveBeCoderImportRecovery(dataRoot, applicationRoot), { journalPath, helperPath });
-		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
-		}
-	});
-
-	test('rejects a non-ordinary recovery journal before inspecting the helper', async () => {
-		const root = fs.mkdtempSync(join(os.tmpdir(), 'becoder-recovery-invalid-'));
-		try {
-			const dataRoot = join(root, 'data');
-			fs.mkdirSync(join(dataRoot, '.becoder-import-transaction.json'), { recursive: true });
-			await assert.rejects(resolveBeCoderImportRecovery(dataRoot, join(root, 'application')), /journal is not an ordinary file/);
-		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
-		}
-	});
 });

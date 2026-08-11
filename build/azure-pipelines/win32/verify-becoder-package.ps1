@@ -31,14 +31,9 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.setup\package.nls.zh-cn.json',
 	'resources\app\extensions\becoder.setup\out\extension.js',
 	'resources\app\extensions\becoder.setup\out\fileVisibility.js',
-	'resources\app\extensions\becoder.setup\out\storageDatabase.js',
 	'resources\app\extensions\becoder.setup\out\toolchain.js',
 	'resources\app\extensions\becoder.setup\out\toolchainDiagnostics.js',
 	'resources\app\extensions\becoder.setup\out\toolchainManifest.js',
-	'resources\app\extensions\becoder.setup\out\userDataArchive.js',
-	'resources\app\extensions\becoder.setup\out\userDataImportHelper.js',
-	'resources\app\extensions\becoder.setup\out\userDataPayload.js',
-	'resources\app\extensions\becoder.setup\out\userDataPortability.js',
 	'resources\app\node_modules.asar',
 	'resources\app\node_modules.asar.unpacked\@vscode\sqlite3\build\Release\vscode-sqlite3.node',
 	'resources\app\node_modules.asar.unpacked\@vscode\windows-mutex\build\Release\CreateMutex.node',
@@ -92,93 +87,19 @@ foreach ($relativePath in $requiredFiles) {
 	}
 }
 
+foreach ($removedUserDataTransferFile in @(
+	'resources\app\extensions\becoder.setup\out\storageDatabase.js',
+	'resources\app\extensions\becoder.setup\out\userDataArchive.js',
+	'resources\app\extensions\becoder.setup\out\userDataImportHelper.js',
+	'resources\app\extensions\becoder.setup\out\userDataPayload.js',
+	'resources\app\extensions\becoder.setup\out\userDataPortability.js'
+)) {
+	if (Test-Path -LiteralPath (Join-Path $PackagePath $removedUserDataTransferFile)) {
+		throw "The Windows package contains a removed BeCoder user-data transfer module: $removedUserDataTransferFile"
+	}
+}
+
 $appPath = Join-Path $PackagePath 'resources\app'
-$helperProbePath = Join-Path ([System.IO.Path]::GetTempPath()) "becoder-package-helper-probe-$PID.js"
-$helperProbeOutputPath = "$helperProbePath.stdout"
-$helperProbeErrorPath = "$helperProbePath.stderr"
-$helperProbe = @'
-const path = require('path');
-
-const applicationRoot = process.argv[2];
-require(path.join(applicationRoot, 'extensions', 'becoder.setup', 'out', 'userDataImportHelper.js'));
-const { parse } = require('jsonc-parser');
-if (parse('{"ready":true}').ready !== true) {
-	throw new Error('jsonc-parser did not parse the helper probe.');
-}
-
-const sqlite3 = require('@vscode/sqlite3');
-const WindowsMutex = require('@vscode/windows-mutex');
-const mutexName = `Local\\BeCoder.PackageProbe.${process.pid}`;
-const mutex = new WindowsMutex.Mutex(mutexName);
-if (!mutex.isActive() || !WindowsMutex.isActive(mutexName)) {
-	throw new Error('Windows import transaction mutex probe did not become active.');
-}
-mutex.release();
-if (WindowsMutex.isActive(mutexName)) {
-	throw new Error('Windows import transaction mutex probe did not release.');
-}
-function openDatabase() {
-	return new Promise((resolve, reject) => {
-		const database = new sqlite3.Database(':memory:', error => error ? reject(error) : resolve(database));
-	});
-}
-function run(database, statement, parameters = []) {
-	return new Promise((resolve, reject) => database.run(statement, parameters, error => error ? reject(error) : resolve()));
-}
-function get(database, statement) {
-	return new Promise((resolve, reject) => database.get(statement, (error, row) => error ? reject(error) : resolve(row)));
-}
-function close(database) {
-	return new Promise((resolve, reject) => database.close(error => error ? reject(error) : resolve()));
-}
-
-(async () => {
-	const database = await openDatabase();
-	try {
-		await run(database, 'CREATE TABLE probe (value TEXT NOT NULL)');
-		await run(database, 'INSERT INTO probe (value) VALUES (?)', ['ready']);
-		const row = await get(database, 'SELECT value FROM probe');
-		if (!row || row.value !== 'ready') {
-			throw new Error('SQLite helper probe returned an unexpected value.');
-		}
-	} finally {
-		await close(database);
-	}
-})().catch(error => {
-	console.error(error);
-	process.exitCode = 1;
-});
-'@
-try {
-	[System.IO.File]::WriteAllText($helperProbePath, $helperProbe, [System.Text.UTF8Encoding]::new($false))
-	$previousElectronRunAsNode = $env:ELECTRON_RUN_AS_NODE
-	$previousNodePath = $env:NODE_PATH
-	$previousNodeOptions = $env:NODE_OPTIONS
-	try {
-		$env:ELECTRON_RUN_AS_NODE = '1'
-		$env:NODE_PATH = "$(Join-Path $appPath 'node_modules.asar');$(Join-Path $appPath 'node_modules.asar.unpacked')"
-		Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue
-		$probeProcess = Start-Process -FilePath (Join-Path $PackagePath 'BeCoder.exe') `
-			-ArgumentList @("`"$helperProbePath`"", "`"$appPath`"") `
-			-Wait -PassThru -WindowStyle Hidden `
-			-RedirectStandardOutput $helperProbeOutputPath `
-			-RedirectStandardError $helperProbeErrorPath
-		if ($probeProcess.ExitCode -ne 0) {
-			$probeOutput = @(
-				Get-Content -LiteralPath $helperProbeOutputPath -Raw -ErrorAction SilentlyContinue
-				Get-Content -LiteralPath $helperProbeErrorPath -Raw -ErrorAction SilentlyContinue
-			) -join "`n"
-			throw "The packaged BeCoder import helper dependency probe failed with exit code $($probeProcess.ExitCode).`n$probeOutput"
-		}
-	} finally {
-		if ($null -eq $previousElectronRunAsNode) { Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue } else { $env:ELECTRON_RUN_AS_NODE = $previousElectronRunAsNode }
-		if ($null -eq $previousNodePath) { Remove-Item Env:NODE_PATH -ErrorAction SilentlyContinue } else { $env:NODE_PATH = $previousNodePath }
-		if ($null -eq $previousNodeOptions) { Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue } else { $env:NODE_OPTIONS = $previousNodeOptions }
-	}
-} finally {
-	Remove-Item -LiteralPath $helperProbePath, $helperProbeOutputPath, $helperProbeErrorPath -Force -ErrorAction SilentlyContinue
-}
-
 $packagedNotices = Get-Content -LiteralPath (Join-Path $appPath 'ThirdPartyNotices.txt') -Raw
 foreach ($requiredNotice in @(
 	'BeCoder Runner 0.3.0',
@@ -365,16 +286,15 @@ foreach ($removedPreparationBoundary in @('.becoder-repair-requested', '.becoder
 		throw "The packaged Setup extension contains a removed runtime toolchain-preparation boundary: $removedPreparationBoundary"
 	}
 }
-foreach ($requiredSetupCommand in @('becoder.openToolchainDiagnostics', 'becoder.exportUserData', 'becoder.importUserData')) {
+foreach ($requiredSetupCommand in @('becoder.openToolchainDiagnostics')) {
 	if ($setupCommands -notcontains $requiredSetupCommand) {
 		throw "The packaged Setup extension is missing command: $requiredSetupCommand"
 	}
 }
-$portabilityBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\userDataPortability.js') -Raw
-$importHelperBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\userDataImportHelper.js') -Raw
-if ($portabilityBundle.Contains('os.tmpdir') -or $importHelperBundle.Contains('os.tmpdir') -or
-	$importHelperBundle -notmatch 'require\(["'']\./userDataPayload["'']\)') {
-	throw 'The packaged user-data transfer path does not keep staging under authenticated BeCoder data or does not defer payload preparation to the detached helper.'
+foreach ($removedSetupCommand in @('becoder.exportUserData', 'becoder.importUserData')) {
+	if ($setupCommands -contains $removedSetupCommand) {
+		throw "The packaged Setup extension still contributes a removed BeCoder user-data transfer command: $removedSetupCommand"
+	}
 }
 $toolchainBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchain.js') -Raw
 $toolchainDiagnosticsBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchainDiagnostics.js') -Raw
@@ -473,18 +393,10 @@ if ((@($product.linkProtectionTrustedDomains) -join ',') -ne 'https://open-vsx.o
 }
 
 $appMainBundle = Get-Content -LiteralPath (Join-Path $appPath 'out\main.js') -Raw
-foreach ($requiredImportRecoveryBoundary in @('.becoder-import-transaction.json', 'userDataImportHelper.js', '--recover', 'node_modules.asar.unpacked', 'ELECTRON_RUN_AS_NODE')) {
-	if (-not $appMainBundle.Contains($requiredImportRecoveryBoundary)) {
-		throw "The packaged main process is missing the user-data import recovery boundary: $requiredImportRecoveryBoundary"
+foreach ($removedImportRecoveryBoundary in @('.becoder-import-transaction.json', 'userDataImportHelper.js', 'recoverInterruptedBeCoderImport', 'becoderImportRecoveryError')) {
+	if ($appMainBundle.Contains($removedImportRecoveryBoundary)) {
+		throw "The packaged main process contains a removed BeCoder user-data import recovery boundary: $removedImportRecoveryBoundary"
 	}
-}
-foreach ($requiredHelperRecoveryBoundary in @('BeCoder.UserDataImport.', '@vscode/windows-mutex', 'runImportRecovery')) {
-	if (-not $importHelperBundle.Contains($requiredHelperRecoveryBoundary)) {
-		throw "The packaged import helper does not own the recovery mutex boundary: $requiredHelperRecoveryBoundary"
-	}
-}
-if ($appMainBundle.Contains('acquireBeCoderImportTransactionLock')) {
-	throw 'The packaged main process still owns the import recovery mutex instead of the recovery helper.'
 }
 foreach ($removedMainBoundary in @('becoder:onboarding', 'becoder.setup.completed', 'becoder.setup.pending', 'first-run.html', 'first-run-preload.js')) {
 	if ($appMainBundle.Contains($removedMainBoundary)) {

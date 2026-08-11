@@ -49,34 +49,14 @@ An exact ordinary item named `input` sorts above siblings in its Explorer folder
 
 Program data remains under installation-local `data`, including user settings, extensions, history, caches, locale, and toolchains. Moving the complete installation moves this state without system migration.
 
-## Export/Import Boundary
+## Profile Export/Import Boundary
 
-The approved design uses a versioned `.becoder-backup` archive with path validation, hashes, count/size limits, protected/blacklisted extension checks, transactional replacement, journaling, rollback, startup recovery, and installation-specific mutex ownership.
+Code OSS Profiles and the native `.code-profile` format are the only BeCoder configuration export/import authority. BeCoder does not provide a parallel `.becoder-backup` format, custom export/import commands, detached replacement helper, transaction journal, or startup recovery path.
 
-The intended export includes:
+The native Profiles UI controls the supported resource set, including settings, keybindings, tasks, snippets, UI state, and user extensions where present in the exported profile. A profile is configuration data, not a complete installation backup: it does not transfer the application, toolchains, source projects, arbitrary installation-local files, caches, logs, unsaved buffers, or secret storage.
 
-- user settings;
-- keybindings;
-- snippets;
-- user-installed extensions;
-- recent-project metadata;
-- generic workspace state;
-- local file history;
-- sanitized `zh-cn` or `en` locale.
-
-It excludes:
-
-- application and toolchains;
-- protected built-ins;
-- caches and logs;
-- credentials, tokens, and secret storage;
-- unsaved buffers/backups;
-- process state;
-- source projects;
-- unrelated `argv.json` fields.
-
-Backups inside the current installation root are rejected. Import never writes user projects or system VS Code directories. End-to-end delivery requires clear bilingual settings controls and separate project-owner runtime acceptance.
+Profile import writes only the current installation's profile data and installs allowed extensions through the ordinary extension-governance path. It must not inspect or modify system VS Code, another BeCoder installation, or user projects. Importing a profile whose name already exists requires the native replacement confirmation. One user action, focus-change auto-save, and other concurrent save requests must share one in-flight profile creation so that replacement and extension installation are not duplicated.
 
 ## Acceptance Boundary
 
-Validate clean profiles, complete/partial hide sets, exact restoration, user edits, multi-root overrides, legacy migration, project asset preservation, system VS Code isolation, archive traversal and link rejection, extension conflicts, integrity limits, interruption, rollback, startup recovery, locale-only transfer, and complete exclusion of secrets and source projects.
+Validate clean profiles, complete/partial hide sets, exact restoration, user edits, multi-root overrides, legacy migration, project asset preservation, system VS Code isolation, native `.code-profile` export/import, same-name replacement, single-flight creation under focus-change auto-save, extension-governance enforcement, and exclusion of secrets and source projects.

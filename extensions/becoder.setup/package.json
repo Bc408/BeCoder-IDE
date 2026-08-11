@@ -14,7 +14,7 @@
 			"supported": true
 		}
 	},
-	"activationEvents": ["*", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.openToolchainDiagnostics", "onCommand:becoder.exportUserData", "onCommand:becoder.importUserData"],
+	"activationEvents": ["*", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.openToolchainDiagnostics"],
 	"main": "./out/extension.js",
 	"scripts": {
 		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true }); require('fs').rmSync('out-test', { recursive: true, force: true })\"",
@@ -41,7 +41,7 @@
 			"window.systemColorTheme": "auto",
 			"window.titleBarStyle": "custom",
 			"workbench.iconTheme": "vs-seti",
-			"workbench.startupEditor": "none",
+			"workbench.startupEditor": "welcomePage",
 			"becoder.runner.cppFlags": ["-O2", "-Wall", "-DDEBUG"],
 			"becoder.runner.cFlags": ["-O2", "-Wall", "-DDEBUG"]
 		},
@@ -85,16 +85,6 @@
 				"command": "becoder.openToolchainDiagnostics",
 				"title": "%command.openToolchainDiagnostics%",
 				"icon": "$(pulse)"
-			},
-			{
-				"command": "becoder.exportUserData",
-				"title": "%command.exportUserData%",
-				"icon": "$(export)"
-			},
-			{
-				"command": "becoder.importUserData",
-				"title": "%command.importUserData%",
-				"icon": "$(import)"
 			},
 			{
 				"command": "becoder.showAllFiles",

@@ -12,8 +12,6 @@
 	"command.configureCppSnippets": "BeCoder IDE：配置代码模板",
 	"command.configureAutoFormat": "BeCoder IDE：配置自动格式化",
 	"command.openToolchainDiagnostics": "BeCoder IDE：工具链诊断",
-	"command.exportUserData": "BeCoder IDE：导出用户数据",
-	"command.importUserData": "BeCoder IDE：导入用户数据",
 	"command.showAllFiles": "BeCoder IDE：显示所有文件",
 	"command.hideSetupFiles": "BeCoder IDE：隐藏配置和可执行文件"
 }

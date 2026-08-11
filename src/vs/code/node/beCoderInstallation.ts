@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { mkdirSync, promises, readFileSync, statSync, type Stats } from 'fs';
+import { mkdirSync, readFileSync, statSync } from 'fs';
 import { dirname, join } from '../../base/common/path.js';
 
 const installationMarkerName = '.becoder-installation.json';
@@ -24,11 +24,6 @@ export type BeCoderPackagedDataRootOptions = {
 	readonly environment: NodeJS.ProcessEnv;
 };
 
-export type BeCoderImportRecoveryPaths = {
-	readonly journalPath: string;
-	readonly helperPath: string;
-};
-
 export function configureBeCoderPackagedDataRoot(options: BeCoderPackagedDataRootOptions): string | undefined {
 	if (!options.isPackaged || options.productName !== 'BeCoder' || options.applicationName !== 'becoder') {
 		return undefined;
@@ -39,38 +34,6 @@ export function configureBeCoderPackagedDataRoot(options: BeCoderPackagedDataRoo
 	options.environment['VSCODE_PORTABLE'] = dataRoot;
 	delete options.environment['VSCODE_APPDATA'];
 	return dataRoot;
-}
-
-export async function resolveBeCoderImportRecovery(dataRoot: string, applicationRoot: string): Promise<BeCoderImportRecoveryPaths | undefined> {
-	const journalPath = join(dataRoot, '.becoder-import-transaction.json');
-	let journal: Stats;
-	try {
-		journal = await promises.lstat(journalPath);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-			return undefined;
-		}
-		throw error;
-	}
-	if (!journal.isFile() || journal.isSymbolicLink()) {
-		throw new Error(`BeCoder import recovery journal is not an ordinary file: ${journalPath}`);
-	}
-
-	const helperPath = join(applicationRoot, 'extensions', 'becoder.setup', 'out', 'userDataImportHelper.js');
-	let helper: Stats;
-	try {
-		helper = await promises.lstat(helperPath);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-			throw new Error(`BeCoder import recovery helper is missing: ${helperPath}`);
-		}
-		throw error;
-	}
-	if (!helper.isFile() || helper.isSymbolicLink()) {
-		throw new Error(`BeCoder import recovery helper is not an ordinary file: ${helperPath}`);
-	}
-
-	return { journalPath, helperPath };
 }
 
 export function readBeCoderInstallationId(executablePath: string): string | undefined {

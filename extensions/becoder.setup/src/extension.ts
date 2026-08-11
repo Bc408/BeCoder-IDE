@@ -9,7 +9,6 @@ import { FileVisibilityState, hideBeCoderFiles, isBeCoderHideActiveInAllScopes, 
 import { registerSimpleSettings } from './simpleSettings';
 import { initializeInstalledToolchain } from './toolchain';
 import { registerToolchainDiagnostics } from './toolchainDiagnostics';
-import { registerUserDataPortability } from './userDataPortability';
 
 const LEGACY_FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v4';
 const FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v5';
@@ -19,7 +18,6 @@ const CLANGD_SETTINGS_MIGRATION = 'becoder.clangdSettings.v1';
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	registerSimpleSettings(context);
 	registerToolchainDiagnostics(context);
-	registerUserDataPortability(context);
 	if (!context.globalState.get<boolean>(FILE_EXCLUDES_MIGRATION)) {
 		await migrateLegacyFileExcludes(context.globalState.get<boolean>(LEGACY_FILE_EXCLUDES_MIGRATION) === true);
 		await context.globalState.update(FILE_EXCLUDES_MIGRATION, true);

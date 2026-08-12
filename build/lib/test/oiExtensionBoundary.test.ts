@@ -881,6 +881,7 @@ suite('OI extension boundary', () => {
 		const components = inventory.components ?? [];
 		assert.deepStrictEqual(components.map(component => component.id), [
 			'code-oss',
+			'electron',
 			'becoder.runner',
 			'vscode.vscode-theme-seti',
 			'becoder.becoder-setup',
@@ -906,6 +907,11 @@ suite('OI extension boundary', () => {
 		const clangd = components.find(component => component.id === 'clangd-windows');
 		assert.strictEqual(clangd?.sha256, 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1');
 		assert.strictEqual(clangd?.archiveLicenseEntry, 'clangd_22.1.6/LICENSE.TXT');
+		const electron = components.find(component => component.id === 'electron');
+		assert.strictEqual(electron?.version, '42.6.0');
+		assert.strictEqual(electron?.spdxIdentifier, 'MIT');
+		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
+		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
 		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
 		assert.strictEqual(ucrt64?.sha256, '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2');
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
@@ -918,9 +924,9 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, 'f261c558b3577143f7500dcffdd4042a6e5fd8acb051c01484c5757a075860d5');
+		assert.strictEqual(languagePack?.contentSha256, '0f2b889acd2d1d09eaca3e17473f54b450fd593aaba0857fd8efd6888c13058a');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, '19f143c47abfc1a4446b0be78650a3fadec5f66f038be8f7e8b53cf89ab52559');
+		assert.strictEqual(languagePack?.packagedContentSha256, '4c207c39074d08ab54b215ee34a7c18d51dabb4e348f2fe66f28d2004a83d685');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -969,6 +975,11 @@ suite('OI extension boundary', () => {
 		}
 		const imageCarouselTranslations = mainTranslation.contents?.['vs/workbench/contrib/imageCarousel/browser/imageCarousel.contribution'] ?? {};
 		assert.strictEqual(imageCarouselTranslations.openImagesInCarousel, '\u5728\u56fe\u50cf\u9884\u89c8\u4e2d\u6253\u5f00');
+		const updateTranslations = mainTranslation.contents?.['vs/platform/update/common/update.config.contribution'] ?? {};
+		assert.strictEqual(updateTranslations.updateMode, '配置 BeCoder 是否接收应用程序自动更新。更新将从 BeCoder 更新服务获取。');
+		assert.strictEqual(updateTranslations.default, '启用自动更新检查。BeCoder 将定期自动检查更新。');
+		assert.strictEqual(updateTranslations.enableWindowsBackgroundUpdates, '启用在后台下载和安装新的 BeCoder 版本。');
+		assert.strictEqual(updateTranslations.showReleaseNotes, '在更新后显示发行说明。发行说明将从 BeCoder 更新服务获取。');
 		assert.ok(!('imageCarousel.chat.enabled' in imageCarouselTranslations));
 		assert.ok(!('openImageInCarousel' in imageCarouselTranslations));
 		const packageVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
@@ -1125,6 +1136,11 @@ suite('OI extension boundary', () => {
 
 		const gallerySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'common', 'extensionGalleryService.ts'), 'utf8');
 		assert.match(gallerySource, /isProtectedExtensionId\(extensionIdentifier\.id, this\.productService\.protectedExtensions\)/);
+		const updateConfigurationSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'update', 'common', 'update.config.contribution.ts'), 'utf8');
+		assert.match(updateConfigurationSource, /configurationRegistry\.registerConfigurations\(product\.updateUrl \? \[\{/);
+		assert.match(updateConfigurationSource, /new BeCoder versions in the background/);
+		assert.match(updateConfigurationSource, /BeCoder update service/);
+		assert.doesNotMatch(updateConfigurationSource, /new VS Code versions|Microsoft online service|Code will check for updates/);
 	});
 
 	test('keeps a single C++ TextMate grammar owner', () => {
@@ -1505,11 +1521,15 @@ suite('OI extension boundary', () => {
 		assert.match(setupScript, /Uninstallable=no/);
 		assert.match(setupScript, /CreateUninstallRegKey=no/);
 		assert.doesNotMatch(setupScript, /^AppId=/m);
-		assert.doesNotMatch(setupScript, /^\[Tasks\]$/m);
-		assert.doesNotMatch(setupScript, /^\[Icons\]$/m);
+		assert.match(setupScript, /^\[Tasks\]$/m);
+		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"; Flags: unchecked$/m);
+		assert.match(setupScript, /^english\.CreateDesktopShortcut=Create a desktop shortcut \(not recommended when installing BeCoder on removable storage\)$/m);
+		assert.match(setupScript, /^simplifiedChinese\.CreateDesktopShortcut=创建桌面快捷方式（当你正在给可移动存储介质安装 BeCoder 时，不建议勾选）$/m);
+		assert.match(setupScript, /^\[Icons\]$/m);
+		assert.match(setupScript, /^Name: "\{userdesktop\}\\\{#NameLong\}"; Filename: "\{app\}\\\{#ExeBasename\}\.exe"; WorkingDir: "\{app\}"; Tasks: desktopicon$/m);
 		assert.doesNotMatch(setupScript, /^\[Registry\]$/m);
 		assert.doesNotMatch(setupScript, /^\[UninstallDelete\]$/m);
-		assert.doesNotMatch(setupScript, /DesktopShortcut|autodesktop|DefaultGroupName/);
+		assert.doesNotMatch(setupScript, /\{(?:auto|common)desktop\}|\{group\}|\{userstartmenu\}|\{commonstartmenu\}|DefaultGroupName/i);
 		assert.doesNotMatch(setupScript, /InitializeUninstall|UninstallWarning|SilentUninstall|uninstallexe|ScheduleMovedInstallationRemoval/);
 		assert.doesNotMatch(setupScript, /\bReg(?:Write|Delete)\w*\s*\(/i);
 		for (const previousSetting of ['AppDir', 'Group', 'Language', 'Privileges', 'SetupType', 'Tasks', 'UserInfo']) {
@@ -1599,6 +1619,14 @@ suite('OI extension boundary', () => {
 		assert.match(setupVerifierSource, /\[Guid\]::NewGuid\(\)\.ToString\('N'\)\.Substring\(0, 6\)/);
 		assert.match(setupVerifierSource, /Unable to remove the previous Setup verification directory/);
 		assert.match(setupVerifierSource, /Unable to remove the completed Setup verification run/);
+		assert.match(setupVerifierSource, /reg\.exe query \$hive \/f \$term \/k \/s/);
+		const electronBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'electron.ts'), 'utf8');
+		assert.match(electronBuildSource, /process\.env\['BECODER_ELECTRON_ARCHIVE'\]/);
+		assert.match(electronBuildSource, /path\.basename\(archivePath\) !== localElectronArchiveName/);
+		assert.match(electronBuildSource, /!stat\.isFile\(\) \|\| stat\.isSymbolicLink\(\)/);
+		assert.match(electronBuildSource, /actualHash !== expectedHash/);
+		assert.match(electronBuildSource, /fileName === 'SHASUMS256\.txt'[\s\S]*fileResponse\(electronChecksumFile\)/);
+		assert.match(electronBuildSource, /: electronFeed[\s\S]*downloadFeedPackage/);
 
 		const checkerBoundary = readJson<{ extends?: string; exclude?: readonly string[] }>(path.join(repositoryRoot, 'build', 'checker', 'tsconfig.becoder.json'));
 		assert.strictEqual(checkerBoundary.extends, '../../src/tsconfig.base.json');

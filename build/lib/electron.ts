@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { Readable } from 'stream';
 import vfs from 'vinyl-fs';
 import { filter, jsonEditor } from './gulp/facade.ts';
@@ -103,6 +104,50 @@ function darwinBundleDocumentTypes(types: { [name: string]: string | string[] },
 }
 
 const { electronVersion, msBuildId } = util.getElectronVersion();
+const electronChecksumFile = path.join(root, 'build', 'checksums', 'electron.txt');
+const localElectronArchive = process.env['BECODER_ELECTRON_ARCHIVE'];
+const localElectronArchiveName = `electron-v${electronVersion}-win32-x64.zip`;
+
+function expectedElectronArchiveHash(): string {
+	const checksumLine = fs.readFileSync(electronChecksumFile, 'utf8')
+		.split(/\r?\n/)
+		.find(line => line.endsWith(` *${localElectronArchiveName}`));
+	const hash = checksumLine?.split(/\s+/, 1)[0];
+	if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) {
+		throw new Error(`Missing SHA-256 checksum for ${localElectronArchiveName}`);
+	}
+	return hash.toLowerCase();
+}
+
+let validatedLocalElectronArchive: Promise<Buffer> | undefined;
+async function getValidatedLocalElectronArchive(): Promise<Buffer> {
+	if (!localElectronArchive) {
+		throw new Error('BECODER_ELECTRON_ARCHIVE is not set');
+	}
+	return validatedLocalElectronArchive ??= (async () => {
+		const archivePath = path.resolve(localElectronArchive);
+		if (path.basename(archivePath) !== localElectronArchiveName) {
+			throw new Error(`BECODER_ELECTRON_ARCHIVE must name ${localElectronArchiveName}`);
+		}
+		const stat = await fs.promises.lstat(archivePath);
+		if (!stat.isFile() || stat.isSymbolicLink()) {
+			throw new Error('BECODER_ELECTRON_ARCHIVE must reference an ordinary file');
+		}
+		const archive = await fs.promises.readFile(archivePath);
+		const actualHash = createHash('sha256').update(archive).digest('hex');
+		const expectedHash = expectedElectronArchiveHash();
+		if (actualHash !== expectedHash) {
+			throw new Error(`BECODER_ELECTRON_ARCHIVE SHA-256 mismatch: expected ${expectedHash}, got ${actualHash}`);
+		}
+		return archive;
+	})();
+}
+
+async function fileResponse(filePath: string): Promise<Response> {
+	const size = (await fs.promises.stat(filePath)).size;
+	const body = Readable.toWeb(fs.createReadStream(filePath)) as ReadableStream<Uint8Array>;
+	return new Response(body, { status: 200, headers: { 'Content-Length': String(size) } });
+}
 
 // In product builds, `@vscode/gulp-electron` is given an asset resolver (via the
 // `repo` option) that fetches the prebuilt Electron archives on demand from the
@@ -125,7 +170,18 @@ function feedPackageName(fileName: string): string | undefined {
 	return fileName.replace(/\.zip$/, '');
 }
 
-const electronAssetResolver = electronFeed
+const electronAssetResolver = localElectronArchive
+	? async ({ fileName }: { url: string; fileName: string }): Promise<Response> => {
+		const archive = await getValidatedLocalElectronArchive();
+		if (fileName === localElectronArchiveName) {
+			return new Response(archive);
+		}
+		if (fileName === 'SHASUMS256.txt') {
+			return fileResponse(electronChecksumFile);
+		}
+		return new Response(null, { status: 404 });
+	}
+	: electronFeed
 	? async ({ fileName }: { url: string; fileName: string }): Promise<Response> => {
 		const name = feedPackageName(fileName);
 		if (!name) {
@@ -133,17 +189,15 @@ const electronAssetResolver = electronFeed
 		}
 		const version = `${electronVersion}-${msBuildId}`;
 		const filePath = await downloadFeedPackage(root, 'electron-feed', { feed: electronFeed, name, version });
-		const size = (await fs.promises.stat(filePath)).size;
-		const body = Readable.toWeb(fs.createReadStream(filePath)) as ReadableStream<Uint8Array>;
-		return new Response(body, { status: 200, headers: { 'Content-Length': String(size) } });
+		return fileResponse(filePath);
 	}
 	: undefined;
 
 export const config = {
 	version: electronVersion,
 	productAppName: product.nameLong,
-	companyName: 'KevinHuangIsLearning',
-	copyright: 'Copyright (C) 2026 KevinHuangIsLearning. All rights reserved',
+	companyName: 'Bc408',
+	copyright: 'Copyright (C) 2026 Bc408. All rights reserved',
 	darwinExecutable: product.nameShort,
 	darwinIcon: 'resources/darwin/code.icns',
 	darwinBundleIdentifier: product.darwinBundleIdentifier,
@@ -240,7 +294,7 @@ export const config = {
 	token: process.env['GITHUB_TOKEN'],
 	repo: electronAssetResolver,
 	validateChecksum: true,
-	checksumFile: path.join(root, 'build', 'checksums', 'electron.txt'),
+	checksumFile: electronChecksumFile,
 	createVersionedResources: useVersionedUpdate,
 	productVersionString: versionedResourcesFolder,
 };

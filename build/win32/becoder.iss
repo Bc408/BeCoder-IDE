@@ -54,9 +54,17 @@ english.ReplaceDeleteFailed=Setup could not completely remove the previous BeCod
 simplifiedChinese.ReplaceDeleteFailed=安装程序无法完全删除旧版 BeCoder。请关闭正在使用此文件夹的程序，然后重试。
 english.OwnershipMarkerFailed=Setup could not create the BeCoder ownership marker. Installation cannot continue safely.
 simplifiedChinese.OwnershipMarkerFailed=安装程序无法创建 BeCoder 所有权标记。为确保安全，安装无法继续。
+english.CreateDesktopShortcut=Create a desktop shortcut (not recommended when installing BeCoder on removable storage)
+simplifiedChinese.CreateDesktopShortcut=创建桌面快捷方式（当你正在给可移动存储介质安装 BeCoder 时，不建议勾选）
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; Flags: unchecked
 
 [Files]
 Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{userdesktop}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong}}"; Flags: nowait postinstall skipifsilent

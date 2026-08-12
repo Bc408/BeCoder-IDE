@@ -12,6 +12,16 @@
 			"licensePath": "licenses/MIT-VSCode.txt"
 		},
 		{
+			"id": "electron",
+			"version": "42.6.0",
+			"source": "https://github.com/electron/electron/tree/v42.6.0",
+			"modificationStatus": "Unmodified upstream Electron Windows runtime used by BeCoder.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (c) Electron contributors; Copyright (c) 2013-2020 GitHub Inc.",
+			"licensePath": "licenses/MIT-Electron.txt"
+		},
+		{
 			"id": "becoder.runner",
 			"version": "0.3.0",
 			"source": "https://github.com/Bc408/BeCoder",
@@ -113,10 +123,10 @@
 			"version": "1.130.2026072017",
 			"sourceArchive": "ms-ceintl.vscode-language-pack-zh-hans-1.130.2026072017.vsix",
 			"sha256": "265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0",
-			"contentSha256": "f261c558b3577143f7500dcffdd4042a6e5fd8acb051c01484c5757a075860d5",
-			"packagedContentSha256": "19f143c47abfc1a4446b0be78650a3fadec5f66f038be8f7e8b53cf89ab52559",
+			"contentSha256": "0f2b889acd2d1d09eaca3e17473f54b450fd593aaba0857fd8efd6888c13058a",
+			"packagedContentSha256": "4c207c39074d08ab54b215ee34a7c18d51dabb4e348f2fe66f28d2004a83d685",
 			"source": "https://github.com/microsoft/vscode-loc",
-			"modificationStatus": "Derived from the approved VSIX by removing translations for AI, prompt, Mermaid Chat, Debug, Source Control, Git/GitHub, and Terminal Suggest surfaces that BeCoder does not package while retaining generic Authentication, built-in Mermaid Markdown, and ordinary Images Preview translations; the standard Code OSS packaging step deterministically minifies JSON resources.",
+			"modificationStatus": "Derived from the approved VSIX by removing translations for AI, prompt, Mermaid Chat, Debug, Source Control, Git/GitHub, and Terminal Suggest surfaces that BeCoder does not package, branding application-update settings for BeCoder, and retaining generic Authentication, built-in Mermaid Markdown, and ordinary Images Preview translations; the standard Code OSS packaging step deterministically minifies JSON resources.",
 			"license": "MIT",
 			"spdxIdentifier": "MIT",
 			"copyrightNotice": "Copyright (c) Microsoft Corporation",

@@ -12,7 +12,7 @@ The target audience includes beginning competitive programmers. A fresh installa
 
 ## 2. Highest Principle
 
-> In BeCoder, only the native terminal actively accommodates the user’s computer runtime environment. All other core functions should isolate system configurations as much as possible, using only the paths, configurations, and resources prepared by BeCoder itself. BeCoder should be all set after intalling BeCoderSetup-x64.exe, with the first launch already in the best default state prepared for user to use; users can configure it themselves, but the product does not proactively require users to complete configuration first.
+> In BeCoder, only the native terminal actively accommodates the user’s computer runtime environment. All other core functions should isolate system configurations as much as possible, using only the paths, configurations, and resources prepared by BeCoder itself. BeCoder should be all set after installing BeCoderSetup-x64.exe, with the first launch already in the best default state prepared for user to use; users can configure it themselves, but the product does not proactively require users to complete configuration first.
 
 This produces four permanent principles:
 
@@ -75,7 +75,7 @@ The same principle applies more broadly: a stable simple result is preferable to
 
 clangd and GCC are complementary rather than competing authorities.
 
-clangd owns code intelligence, one bounded semantic refinement, and explicit Google-style formatting. It does not own visible diagnostics, warning presentation, inlay hints, inactive regions, broad code actions, or a general indexing product.
+clangd owns code intelligence, one bounded semantic refinement, explicit Google-style formatting, and optional inlay-hint data. BeCoder owns the inlay-hint switch through `becoder.inlayHints.enabled`, which is off by default. clangd does not own visible diagnostics, warning presentation, inactive regions, broad code actions, or a general indexing product.
 
 Bundled GCC owns visible syntax, preprocessing, and type errors. Runner owns real compilation, warnings, linking, execution, and program output. Background diagnostics and explicit Run are separate processes and must not share cancellation or terminal state.
 
@@ -113,9 +113,9 @@ User-installed extensions remain third-party content under their own licenses an
 
 ## 12. Directory Product, Not System Integration
 
-BeCoder's Windows Setup places one complete BeCoder directory at a user-selected location. The installed directory remains movable, including to a removable drive. Setup is not permission to integrate BeCoder into Windows.
+BeCoder's Windows Setup places one complete BeCoder directory at a user-selected location. The installed directory remains movable, including to a removable drive. Setup creates no Windows integration by default. It may create one current-user desktop shortcut only when the user explicitly selects that unchecked option; the installer warns against selecting it for removable-storage installations.
 
-BeCoder does not need registry state, an uninstaller, file associations, PATH changes, App Paths, protocols, services, background tasks, or startup entries. Closing BeCoder and deleting its directory is the complete uninstall model.
+BeCoder does not need registry state, an uninstaller, Start-menu entries, file associations, PATH changes, App Paths, protocols, services, background tasks, or startup entries. Closing BeCoder and deleting its directory is the complete uninstall model; an explicitly created desktop shortcut remains a separate user-owned link that can be deleted directly.
 
 Reinstalling the same authenticated directory is a complete replacement. Any data-preservation mechanism must be explicit and user-invoked rather than hidden installer behavior. 
 

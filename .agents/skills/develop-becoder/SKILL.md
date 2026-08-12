@@ -5,7 +5,7 @@ description: Repository-local workflow for planning, implementing, reviewing, va
 
 # Develop BeCoder
 
-Use the repository's authoritative documents to reconstruct product context before acting. Keep this skill procedural: never substitute its text for current BeCoder product contracts.
+Use the repository's authoritative documents and the project owner's latest requirements to reconstruct product context before acting. Keep this skill procedural: never substitute its text for current BeCoder product truth.
 
 ## Orient
 
@@ -72,9 +72,9 @@ Classify removal by actual consumers and product paths. Do not delete by keyword
 - Preserve user changes in a dirty worktree.
 - Do not edit generated output or dependency directories directly.
 - Do not modify system VS Code, user environment variables, external references, or project assets.
-- Keep visible English and Simplified-Chinese surfaces synchronized unless a current contract deliberately fixes protocol text in one language.
+- Keep visible English and Simplified-Chinese surfaces synchronized unless the project owner's current requirement deliberately fixes protocol text in one language.
 - Maintain bundled-component provenance, licenses, notices, and corresponding-source records when affected.
-- Update `BECODER_CURRENT.md` and current contracts when implementation changes live truth; do not rewrite archives to hide historical facts.
+- Update the current user-facing or workflow documentation when implementation changes facts documented there; do not recreate deleted historical stage systems or rewrite archives to hide historical facts.
 - Before adding a file, inspect at least two nearby files in the same ownership area for the local copyright header, import style, naming, and test conventions.
 - When changing path ownership, installation, publication, deletion, replacement, recovery, or race-sensitive filesystem behavior, read [references/filesystem-safety-review.md](references/filesystem-safety-review.md) before editing and again before review.
 
@@ -137,7 +137,7 @@ After the specifically requested build succeeds, stop by default. Do not automat
 
 Archive only after project-owner acceptance.
 
-1. Confirm current contracts reflect the accepted behavior.
+1. Confirm current project documentation does not contradict the accepted behavior.
 2. Re-read the documentation for contradictions.
 3. Commit and push only after explicit authorization.
 

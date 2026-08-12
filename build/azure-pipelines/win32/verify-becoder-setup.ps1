@@ -39,10 +39,43 @@ foreach ($previousSetting in @('AppDir', 'Group', 'Language', 'Privileges', 'Set
 		throw "BeCoder Setup may persist previous installer state: UsePrevious$previousSetting=no is missing."
 	}
 }
+
+function Get-InnoSection {
+	param([string]$Name)
+	$section = [regex]::Match($setupScript, "(?ims)^\s*\[$Name\]\s*$\r?\n(?<body>.*?)(?=^\s*\[[^\]]+\]\s*$|\z)")
+	if (-not $section.Success) {
+		throw "BeCoder Setup is missing the required [$Name] section."
+	}
+	return $section.Groups['body'].Value
+}
+
+$tasksSection = Get-InnoSection -Name 'Tasks'
+$taskEntries = @($tasksSection -split '\r?\n' | Where-Object { $_ -match '^\s*Name:' })
+if ($taskEntries.Count -ne 1 -or
+	$taskEntries[0] -notmatch '^\s*Name:\s*"desktopicon";\s*Description:\s*"\{cm:CreateDesktopShortcut\}";\s*Flags:\s*unchecked\s*$') {
+	throw 'BeCoder Setup must expose exactly one unchecked desktop-shortcut task.'
+}
+
+$iconsSection = Get-InnoSection -Name 'Icons'
+$iconEntries = @($iconsSection -split '\r?\n' | Where-Object { $_ -match '^\s*Name:' })
+if ($iconEntries.Count -ne 1 -or
+	$iconEntries[0] -notmatch '^\s*Name:\s*"\{userdesktop\}\\\{#NameLong\}";\s*Filename:\s*"\{app\}\\\{#ExeBasename\}\.exe";\s*WorkingDir:\s*"\{app\}";\s*Tasks:\s*desktopicon\s*$') {
+	throw 'BeCoder Setup must create only the explicitly selected current-user desktop shortcut.'
+}
+
+foreach ($requiredShortcutMessage in @(
+	'(?im)^\s*english\.CreateDesktopShortcut=Create a desktop shortcut \(not recommended when installing BeCoder on removable storage\)\s*$',
+	'(?im)^\s*simplifiedChinese\.CreateDesktopShortcut=.+$'
+)) {
+	if ($setupScript -notmatch $requiredShortcutMessage) {
+		throw "BeCoder Setup is missing required desktop-shortcut text: $requiredShortcutMessage"
+	}
+}
 foreach ($forbiddenPattern in @(
 	'(?im)^\s*AppId=',
 	'(?im)^\s*DefaultGroupName=',
-	'(?im)^\s*\[(Registry|Icons|Tasks|UninstallDelete|UninstallRun)\]\s*$',
+	'(?im)^\s*\[(Registry|UninstallDelete|UninstallRun)\]\s*$',
+	'(?i)\{(?:auto|common)desktop\}|\{group\}|\{userstartmenu\}|\{commonstartmenu\}',
 	'(?i)\bReg(?:Write|Delete)\w*\s*\('
 )) {
 	if ($setupScript -match $forbiddenPattern) {
@@ -175,7 +208,7 @@ function Get-BeCoderNamedRegistrySnapshot {
 	$lines = @()
 	foreach ($hive in @('HKCU\Software', 'HKLM\Software')) {
 		foreach ($term in @('BeCoder', 'Bc408')) {
-			$output = & reg.exe query $hive /f $term /s 2>$null
+			$output = & reg.exe query $hive /f $term /k /s 2>$null
 			if ($LASTEXITCODE -notin @(0, 1)) {
 				throw "Unable to inspect $hive for registry term $term."
 			}
@@ -311,7 +344,7 @@ $shortcutsAfter = Get-ShortcutSnapshot
 $registryAfter = Get-RegistryIntegrationSnapshot
 $namedRegistryAfter = Get-BeCoderNamedRegistrySnapshot
 if (Compare-Object $shortcutsBefore $shortcutsAfter) {
-	throw 'BeCoder Setup created or removed a desktop or Start-menu shortcut.'
+	throw 'BeCoder Setup created or removed a desktop or Start-menu shortcut without the explicit desktop-shortcut task.'
 }
 if (Compare-Object $registryBefore $registryAfter) {
 	throw 'BeCoder Setup changed a monitored Windows integration registry key.'

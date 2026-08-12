@@ -6,10 +6,7 @@ BeCoder is a Code - OSS fork for OI/ICPC workflows. Core TypeScript lives in `sr
 
 ## Mandatory Project Orientation
 
-After reading this file completely, and before analyzing a new stage or making a nontrivial change, read these files completely in order:
-
-1. `BECODER_PHILOSOPHY.md`
-2. every product contract related to the task
+After reading this file completely, and before analyzing a new stage or making a nontrivial change, read `BECODER_PHILOSOPHY.md` completely. Then inspect the current source and the project owner's latest requirements relevant to the task. Do not assume that deleted historical stage, handoff, or contract documents remain authoritative.
 
 Before proposing or starting implementation for a new stage or nontrivial change, provide an understanding proof covering the product purpose, relevant ownership boundaries, current repository/stage facts, requested change, protected/out-of-scope behavior, and validation/project-owner acceptance boundary. This requirement also applies when the user directly authorizes implementation. Wait for explicit plan approval before editing unless the user directly requested implementation.
 
@@ -26,7 +23,7 @@ Run commands from the repository root:
 - `npm run test-browser-no-install` runs browser tests.
 - `npm run gulp vscode-win32-x64-min` creates the staged Windows application used to build the BeCoder Setup.
 
-Before tests, use the build watch task when available; otherwise run the owning typecheck or extension Gulp task. Do not use `npm run compile` for TypeScript validation. `.github/copilot-instructions.md` is a short BeCoder entry point and must not override this file, `BECODER_PHILOSOPHY.md` or current product contracts.
+Before tests, use the build watch task when available; otherwise run the owning typecheck or extension Gulp task. Do not use `npm run compile` for TypeScript validation. `.github/copilot-instructions.md` is a short BeCoder entry point and must not override this file, `BECODER_PHILOSOPHY.md` or the project owner's latest explicit requirements.
 
 ### BeCoder Build Workflow
 

@@ -24,6 +24,7 @@ $requiredFiles = @(
 	'data\toolchains\clangd\clangd_22.1.6\bin\clangd.exe',
 	'resources\app\ThirdPartyNotices.txt',
 	'resources\app\licenses\MIT-VSCode.txt',
+	'resources\app\licenses\MIT-Electron.txt',
 	'resources\app\package.json',
 	'resources\app\product.json',
 	'resources\app\extensions\aadityanarayan.code-snap\package.json',
@@ -675,6 +676,7 @@ if ($compilerSize -gt 400MB) {
 $componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\BUNDLED-COMPONENTS.json') -Raw | ConvertFrom-Json
 $expectedComponentIds = @(
 	'code-oss',
+	'electron',
 	'becoder.runner',
 	'vscode.vscode-theme-seti',
 	'becoder.becoder-setup',
@@ -712,16 +714,23 @@ foreach ($component in @($componentInventory.components)) {
 	}
 }
 $clangdComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'clangd-windows' }
+$electronComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'electron' }
 $ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 'becoder-ucrt64' }
 $languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
 $mermaidComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'vscode.mermaid-markdown-features' }
 if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne $expectedCompilerHash) {
 	throw 'The bundled component inventory does not pin the audited source toolchain archives.'
 }
+if ($electronComponent.version -ne '42.6.0' -or
+	$electronComponent.spdxIdentifier -ne 'MIT' -or
+	$electronComponent.licensePath -ne 'licenses/MIT-Electron.txt' -or
+	(Get-Content -LiteralPath (Join-Path $appPath $electronComponent.licensePath) -Raw -Encoding utf8) -notmatch 'Copyright \(c\) Electron contributors') {
+	throw 'The bundled component inventory does not preserve the Electron runtime license boundary.'
+}
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne 'f261c558b3577143f7500dcffdd4042a6e5fd8acb051c01484c5757a075860d5' -or
-	$languagePackComponent.packagedContentSha256 -ne '19f143c47abfc1a4446b0be78650a3fadec5f66f038be8f7e8b53cf89ab52559') {
+	$languagePackComponent.contentSha256 -ne '0f2b889acd2d1d09eaca3e17473f54b450fd593aaba0857fd8efd6888c13058a' -or
+	$languagePackComponent.packagedContentSha256 -ne '4c207c39074d08ab54b215ee34a7c18d51dabb4e348f2fe66f28d2004a83d685') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

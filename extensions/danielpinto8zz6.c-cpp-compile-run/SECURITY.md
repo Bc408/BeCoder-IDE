@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
+| 0.3.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
-To report a vulnerability please raise an issue.
+Report a vulnerability through the [BeCoder issue tracker](https://github.com/Bc408/BeCoder/issues).

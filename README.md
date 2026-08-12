@@ -4,7 +4,7 @@
 
 BeCoder is a self-contained Windows editor for OI, ICPC, and everyday C/C++ competitive-programming work. Install it once and begin coding with the compiler, code intelligence, diagnostics, and run environment already prepared.
 
-The current BeCoder product version is **1.0.0**. BeCoder is derived from **Code - OSS 1.130** and retains extension API compatibility with **1.130.0**. It is an independent product and does not share product data or configuration with a system installation of Visual Studio Code.
+BeCoder is derived from **Code - OSS 1.130** and retains extension API compatibility with **1.130.0**. It is an independent product and does not share product data or configuration with a system installation of Visual Studio Code.
 
 ## Main Features
 
@@ -21,7 +21,7 @@ BeCoder deliberately does not provide AI, Chat, Agent, MCP, Debug/GDB, Source Co
 
 ## Install and First Launch
 
-BeCoder is distributed as `BeCoderSetup-x64-1.0.0.exe` for 64-bit Windows 10 and later.
+BeCoder is distributed through a Setup installer for 64-bit Windows 10 and later.
 
 1. Run Setup and select a dedicated installation folder. The path must contain only ASCII characters, must be no longer than 70 characters, and cannot be a drive root. The default is `%LOCALAPPDATA%\Programs\BeCoder`.
 2. The optional desktop-shortcut checkbox is off by default. It is not recommended when installing BeCoder on removable storage.

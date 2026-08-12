@@ -579,7 +579,6 @@ function sameExecutableIdentity(first: RunnerExecutableIdentity, second: RunnerE
 
 function samePublishedFileIdentity(first: RunnerExecutableIdentity, second: RunnerExecutableIdentity): boolean {
 	return first.device === second.device
-		&& first.inode === second.inode
 		&& first.size === second.size
 		&& first.sha256 === second.sha256;
 }

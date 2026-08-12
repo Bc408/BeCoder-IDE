@@ -400,6 +400,35 @@ suite('Runner process boundary', () => {
 		}
 	});
 
+	test('accepts publication when a removable filesystem changes file identity during rename', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-runner-removable-publication-'));
+		try {
+			const source = path.join(root, 'staging.exe');
+			const destination = path.join(root, 'program.exe');
+			fs.writeFileSync(source, 'published executable');
+			let renamedFromIdentity: fs.BigIntStats | undefined;
+			const rename = (async (from: fs.PathLike, to: fs.PathLike) => {
+				renamedFromIdentity = fs.statSync(from, { bigint: true });
+				await fs.promises.copyFile(from, to);
+				await fs.promises.rm(from);
+			}) as typeof fs.promises.rename;
+
+			const identity = await publishExecutable(source, destination, {
+				copyFile: fs.promises.copyFile,
+				rename,
+				rm: fs.promises.rm
+			});
+
+			const destinationIdentity = fs.statSync(destination, { bigint: true });
+			assert.ok(renamedFromIdentity);
+			assert.notStrictEqual(destinationIdentity.ino, renamedFromIdentity.ino);
+			assert.strictEqual(identity.inode, destinationIdentity.ino.toString());
+			assert.strictEqual(fs.readFileSync(destination, 'utf8'), 'published executable');
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	test('does not accept a replacement request until cancellation fully retires the child', async () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-runner-'));
 		try {

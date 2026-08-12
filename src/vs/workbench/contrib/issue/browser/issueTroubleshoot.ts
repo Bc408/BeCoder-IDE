@@ -27,7 +27,6 @@ import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js'
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { URI } from '../../../../base/common/uri.js';
-import { RemoteNameContext } from '../../../common/contextkeys.js';
 import { IsWebContext } from '../../../../platform/contextkey/common/contextkeys.js';
 
 const ITroubleshootIssueService = createDecorator<ITroubleshootIssueService>('ITroubleshootIssueService');
@@ -352,7 +351,7 @@ registerAction2(class TroubleshootIssueAction extends Action2 {
 			title: localize2('troubleshootIssue', 'Troubleshoot Issue...'),
 			category: Categories.Help,
 			f1: true,
-			precondition: ContextKeyExpr.and(IssueTroubleshootUi.ctxIsTroubleshootActive.negate(), RemoteNameContext.isEqualTo(''), IsWebContext.negate()),
+			precondition: ContextKeyExpr.and(IssueTroubleshootUi.ctxIsTroubleshootActive.negate(), IsWebContext.negate()),
 		});
 	}
 	run(accessor: ServicesAccessor): Promise<void> {

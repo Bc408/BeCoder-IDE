@@ -59,7 +59,6 @@ import {
 	LocalInstallAction,
 	MigrateDeprecatedExtensionAction,
 	ExtensionRuntimeStateAction,
-	RemoteInstallAction,
 	SetColorThemeAction,
 	SetFileIconThemeAction,
 	SetLanguageAction,
@@ -72,7 +71,7 @@ import {
 } from './extensionsActions.js';
 import { Delegate } from './extensionsList.js';
 import { ExtensionData, ExtensionsGridView, ExtensionsTree, getExtensions } from './extensionsViewer.js';
-import { ExtensionRecommendationWidget, ExtensionStatusWidget, ExtensionWidget, InstallCountWidget, RatingsWidget, RemoteBadgeWidget, SponsorWidget, PublisherWidget, onClick, ExtensionKindIndicatorWidget, ExtensionIconWidget } from './extensionsWidgets.js';
+import { ExtensionRecommendationWidget, ExtensionStatusWidget, ExtensionWidget, InstallCountWidget, RatingsWidget, SponsorWidget, PublisherWidget, onClick, ExtensionKindIndicatorWidget, ExtensionIconWidget } from './extensionsWidgets.js';
 import { ExtensionContainers, ExtensionEditorTab, ExtensionState, IExtension, IExtensionContainer, IExtensionsWorkbenchService } from '../common/extensions.js';
 import { ExtensionsInput, IExtensionEditorOptions } from '../common/extensionsInput.js';
 import { DEFAULT_MARKDOWN_STYLES, renderMarkdownDocument } from '../../markdown/browser/markdownDocumentRenderer.js';
@@ -85,7 +84,6 @@ import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uri
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { ByteSize, IFileService } from '../../../../platform/files/common/files.js';
 import { IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { IExtensionGalleryManifestService } from '../../../../platform/extensionManagement/common/extensionGalleryManifest.js';
 import { ShowCurrentReleaseNotesActionId } from '../../update/common/update.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
@@ -277,7 +275,6 @@ export class ExtensionEditor extends EditorPane {
 
 		const iconContainer = append(header, $('.icon-container'));
 		const iconWidget = this.instantiationService.createInstance(ExtensionIconWidget, iconContainer);
-		const remoteBadge = this.instantiationService.createInstance(RemoteBadgeWidget, iconContainer, true);
 
 		const details = append(header, $('.details'));
 		const title = append(details, $('.title'));
@@ -317,7 +314,6 @@ export class ExtensionEditor extends EditorPane {
 
 		const widgets: ExtensionWidget[] = [
 			iconWidget,
-			remoteBadge,
 			versionWidget,
 			publisherWidget,
 			extensionKindWidget,
@@ -342,7 +338,6 @@ export class ExtensionEditor extends EditorPane {
 			this.instantiationService.createInstance(EnableDropDownAction),
 			this.instantiationService.createInstance(TogglePreReleaseExtensionAction),
 			this.instantiationService.createInstance(DisableDropDownAction),
-			this.instantiationService.createInstance(RemoteInstallAction, false),
 			this.instantiationService.createInstance(LocalInstallAction),
 			this.instantiationService.createInstance(WebInstallAction),
 			installAction,
@@ -1054,7 +1049,6 @@ class AdditionalDetailsWidget extends Disposable {
 		@IHoverService private readonly hoverService: IHoverService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@IFileService private readonly fileService: IFileService,
 		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
 		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
@@ -1224,15 +1218,7 @@ class AdditionalDetailsWidget extends Disposable {
 	}
 
 	private async getCacheLocation(extension: ILocalExtension): Promise<URI | undefined> {
-		let extensionCacheLocation = this.uriIdentityService.extUri.joinPath(this.userDataProfilesService.defaultProfile.globalStorageHome, extension.identifier.id.toLowerCase());
-		if (extension.location.scheme === Schemas.vscodeRemote) {
-			const environment = await this.remoteAgentService.getEnvironment();
-			if (!environment) {
-				return undefined;
-			}
-			extensionCacheLocation = this.uriIdentityService.extUri.joinPath(environment.globalStorageHome, extension.identifier.id.toLowerCase());
-		}
-		return extensionCacheLocation;
+		return this.uriIdentityService.extUri.joinPath(this.userDataProfilesService.defaultProfile.globalStorageHome, extension.identifier.id.toLowerCase());
 	}
 
 	private renderMarketplaceInfo(container: HTMLElement, extension: IExtension): void {

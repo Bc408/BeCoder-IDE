@@ -17,7 +17,6 @@ import { ServicesAccessor } from '../../../platform/instantiation/common/instant
 import { IHostService } from '../../services/host/browser/host.js';
 import { KeyChord, KeyCode, KeyMod } from '../../../base/common/keyCodes.js';
 import { ContextKeyExpr } from '../../../platform/contextkey/common/contextkey.js';
-import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { IWorkspacesService } from '../../../platform/workspaces/common/workspaces.js';
 import { KeybindingWeight } from '../../../platform/keybinding/common/keybindingsRegistry.js';
 import { IsMacNativeContext } from '../../../platform/contextkey/common/contextkeys.js';
@@ -179,9 +178,7 @@ class CloseWorkspaceAction extends Action2 {
 
 	override async run(accessor: ServicesAccessor): Promise<void> {
 		const hostService = accessor.get(IHostService);
-		const environmentService = accessor.get(IWorkbenchEnvironmentService);
-
-		return hostService.openWindow({ forceReuseWindow: true, remoteAuthority: environmentService.remoteAuthority });
+		return hostService.openWindow({ forceReuseWindow: true });
 	}
 }
 
@@ -308,15 +305,12 @@ class DuplicateWorkspaceInNewWindowAction extends Action2 {
 		const workspaceEditingService = accessor.get(IWorkspaceEditingService);
 		const hostService = accessor.get(IHostService);
 		const workspacesService = accessor.get(IWorkspacesService);
-		const environmentService = accessor.get(IWorkbenchEnvironmentService);
-
 		const folders = workspaceContextService.getWorkspace().folders;
-		const remoteAuthority = environmentService.remoteAuthority;
 
-		const newWorkspace = await workspacesService.createUntitledWorkspace(folders, remoteAuthority);
+		const newWorkspace = await workspacesService.createUntitledWorkspace(folders);
 		await workspaceEditingService.copyWorkspaceSettings(newWorkspace);
 
-		return hostService.openWindow([{ workspaceUri: newWorkspace.configPath }], { forceNewWindow: true, remoteAuthority });
+		return hostService.openWindow([{ workspaceUri: newWorkspace.configPath }], { forceNewWindow: true });
 	}
 }
 

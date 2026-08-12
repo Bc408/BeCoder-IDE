@@ -199,7 +199,6 @@ export interface IPickAndOpenOptions {
 	defaultUri?: URI;
 	readonly telemetryExtraData?: ITelemetryData;
 	availableFileSystems?: string[];
-	remoteAuthority?: string | null;
 }
 
 export interface FileFilter {

@@ -37,15 +37,4 @@ export class LocalWebWorkerRunningLocation {
 	}
 }
 
-export class RemoteRunningLocation {
-	public readonly kind = ExtensionHostKind.Remote;
-	public readonly affinity = 0;
-	public equals(other: ExtensionRunningLocation) {
-		return (this.kind === other.kind);
-	}
-	public asString(): string {
-		return 'Remote';
-	}
-}
-
-export type ExtensionRunningLocation = LocalProcessRunningLocation | LocalWebWorkerRunningLocation | RemoteRunningLocation;
+export type ExtensionRunningLocation = LocalProcessRunningLocation | LocalWebWorkerRunningLocation;

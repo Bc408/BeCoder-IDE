@@ -169,7 +169,7 @@ flakySuite('WorkspacesManagementMainService', () => {
 		const folder1URI = URI.parse('myscheme://server/work/p/f1');
 		const folder2URI = URI.parse('myscheme://server/work/o/f3');
 
-		const workspace = await service.createUntitledWorkspace([{ uri: folder1URI }, { uri: folder2URI }], 'server');
+		const workspace = await service.createUntitledWorkspace([{ uri: folder1URI }, { uri: folder2URI }]);
 		assert.ok(workspace);
 		assert.ok(fs.existsSync(workspace.configPath.fsPath));
 		assert.ok(service.isUntitledWorkspace(workspace));
@@ -180,7 +180,6 @@ flakySuite('WorkspacesManagementMainService', () => {
 		assert.strictEqual((<IRawUriWorkspaceFolder>ws.folders[1]).uri, folder2URI.toString(true));
 		assert.ok(!(<IRawFileWorkspaceFolder>ws.folders[0]).name);
 		assert.ok(!(<IRawFileWorkspaceFolder>ws.folders[1]).name);
-		assert.strictEqual(ws.remoteAuthority, 'server');
 	});
 
 	test('resolveWorkspace', async () => {

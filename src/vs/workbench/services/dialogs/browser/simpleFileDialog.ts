@@ -9,7 +9,7 @@ import * as objects from '../../../../base/common/objects.js';
 import { IFileService, IFileStat, FileKind, IFileStatWithPartialMetadata, FileSystemProviderErrorCode, toFileSystemProviderErrorCode } from '../../../../platform/files/common/files.js';
 import { IQuickInputService, IQuickPickItem, IQuickPick, ItemActivation } from '../../../../platform/quickinput/common/quickInput.js';
 import { URI } from '../../../../base/common/uri.js';
-import { isWindows, OperatingSystem } from '../../../../base/common/platform.js';
+import { isWindows } from '../../../../base/common/platform.js';
 import { ISaveDialogOptions, IOpenDialogOptions, IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
@@ -19,11 +19,9 @@ import { ILanguageService } from '../../../../editor/common/languages/language.j
 import { getIconClasses } from '../../../../editor/common/services/getIconClasses.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IContextKeyService, IContextKey, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { equalsIgnoreCase, format, startsWithIgnoreCase } from '../../../../base/common/strings.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { IRemoteAgentEnvironment } from '../../../../platform/remote/common/remoteAgentEnvironment.js';
 import { isValidBasename } from '../../../../base/common/extpath.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, IDisposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
@@ -102,7 +100,7 @@ enum UpdateResult {
 	InvalidPath
 }
 
-export const RemoteFileDialogContext = new RawContextKey<boolean>('remoteFileDialogVisible', false);
+export const SimpleFileDialogContext = new RawContextKey<boolean>('simpleFileDialogVisible', false);
 
 export interface ISimpleFileDialog extends IDisposable {
 	showOpenDialog(options: IOpenDialogOptions): Promise<URI[] | undefined>;
@@ -116,7 +114,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 	private hidden: boolean = false;
 	private allowFileSelection: boolean = true;
 	private allowFolderSelection: boolean = false;
-	private remoteAuthority: string | undefined;
 	private requiresTrailing: boolean = false;
 	private trailing: string | undefined;
 	protected scheme: string;
@@ -128,13 +125,11 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 	private trueHome!: URI;
 	private isWindows: boolean = false;
 	private badPath: string | undefined;
-	private remoteAgentEnvironment: IRemoteAgentEnvironment | null | undefined;
 	private separator: string = '/';
 
 	/**
 	 * When set, the dialog is scoped to a specific URI authority for a
-	 * filesystem that uses per-connection authorities rather than the global
-	 * {@link remoteAuthority}).
+	 * filesystem that uses per-connection authorities.
 	 */
 	private scopedAuthority: string | undefined;
 	private readonly onBusyChangeEmitter = this._register(new Emitter<boolean>());
@@ -152,7 +147,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 		@IModelService private readonly modelService: IModelService,
 		@ILanguageService private readonly languageService: ILanguageService,
 		@IWorkbenchEnvironmentService protected readonly environmentService: IWorkbenchEnvironmentService,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@IPathService protected readonly pathService: IPathService,
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@IContextKeyService contextKeyService: IContextKeyService,
@@ -160,8 +154,7 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 		@IStorageService private readonly storageService: IStorageService
 	) {
 		super();
-		this.remoteAuthority = this.environmentService.remoteAuthority;
-		this.contextKey = RemoteFileDialogContext.bindTo(contextKeyService);
+		this.contextKey = SimpleFileDialogContext.bindTo(contextKeyService);
 		this.scheme = this.pathService.defaultUriScheme;
 
 		this.getShowDotFiles();
@@ -265,13 +258,9 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 		if (this.scopedAuthority) {
 			return URI.from({ scheme: this.scheme, authority: this.scopedAuthority, path, query: hintUri?.query, fragment: hintUri?.fragment });
 		}
-		const uri: URI = this.scheme === Schemas.file ? URI.file(path) : URI.from({ scheme: this.scheme, path, query: hintUri?.query, fragment: hintUri?.fragment });
-		// If the default scheme is file, then we don't care about the remote authority or the hint authority
-		const authority = (uri.scheme === Schemas.file) ? undefined : (this.remoteAuthority ?? hintUri?.authority);
-		return resources.toLocalResource(uri, authority,
-			// If there is a remote authority, then we should use the system's default URI as the local scheme.
-			// If there is *no* remote authority, then we should use the default scheme for this dialog as that is already local.
-			authority ? this.pathService.defaultUriScheme : uri.scheme);
+		return this.scheme === Schemas.file
+			? URI.file(path)
+			: URI.from({ scheme: this.scheme, authority: hintUri?.authority, path, query: hintUri?.query, fragment: hintUri?.fragment });
 	}
 
 	private getScheme(available: readonly string[] | undefined, defaultUri: URI | undefined): string {
@@ -289,26 +278,14 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 	/**
 	 * Returns the per-URI authority from {@link defaultUri} if the dialog
 	 * should be scoped to a specific authority.
-	 *
-	 * Returns `undefined` when the authority matches the global
-	 * {@link remoteAuthority} (standard SSH remotes), since that path is
-	 * already handled by the existing logic.
 	 */
 	private getScopedAuthority(defaultUri: URI | undefined): string | undefined {
 		if (defaultUri
 			&& defaultUri.scheme === this.scheme
-			&& defaultUri.authority
-			&& defaultUri.authority !== this.remoteAuthority) {
+			&& defaultUri.authority) {
 			return defaultUri.authority;
 		}
 		return undefined;
-	}
-
-	private async getRemoteAgentEnvironment(): Promise<IRemoteAgentEnvironment | null> {
-		if (this.remoteAgentEnvironment === undefined) {
-			this.remoteAgentEnvironment = await this.remoteAgentService.getEnvironment();
-		}
-		return this.remoteAgentEnvironment;
 	}
 
 	protected getUserHome(trueHome = false): Promise<URI> {
@@ -333,7 +310,7 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 	private async pickResource(isSave: boolean = false): Promise<URI[] | URI | undefined> {
 		this.allowFolderSelection = !!this.options.canSelectFolders;
 		this.allowFileSelection = !!this.options.canSelectFiles;
-		this.separator = this.scopedAuthority ? '/' : this.labelService.getSeparator(this.scheme, this.remoteAuthority);
+		this.separator = this.scopedAuthority ? '/' : this.labelService.getSeparator(this.scheme);
 		this.hidden = false;
 		this.isWindows = this.scopedAuthority ? false : await this.checkIsWindowsOS();
 		let homedir: URI = this.options.defaultUri ? this.options.defaultUri : this.workspaceContextService.getWorkspace().folders[0].uri;
@@ -1096,12 +1073,7 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
 	}
 
 	private async checkIsWindowsOS(): Promise<boolean> {
-		let isWindowsOS = isWindows;
-		const env = await this.getRemoteAgentEnvironment();
-		if (env) {
-			isWindowsOS = env.os === OperatingSystem.Windows;
-		}
-		return isWindowsOS;
+		return isWindows;
 	}
 
 	private endsWithSlash(s: string) {

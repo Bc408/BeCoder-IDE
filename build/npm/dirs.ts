@@ -53,16 +53,12 @@ export const dirs = [
 	'extensions/references-view',
 	'extensions/search-result',
 	'extensions/simple-browser',
-	'extensions/tunnel-forwarding',
 	'extensions/typescript-language-features',
 	'extensions/vscode-api-tests',
 	'extensions/vscode-colorize-tests',
 	'extensions/vscode-colorize-perf-tests',
 	'extensions/vscode-test-resolver',
-	'remote',
-	'remote/web',
 	'test/automation',
-	'test/integration/browser',
 	'test/monaco',
 	'test/smoke',
 	'.vscode/extensions/vscode-selfhost-import-aid',
@@ -73,6 +69,4 @@ export const dirs = [
 
 dirs.push(...[
 	'.build/distro/npm',
-	'.build/distro/npm/remote',
-	'.build/distro/npm/remote/web',
 ].filter(isNpmProject));

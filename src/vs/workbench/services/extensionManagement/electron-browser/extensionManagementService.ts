@@ -3,18 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { generateUuid } from '../../../../base/common/uuid.js';
-import { ILocalExtension, IExtensionGalleryService, InstallOptions, IAllowedExtensionsService } from '../../../../platform/extensionManagement/common/extensionManagement.js';
-import { URI } from '../../../../base/common/uri.js';
+import { IExtensionGalleryService, IAllowedExtensionsService } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { ExtensionManagementService as BaseExtensionManagementService } from '../common/extensionManagementService.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { IExtensionManagementServer, IExtensionManagementServerService, IWorkbenchExtensionManagementService } from '../common/extensionManagement.js';
-import { Schemas } from '../../../../base/common/network.js';
+import { IExtensionManagementServerService, IWorkbenchExtensionManagementService } from '../common/extensionManagement.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IDownloadService } from '../../../../platform/download/common/download.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { INativeWorkbenchEnvironmentService } from '../../environment/electron-browser/environmentService.js';
-import { joinPath } from '../../../../base/common/resources.js';
 import { IUserDataSyncEnablementService } from '../../../../platform/userDataSync/common/userDataSync.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IWorkspaceTrustRequestService } from '../../../../platform/workspace/common/workspaceTrust.js';
@@ -31,7 +26,6 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 export class ExtensionManagementService extends BaseExtensionManagementService {
 
 	constructor(
-		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService,
 		@IExtensionManagementServerService extensionManagementServerService: IExtensionManagementServerService,
 		@IExtensionGalleryService extensionGalleryService: IExtensionGalleryService,
 		@IUserDataProfileService userDataProfileService: IUserDataProfileService,
@@ -73,14 +67,6 @@ export class ExtensionManagementService extends BaseExtensionManagementService {
 		);
 	}
 
-	protected override async installVSIXInServer(vsix: URI, server: IExtensionManagementServer, options: InstallOptions | undefined): Promise<ILocalExtension> {
-		if (vsix.scheme === Schemas.vscodeRemote && server === this.extensionManagementServerService.localExtensionManagementServer) {
-			const downloadedLocation = joinPath(this.environmentService.tmpDir, generateUuid());
-			await this.downloadService.download(vsix, downloadedLocation, 'extensionManagement.downloadRemoteVsix');
-			vsix = downloadedLocation;
-		}
-		return super.installVSIXInServer(vsix, server, options);
-	}
 }
 
 registerSingleton(IWorkbenchExtensionManagementService, ExtensionManagementService, InstantiationType.Delayed);

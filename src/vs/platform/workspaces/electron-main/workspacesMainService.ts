@@ -38,8 +38,8 @@ export class WorkspacesMainService implements AddFirstParameterToFunctions<IWork
 		return undefined;
 	}
 
-	createUntitledWorkspace(windowId: number, folders?: IWorkspaceFolderCreationData[], remoteAuthority?: string): Promise<IWorkspaceIdentifier> {
-		return this.workspacesManagementMainService.createUntitledWorkspace(folders, remoteAuthority);
+	createUntitledWorkspace(windowId: number, folders?: IWorkspaceFolderCreationData[]): Promise<IWorkspaceIdentifier> {
+		return this.workspacesManagementMainService.createUntitledWorkspace(folders);
 	}
 
 	deleteUntitledWorkspace(windowId: number, workspace: IWorkspaceIdentifier): Promise<void> {

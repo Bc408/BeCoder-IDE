@@ -15,7 +15,6 @@ import { IShellLaunchConfigResolveOptions, ITerminalProfileResolverService, ITer
 import * as path from '../../../../base/common/path.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { getIconRegistry, IIconRegistry } from '../../../../platform/theme/common/iconRegistry.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { debounce } from '../../../../base/common/decorators.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { isUriComponents, URI } from '../../../../base/common/uri.js';
@@ -25,8 +24,8 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { isString, type SingleOrMany } from '../../../../base/common/types.js';
 
 export interface IProfileContextProvider {
-	getDefaultSystemShell(remoteAuthority: string | undefined, os: OperatingSystem): Promise<string>;
-	getEnvironment(remoteAuthority: string | undefined): Promise<IProcessEnvironment>;
+	getDefaultSystemShell(os: OperatingSystem): Promise<string>;
+	getEnvironment(): Promise<IProcessEnvironment>;
 }
 
 const generatedProfileName = 'Generated';
@@ -38,7 +37,7 @@ const generatedProfileName = 'Generated';
 export abstract class BaseTerminalProfileResolverService extends Disposable implements ITerminalProfileResolverService {
 	declare _serviceBrand: undefined;
 
-	private _primaryBackendOs: OperatingSystem | undefined;
+	private readonly _primaryBackendOs = OS;
 
 	private readonly _iconRegistry: IIconRegistry = getIconRegistry();
 
@@ -52,16 +51,9 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 		private readonly _historyService: IHistoryService,
 		private readonly _logService: ITerminalLogService,
 		private readonly _terminalProfileService: ITerminalProfileService,
-		private readonly _workspaceContextService: IWorkspaceContextService,
-		private readonly _remoteAgentService: IRemoteAgentService
+		private readonly _workspaceContextService: IWorkspaceContextService
 	) {
 		super();
-
-		if (this._remoteAgentService.getConnection()) {
-			this._remoteAgentService.getEnvironment().then(env => this._primaryBackendOs = env?.os || OS);
-		} else {
-			this._primaryBackendOs = OS;
-		}
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(TerminalSettingId.DefaultProfileWindows) ||
 				e.affectsConfiguration(TerminalSettingId.DefaultProfileMacOs) ||
@@ -74,12 +66,9 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 
 	@debounce(200)
 	private async _refreshDefaultProfileName() {
-		if (this._primaryBackendOs) {
-			this._defaultProfileName = (await this.getDefaultProfile({
-				remoteAuthority: this._remoteAgentService.getConnection()?.remoteAuthority,
-				os: this._primaryBackendOs
-			}))?.profileName;
-		}
+		this._defaultProfileName = (await this.getDefaultProfile({
+			os: this._primaryBackendOs
+		}))?.profileName;
 	}
 
 	resolveIcon(shellLaunchConfig: IShellLaunchConfig, os: OperatingSystem): void {
@@ -165,8 +154,8 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 		return this._resolveProfile(await this._getUnresolvedDefaultProfile(options), options);
 	}
 
-	getEnvironment(remoteAuthority: string | undefined): Promise<IProcessEnvironment> {
-		return this._context.getEnvironment(remoteAuthority);
+	getEnvironment(): Promise<IProcessEnvironment> {
+		return this._context.getEnvironment();
 	}
 
 	private _getCustomIcon(icon?: TerminalIcon): TerminalIcon | undefined {
@@ -224,7 +213,7 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 	}
 
 	private async _getUnresolvedFallbackDefaultProfile(options: IShellLaunchConfigResolveOptions): Promise<ITerminalProfile> {
-		const executable = await this._context.getDefaultSystemShell(options.remoteAuthority, options.os);
+		const executable = await this._context.getDefaultSystemShell(options.os);
 
 		// Try select an existing profile to fallback to, based on the default system shell, only do
 		// this when it is NOT a local terminal in a remote window where the front and back end OS
@@ -272,7 +261,7 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 	}
 
 	private async _resolveProfile(profile: ITerminalProfile, options: IShellLaunchConfigResolveOptions): Promise<ITerminalProfile> {
-		const env = await this._context.getEnvironment(options.remoteAuthority);
+		const env = await this._context.getEnvironment();
 
 		if (options.os === OperatingSystem.Windows) {
 			// Change Sysnative to System32 if the OS is Windows but NOT WoW64. It's
@@ -294,7 +283,7 @@ export abstract class BaseTerminalProfileResolverService extends Disposable impl
 		}
 
 		// Resolve path variables
-		const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(options.remoteAuthority ? Schemas.vscodeRemote : Schemas.file);
+		const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(Schemas.file);
 		const lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) ?? undefined : undefined;
 		profile.path = await this._resolveVariables(profile.path, env, lastActiveWorkspace);
 
@@ -364,22 +353,21 @@ export class BrowserTerminalProfileResolverService extends BaseTerminalProfileRe
 		@ITerminalLogService logService: ITerminalLogService,
 		@ITerminalInstanceService terminalInstanceService: ITerminalInstanceService,
 		@ITerminalProfileService terminalProfileService: ITerminalProfileService,
-		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService
+		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService
 	) {
 		super(
 			{
-				getDefaultSystemShell: async (remoteAuthority, os) => {
-					const backend = await terminalInstanceService.getBackend(remoteAuthority);
-					if (!remoteAuthority || !backend) {
+				getDefaultSystemShell: async os => {
+					const backend = await terminalInstanceService.getBackend();
+					if (!backend) {
 						// Just return basic values, this is only for serverless web and wouldn't be used
 						return os === OperatingSystem.Windows ? 'pwsh' : 'bash';
 					}
 					return backend.getDefaultSystemShell(os);
 				},
-				getEnvironment: async (remoteAuthority) => {
-					const backend = await terminalInstanceService.getBackend(remoteAuthority);
-					if (!remoteAuthority || !backend) {
+				getEnvironment: async () => {
+					const backend = await terminalInstanceService.getBackend();
+					if (!backend) {
 						return env;
 					}
 					return backend.getEnvironment();
@@ -390,8 +378,7 @@ export class BrowserTerminalProfileResolverService extends BaseTerminalProfileRe
 			historyService,
 			logService,
 			terminalProfileService,
-			workspaceContextService,
-			remoteAgentService
+			workspaceContextService
 		);
 	}
 }

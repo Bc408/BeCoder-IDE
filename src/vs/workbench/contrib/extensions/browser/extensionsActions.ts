@@ -6,14 +6,14 @@
 import './media/extensionActions.css';
 import { localize, localize2 } from '../../../../nls.js';
 import { IAction, Action, Separator, SubmenuAction, IActionChangeEvent } from '../../../../base/common/actions.js';
-import { Delayer, Promises, Throttler } from '../../../../base/common/async.js';
+import { Delayer, Throttler } from '../../../../base/common/async.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import * as json from '../../../../base/common/json.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { disposeIfDisposable } from '../../../../base/common/lifecycle.js';
 import { IExtension, ExtensionState, IExtensionsWorkbenchService, IExtensionContainer, TOGGLE_IGNORE_EXTENSION_ACTION_ID, SELECT_INSTALL_VSIX_EXTENSION_COMMAND_ID, THEME_ACTIONS_GROUP, INSTALL_ACTIONS_GROUP, UPDATE_ACTIONS_GROUP, ExtensionEditorTab, ExtensionRuntimeActionType, IExtensionArg, AutoUpdateConfigurationKey } from '../common/extensions.js';
 import { ExtensionsConfigurationInitialContent } from '../common/extensionsFileTemplate.js';
-import { IGalleryExtension, IExtensionGalleryService, ILocalExtension, InstallOptions, InstallOperation, ExtensionManagementErrorCode, IAllowedExtensionsService, shouldRequireRepositorySignatureFor } from '../../../../platform/extensionManagement/common/extensionManagement.js';
+import { IExtensionGalleryService, ILocalExtension, InstallOptions, InstallOperation, ExtensionManagementErrorCode, IAllowedExtensionsService, shouldRequireRepositorySignatureFor } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { IWorkbenchExtensionEnablementService, EnablementState, IExtensionManagementServerService, IExtensionManagementServer, IWorkbenchExtensionManagementService } from '../../../services/extensionManagement/common/extensionManagement.js';
 import { ExtensionRecommendationReason, IExtensionIgnoredRecommendationsService, IExtensionRecommendationsService } from '../../../services/extensionRecommendations/common/extensionRecommendations.js';
 import { areSameExtensions, getExtensionId } from '../../../../platform/extensionManagement/common/extensionManagementUtil.js';
@@ -46,7 +46,6 @@ import { ILabelService } from '../../../../platform/label/common/label.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IDialogService, IPromptButton } from '../../../../platform/dialogs/common/dialogs.js';
-import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
 import { IActionViewItemOptions, ActionViewItem } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { EXTENSIONS_CONFIG, IExtensionsConfigContent } from '../../../services/extensionRecommendations/common/workspaceExtensionsConfig.js';
 import { getErrorMessage, isCancellationError } from '../../../../base/common/errors.js';
@@ -93,7 +92,6 @@ export class PromptExtensionInstallFailureAction extends Action {
 		@IExtensionManagementServerService private readonly extensionManagementServerService: IExtensionManagementServerService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IExtensionGalleryService private readonly galleryService: IExtensionGalleryService,
-		@IExtensionManifestPropertiesService private readonly extensionManifestPropertiesService: IExtensionManifestPropertiesService,
 		@IWorkbenchIssueService private readonly workbenchIssueService: IWorkbenchIssueService,
 	) {
 		super('extension.promptExtensionInstallFailure');
@@ -108,16 +106,8 @@ export class PromptExtensionInstallFailureAction extends Action {
 
 		if (this.error.name === ExtensionManagementErrorCode.Unsupported) {
 			const productName = isWeb ? localize('VS Code for Web', "{0} for the Web", this.productService.nameLong) : this.productService.nameLong;
-			const message = localize('cannot be installed', "The '{0}' extension is not available in {1}. Click 'More Information' to learn more.", this.extension.displayName || this.extension.identifier.id, productName);
-			const { confirmed } = await this.dialogService.confirm({
-				type: Severity.Info,
-				message,
-				primaryButton: localize({ key: 'more information', comment: ['&& denotes a mnemonic'] }, "&&More Information"),
-				cancelButton: localize('close', "Close")
-			});
-			if (confirmed) {
-				this.openerService.open(isWeb ? URI.parse('https://aka.ms/vscode-web-extensions-guide') : URI.parse('https://aka.ms/vscode-remote'));
-			}
+			const message = localize('cannot be installed', "The '{0}' extension is not available in {1}.", this.extension.displayName || this.extension.identifier.id, productName);
+			await this.dialogService.info(message);
 			return;
 		}
 
@@ -243,21 +233,10 @@ export class PromptExtensionInstallFailureAction extends Action {
 		if (!this.extension.gallery) {
 			return undefined;
 		}
-		if (!this.extensionManagementServerService.localExtensionManagementServer && !this.extensionManagementServerService.remoteExtensionManagementServer) {
+		if (!this.extensionManagementServerService.localExtensionManagementServer) {
 			return undefined;
 		}
-		let targetPlatform = this.extension.gallery.properties.targetPlatform;
-		if (targetPlatform !== TargetPlatform.UNIVERSAL && targetPlatform !== TargetPlatform.UNDEFINED && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			try {
-				const manifest = await this.galleryService.getManifest(this.extension.gallery, CancellationToken.None);
-				if (manifest && this.extensionManifestPropertiesService.prefersExecuteOnWorkspace(manifest)) {
-					targetPlatform = await this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.getTargetPlatform();
-				}
-			} catch (error) {
-				this.logService.error(error);
-				return undefined;
-			}
-		}
+		const targetPlatform = this.extension.gallery.properties.targetPlatform;
 		if (targetPlatform === TargetPlatform.UNKNOWN) {
 			return undefined;
 		}
@@ -789,11 +768,6 @@ export abstract class InstallInOtherServerAction extends ExtensionAction {
 			return true;
 		}
 
-		// Prefers to run on Workspace
-		if (this.server === this.extensionManagementServerService.remoteExtensionManagementServer && this.extensionManifestPropertiesService.prefersExecuteOnWorkspace(this.extension.local.manifest)) {
-			return true;
-		}
-
 		// Prefers to run on Web
 		if (this.server === this.extensionManagementServerService.webExtensionManagementServer && this.extensionManifestPropertiesService.prefersExecuteOnWeb(this.extension.local.manifest)) {
 			return true;
@@ -805,10 +779,6 @@ export abstract class InstallInOtherServerAction extends ExtensionAction {
 				return true;
 			}
 
-			// Can run on Workspace
-			if (this.server === this.extensionManagementServerService.remoteExtensionManagementServer && this.extensionManifestPropertiesService.canExecuteOnWorkspace(this.extension.local.manifest)) {
-				return true;
-			}
 		}
 
 		return false;
@@ -830,25 +800,6 @@ export abstract class InstallInOtherServerAction extends ExtensionAction {
 	}
 
 	protected abstract getInstallLabel(): string;
-}
-
-export class RemoteInstallAction extends InstallInOtherServerAction {
-
-	constructor(
-		canInstallAnyWhere: boolean,
-		@IExtensionsWorkbenchService extensionsWorkbenchService: IExtensionsWorkbenchService,
-		@IExtensionManagementServerService extensionManagementServerService: IExtensionManagementServerService,
-		@IExtensionManifestPropertiesService extensionManifestPropertiesService: IExtensionManifestPropertiesService,
-	) {
-		super(`extensions.remoteinstall`, extensionManagementServerService.remoteExtensionManagementServer, canInstallAnyWhere, extensionsWorkbenchService, extensionManagementServerService, extensionManifestPropertiesService);
-	}
-
-	protected getInstallLabel(): string {
-		return this.extensionManagementServerService.remoteExtensionManagementServer
-			? localize({ key: 'install in remote', comment: ['This is the name of the action to install an extension in remote server. Placeholder is for the name of remote server.'] }, "Install in {0}", this.extensionManagementServerService.remoteExtensionManagementServer.label)
-			: InstallInOtherServerAction.INSTALL_LABEL;
-	}
-
 }
 
 export class LocalInstallAction extends InstallInOtherServerAction {
@@ -2735,26 +2686,8 @@ export class ExtensionStatusAction extends ExtensionAction {
 		if (this.extension.enablementState === EnablementState.DisabledByExtensionKind) {
 			if (!this.extensionsWorkbenchService.installed.some(e => areSameExtensions(e.identifier, this.extension!.identifier) && e.server !== this.extension!.server)) {
 				let message;
-				// Extension on Local Server
-				if (this.extensionManagementServerService.localExtensionManagementServer === this.extension.server) {
-					if (this.extensionManifestPropertiesService.prefersExecuteOnWorkspace(this.extension.local.manifest)) {
-						if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-							message = new MarkdownString(`${localize('Install in remote server to enable', "This extension is disabled in this workspace because it is defined to run in the Remote Extension Host. Please install the extension in '{0}' to enable.", this.extensionManagementServerService.remoteExtensionManagementServer.label)} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`);
-						}
-					}
-				}
-				// Extension on Remote Server
-				else if (this.extensionManagementServerService.remoteExtensionManagementServer === this.extension.server) {
-					if (this.extensionManifestPropertiesService.prefersExecuteOnUI(this.extension.local.manifest)) {
-						if (this.extensionManagementServerService.localExtensionManagementServer) {
-							message = new MarkdownString(`${localize('Install in local server to enable', "This extension is disabled in this workspace because it is defined to run in the Local Extension Host. Please install the extension locally to enable.", this.extensionManagementServerService.remoteExtensionManagementServer.label)} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`);
-						} else if (isWeb) {
-							message = new MarkdownString(`${localize('Defined to run in desktop', "This extension is disabled because it is defined to run only in {0} for the Desktop.", this.productService.nameLong)} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`);
-						}
-					}
-				}
 				// Extension on Web Server
-				else if (this.extensionManagementServerService.webExtensionManagementServer === this.extension.server) {
+				if (this.extensionManagementServerService.webExtensionManagementServer === this.extension.server) {
 					message = new MarkdownString(`${localize('Cannot be enabled', "This extension is disabled because it is not supported in {0} for the Web.", this.productService.nameLong)} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`);
 				}
 				if (message) {
@@ -2775,42 +2708,6 @@ export class ExtensionStatusAction extends ExtensionAction {
 			}
 			if (status?.severity === Severity.Warning) {
 				this.updateStatus({ icon: warningIcon, message: new MarkdownString().appendText(status.message).appendMarkdown(` ${manageAccessLink}`) }, true);
-				return;
-			}
-		}
-
-		// Remote Workspace
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			if (isLanguagePackExtension(this.extension.local.manifest)) {
-				if (!this.extensionsWorkbenchService.installed.some(e => areSameExtensions(e.identifier, this.extension!.identifier) && e.server !== this.extension!.server)) {
-					const message = this.extension.server === this.extensionManagementServerService.localExtensionManagementServer
-						? new MarkdownString(localize('Install language pack also in remote server', "Install the language pack extension on '{0}' to enable it there also.", this.extensionManagementServerService.remoteExtensionManagementServer.label))
-						: new MarkdownString(localize('Install language pack also locally', "Install the language pack extension locally to enable it there also."));
-					this.updateStatus({ icon: infoIcon, message }, true);
-				}
-				return;
-			}
-
-			const runningExtension = this.extensionService.extensions.filter(e => areSameExtensions({ id: e.identifier.value, uuid: e.uuid }, this.extension!.identifier))[0];
-			const runningExtensionServer = runningExtension ? this.extensionManagementServerService.getExtensionManagementServer(toExtension(runningExtension)) : null;
-			if (this.extension.server === this.extensionManagementServerService.localExtensionManagementServer && runningExtensionServer === this.extensionManagementServerService.remoteExtensionManagementServer) {
-				if (this.extensionManifestPropertiesService.prefersExecuteOnWorkspace(this.extension.local.manifest)) {
-					this.updateStatus({ icon: infoIcon, message: new MarkdownString(`${localize('enabled remotely', "This extension is enabled in the Remote Extension Host because it prefers to run there.")} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`) }, true);
-				}
-				return;
-			}
-
-			if (this.extension.server === this.extensionManagementServerService.remoteExtensionManagementServer && runningExtensionServer === this.extensionManagementServerService.localExtensionManagementServer) {
-				if (this.extensionManifestPropertiesService.prefersExecuteOnUI(this.extension.local.manifest)) {
-					this.updateStatus({ icon: infoIcon, message: new MarkdownString(`${localize('enabled locally', "This extension is enabled in the Local Extension Host because it prefers to run there.")} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`) }, true);
-				}
-				return;
-			}
-
-			if (this.extension.server === this.extensionManagementServerService.remoteExtensionManagementServer && runningExtensionServer === this.extensionManagementServerService.webExtensionManagementServer) {
-				if (this.extensionManifestPropertiesService.canExecuteOnWeb(this.extension.local.manifest)) {
-					this.updateStatus({ icon: infoIcon, message: new MarkdownString(`${localize('enabled in web worker', "This extension is enabled in the Web Worker Extension Host because it prefers to run there.")} [${localize('learn more', "Learn More")}](https://code.visualstudio.com/api/advanced-topics/remote-extensions#architecture-and-extension-kinds)`) }, true);
-				}
 				return;
 			}
 		}
@@ -2838,12 +2735,6 @@ export class ExtensionStatusAction extends ExtensionAction {
 			if (this.extension.enablementState === EnablementState.EnabledWorkspace) {
 				this.updateStatus({ message: new MarkdownString(localize('workspace enabled', "This extension is enabled for this workspace by the user.")) }, true);
 				return;
-			}
-			if (this.extensionManagementServerService.localExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) {
-				if (this.extension.server === this.extensionManagementServerService.remoteExtensionManagementServer) {
-					this.updateStatus({ message: new MarkdownString(localize('extension enabled on remote', "Extension is enabled on '{0}'", this.extension.server.label)) }, true);
-					return;
-				}
 			}
 			if (this.extension.enablementState === EnablementState.EnabledGlobally) {
 				return;
@@ -2978,217 +2869,6 @@ export class InstallSpecificVersionOfExtensionAction extends Action {
 
 interface IExtensionPickItem extends IQuickPickItem {
 	extension: IExtension;
-}
-
-export abstract class AbstractInstallExtensionsInServerAction extends Action {
-
-	private extensions: IExtension[] | undefined = undefined;
-
-	constructor(
-		id: string,
-		@IExtensionsWorkbenchService protected readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
-		@IQuickInputService private readonly quickInputService: IQuickInputService,
-		@INotificationService private readonly notificationService: INotificationService,
-		@IProgressService private readonly progressService: IProgressService,
-	) {
-		super(id);
-		this.update();
-		this.extensionsWorkbenchService.queryLocal().then(() => this.updateExtensions());
-		this._register(this.extensionsWorkbenchService.onChange(() => {
-			if (this.extensions) {
-				this.updateExtensions();
-			}
-		}));
-	}
-
-	private updateExtensions(): void {
-		this.extensions = this.extensionsWorkbenchService.local;
-		this.update();
-	}
-
-	private update(): void {
-		this.enabled = !!this.extensions && this.getExtensionsToInstall(this.extensions).length > 0;
-		this.tooltip = this.label;
-	}
-
-	override async run(): Promise<void> {
-		return this.selectAndInstallExtensions();
-	}
-
-	private async queryExtensionsToInstall(): Promise<IExtension[]> {
-		const local = await this.extensionsWorkbenchService.queryLocal();
-		return this.getExtensionsToInstall(local);
-	}
-
-	private async selectAndInstallExtensions(): Promise<void> {
-		const quickPick = this.quickInputService.createQuickPick<IExtensionPickItem>();
-		quickPick.busy = true;
-		const disposable = quickPick.onDidAccept(() => {
-			disposable.dispose();
-			quickPick.hide();
-			quickPick.dispose();
-			this.onDidAccept(quickPick.selectedItems);
-		});
-		quickPick.show();
-		const localExtensionsToInstall = await this.queryExtensionsToInstall();
-		quickPick.busy = false;
-		if (localExtensionsToInstall.length) {
-			quickPick.title = this.getQuickPickTitle();
-			quickPick.placeholder = localize('select extensions to install', "Select extensions to install");
-			quickPick.canSelectMany = true;
-			localExtensionsToInstall.sort((e1, e2) => e1.displayName.localeCompare(e2.displayName));
-			quickPick.items = localExtensionsToInstall.map<IExtensionPickItem>(extension => ({ extension, label: extension.displayName, description: extension.version }));
-		} else {
-			quickPick.hide();
-			quickPick.dispose();
-			this.notificationService.notify({
-				severity: Severity.Info,
-				message: localize('no local extensions', "There are no extensions to install.")
-			});
-		}
-	}
-
-	private async onDidAccept(selectedItems: ReadonlyArray<IExtensionPickItem>): Promise<void> {
-		if (selectedItems.length) {
-			const localExtensionsToInstall = selectedItems.filter(r => !!r.extension).map(r => r.extension);
-			if (localExtensionsToInstall.length) {
-				await this.progressService.withProgress(
-					{
-						location: ProgressLocation.Notification,
-						title: localize('installing extensions', "Installing Extensions...")
-					},
-					() => this.installExtensions(localExtensionsToInstall));
-				this.notificationService.info(localize('finished installing', "Successfully installed extensions."));
-			}
-		}
-	}
-
-	protected abstract getQuickPickTitle(): string;
-	protected abstract getExtensionsToInstall(local: IExtension[]): IExtension[];
-	protected abstract installExtensions(extensions: IExtension[]): Promise<void>;
-}
-
-export class InstallLocalExtensionsInRemoteAction extends AbstractInstallExtensionsInServerAction {
-
-	constructor(
-		@IExtensionsWorkbenchService extensionsWorkbenchService: IExtensionsWorkbenchService,
-		@IQuickInputService quickInputService: IQuickInputService,
-		@IProgressService progressService: IProgressService,
-		@INotificationService notificationService: INotificationService,
-		@IExtensionManagementServerService private readonly extensionManagementServerService: IExtensionManagementServerService,
-		@IExtensionGalleryService private readonly extensionGalleryService: IExtensionGalleryService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IFileService private readonly fileService: IFileService,
-		@ILogService private readonly logService: ILogService,
-	) {
-		super('workbench.extensions.actions.installLocalExtensionsInRemote', extensionsWorkbenchService, quickInputService, notificationService, progressService);
-	}
-
-	override get label(): string {
-		if (this.extensionManagementServerService && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return localize('select and install local extensions', "Install Local Extensions in '{0}'...", this.extensionManagementServerService.remoteExtensionManagementServer.label);
-		}
-		return '';
-	}
-
-	protected getQuickPickTitle(): string {
-		return localize('install local extensions title', "Install Local Extensions in '{0}'", this.extensionManagementServerService.remoteExtensionManagementServer!.label);
-	}
-
-	protected getExtensionsToInstall(local: IExtension[]): IExtension[] {
-		return local.filter(extension => {
-			const action = this.instantiationService.createInstance(RemoteInstallAction, true);
-			action.extension = extension;
-			return action.enabled;
-		});
-	}
-
-	protected async installExtensions(localExtensionsToInstall: IExtension[]): Promise<void> {
-		const galleryExtensions: IGalleryExtension[] = [];
-		const vsixs: URI[] = [];
-		const targetPlatform = await this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.getTargetPlatform();
-		await Promises.settled(localExtensionsToInstall.map(async extension => {
-			if (this.extensionGalleryService.isEnabled()) {
-				const gallery = (await this.extensionGalleryService.getExtensions([{ ...extension.identifier, preRelease: !!extension.local?.preRelease }], { targetPlatform, compatible: true }, CancellationToken.None))[0];
-				if (gallery) {
-					galleryExtensions.push(gallery);
-					return;
-				}
-			}
-			const vsix = await this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.zip(extension.local!);
-			vsixs.push(vsix);
-		}));
-
-		await Promises.settled(galleryExtensions.map(gallery => this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.installFromGallery(gallery)));
-		try {
-			await Promises.settled(vsixs.map(vsix => this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.install(vsix)));
-		} finally {
-			try {
-				await Promise.allSettled(vsixs.map(vsix => this.fileService.del(vsix)));
-			} catch (error) {
-				this.logService.error(error);
-			}
-		}
-	}
-}
-
-export class InstallRemoteExtensionsInLocalAction extends AbstractInstallExtensionsInServerAction {
-
-	constructor(
-		id: string,
-		@IExtensionsWorkbenchService extensionsWorkbenchService: IExtensionsWorkbenchService,
-		@IQuickInputService quickInputService: IQuickInputService,
-		@IProgressService progressService: IProgressService,
-		@INotificationService notificationService: INotificationService,
-		@IExtensionManagementServerService private readonly extensionManagementServerService: IExtensionManagementServerService,
-		@IExtensionGalleryService private readonly extensionGalleryService: IExtensionGalleryService,
-		@IFileService private readonly fileService: IFileService,
-		@ILogService private readonly logService: ILogService,
-	) {
-		super(id, extensionsWorkbenchService, quickInputService, notificationService, progressService);
-	}
-
-	override get label(): string {
-		return localize('select and install remote extensions', "Install Remote Extensions Locally...");
-	}
-
-	protected getQuickPickTitle(): string {
-		return localize('install remote extensions', "Install Remote Extensions Locally");
-	}
-
-	protected getExtensionsToInstall(local: IExtension[]): IExtension[] {
-		return local.filter(extension =>
-			extension.type === ExtensionType.User && extension.server !== this.extensionManagementServerService.localExtensionManagementServer
-			&& !this.extensionsWorkbenchService.installed.some(e => e.server === this.extensionManagementServerService.localExtensionManagementServer && areSameExtensions(e.identifier, extension.identifier)));
-	}
-
-	protected async installExtensions(extensions: IExtension[]): Promise<void> {
-		const galleryExtensions: IGalleryExtension[] = [];
-		const vsixs: URI[] = [];
-		const targetPlatform = await this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.getTargetPlatform();
-		await Promises.settled(extensions.map(async extension => {
-			if (this.extensionGalleryService.isEnabled()) {
-				const gallery = (await this.extensionGalleryService.getExtensions([{ ...extension.identifier, preRelease: !!extension.local?.preRelease }], { targetPlatform, compatible: true }, CancellationToken.None))[0];
-				if (gallery) {
-					galleryExtensions.push(gallery);
-					return;
-				}
-			}
-			const vsix = await this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.zip(extension.local!);
-			vsixs.push(vsix);
-		}));
-
-		await Promises.settled(galleryExtensions.map(gallery => this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.installFromGallery(gallery)));
-		try {
-			await Promises.settled(vsixs.map(vsix => this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.install(vsix)));
-		} finally {
-			try {
-				await Promise.allSettled(vsixs.map(vsix => this.fileService.del(vsix)));
-			} catch (error) {
-				this.logService.error(error);
-			}
-		}
-	}
 }
 
 CommandsRegistry.registerCommand('workbench.extensions.action.showExtensionsForLanguage', function (accessor: ServicesAccessor, fileExtension: string) {

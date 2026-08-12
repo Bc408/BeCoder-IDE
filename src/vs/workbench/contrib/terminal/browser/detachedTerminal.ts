@@ -135,7 +135,6 @@ export class DetachedProcessInfo extends Disposable implements ITerminalProcessI
 	processState = ProcessState.Running;
 	ptyProcessReady = Promise.resolve();
 	shellProcessId: number | undefined;
-	remoteAuthority: string | undefined;
 	os: OperatingSystem | undefined;
 	userHome: string | undefined;
 	initialCwd = '';

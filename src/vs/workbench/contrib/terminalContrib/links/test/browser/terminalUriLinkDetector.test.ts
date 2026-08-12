@@ -50,7 +50,6 @@ suite('Workbench - TerminalUriLinkDetector', () => {
 		detector = instantiationService.createInstance(TerminalUriLinkDetector, xterm, {
 			initialCwd: '/parent/cwd',
 			os: OperatingSystem.Linux,
-			remoteAuthority: undefined,
 			userHome: '/home',
 			backend: undefined
 		}, instantiationService.createInstance(TerminalLinkResolver));

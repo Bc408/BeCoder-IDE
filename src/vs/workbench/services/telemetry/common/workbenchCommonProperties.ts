@@ -6,7 +6,6 @@
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { resolveCommonProperties } from '../../../../platform/telemetry/common/commonProperties.js';
 import { ICommonProperties, firstSessionDateStorageKey, lastSessionDateStorageKey } from '../../../../platform/telemetry/common/telemetry.js';
-import { cleanRemoteAuthority } from '../../../../platform/telemetry/common/telemetryUtils.js';
 import { INodeProcess } from '../../../../base/common/platform.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -38,8 +37,6 @@ export function resolveWorkbenchCommonProperties(
 	result['common.lastSessionDate'] = lastSessionDate || '';
 	// __GDPR__COMMON__ "common.isNewSession" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 	result['common.isNewSession'] = !lastSessionDate ? '1' : '0';
-	// __GDPR__COMMON__ "common.remoteAuthority" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" }
-	result['common.remoteAuthority'] = cleanRemoteAuthority(environmentService.remoteAuthority, productService);
 	// __GDPR__COMMON__ "common.cli" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
 	result['common.cli'] = !!process.env['VSCODE_CLI'];
 

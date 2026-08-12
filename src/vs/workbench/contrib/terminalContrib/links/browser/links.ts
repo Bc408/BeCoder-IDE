@@ -30,7 +30,7 @@ export interface ITerminalLinkProviderService {
 }
 
 export interface ITerminalLinkResolver {
-	resolveLink(processManager: Pick<ITerminalProcessManager, 'initialCwd' | 'os' | 'remoteAuthority' | 'userHome'> & { backend?: Pick<ITerminalBackend, 'getWslPath'> }, link: string, uri?: URI): Promise<ResolvedLink>;
+	resolveLink(processManager: Pick<ITerminalProcessManager, 'initialCwd' | 'os' | 'userHome'> & { backend?: Pick<ITerminalBackend, 'getWslPath'> }, link: string, uri?: URI): Promise<ResolvedLink>;
 }
 
 /**

@@ -8,7 +8,7 @@ import { DisposableStore } from '../../../base/common/lifecycle.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { ExtHostTextEditor } from './extHostTextEditor.js';
 import { ExtHostEditors } from './extHostTextEditors.js';
-import { asWebviewUri, webviewGenericCspSource, WebviewRemoteInfo } from '../../contrib/webview/common/webview.js';
+import { asWebviewUri, webviewGenericCspSource } from '../../contrib/webview/common/webview.js';
 import type * as vscode from 'vscode';
 import { ExtHostEditorInsetsShape, MainThreadEditorInsetsShape } from './extHost.protocol.js';
 
@@ -20,8 +20,7 @@ export class ExtHostEditorInsets implements ExtHostEditorInsetsShape {
 
 	constructor(
 		private readonly _proxy: MainThreadEditorInsetsShape,
-		private readonly _editors: ExtHostEditors,
-		private readonly _remoteInfo: WebviewRemoteInfo
+		private readonly _editors: ExtHostEditors
 	) {
 
 		// dispose editor inset whenever the hosting editor goes away
@@ -64,7 +63,7 @@ export class ExtHostEditorInsets implements ExtHostEditorInsetsShape {
 			private _options: vscode.WebviewOptions = Object.create(null);
 
 			asWebviewUri(resource: vscode.Uri): vscode.Uri {
-				return asWebviewUri(resource, that._remoteInfo);
+				return asWebviewUri(resource);
 			}
 
 			get cspSource(): string {

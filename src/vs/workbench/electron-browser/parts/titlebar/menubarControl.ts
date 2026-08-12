@@ -168,7 +168,6 @@ export class NativeMenubarControl extends MenubarControl {
 		return {
 			id: action.id,
 			uri: action.uri,
-			remoteAuthority: action.remoteAuthority,
 			enabled: action.enabled,
 			label: action.label
 		};

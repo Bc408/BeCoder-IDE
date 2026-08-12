@@ -42,15 +42,6 @@ export interface IBaseOpenWindowsOptions {
 	 */
 	readonly forceReuseWindow?: boolean;
 
-	/**
-	 * The remote authority to use when windows are opened with either
-	 * - no workspace (empty window)
-	 * - a workspace that is neither `file://` nor `vscode-remote://`
-	 * Use 'null' for a local window.
-	 * If not set, defaults to the remote authority of the current window.
-	 */
-	readonly remoteAuthority?: string | null;
-
 	readonly forceProfile?: string;
 	readonly forceTempProfile?: boolean;
 }
@@ -409,8 +400,6 @@ export interface IColorScheme {
 }
 
 export interface IWindowConfiguration {
-	remoteAuthority?: string;
-
 	filesToOpenOrCreate?: IPath[];
 	filesToDiff?: IPath[];
 	filesToMerge?: IPath[];

@@ -14,7 +14,6 @@ import { getMultiSelectedResources, IExplorerService } from '../../files/browser
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { distinct } from '../../../../base/common/arrays.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IWorkbenchContribution, IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -39,7 +38,6 @@ function registerOpenTerminalCommand(id: string, explorerKind: 'integrated' | 'e
 			const configurationService = accessor.get(IConfigurationService);
 			const fileService = accessor.get(IFileService);
 			const integratedTerminalService = accessor.get(IIntegratedTerminalService);
-			const remoteAgentService = accessor.get(IRemoteAgentService);
 			const terminalGroupService = accessor.get(ITerminalGroupService);
 			let externalTerminalService: IExternalTerminalService | undefined = undefined;
 			try {
@@ -48,10 +46,9 @@ function registerOpenTerminalCommand(id: string, explorerKind: 'integrated' | 'e
 
 			const resources = getMultiSelectedResources(resource, accessor.get(IListService), accessor.get(IEditorService), accessor.get(IEditorGroupsService), accessor.get(IExplorerService));
 			return fileService.resolveAll(resources.map(r => ({ resource: r }))).then(async stats => {
-				// Always use integrated terminal when using a remote
 				const config = configurationService.getValue<IExternalTerminalConfiguration>();
 
-				const useIntegratedTerminal = remoteAgentService.getConnection() || explorerKind === 'integrated';
+				const useIntegratedTerminal = explorerKind === 'integrated';
 				const targets = distinct(stats.filter(data => data.success));
 				if (useIntegratedTerminal) {
 					// TODO: Use uri for cwd in createterminal
@@ -118,7 +115,7 @@ export class ExternalTerminalContribution extends Disposable implements IWorkben
 				id: OPEN_IN_INTEGRATED_TERMINAL_COMMAND_ID,
 				title: nls.localize('scopedConsoleAction.Integrated', "Open in Integrated Terminal")
 			},
-			when: ContextKeyExpr.or(shouldShowIntegratedOnLocal, ResourceContextKey.Scheme.isEqualTo(Schemas.vscodeRemote))
+			when: shouldShowIntegratedOnLocal
 		};
 
 

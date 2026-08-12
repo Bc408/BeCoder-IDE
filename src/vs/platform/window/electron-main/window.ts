@@ -59,8 +59,6 @@ export interface ICodeWindow extends IBaseWindow {
 
 	readonly backupPath?: string;
 
-	readonly remoteAuthority?: string;
-
 	readonly isExtensionDevelopmentHost: boolean;
 	readonly isExtensionTestHost: boolean;
 

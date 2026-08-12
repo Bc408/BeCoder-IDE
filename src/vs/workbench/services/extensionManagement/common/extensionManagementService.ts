@@ -121,9 +121,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			this.servers.push(this.extensionManagementServerService.localExtensionManagementServer);
 		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			this.servers.push(this.extensionManagementServerService.remoteExtensionManagementServer);
-		}
 		if (this.extensionManagementServerService.webExtensionManagementServer) {
 			this.servers.push(this.extensionManagementServerService.webExtensionManagementServer);
 		}
@@ -254,31 +251,7 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	}
 
 	private async uninstallInServer(server: IExtensionManagementServer, extensions: UninstallExtensionInfo[]): Promise<void> {
-		if (server === this.extensionManagementServerService.localExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			for (const { extension } of extensions) {
-				const installedExtensions = await this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.getInstalled(ExtensionType.User);
-				const dependentNonUIExtensions = installedExtensions.filter(i => !this.extensionManifestPropertiesService.prefersExecuteOnUI(i.manifest)
-					&& i.manifest.extensionDependencies && i.manifest.extensionDependencies.some(id => areSameExtensions({ id }, extension.identifier)));
-				if (dependentNonUIExtensions.length) {
-					throw (new Error(this.getDependentsErrorMessage(extension, dependentNonUIExtensions)));
-				}
-			}
-		}
 		return server.extensionManagementService.uninstallExtensions(extensions);
-	}
-
-	private getDependentsErrorMessage(extension: ILocalExtension, dependents: ILocalExtension[]): string {
-		if (dependents.length === 1) {
-			return localize('singleDependentError', "Cannot uninstall extension '{0}'. Extension '{1}' depends on this.",
-				extension.manifest.displayName || extension.manifest.name, dependents[0].manifest.displayName || dependents[0].manifest.name);
-		}
-		if (dependents.length === 2) {
-			return localize('twoDependentsError', "Cannot uninstall extension '{0}'. Extensions '{1}' and '{2}' depend on this.",
-				extension.manifest.displayName || extension.manifest.name, dependents[0].manifest.displayName || dependents[0].manifest.name, dependents[1].manifest.displayName || dependents[1].manifest.name);
-		}
-		return localize('multipleDependentsError', "Cannot uninstall extension '{0}'. Extensions '{1}', '{2}' and others depend on this.",
-			extension.manifest.displayName || extension.manifest.name, dependents[0].manifest.displayName || dependents[0].manifest.name, dependents[1].manifest.displayName || dependents[1].manifest.name);
-
 	}
 
 	updateMetadata(extension: ILocalExtension, metadata: Partial<Metadata>): Promise<ILocalExtension> {
@@ -325,23 +298,8 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	}
 
 	private getServersToInstall(manifest: IExtensionManifest): IExtensionManagementServer[] | undefined {
-		if (this.extensionManagementServerService.localExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			if (isLanguagePackExtension(manifest)) {
-				// Install on both servers
-				return [this.extensionManagementServerService.localExtensionManagementServer, this.extensionManagementServerService.remoteExtensionManagementServer];
-			}
-			if (this.extensionManifestPropertiesService.prefersExecuteOnUI(manifest)) {
-				// Install only on local server
-				return [this.extensionManagementServerService.localExtensionManagementServer];
-			}
-			// Install only on remote server
-			return [this.extensionManagementServerService.remoteExtensionManagementServer];
-		}
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			return [this.extensionManagementServerService.localExtensionManagementServer];
-		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return [this.extensionManagementServerService.remoteExtensionManagementServer];
 		}
 		return undefined;
 	}
@@ -352,12 +310,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 				return this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.installFromLocation(location, this.userDataProfileService.currentProfile.extensionsResource);
 			}
 			throw new Error('Local extension management server is not found');
-		}
-		if (location.scheme === Schemas.vscodeRemote) {
-			if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-				return this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.installFromLocation(location, this.userDataProfileService.currentProfile.extensionsResource);
-			}
-			throw new Error('Remote extension management server is not found');
 		}
 		if (!this.extensionManagementServerService.webExtensionManagementServer) {
 			throw new Error('Web extension management server is not found');
@@ -372,12 +324,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	getManifest(vsix: URI): Promise<IExtensionManifest> {
 		if (vsix.scheme === Schemas.file && this.extensionManagementServerService.localExtensionManagementServer) {
 			return this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.getManifest(vsix);
-		}
-		if (vsix.scheme === Schemas.file && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.getManifest(vsix);
-		}
-		if (vsix.scheme === Schemas.vscodeRemote && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.getManifest(vsix);
 		}
 		return Promise.reject('No Servers');
 	}
@@ -398,11 +344,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 		if (!manifest) {
 			return new MarkdownString().appendText(localize('manifest is not found', "Manifest is not found"));
 		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer
-			&& await this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.canInstall(gallery) === true
-			&& this.extensionManifestPropertiesService.canExecuteOnWorkspace(manifest)) {
-			return true;
-		}
 		if (this.extensionManagementServerService.webExtensionManagementServer
 			&& await this.extensionManagementServerService.webExtensionManagementServer.extensionManagementService.canInstall(gallery) === true
 			&& this.extensionManifestPropertiesService.canExecuteOnWeb(manifest)) {
@@ -413,9 +354,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 
 	private async canInstallResourceExtension(extension: IResourceExtension): Promise<true | IMarkdownString> {
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
-			return true;
-		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer && this.extensionManifestPropertiesService.canExecuteOnWorkspace(extension.manifest)) {
 			return true;
 		}
 		if (this.extensionManagementServerService.webExtensionManagementServer && this.extensionManifestPropertiesService.canExecuteOnWeb(extension.manifest)) {
@@ -722,9 +660,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 			if (kind === 'ui' && this.extensionManagementServerService.localExtensionManagementServer) {
 				servers.push(this.extensionManagementServerService.localExtensionManagementServer);
 			}
-			if (kind === 'workspace' && this.extensionManagementServerService.remoteExtensionManagementServer) {
-				servers.push(this.extensionManagementServerService.remoteExtensionManagementServer);
-			}
 			if (kind === 'web' && this.extensionManagementServerService.webExtensionManagementServer) {
 				servers.push(this.extensionManagementServerService.webExtensionManagementServer);
 			}
@@ -776,9 +711,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			return this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.getExtensionsControlManifest();
 		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return this.extensionManagementServerService.remoteExtensionManagementServer.extensionManagementService.getExtensionsControlManifest();
-		}
 		if (this.extensionManagementServerService.webExtensionManagementServer) {
 			return this.extensionManagementServerService.webExtensionManagementServer.extensionManagementService.getExtensionsControlManifest();
 		}
@@ -793,9 +725,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	}
 
 	private getWorkspaceExtensionsServer(): IExtensionManagementServer {
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return this.extensionManagementServerService.remoteExtensionManagementServer;
-		}
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			return this.extensionManagementServerService.localExtensionManagementServer;
 		}
@@ -1121,9 +1050,6 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	}
 
 	copyExtensions(from: URI, to: URI): Promise<void> {
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			throw new Error('Not Supported');
-		}
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			return this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.copyExtensions(from, to);
 		}

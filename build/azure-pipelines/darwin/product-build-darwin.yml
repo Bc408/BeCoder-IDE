@@ -9,9 +9,6 @@ parameters:
   - name: VSCODE_RUN_BROWSER_TESTS
     type: boolean
     default: false
-  - name: VSCODE_RUN_REMOTE_TESTS
-    type: boolean
-    default: false
 
 jobs:
   - job: macOS_${{ parameters.VSCODE_ARCH }}
@@ -23,7 +20,7 @@ jobs:
     templateContext:
       outputParentDirectory: $(Build.ArtifactStagingDirectory)/out
       outputs:
-        - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+        - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
           - output: pipelineArtifact
             targetPath: $(Build.SourcesDirectory)/.build/crashes
             artifactName: crash-dump-macos-$(VSCODE_ARCH)-$(System.JobAttempt)
@@ -56,20 +53,6 @@ jobs:
           sbomPackageName: "VS Code macOS $(VSCODE_ARCH)"
           sbomPackageVersion: $(Build.SourceVersion)
         - output: pipelineArtifact
-          targetPath: $(Build.ArtifactStagingDirectory)/out/vscode_server_darwin_$(VSCODE_ARCH)_archive/vscode-server-darwin-$(VSCODE_ARCH).zip
-          artifactName: vscode_server_darwin_$(VSCODE_ARCH)_archive
-          displayName: Publish server archive
-          sbomBuildDropPath: $(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)
-          sbomPackageName: "VS Code macOS $(VSCODE_ARCH) Server"
-          sbomPackageVersion: $(Build.SourceVersion)
-        - output: pipelineArtifact
-          targetPath: $(Build.ArtifactStagingDirectory)/out/vscode_web_darwin_$(VSCODE_ARCH)_archive/vscode-server-darwin-$(VSCODE_ARCH)-web.zip
-          artifactName: vscode_web_darwin_$(VSCODE_ARCH)_archive
-          displayName: Publish web server archive
-          sbomBuildDropPath: $(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)-web
-          sbomPackageName: "VS Code macOS $(VSCODE_ARCH) Web"
-          sbomPackageVersion: $(Build.SourceVersion)
-        - output: pipelineArtifact
           targetPath: $(Build.ArtifactStagingDirectory)/out/vscode_client_darwin_$(VSCODE_ARCH)_dmg/VSCode-darwin-$(VSCODE_ARCH).dmg
           artifactName: vscode_client_darwin_$(VSCODE_ARCH)_dmg
           displayName: Publish client DMG
@@ -83,4 +66,3 @@ jobs:
           VSCODE_CIBUILD: ${{ parameters.VSCODE_CIBUILD }}
           VSCODE_RUN_ELECTRON_TESTS: ${{ parameters.VSCODE_RUN_ELECTRON_TESTS }}
           VSCODE_RUN_BROWSER_TESTS: ${{ parameters.VSCODE_RUN_BROWSER_TESTS }}
-          VSCODE_RUN_REMOTE_TESTS: ${{ parameters.VSCODE_RUN_REMOTE_TESTS }}

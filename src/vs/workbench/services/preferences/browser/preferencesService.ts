@@ -35,7 +35,6 @@ import { KeybindingsEditorInput } from './keybindingsEditorInput.js';
 import { DEFAULT_SETTINGS_EDITOR_SETTING, FOLDER_SETTINGS_PATH, IKeybindingsEditorPane, IOpenKeybindingsEditorOptions, IOpenSettingsOptions, IPreferencesEditorModel, IPreferencesService, ISetting, ISettingsEditorOptions, ISettingsGroup, SETTINGS_AUTHORITY, USE_SPLIT_JSON_SETTING, validateSettingsEditorOptions } from '../common/preferences.js';
 import { PreferencesEditorInput, SettingsEditor2Input } from '../common/preferencesEditorInput.js';
 import { defaultKeybindingsContents, DefaultKeybindingsEditorModel, DefaultRawSettingsEditorModel, DefaultSettings, DefaultSettingsEditorModel, Settings2EditorModel, SettingsEditorModel, WorkspaceConfigurationEditorModel } from '../common/preferencesModels.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { ITextEditorService } from '../../textfile/common/textEditorService.js';
 import { ITextFileService } from '../../textfile/common/textfiles.js';
 import { isObject } from '../../../../base/common/types.js';
@@ -87,7 +86,6 @@ export class PreferencesService extends Disposable implements IPreferencesServic
 		@IModelService modelService: IModelService,
 		@IJSONEditingService private readonly jsonEditingService: IJSONEditingService,
 		@ILabelService private readonly labelService: ILabelService,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@ITextEditorService private readonly textEditorService: ITextEditorService,
 		@IURLService urlService: IURLService,
 		@IExtensionService private readonly extensionService: IExtensionService,
@@ -194,12 +192,6 @@ export class PreferencesService extends Disposable implements IPreferencesServic
 			}
 		}
 
-		const remoteEnvironment = await this.remoteAgentService.getEnvironment();
-		const remoteSettingsUri = remoteEnvironment ? remoteEnvironment.settingsPath : null;
-		if (remoteSettingsUri && remoteSettingsUri.toString() === uri.toString()) {
-			return this.createEditableSettingsEditorModel(ConfigurationTarget.USER_REMOTE, uri);
-		}
-
 		return null;
 	}
 
@@ -293,19 +285,6 @@ export class PreferencesService extends Disposable implements IPreferencesServic
 			target: ConfigurationTarget.USER_LOCAL,
 		};
 		return this.open(this.userSettingsResource, options);
-	}
-
-	async openRemoteSettings(options: IOpenSettingsOptions = {}): Promise<IEditorPane | undefined> {
-		const environment = await this.remoteAgentService.getEnvironment();
-		if (environment) {
-			options = {
-				...options,
-				target: ConfigurationTarget.USER_REMOTE,
-			};
-
-			this.open(environment.settingsPath, options);
-		}
-		return undefined;
 	}
 
 	openWorkspaceSettings(options: IOpenSettingsOptions = {}): Promise<IEditorPane | undefined> {
@@ -523,10 +502,6 @@ export class PreferencesService extends Disposable implements IPreferencesServic
 			case ConfigurationTarget.USER:
 			case ConfigurationTarget.USER_LOCAL:
 				return this.userSettingsResource;
-			case ConfigurationTarget.USER_REMOTE: {
-				const remoteEnvironment = await this.remoteAgentService.getEnvironment();
-				return remoteEnvironment ? remoteEnvironment.settingsPath : null;
-			}
 			case ConfigurationTarget.WORKSPACE:
 				return this.workspaceSettingsResource;
 			case ConfigurationTarget.WORKSPACE_FOLDER:

@@ -9,7 +9,6 @@ import { URI } from '../../../base/common/uri.js';
 import { ILocalizedString } from '../../action/common/action.js';
 import { ExtensionKind } from '../../environment/common/environment.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-import { getRemoteName } from '../../remote/common/remoteHosts.js';
 
 export const USER_MANIFEST_CACHE_FILE = 'extensions.user.cache';
 export const BUILTIN_MANIFEST_CACHE_FILE = 'extensions.builtin.cache';
@@ -479,14 +478,6 @@ export function isLanguagePackExtension(manifest: IExtensionManifest): boolean {
 
 export function isAuthenticationProviderExtension(manifest: IExtensionManifest): boolean {
 	return manifest.contributes && manifest.contributes.authentication ? manifest.contributes.authentication.length > 0 : false;
-}
-
-export function isResolverExtension(manifest: IExtensionManifest, remoteAuthority: string | undefined): boolean {
-	if (remoteAuthority) {
-		const activationEvent = `onResolveRemoteAuthority:${getRemoteName(remoteAuthority)}`;
-		return !!manifest.activationEvents?.includes(activationEvent);
-	}
-	return false;
 }
 
 export function parseEnabledApiProposalNames(enabledApiProposals: string[]): string[] {

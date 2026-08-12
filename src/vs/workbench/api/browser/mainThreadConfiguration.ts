@@ -65,8 +65,6 @@ export class MainThreadConfiguration implements MainThreadConfigurationShape {
 				return this._updateValue(key, value, target, configurationValue?.workspaceFolder?.override, overrides, scopeToLanguage);
 			case ConfigurationTarget.WORKSPACE:
 				return this._updateValue(key, value, target, configurationValue?.workspace?.override, overrides, scopeToLanguage);
-			case ConfigurationTarget.USER_REMOTE:
-				return this._updateValue(key, value, target, configurationValue?.userRemote?.override, overrides, scopeToLanguage);
 			default:
 				return this._updateValue(key, value, target, configurationValue?.userLocal?.override, overrides, scopeToLanguage);
 		}

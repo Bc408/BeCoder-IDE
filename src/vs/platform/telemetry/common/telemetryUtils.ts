@@ -11,7 +11,6 @@ import { IConfigurationService } from '../../configuration/common/configuration.
 import { IEnvironmentService } from '../../environment/common/environment.js';
 import { LoggerGroup } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
-import { getRemoteName } from '../../remote/common/remoteHosts.js';
 import { verifyMicrosoftInternalDomain } from './commonProperties.js';
 import { ICustomEndpointTelemetryService, ITelemetryData, ITelemetryEndpoint, ITelemetryService, TelemetryConfiguration, TelemetryLevel, TELEMETRY_CRASH_REPORTER_SETTING_ID, TELEMETRY_OLD_SETTING_ID, TELEMETRY_SETTING_ID } from './telemetry.js';
 
@@ -202,31 +201,6 @@ export function validateTelemetryData(data?: unknown): { properties: Properties;
 		properties,
 		measurements
 	};
-}
-
-interface IRemoteAuthoringConfig {
-	remoteExtensionTips?: { readonly [remoteName: string]: unknown };
-	virtualWorkspaceExtensionTips?: { readonly [remoteName: string]: unknown };
-}
-
-export function cleanRemoteAuthority(remoteAuthority: string | undefined, config: IRemoteAuthoringConfig): string {
-	if (!remoteAuthority) {
-		return 'none';
-	}
-
-	const remoteName = getRemoteName(remoteAuthority);
-
-	const set1 = config?.remoteExtensionTips;
-	if (set1 && Object.prototype.hasOwnProperty.call(set1, remoteName)) {
-		return remoteName;
-	}
-
-	const set2 = config?.virtualWorkspaceExtensionTips;
-	if (set2 && Object.prototype.hasOwnProperty.call(set2, remoteName)) {
-		return remoteName;
-	}
-
-	return 'other';
 }
 
 function flatten(obj: unknown, result: Record<string, unknown>, order: number = 0, prefix?: string): void {

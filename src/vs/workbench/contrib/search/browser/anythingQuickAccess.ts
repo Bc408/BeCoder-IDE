@@ -16,7 +16,6 @@ import { untildify } from '../../../../base/common/labels.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { toLocalResource, dirname, basenameOrAuthority } from '../../../../base/common/resources.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { DisposableStore, IDisposable, toDisposable, MutableDisposable, Disposable } from '../../../../base/common/lifecycle.js';
@@ -121,7 +120,6 @@ export class AnythingQuickAccessProvider extends PickerQuickAccessProvider<IAnyt
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IPathService private readonly pathService: IPathService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IFileService private readonly fileService: IFileService,
 		@ILabelService private readonly labelService: ILabelService,
 		@IModelService private readonly modelService: IModelService,
@@ -741,7 +739,7 @@ export class AnythingQuickAccessProvider extends PickerQuickAccessProvider<IAnyt
 		if (isAbsolutePathQuery) {
 			const resource = toLocalResource(
 				await this.pathService.fileURI(detildifiedQuery),
-				this.environmentService.remoteAuthority,
+				undefined,
 				this.pathService.defaultUriScheme
 			);
 
@@ -779,7 +777,7 @@ export class AnythingQuickAccessProvider extends PickerQuickAccessProvider<IAnyt
 
 				const resource = toLocalResource(
 					folder.toResource(query.original),
-					this.environmentService.remoteAuthority,
+					undefined,
 					this.pathService.defaultUriScheme
 				);
 

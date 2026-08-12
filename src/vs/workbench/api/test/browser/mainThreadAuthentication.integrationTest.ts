@@ -19,9 +19,8 @@ import { IActivityService } from '../../../services/activity/common/activity.js'
 import { AuthenticationService } from '../../../services/authentication/browser/authenticationService.js';
 import { IAuthenticationExtensionsService, IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { TestRPCProtocol } from '../common/testRPCProtocol.js';
-import { TestEnvironmentService, TestHostService, TestQuickInputService, TestRemoteAgentService } from '../../../test/browser/workbenchTestServices.js';
+import { TestEnvironmentService, TestHostService, TestQuickInputService } from '../../../test/browser/workbenchTestServices.js';
 import { TestActivityService, TestExtensionService, TestProductService, TestStorageService } from '../../../test/common/workbenchTestServices.js';
 import { IBrowserWorkbenchEnvironmentService } from '../../../services/environment/browser/environmentService.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
@@ -67,7 +66,6 @@ suite('MainThreadAuthentication', () => {
 		services.set(IQuickInputService, new SyncDescriptor(TestQuickInputService));
 		services.set(IExtensionService, new SyncDescriptor(TestExtensionService));
 		services.set(IActivityService, new SyncDescriptor(TestActivityService));
-		services.set(IRemoteAgentService, new SyncDescriptor(TestRemoteAgentService));
 		services.set(INotificationService, new SyncDescriptor(TestNotificationService));
 		services.set(IHostService, new SyncDescriptor(TestHostService));
 		services.set(IUserActivityService, new SyncDescriptor(UserActivityService));

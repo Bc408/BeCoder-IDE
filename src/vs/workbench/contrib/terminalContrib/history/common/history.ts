@@ -5,9 +5,8 @@
 
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { LRUCache } from '../../../../../base/common/map.js';
-import { Schemas } from '../../../../../base/common/network.js';
 import { join } from '../../../../../base/common/path.js';
-import { isWindows, OperatingSystem } from '../../../../../base/common/platform.js';
+import { isWindows } from '../../../../../base/common/platform.js';
 import { env } from '../../../../../base/common/process.js';
 import { isNumber } from '../../../../../base/common/types.js';
 import { URI } from '../../../../../base/common/uri.js';
@@ -16,7 +15,6 @@ import { FileOperationError, FileOperationResult, IFileContent, IFileService } f
 import { IInstantiationService, ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { GeneralShellType, PosixShellType, TerminalShellType } from '../../../../../platform/terminal/common/terminal.js';
-import { IRemoteAgentService } from '../../../../services/remote/common/remoteAgentService.js';
 import { TerminalHistorySettingId } from './terminal.history.js';
 
 /**
@@ -54,10 +52,10 @@ const enum StorageKeys {
 	Timestamp = 'terminal.history.timestamp'
 }
 
-let directoryHistory: ITerminalPersistedHistory<{ remoteAuthority?: string }> | undefined = undefined;
-export function getDirectoryHistory(accessor: ServicesAccessor): ITerminalPersistedHistory<{ remoteAuthority?: string }> {
+let directoryHistory: ITerminalPersistedHistory<null> | undefined = undefined;
+export function getDirectoryHistory(accessor: ServicesAccessor): ITerminalPersistedHistory<null> {
 	if (!directoryHistory) {
-		directoryHistory = accessor.get(IInstantiationService).createInstance(TerminalPersistedHistory, 'dirs') as TerminalPersistedHistory<{ remoteAuthority?: string }>;
+		directoryHistory = accessor.get(IInstantiationService).createInstance(TerminalPersistedHistory, 'dirs') as TerminalPersistedHistory<null>;
 	}
 	return directoryHistory;
 }
@@ -237,14 +235,12 @@ export function clearShellFileHistory() {
 
 export async function fetchBashHistory(accessor: ServicesAccessor): Promise<IShellFileHistoryEntry | undefined> {
 	const fileService = accessor.get(IFileService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
-	const remoteEnvironment = await remoteAgentService.getEnvironment();
-	if (remoteEnvironment?.os === OperatingSystem.Windows || !remoteEnvironment && isWindows) {
+	if (isWindows) {
 		return undefined;
 	}
 	const sourceLabel = '~/.bash_history';
-	const home = remoteEnvironment?.userHome?.fsPath ?? env['HOME'];
-	const resolvedFile = await fetchFileContents(home, '.bash_history', false, fileService, remoteAgentService);
+	const home = env['HOME'];
+	const resolvedFile = await fetchFileContents(home, '.bash_history', false, fileService);
 	if (resolvedFile === undefined) {
 		return undefined;
 	}
@@ -290,15 +286,13 @@ export async function fetchBashHistory(accessor: ServicesAccessor): Promise<IShe
 
 export async function fetchZshHistory(accessor: ServicesAccessor): Promise<IShellFileHistoryEntry | undefined> {
 	const fileService = accessor.get(IFileService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
-	const remoteEnvironment = await remoteAgentService.getEnvironment();
-	if (remoteEnvironment?.os === OperatingSystem.Windows || !remoteEnvironment && isWindows) {
+	if (isWindows) {
 		return undefined;
 	}
 
 	const sourceLabel = '~/.zsh_history';
-	const home = remoteEnvironment?.userHome?.fsPath ?? env['HOME'];
-	const resolvedFile = await fetchFileContents(home, '.zsh_history', false, fileService, remoteAgentService);
+	const home = env['HOME'];
+	const resolvedFile = await fetchFileContents(home, '.zsh_history', false, fileService);
 	if (resolvedFile === undefined) {
 		return undefined;
 	}
@@ -321,12 +315,10 @@ export async function fetchZshHistory(accessor: ServicesAccessor): Promise<IShel
 
 export async function fetchPythonHistory(accessor: ServicesAccessor): Promise<IShellFileHistoryEntry | undefined> {
 	const fileService = accessor.get(IFileService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
-	const remoteEnvironment = await remoteAgentService.getEnvironment();
 
 	const sourceLabel = '~/.python_history';
-	const home = remoteEnvironment?.userHome?.fsPath ?? env['HOME'];
-	const resolvedFile = await fetchFileContents(home, '.python_history', false, fileService, remoteAgentService);
+	const home = env['HOME'];
+	const resolvedFile = await fetchFileContents(home, '.python_history', false, fileService);
 
 	if (resolvedFile === undefined) {
 		return undefined;
@@ -351,22 +343,20 @@ export async function fetchPythonHistory(accessor: ServicesAccessor): Promise<IS
 
 export async function fetchPwshHistory(accessor: ServicesAccessor): Promise<IShellFileHistoryEntry | undefined> {
 	const fileService: Pick<IFileService, 'readFile'> = accessor.get(IFileService);
-	const remoteAgentService: Pick<IRemoteAgentService, 'getConnection' | 'getEnvironment'> = accessor.get(IRemoteAgentService);
 	let folderPrefix: string | undefined;
 	let filePath: string;
-	const remoteEnvironment = await remoteAgentService.getEnvironment();
-	const isFileWindows = remoteEnvironment?.os === OperatingSystem.Windows || !remoteEnvironment && isWindows;
+	const isFileWindows = isWindows;
 	let sourceLabel: string;
 	if (isFileWindows) {
 		folderPrefix = env['APPDATA'];
 		filePath = 'Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt';
 		sourceLabel = `$APPDATA\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt`;
 	} else {
-		folderPrefix = remoteEnvironment?.userHome?.fsPath ?? env['HOME'];
+		folderPrefix = env['HOME'];
 		filePath = '.local/share/powershell/PSReadline/ConsoleHost_history.txt';
 		sourceLabel = `~/${filePath}`;
 	}
-	const resolvedFile = await fetchFileContents(folderPrefix, filePath, isFileWindows, fileService, remoteAgentService);
+	const resolvedFile = await fetchFileContents(folderPrefix, filePath, isFileWindows, fileService);
 	if (resolvedFile === undefined) {
 		return undefined;
 	}
@@ -427,9 +417,7 @@ export async function fetchPwshHistory(accessor: ServicesAccessor): Promise<IShe
 
 export async function fetchFishHistory(accessor: ServicesAccessor): Promise<IShellFileHistoryEntry | undefined> {
 	const fileService = accessor.get(IFileService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
-	const remoteEnvironment = await remoteAgentService.getEnvironment();
-	if (remoteEnvironment?.os === OperatingSystem.Windows || !remoteEnvironment && isWindows) {
+	if (isWindows) {
 		return undefined;
 	}
 
@@ -455,10 +443,10 @@ export async function fetchFishHistory(accessor: ServicesAccessor): Promise<IShe
 		filePath = 'fish/fish_history';
 	} else {
 		sourceLabel = '~/.local/share/fish/fish_history';
-		folderPrefix = remoteEnvironment?.userHome?.fsPath ?? env['HOME'];
+		folderPrefix = env['HOME'];
 		filePath = '.local/share/fish/fish_history';
 	}
-	const resolvedFile = await fetchFileContents(folderPrefix, filePath, false, fileService, remoteAgentService);
+	const resolvedFile = await fetchFileContents(folderPrefix, filePath, false, fileService);
 	if (resolvedFile === undefined) {
 		return undefined;
 	}
@@ -527,18 +515,11 @@ async function fetchFileContents(
 	filePath: string,
 	isFileWindows: boolean,
 	fileService: Pick<IFileService, 'readFile'>,
-	remoteAgentService: Pick<IRemoteAgentService, 'getConnection'>,
 ): Promise<{ resource: URI; content: string } | undefined> {
 	if (!folderPrefix) {
 		return undefined;
 	}
-	const connection = remoteAgentService.getConnection();
-	const isRemote = !!connection?.remoteAuthority;
-	const resource = URI.from({
-		scheme: isRemote ? Schemas.vscodeRemote : Schemas.file,
-		authority: isRemote ? connection.remoteAuthority : undefined,
-		path: URI.file(join(folderPrefix, filePath)).path
-	});
+	const resource = URI.file(join(folderPrefix, filePath));
 	let content: IFileContent;
 	try {
 		content = await fileService.readFile(resource);

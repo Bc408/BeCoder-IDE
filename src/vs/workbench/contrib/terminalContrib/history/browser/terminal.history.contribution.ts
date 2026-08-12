@@ -57,7 +57,7 @@ class TerminalHistoryContribution extends Disposable implements ITerminalContrib
 				case TerminalCapability.CwdDetection: {
 					const store = new DisposableStore();
 					store.add(e.capability.onDidChangeCwd(e => {
-						this._instantiationService.invokeFunction(getDirectoryHistory)?.add(e, { remoteAuthority: _ctx.instance.remoteAuthority });
+						this._instantiationService.invokeFunction(getDirectoryHistory)?.add(e, null);
 					}));
 					capabilityListeners.set(e.id, store);
 					break;

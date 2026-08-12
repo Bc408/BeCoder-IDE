@@ -77,12 +77,6 @@ export class BrowserSessionTrust implements IBrowserSessionTrust {
 	private _installCertVerifyProc(): void {
 		this._session.electronSession.setCertificateVerifyProc((request, callback) => {
 			const { hostname, errorCode, certificate, verificationResult } = request;
-			const proxy = this._session.remote.proxy;
-
-			// Trust the tunnel proxy's self-signed certificate
-			if (proxy && hostname === proxy.host && certificate.fingerprint === proxy.certFingerprint) {
-				return callback(0); // Accept
-			}
 
 			if (errorCode !== 0) {
 				this._certErrors.set(hostname, { certificate, error: verificationResult });

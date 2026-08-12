@@ -344,9 +344,23 @@ if ($grammarOwners.Count -ne 1 -or
 
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
 if ($product.licenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
-	$product.serverLicenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
 	$product.reportIssueUrl -ne 'https://github.com/Bc408/BeCoder/issues/new') {
 	throw 'The packaged product contains stale BeCoder license or issue URLs.'
+}
+foreach ($removedProductProperty in @(
+	'serverLicenseUrl',
+	'serverGreeting',
+	'serverLicense',
+	'serverLicensePrompt',
+	'serverApplicationName',
+	'serverDataFolderName',
+	'tunnelApplicationName',
+	'win32TunnelServiceMutex',
+	'win32TunnelMutex'
+)) {
+	if ($null -ne $product.PSObject.Properties[$removedProductProperty]) {
+		throw "The packaged product retains the removed Remote product property: $removedProductProperty"
+	}
 }
 $packageManifest = Get-Content -LiteralPath (Join-Path $appPath 'package.json') -Raw | ConvertFrom-Json
 if ($packageManifest.repository.url -ne 'https://github.com/Bc408/BeCoder.git' -or

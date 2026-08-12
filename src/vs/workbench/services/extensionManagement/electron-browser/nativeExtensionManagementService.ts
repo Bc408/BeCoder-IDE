@@ -16,7 +16,7 @@ import { IDownloadService } from '../../../../platform/download/common/download.
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ProfileAwareExtensionManagementChannelClient } from '../common/extensionManagementChannelClient.js';
-import { ExtensionIdentifier, ExtensionType, isResolverExtension } from '../../../../platform/extensions/common/extensions.js';
+import { ExtensionIdentifier } from '../../../../platform/extensions/common/extensions.js';
 import { INativeWorkbenchEnvironmentService } from '../../environment/electron-browser/environmentService.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 
@@ -68,16 +68,6 @@ export class NativeExtensionManagementService extends ProfileAwareExtensionManag
 	}
 
 	protected override async switchExtensionsProfile(previousProfileLocation: URI, currentProfileLocation: URI, preserveExtensions?: ExtensionIdentifier[]): Promise<DidChangeProfileEvent> {
-		if (this.nativeEnvironmentService.remoteAuthority) {
-			const previousInstalledExtensions = await this.getInstalled(ExtensionType.User, previousProfileLocation);
-			const resolverExtension = previousInstalledExtensions.find(e => isResolverExtension(e.manifest, this.nativeEnvironmentService.remoteAuthority));
-			if (resolverExtension) {
-				if (!preserveExtensions) {
-					preserveExtensions = [];
-				}
-				preserveExtensions.push(new ExtensionIdentifier(resolverExtension.identifier.id));
-			}
-		}
 		return super.switchExtensionsProfile(previousProfileLocation, currentProfileLocation, preserveExtensions);
 	}
 }

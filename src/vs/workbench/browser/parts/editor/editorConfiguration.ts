@@ -14,7 +14,6 @@ import { IJSONSchemaMap } from '../../../../base/common/jsonSchema.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { coalesce } from '../../../../base/common/arrays.js';
 import { Event } from '../../../../base/common/event.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { ByteSize, getLargeFileConfirmationLimit } from '../../../../platform/files/common/files.js';
 
 export class DynamicEditorConfigurations extends Disposable implements IWorkbenchContribution {
@@ -75,8 +74,7 @@ export class DynamicEditorConfigurations extends Disposable implements IWorkbenc
 
 	constructor(
 		@IEditorResolverService private readonly editorResolverService: IEditorResolverService,
-		@IExtensionService extensionService: IExtensionService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService
+		@IExtensionService extensionService: IExtensionService
 	) {
 		super();
 
@@ -192,7 +190,7 @@ export class DynamicEditorConfigurations extends Disposable implements IWorkbenc
 			properties: {
 				'workbench.editorLargeFileConfirmation': {
 					type: 'number',
-					default: getLargeFileConfirmationLimit(this.environmentService.remoteAuthority) / ByteSize.MB,
+					default: getLargeFileConfirmationLimit(undefined) / ByteSize.MB,
 					minimum: 1,
 					scope: ConfigurationScope.RESOURCE,
 					markdownDescription: localize('editorLargeFileSizeConfirmation', "Controls the minimum size of a file in MB before asking for confirmation when opening in the editor. Note that this setting may not apply to all editor types and environments."),

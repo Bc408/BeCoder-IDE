@@ -8,7 +8,7 @@ import { URI } from '../../../base/common/uri.js';
 import { IWorkspace } from './workspace.js';
 
 export function isVirtualResource(resource: URI) {
-	return resource.scheme !== Schemas.file && resource.scheme !== Schemas.vscodeRemote;
+	return resource.scheme !== Schemas.file;
 }
 
 export function getVirtualWorkspaceLocation(workspace: IWorkspace): { scheme: string; authority: string } | undefined {

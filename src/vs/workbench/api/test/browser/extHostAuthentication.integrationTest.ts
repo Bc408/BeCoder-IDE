@@ -20,9 +20,8 @@ import { IActivityService } from '../../../services/activity/common/activity.js'
 import { AuthenticationService } from '../../../services/authentication/browser/authenticationService.js';
 import { IAuthenticationExtensionsService, IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { IExtensionService, nullExtensionDescription as extensionDescription } from '../../../services/extensions/common/extensions.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { TestRPCProtocol } from '../common/testRPCProtocol.js';
-import { TestEnvironmentService, TestHostService, TestQuickInputService, TestRemoteAgentService } from '../../../test/browser/workbenchTestServices.js';
+import { TestEnvironmentService, TestHostService, TestQuickInputService } from '../../../test/browser/workbenchTestServices.js';
 import { TestActivityService, TestExtensionService, TestLoggerService, TestProductService, TestStorageService } from '../../../test/common/workbenchTestServices.js';
 import type { AuthenticationProvider, AuthenticationSession } from 'vscode';
 import { IBrowserWorkbenchEnvironmentService } from '../../../services/environment/browser/environmentService.js';
@@ -140,7 +139,6 @@ suite('ExtHostAuthentication', () => {
 		services.set(IQuickInputService, new SyncDescriptor(AuthTestQuickInputService));
 		services.set(IExtensionService, new SyncDescriptor(TestExtensionService));
 		services.set(IActivityService, new SyncDescriptor(TestActivityService));
-		services.set(IRemoteAgentService, new SyncDescriptor(TestRemoteAgentService));
 		services.set(INotificationService, new SyncDescriptor(TestNotificationService));
 		services.set(IHostService, new SyncDescriptor(TestHostService));
 		services.set(IUserActivityService, new SyncDescriptor(UserActivityService));

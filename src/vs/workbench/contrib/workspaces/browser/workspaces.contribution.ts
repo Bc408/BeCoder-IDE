@@ -22,7 +22,6 @@ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js
 import { ActiveEditorContext, ResourceContextKey, TemporaryWorkspaceContext } from '../../../common/contextkeys.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { TEXT_FILE_EDITOR_ID } from '../../files/common/files.js';
-import './recentRemoteFolderPruner.js';
 
 /**
  * A workbench contribution that will look for `.code-workspace` files in the root of the

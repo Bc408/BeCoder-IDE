@@ -15,11 +15,12 @@ BeCoder does not ship or expose:
 - Web Content Extractor, Agent Network Filter, or Browser View automation/CDP/Playwright channel;
 - Debug Workbench, debug contribution APIs, bundled debug extensions, or GDB;
 - Source Control, SCM contribution APIs, Quick Diff, built-in Git bridge, or SCM product surfaces;
+- Remote Window, remote extension hosts, remote authority resolvers, remote filesystems, Ports, port forwarding, Tunnel, Remote Tunnel, remote server/CLI routes, or extension APIs that can recreate those capabilities;
 - the removed terminal initial suggestion hint or Workbench Terminal Suggest overlay.
 
 Do not add Null, Empty, or Stub replacement services, compatibility layers, migrations, serializers, state cleanup, or speculative future restoration interfaces for these removed products.
 
-Extensions cannot recreate removed Chat, Agent, language-model, MCP, Debug, or SCM product surfaces through manifest contribution points or extension APIs.
+Extensions cannot recreate removed Chat, Agent, language-model, MCP, Debug, SCM, Remote Window, Ports, or Tunnel product surfaces through manifest contribution points or extension APIs.
 
 ## Retained Generic Infrastructure
 
@@ -27,6 +28,7 @@ Retain ordinary capabilities with non-target consumers, including:
 
 - generic `vscode.authentication`, extension authentication providers, OAuth callbacks, secure credential storage, and account access;
 - Browser View and interactive ordinary webpages, including third-party AI websites, without BeCoder AI integration or automation;
+- ordinary HTTP/HTTPS networking, system proxy and certificate support, Open VSX traffic, OAuth callbacks, localhost access, and Browser View navigation without a remote tunnel proxy;
 - `htmlToMarkdown` and its generic tests;
 - Quick Access and generic attachment/explicit-selection mechanisms;
 - Markdown, Mermaid, Notebook Markdown cells, standalone diagram preview, zoom, and source copy;
@@ -34,7 +36,8 @@ Retain ordinary capabilities with non-target consumers, including:
 - terminal, editor, search, Tasks, testing, Images Preview, policy, configuration, and extension infrastructure;
 - Playwright only as development/test infrastructure, never a packaged BeCoder automation service;
 - user project `.vscode` and Git assets;
-- native PowerShell use of ordinary `git` commands.
+- native PowerShell use of ordinary `git`, `ssh`, `scp`, and other user-invoked external commands;
+- local multi-window use, UNC and network-drive paths, ordinary URI handling, local webview port mapping, and extension-provided filesystems that do not use the removed `vscode-remote` authority route.
 
 IANA port names, package names, comments, test fixtures, or unreachable upstream source containing target words are not product capabilities by themselves.
 
@@ -47,6 +50,12 @@ Remove Chat output contributions, `vscode.chat` registration, language-model typ
 ## Authentication Boundary
 
 Keep generic Authentication APIs and extension-provided providers. Remove only Copilot/default-account entitlement, AI policy, managed settings, MCP registry/account preferences, and AI-specific account UI or telemetry. Open VSX requires no BeCoder account.
+
+## Remote Development Boundary
+
+Remove the complete Code OSS remote-development dependency graph: Workbench registrations and UI, remote settings and context keys, remote extension scanning and management, remote extension hosts and authority resolvers, remote filesystem and resource protocols, Ports and forwarding, Tunnel and Remote Tunnel services, WSL remote delegation, remote CLI/server routes, product identities, build entries, packaged resources, and localization.
+
+Do not remove or block generic network, socket, process, URI, filesystem, proxy, authentication, Browser View, terminal, localhost, UNC, or network-drive infrastructure merely because it can be used to communicate with another machine. An ordinary extension may implement its own network-backed functionality through retained generic APIs, but BeCoder does not expose Code OSS remote-authority, remote-extension-host, Ports, or Tunnel APIs for it to recreate Remote Window.
 
 ## Source and Package Classification
 

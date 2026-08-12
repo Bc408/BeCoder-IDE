@@ -93,14 +93,14 @@ suite('OI extension boundary', () => {
 		const contribution = fs.readFileSync(path.join(welcomeRoot, 'gettingStarted.contribution.ts'), 'utf8');
 		const input = fs.readFileSync(path.join(welcomeRoot, 'gettingStartedInput.ts'), 'utf8');
 		const startup = fs.readFileSync(path.join(welcomeRoot, 'startupPage.ts'), 'utf8');
-		const remote = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remote', 'browser', 'remote.ts'), 'utf8');
 		const help = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'actions', 'helpActions.ts'), 'utf8');
 		const notebookLayout = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'controller', 'layoutActions.ts'), 'utf8');
 		const notebookStartup = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'contrib', 'gettingStarted', 'notebookGettingStarted.ts'), 'utf8');
 
 		assert.match(contribution, /workbench\.action\.openWelcomePage/);
 		assert.doesNotMatch(`${page}\n${contribution}\n${input}\n${startup}`, /IWalkthroughsService|openWalkthrough|walkthroughsExtensionPoint|selectedCategory|selectedStep|restorableWalkthroughs|showAllWalkthroughs|walkthroughs\.openOnInstall|experimentalOnboarding/);
-		assert.doesNotMatch(`${remote}\n${help}\n${notebookLayout}\n${notebookStartup}`, /IWalkthroughsService|workbench\.action\.openWalkthrough/);
+		assert.doesNotMatch(`${help}\n${notebookLayout}\n${notebookStartup}`, /IWalkthroughsService|workbench\.action\.openWalkthrough/);
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remote')));
 		assert.ok(!fs.existsSync(path.join(welcomeRoot, 'gettingStartedAccessibleView.ts')));
 		assert.match(page, /buildStartList\(\)/);
 		assert.match(page, /buildRecentlyOpenedList\(\)/);
@@ -120,6 +120,26 @@ suite('OI extension boundary', () => {
 	});
 
 	test('does not build or package AI, local transcription, sessions, or debug workbench entrypoints', () => {
+		for (const removedSourcePath of [
+			'src/vs/workbench/contrib/accessibilitySignals/browser/accessibilitySignalDebuggerContribution.ts',
+			'src/vs/workbench/contrib/editSessions',
+			'src/vs/workbench/contrib/extensions/electron-browser/debugExtensionHostAction.ts',
+			'src/vs/workbench/contrib/notebook/browser/contrib/debug',
+			'src/vs/workbench/api/browser/mainThreadAiEmbeddingVector.ts',
+			'src/vs/workbench/api/browser/mainThreadAiRelatedInformation.ts',
+			'src/vs/workbench/api/browser/mainThreadAiSettingsSearch.ts',
+			'src/vs/workbench/api/browser/mainThreadDebugService.ts',
+			'src/vs/workbench/api/browser/mainThreadEmbeddings.ts',
+			'src/vs/workbench/api/common/extHostAiRelatedInformation.ts',
+			'src/vs/workbench/api/common/extHostAiSettingsSearch.ts',
+			'src/vs/workbench/api/common/extHostDebugService.ts',
+			'src/vs/workbench/api/common/extHostEmbedding.ts',
+			'src/vs/workbench/api/common/extHostEmbeddingVector.ts',
+			'src/vs/workbench/api/node/extHostDebugService.ts'
+		]) {
+			assert.ok(!fs.existsSync(path.join(repositoryRoot, removedSourcePath)), `Removed source remains: ${removedSourcePath}`);
+		}
+
 		const product = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
 		for (const property of ['agentsTelemetryAppName', 'agentSdks', 'defaultChatAgent', 'sessionsWindowAllowedExtensions', 'voiceWsUrl']) {
 			assert.ok(!(property in product), `Unsupported product property remains: ${property}`);
@@ -157,11 +177,11 @@ suite('OI extension boundary', () => {
 		for (const buildBoundaryPath of [
 			path.join(repositoryRoot, 'src', 'tsconfig.json'),
 			path.join(repositoryRoot, 'build', 'next', 'index.ts'),
-			path.join(repositoryRoot, 'build', 'gulpfile.vscode.web.ts'),
 			path.join(repositoryRoot, 'build', 'lib', 'i18n.resources.json')
 		]) {
 			assert.ok(!fs.readFileSync(buildBoundaryPath, 'utf8').includes('welcomeOnboarding'), `Unsupported onboarding build entry remains: ${buildBoundaryPath}`);
 		}
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.web.ts')));
 		const eslintConfig = fs.readFileSync(path.join(repositoryRoot, 'eslint.config.js'), 'utf8');
 		const extensionGulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.extensions.ts'), 'utf8');
 		assert.match(extensionGulpfile, /extensions\/simple-browser\/tsconfig\.json/);
@@ -211,11 +231,30 @@ suite('OI extension boundary', () => {
 		for (const removedPath of [
 			path.join(repositoryRoot, 'build', 'agent-sdk'),
 			path.join(repositoryRoot, 'build', 'npm', 'stubs', 'sharp'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'agentHost'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'agentPlugins'),
 			path.join(repositoryRoot, 'src', 'vs', 'platform', 'localTranscription'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'mcp'),
 			path.join(repositoryRoot, 'src', 'vs', 'platform', 'networkFilter'),
 			path.join(repositoryRoot, 'src', 'vs', 'platform', 'webContentExtractor'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'chat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'editTelemetry'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'inlineChat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'contrib', 'chat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'view', 'cellParts', 'chat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'mcp'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remoteCodingAgents'),
 			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'search', 'browser', 'AISearch'),
-			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'agentEditorComments')
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'terminalContrib', 'chat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'terminalContrib', 'chatAgentTools'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeAgentSessions'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'agentEditorComments'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'agentHost'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'aiEmbeddingVector'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'aiRelatedInformation'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'aiSettingsSearch'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'chat'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'mcp')
 		]) {
 			const files = fs.existsSync(removedPath) ? fs.readdirSync(removedPath, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile()) : [];
 			assert.deepStrictEqual(files, [], `Removed product resource still contains files: ${removedPath}`);
@@ -257,7 +296,15 @@ suite('OI extension boundary', () => {
 			path.join(repositoryRoot, 'src', 'typings', 'copilot-api.d.ts'),
 			path.join(repositoryRoot, 'src', 'vs', 'platform', 'endpoint', 'common', 'licenseAgreement.ts'),
 			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'browser', 'mainThreadAgentEditorComments.ts'),
-			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHostAgentEditorComments.ts')
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHostAgentEditorComments.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'markers', 'browser', 'markersChatContext.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'search', 'browser', 'searchChatContext.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'surveys', 'browser', 'survey.contribution.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'terminal', 'browser', 'chatTerminalCommandMirror.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'assignment', 'common', 'assignmentFilters.ts'),
+			path.join(repositoryRoot, 'test', 'automation', 'src', 'agentsWindow.ts'),
+			path.join(repositoryRoot, 'test', 'automation', 'src', 'chat.ts'),
+			path.join(repositoryRoot, 'test', 'smoke', 'src', 'areas', 'chat', 'chatDisabled.test.ts')
 		]) {
 			assert.ok(!fs.existsSync(removedSource), `Unsupported AI source remains: ${removedSource}`);
 		}
@@ -383,7 +430,8 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(assignmentService, /CopilotAssignmentFilterProvider|defaultAccount|chatEntitlement/);
 
 		const sourceTsconfig = fs.readFileSync(path.join(repositoryRoot, 'src', 'tsconfig.json'), 'utf8');
-		assert.match(sourceTsconfig, /vs\/workbench\/services\/assignment\/common\/assignmentFilters\.ts/);
+		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'assignment', 'common', 'assignmentFilters.ts')));
+		assert.doesNotMatch(sourceTsconfig, /vs\/workbench\/services\/assignment\/common\/assignmentFilters\.ts/);
 		assert.doesNotMatch(sourceTsconfig, /vs\/workbench\/services\/assignment\/\*\*/);
 		assert.doesNotMatch(sourceTsconfig, /contrib\/notebook\/browser\/contrib\/cellDiagnostics\/\*\*/);
 
@@ -434,6 +482,146 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(windowsShellHelper, /(?:claude|codex|commandcode|copilot|gemini)\.exe/);
 	});
 
+	test('removes Remote products while retaining ordinary local and network infrastructure', () => {
+		const product = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
+		for (const property of [
+			'serverLicenseUrl',
+			'serverGreeting',
+			'serverLicense',
+			'serverLicensePrompt',
+			'serverApplicationName',
+			'serverDataFolderName',
+			'tunnelApplicationName',
+			'win32TunnelServiceMutex',
+			'win32TunnelMutex'
+		]) {
+			assert.ok(!(property in product), `Remote product property remains: ${property}`);
+		}
+
+		for (const removedPath of [
+			path.join(repositoryRoot, 'cli'),
+			path.join(repositoryRoot, 'remote'),
+			path.join(repositoryRoot, 'resources', 'server'),
+			path.join(repositoryRoot, 'src', 'vs', 'sessions'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'agentsVoice'),
+			path.join(repositoryRoot, 'src', 'vs', 'server'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'remote'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'remoteTunnel'),
+			path.join(repositoryRoot, 'src', 'vs', 'platform', 'tunnel'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remote'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remoteTunnel'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'remote'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'tunnel'),
+			path.join(repositoryRoot, 'build', 'gulpfile.reh.ts'),
+			path.join(repositoryRoot, 'build', 'gulpfile.cli.ts'),
+			path.join(repositoryRoot, 'build', 'gulpfile.vscode.web.ts'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'cli'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'web'),
+			path.join(repositoryRoot, 'scripts', 'code-server.js'),
+			path.join(repositoryRoot, 'scripts', 'code-agent-host.sh'),
+			path.join(repositoryRoot, 'scripts', 'code-sessions-web.sh'),
+			path.join(repositoryRoot, 'scripts', 'code-web.js'),
+			path.join(repositoryRoot, 'scripts', 'code-web.sh'),
+			path.join(repositoryRoot, 'scripts', 'code-web.bat'),
+			path.join(repositoryRoot, 'build', 'vite', 'mobile-multi-diff.ts'),
+			path.join(repositoryRoot, 'build', 'vite', 'mobile-multi-diff-worker.ts'),
+			path.join(repositoryRoot, 'build', 'vite', 'mobile-multi-diff.html'),
+			path.join(repositoryRoot, 'scripts', 'test-remote-integration.sh'),
+			path.join(repositoryRoot, 'scripts', 'test-web-integration.sh')
+		]) {
+			if (!fs.existsSync(removedPath)) {
+				continue;
+			}
+			assert.ok(fs.statSync(removedPath).isDirectory(), `Remote product file remains: ${removedPath}`);
+			const files = fs.readdirSync(removedPath, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
+			assert.deepStrictEqual(files, [], `Remote product directory still contains files: ${removedPath}`);
+		}
+
+		const entrypoints = [
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.web.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'electron-browser', 'desktop.main.ts'),
+			path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-utility', 'sharedProcess', 'sharedProcessMain.ts')
+		].map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		assert.doesNotMatch(entrypoints, /(?:platform|services|contrib)\/(?:remote|remoteTunnel|tunnel)\//);
+
+		const pipelineSources = [
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'product-build.yml'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'product-build-template.yml'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'product-build-variables.yml'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'darwin', 'product-build-darwin-ci.yml'),
+			path.join(repositoryRoot, 'build', 'azure-pipelines', 'linux', 'product-build-linux-ci.yml')
+		].map(filePath => fs.readFileSync(filePath, 'utf8')).join('\n');
+		assert.doesNotMatch(pipelineSources, /VSCODE_(?:BUILD_(?:ALPINE|WEB)|BUILD_STAGE_(?:ALPINE|WEB)|RUN_REMOTE_TESTS)|VSCODE_TEST_SUITE:\s*Remote/);
+
+		const publisher = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'common', 'publish.ts'), 'utf8');
+		assert.match(publisher, /product !== 'client'/);
+		assert.doesNotMatch(publisher, /server-(?:win32|linux|darwin|alpine)|cli-(?:win32|linux|darwin|alpine)|web-standalone/);
+
+		const launchConfiguration = fs.readFileSync(path.join(repositoryRoot, '.vscode', 'launch.json'), 'utf8');
+		for (const removedLaunchName of [
+			'Attach to Agent Host Process',
+			'Launch VS Code Agents Internal',
+			'VS Code Server (Web)',
+			'VS Code Server (Web, Chrome)',
+			'VS Code Server (Web, Edge)',
+			'VS Code Web (Chrome)',
+			'VS Code Web (Edge)',
+			'VS Code Agent Host',
+			'VS Code Agents',
+			'Renderer and Agent Host processes'
+		]) {
+			assert.doesNotMatch(launchConfiguration, new RegExp(`"name"\\s*:\\s*"${removedLaunchName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
+		}
+		assert.doesNotMatch(launchConfiguration, /"program"\s*:\s*"[^"]*(?:code-(?:server|web|sessions-web|agent-host)|server-main|server-cli)[^"]*"/);
+		assert.doesNotMatch(launchConfiguration, /"args"\s*:\s*\[[^\]]*"--agents"/s);
+
+		const workspaceTasks = fs.readFileSync(path.join(repositoryRoot, '.vscode', 'tasks.json'), 'utf8');
+		for (const removedTaskLabel of [
+			'Web Ext - Build',
+			'Kill Web Ext - Build',
+			'Run Dev Agents',
+			'Run and Compile Agents - OSS',
+			'Run code server',
+			'Run code web',
+			'Run VS Code (Web)',
+			'Launch MCP Server'
+		]) {
+			assert.doesNotMatch(workspaceTasks, new RegExp(`"label"\\s*:\\s*"${removedTaskLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
+		}
+		assert.doesNotMatch(workspaceTasks, /"(?:command|script)"\s*:\s*"(?:compile-cli|watch-cli|compile-web|watch-web|[^"]*code-(?:server|web|sessions-web|agent-host)[^"]*)"/);
+
+		const workspaceSettings = fs.readFileSync(path.join(repositoryRoot, '.vscode', 'settings.json'), 'utf8');
+		assert.doesNotMatch(workspaceSettings, /"[^"]*(?:remote|tunnel|agentHost|agentSessions)[^"]*"\s*:/i);
+
+		const packageManifest = readJson<{ readonly scripts?: Record<string, string> }>(path.join(repositoryRoot, 'package.json'));
+		for (const removedScript of ['compile-cli', 'watch-cli', 'compile-web', 'watch-web']) {
+			assert.equal(packageManifest.scripts?.[removedScript], undefined, `Removed product script remains: ${removedScript}`);
+		}
+		for (const [scriptName, scriptCommand] of Object.entries(packageManifest.scripts ?? {})) {
+			assert.doesNotMatch(scriptCommand, /(?:scripts\/code-(?:server|web|sessions-web|agent-host)|build\/gulpfile\.(?:cli|reh|vscode\.web))/, `Removed product command remains in script ${scriptName}`);
+		}
+
+		const network = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'base', 'common', 'network.ts'), 'utf8');
+		assert.match(network, /export const http = 'http'/);
+		assert.match(network, /export const https = 'https'/);
+		assert.match(network, /export const file = 'file'/);
+		assert.match(network, /export const vscodeBrowser = 'vscode-browser'/);
+		assert.doesNotMatch(network, /vscodeRemote\s*=|vscode-remote/);
+
+		const commonMain = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
+		const desktopMain = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'), 'utf8');
+		const extensionContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'extensions', 'browser', 'extensions.contribution.ts'), 'utf8');
+		assert.match(commonMain, /services\/authentication\/browser\/authenticationService\.js/);
+		assert.match(commonMain, /contrib\/tasks\/browser\/task\.contribution\.js/);
+		assert.match(desktopMain, /contrib\/browserView\/electron-browser\/browserView\.contribution\.js/);
+		assert.match(desktopMain, /contrib\/terminal\/electron-browser\/terminal\.contribution\.js/);
+		assert.match(extensionContribution, /id: SELECT_INSTALL_VSIX_EXTENSION_COMMAND_ID/);
+		assert.match(extensionContribution, /id: INSTALL_EXTENSION_FROM_VSIX_COMMAND_ID/);
+		assert.match(extensionContribution, /when: CONTEXT_HAS_LOCAL_SERVER/);
+	});
+
 	test('owns the Stage 4.6 dependency, terminal, SCM, and workspace boundary', () => {
 		const packageManifest = readJson<{
 			dependencies?: Record<string, string>;
@@ -444,7 +632,10 @@ suite('OI extension boundary', () => {
 		assert.ok(!('cpu-features' in (packageManifest.dependencies ?? {})));
 		assert.ok(!('cpu-features' in (packageManifest.devDependencies ?? {})));
 		assert.ok(!('cpu-features' in (packageManifest.overrides ?? {})));
-		assert.strictEqual(packageManifest.allowScripts?.['cpu-features'], false);
+		assert.ok(!('cpu-features' in (packageManifest.allowScripts ?? {})));
+		assert.ok(!('ssh2' in (packageManifest.dependencies ?? {})));
+		assert.ok(!('@types/ssh2' in (packageManifest.devDependencies ?? {})));
+		assert.ok(!('ssh2' in (packageManifest.allowScripts ?? {})));
 		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'build', 'npm', 'stubs', 'cpu-features')));
 
 		const packageLock = readJson<{
@@ -456,12 +647,8 @@ suite('OI extension boundary', () => {
 				optionalDependencies?: Record<string, string>;
 			}>;
 		}>(path.join(repositoryRoot, 'package-lock.json'));
-		const cpuFeatures = packageLock.packages?.['node_modules/cpu-features'];
-		assert.strictEqual(cpuFeatures?.version, '0.0.10');
-		assert.strictEqual(cpuFeatures?.resolved, 'https://registry.npmjs.org/cpu-features/-/cpu-features-0.0.10.tgz');
-		assert.strictEqual(cpuFeatures?.optional, true);
-		assert.deepStrictEqual(cpuFeatures?.dependencies, { buildcheck: '~0.0.6', nan: '^2.19.0' });
-		assert.strictEqual(packageLock.packages?.['node_modules/ssh2']?.optionalDependencies?.['cpu-features'], '~0.0.10');
+		assert.ok(!packageLock.packages?.['node_modules/ssh2']);
+		assert.ok(!packageLock.packages?.['node_modules/cpu-features']);
 
 		for (const removedPath of [
 			'src/vs/workbench/contrib/terminalContrib/inlineHint',
@@ -481,13 +668,14 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(commonWorkbench, /terminalContrib\/(?:inlineHint|suggest)\//);
 		for (const retainedContribution of [
 			'contrib/multiDiffEditor/browser/multiDiffEditor.contribution.js',
-			'contrib/timeline/browser/timeline.contribution.js',
+			'contrib/timeline/browser/timeline.service.contribution.js',
 			'contrib/localHistory/browser/localHistory.contribution.js',
 			'contrib/tasks/browser/task.contribution.js',
 			'contrib/markdown/browser/markdown.contribution.js',
 		]) {
 			assert.ok(commonWorkbench.includes(retainedContribution), `Ordinary Workbench contribution was lost: ${retainedContribution}`);
 		}
+		assert.doesNotMatch(commonWorkbench, /contrib\/timeline\/browser\/timeline\.contribution\.js/);
 		assert.match(desktopWorkbench, /contrib\/tasks\/electron-browser\/taskService\.js/);
 		assert.match(desktopWorkbench, /contrib\/browserView\/electron-browser\/browserView\.contribution\.js/);
 
@@ -717,9 +905,9 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, '003524d3dd4b4c9ddf294f47aa3456394758d5f61daeed589b60d77e272b3d72');
+		assert.strictEqual(languagePack?.contentSha256, 'f261c558b3577143f7500dcffdd4042a6e5fd8acb051c01484c5757a075860d5');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, '6c84cf72ad88a4e65b6a91fd87fb0005adaf414ce34388390927d4c8bd02634c');
+		assert.strictEqual(languagePack?.packagedContentSha256, '19f143c47abfc1a4446b0be78650a3fadec5f66f038be8f7e8b53cf89ab52559');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -907,7 +1095,8 @@ suite('OI extension boundary', () => {
 		}
 
 		const setupSettingsSource = fs.readFileSync(path.join(extensionsRoot, 'becoder.setup', 'src', 'simpleSettings.ts'), 'utf8');
-		assert.match(setupSettingsSource, /@ext:becoder\.becoder-setup/);
+		assert.match(setupSettingsSource, /executeCommand\('workbench\.action\.openSettings'\)/);
+		assert.doesNotMatch(setupSettingsSource, /@ext:becoder\.becoder-setup/);
 		const displayLanguageSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'becoder', 'electron-browser', 'beCoderDisplayLanguage.contribution.ts'), 'utf8');
 		assert.match(displayLanguageSource, /ConfigurationTarget\.USER_LOCAL/);
 		assert.match(displayLanguageSource, /BeCoderSimplifiedChineseLanguagePackId/);
@@ -1385,61 +1574,17 @@ suite('OI extension boundary', () => {
 		assert.deepStrictEqual(checkerBoundary.exclude, [
 			'../../src/**/test/**',
 			'../../src/**/fixtures/**',
-			'../../src/vs/sessions/**',
-			'../../src/vs/platform/agentHost/**',
-			'../../src/vs/platform/agentPlugins/**',
-			'../../src/vs/platform/mcp/**',
-			'../../src/vs/workbench/contrib/agentsVoice/**',
-			'../../src/vs/workbench/contrib/accessibilitySignals/browser/accessibilitySignalDebuggerContribution.ts',
-			'../../src/vs/workbench/contrib/chat/**',
 			'../../src/vs/workbench/contrib/debug/**',
-			'../../src/vs/workbench/contrib/editSessions/**',
-			'../../src/vs/workbench/contrib/editTelemetry/**',
-			'../../src/vs/workbench/contrib/extensions/electron-browser/debugExtensionHostAction.ts',
-			'../../src/vs/workbench/contrib/inlineChat/**',
-			'../../src/vs/workbench/contrib/inlineCompletions/browser/inlineCompletionLanguageStatusBarContribution.ts',
-			'../../src/vs/workbench/contrib/mcp/**',
-			'../../src/vs/workbench/contrib/remoteCodingAgents/**',
 			'../../src/vs/workbench/contrib/replNotebook/**',
-			'../../src/vs/workbench/contrib/markers/browser/markersChatContext.ts',
-			'../../src/vs/workbench/contrib/notebook/browser/controller/chat/**',
-			'../../src/vs/workbench/contrib/notebook/browser/contrib/debug/**',
-			'../../src/vs/workbench/contrib/notebook/browser/contrib/chat/**',
 			'../../src/vs/workbench/contrib/notebook/browser/contrib/editorHint/emptyCellEditorHint.ts',
 			'../../src/vs/workbench/contrib/notebook/browser/contrib/notebookVariables/**',
-			'../../src/vs/workbench/contrib/notebook/browser/view/cellParts/chat/**',
 			'../../src/vs/workbench/contrib/scm/browser/scmHistoryChatContext.ts',
-			'../../src/vs/workbench/contrib/search/browser/searchChatContext.ts',
-			'../../src/vs/workbench/contrib/terminal/browser/chatTerminalCommandMirror.ts',
-			'../../src/vs/workbench/contrib/terminalContrib/chat/**',
-			'../../src/vs/workbench/contrib/terminalContrib/chatAgentTools/**',
-			'../../src/vs/workbench/contrib/surveys/browser/survey.contribution.ts',
-			'../../src/vs/workbench/contrib/welcomeAgentSessions/**',
-			'../../src/vs/workbench/services/agentHost/**',
-			'../../src/vs/workbench/services/aiEmbeddingVector/**',
-			'../../src/vs/workbench/services/aiRelatedInformation/**',
-			'../../src/vs/workbench/services/aiSettingsSearch/**',
-			'../../src/vs/workbench/services/assignment/common/assignmentFilters.ts',
-			'../../src/vs/workbench/services/chat/**',
-			'../../src/vs/workbench/services/mcp/**',
 			'../../src/vs/workbench/services/policies/browser/accountPolicyGate.contribution.ts',
 			'../../src/vs/workbench/services/policies/browser/accountPolicyGateContribution.ts',
 			'../../src/vs/workbench/api/browser/mainThreadAgent*.ts',
-			'../../src/vs/workbench/api/browser/mainThreadAi*.ts',
-			'../../src/vs/workbench/api/browser/mainThreadChat*.ts',
-			'../../src/vs/workbench/api/browser/mainThreadDebug*.ts',
-			'../../src/vs/workbench/api/browser/mainThreadEmbedding*.ts',
-			'../../src/vs/workbench/api/browser/mainThreadLanguageModel*.ts',
 			'../../src/vs/workbench/api/browser/mainThreadMcp*.ts',
 			'../../src/vs/workbench/api/common/extHostAgent*.ts',
-			'../../src/vs/workbench/api/common/extHostAi*.ts',
-			'../../src/vs/workbench/api/common/extHostChat*.ts',
-			'../../src/vs/workbench/api/common/extHostCodeMapper.ts',
-			'../../src/vs/workbench/api/common/extHostDebug*.ts',
-			'../../src/vs/workbench/api/common/extHostEmbedding*.ts',
-			'../../src/vs/workbench/api/common/extHostLanguageModel*.ts',
 			'../../src/vs/workbench/api/common/extHostMcp*.ts',
-			'../../src/vs/workbench/api/node/extHostDebug*.ts',
 			'../../src/vs/workbench/api/node/extHostMcp*.ts',
 			'../../src/vs/base/parts/sandbox/electron-browser/preload.ts',
 			'../../src/vs/base/parts/sandbox/electron-browser/preload-aux.ts',
@@ -1452,10 +1597,9 @@ suite('OI extension boundary', () => {
 			);
 		}
 
-		const product = readJson<{ licenseUrl?: string; serverLicenseUrl?: string; reportIssueUrl?: string }>(path.join(repositoryRoot, 'product.json'));
+		const product = readJson<{ licenseUrl?: string; reportIssueUrl?: string }>(path.join(repositoryRoot, 'product.json'));
 		assert.strictEqual(product.licenseUrl, 'https://github.com/Bc408/BeCoder/blob/main/LICENSE');
-		assert.strictEqual(product.serverLicenseUrl, 'https://github.com/Bc408/BeCoder/blob/main/LICENSE');
-		assert.strictEqual(product.reportIssueUrl, 'https://github.com/Bc408/BeCoder/issues/new');
+		assert.strictEqual(product.reportIssueUrl, undefined);
 		const packageManifest = readJson<{ repository?: { url?: string }; bugs?: { url?: string } }>(path.join(repositoryRoot, 'package.json'));
 		assert.strictEqual(packageManifest.repository?.url, 'https://github.com/Bc408/BeCoder.git');
 		assert.strictEqual(packageManifest.bugs?.url, 'https://github.com/Bc408/BeCoder/issues');

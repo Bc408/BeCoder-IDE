@@ -176,64 +176,6 @@ suite('TextResourceConfigurationService - Update', () => {
 		assert.deepStrictEqual(updateArgs, ['a', 'b', { resource, overrideIdentifier: language }, ConfigurationTarget.WORKSPACE]);
 	});
 
-	test('updateValue writes into derived user remote target without overrides', async () => {
-		language = 'a';
-		configurationValue = {
-			default: { value: '1' },
-			userLocal: { value: '2' },
-			userRemote: { value: '2' },
-		};
-		const resource = URI.file('someFile');
-
-		await testObject.updateValue(resource, 'a', 'b');
-		assert.deepStrictEqual(updateArgs, ['a', 'b', { resource, overrideIdentifier: undefined }, ConfigurationTarget.USER_REMOTE]);
-	});
-
-	test('updateValue writes into derived user remote target with overrides', async () => {
-		language = 'a';
-		configurationValue = {
-			default: { value: '1' },
-			userLocal: { value: '2' },
-			userRemote: { value: '2', override: '3' },
-			overrideIdentifiers: [language]
-		};
-		const resource = URI.file('someFile');
-
-		await testObject.updateValue(resource, 'a', 'b');
-		assert.deepStrictEqual(updateArgs, ['a', 'b', { resource, overrideIdentifier: language }, ConfigurationTarget.USER_REMOTE]);
-	});
-
-	test('updateValue writes into derived user remote target with overrides and value defined in workspace', async () => {
-		language = 'a';
-		configurationValue = {
-			default: { value: '1' },
-			userLocal: { value: '2' },
-			userRemote: { value: '2', override: '3' },
-			workspace: { value: '3' },
-			overrideIdentifiers: [language]
-		};
-		const resource = URI.file('someFile');
-
-		await testObject.updateValue(resource, 'a', 'b');
-		assert.deepStrictEqual(updateArgs, ['a', 'b', { resource, overrideIdentifier: language }, ConfigurationTarget.USER_REMOTE]);
-	});
-
-	test('updateValue writes into derived user remote target with overrides and value defined in workspace folder', async () => {
-		language = 'a';
-		configurationValue = {
-			default: { value: '1' },
-			userLocal: { value: '2', override: '1' },
-			userRemote: { value: '2', override: '3' },
-			workspace: { value: '3' },
-			workspaceFolder: { value: '3' },
-			overrideIdentifiers: [language]
-		};
-		const resource = URI.file('someFile');
-
-		await testObject.updateValue(resource, 'a', 'b');
-		assert.deepStrictEqual(updateArgs, ['a', 'b', { resource, overrideIdentifier: language }, ConfigurationTarget.USER_REMOTE]);
-	});
-
 	test('updateValue writes into derived user target without overrides', async () => {
 		language = 'a';
 		configurationValue = {
@@ -251,20 +193,6 @@ suite('TextResourceConfigurationService - Update', () => {
 		configurationValue = {
 			default: { value: '1' },
 			userLocal: { value: '2', override: '3' },
-			overrideIdentifiers: [language]
-		};
-		const resource = URI.file('someFile');
-
-		await testObject.updateValue(resource, 'a', '2');
-		assert.deepStrictEqual(updateArgs, ['a', '2', { resource, overrideIdentifier: language }, ConfigurationTarget.USER_LOCAL]);
-	});
-
-	test('updateValue writes into derived user target with overrides and value is defined in remote', async () => {
-		language = 'a';
-		configurationValue = {
-			default: { value: '1' },
-			userLocal: { value: '2', override: '3' },
-			userRemote: { value: '3' },
 			overrideIdentifiers: [language]
 		};
 		const resource = URI.file('someFile');
@@ -292,7 +220,6 @@ suite('TextResourceConfigurationService - Update', () => {
 		configurationValue = {
 			default: { value: '1', override: '3' },
 			userLocal: { value: '2', override: '3' },
-			userRemote: { value: '3' },
 			workspaceFolderValue: { value: '3' },
 			overrideIdentifiers: [language]
 		};

@@ -74,13 +74,7 @@ export class NativeWorkbenchEnvironmentService extends AbstractNativeEnvironment
 	get isPortable() { return this.configuration.isPortable; }
 
 	@memoize
-	get remoteAuthority() { return this.configuration.remoteAuthority; }
-
-	@memoize
 	get beCoderTrustWorkspace() { return this.args['becoder-trust-workspace']; }
-
-	@memoize
-	get expectsResolverExtension() { return !!this.configuration.remoteAuthority?.includes('+'); }
 
 	@memoize
 	get execPath() { return this.configuration.execPath; }

@@ -14,7 +14,7 @@ import { ConfigurationScope, IConfigurationRegistry, Extensions as Configuration
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { distinct } from '../../../../base/common/arrays.js';
-import { basename, isEqual, isEqualAuthority, joinPath, removeTrailingPathSeparator } from '../../../../base/common/resources.js';
+import { basename, isEqual, joinPath, removeTrailingPathSeparator } from '../../../../base/common/resources.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -82,9 +82,6 @@ export abstract class AbstractWorkspaceEditingService extends Disposable impleme
 
 	async pickNewWorkspacePath(): Promise<URI | undefined> {
 		const availableFileSystems = [Schemas.file];
-		if (this.environmentService.remoteAuthority) {
-			availableFileSystems.unshift(Schemas.vscodeRemote);
-		}
 		let workspacePath = await this.fileDialogService.showSaveDialog({
 			saveLabel: localize('save', "Save"),
 			title: localize('saveWorkspace', "Save Workspace"),
@@ -196,12 +193,6 @@ export abstract class AbstractWorkspaceEditingService extends Disposable impleme
 
 	private async doAddFolders(foldersToAdd: IWorkspaceFolderCreationData[], index?: number, donotNotifyError = false): Promise<void> {
 		const state = this.contextService.getWorkbenchState();
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		if (remoteAuthority) {
-			// https://github.com/microsoft/vscode/issues/94191
-			foldersToAdd = foldersToAdd.filter(folder => folder.uri.scheme !== Schemas.file && (folder.uri.scheme !== Schemas.vscodeRemote || isEqualAuthority(folder.uri.authority, remoteAuthority)));
-		}
-
 		// If we are in no-workspace or single-folder workspace, adding folders has to
 		// enter a workspace.
 		if (state !== WorkbenchState.WORKSPACE) {
@@ -262,8 +253,7 @@ export abstract class AbstractWorkspaceEditingService extends Disposable impleme
 			return;
 		}
 
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		const untitledWorkspace = await this.workspacesService.createUntitledWorkspace(folders, remoteAuthority);
+		const untitledWorkspace = await this.workspacesService.createUntitledWorkspace(folders);
 		if (path) {
 			try {
 				await this.saveWorkspaceAs(untitledWorkspace, path);

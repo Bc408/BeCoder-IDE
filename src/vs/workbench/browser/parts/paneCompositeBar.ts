@@ -21,8 +21,6 @@ import { ToggleCompositePinnedAction, ICompositeBarColors, IActivityHoverOptions
 import { IViewDescriptorService, ViewContainer, IViewContainerModel, ViewContainerLocation } from '../../common/views.js';
 import { IContextKeyService, ContextKeyExpr } from '../../../platform/contextkey/common/contextkey.js';
 import { isString } from '../../../base/common/types.js';
-import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
-import { isNative } from '../../../base/common/platform.js';
 import { Before2D, ICompositeDragAndDrop } from '../dnd.js';
 import { ThemeIcon } from '../../../base/common/themables.js';
 import { IAction, Separator, SubmenuAction, toAction } from '../../../base/common/actions.js';
@@ -121,7 +119,6 @@ export class PaneCompositeBar extends Disposable {
 		@IViewDescriptorService private readonly viewDescriptorService: IViewDescriptorService,
 		@IViewsService private readonly viewService: IViewsService,
 		@IContextKeyService protected readonly contextKeyService: IContextKeyService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkbenchLayoutService protected readonly layoutService: IWorkbenchLayoutService,
 	) {
 		super();
@@ -487,8 +484,7 @@ export class PaneCompositeBar extends Disposable {
 			}
 		}
 
-		// Check cache only if extensions are not yet registered and current window is not native (desktop) remote connection window
-		if (!this.hasExtensionsRegistered && !(this.part === Parts.SIDEBAR_PART && this.environmentService.remoteAuthority && isNative)) {
+		if (!this.hasExtensionsRegistered) {
 			cachedViewContainer = cachedViewContainer || this.cachedViewContainers.find(({ id }) => id === viewContainerId);
 
 			// Show builtin ViewContainer if not registered yet
@@ -640,7 +636,7 @@ export class PaneCompositeBar extends Disposable {
 				state.push({
 					id: compositeItem.id,
 					name: viewContainerModel.title,
-					icon: URI.isUri(viewContainerModel.icon) && this.environmentService.remoteAuthority ? undefined : viewContainerModel.icon, // Do not cache uri icons with remote connection
+					icon: viewContainerModel.icon,
 					views,
 					pinned: compositeItem.pinned,
 					order: compositeItem.order,
@@ -666,9 +662,6 @@ export class PaneCompositeBar extends Disposable {
 					cachedViewContainer.name = placeholderViewContainer.name;
 					cachedViewContainer.icon = placeholderViewContainer.themeIcon ? placeholderViewContainer.themeIcon :
 						placeholderViewContainer.iconUrl ? URI.revive(placeholderViewContainer.iconUrl) : undefined;
-					if (URI.isUri(cachedViewContainer.icon) && this.environmentService.remoteAuthority) {
-						cachedViewContainer.icon = undefined; // Do not cache uri icons with remote connection
-					}
 					cachedViewContainer.views = placeholderViewContainer.views;
 					cachedViewContainer.isBuiltin = placeholderViewContainer.isBuiltin;
 				}

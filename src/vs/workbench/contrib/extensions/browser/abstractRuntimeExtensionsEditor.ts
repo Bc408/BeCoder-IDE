@@ -14,7 +14,6 @@ import { isNonEmptyArray } from '../../../../base/common/arrays.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { fromNow } from '../../../../base/common/date.js';
 import { IDisposable, dispose } from '../../../../base/common/lifecycle.js';
-import { Schemas } from '../../../../base/common/network.js';
 import * as nls from '../../../../nls.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { getContextMenuActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
@@ -25,7 +24,6 @@ import { IContextMenuService } from '../../../../platform/contextview/browser/co
 import { ExtensionIdentifier, ExtensionIdentifierMap, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { ILabelService } from '../../../../platform/label/common/label.js';
 import { WorkbenchList } from '../../../../platform/list/browser/listService.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
@@ -36,7 +34,6 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
 import { IEditorGroup } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { Extensions, IExtensionFeaturesManagementService, IExtensionFeaturesRegistry } from '../../../services/extensionManagement/common/extensionFeatures.js';
 import { EnablementState } from '../../../services/extensionManagement/common/extensionManagement.js';
 import { LocalWebWorkerRunningLocation } from '../../../services/extensions/common/extensionRunningLocation.js';
@@ -89,8 +86,6 @@ export abstract class AbstractRuntimeExtensionsEditor extends EditorPane {
 		@IContextMenuService private readonly _contextMenuService: IContextMenuService,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IStorageService storageService: IStorageService,
-		@ILabelService private readonly _labelService: ILabelService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@IClipboardService private readonly _clipboardService: IClipboardService,
 		@IExtensionFeaturesManagementService private readonly _extensionFeaturesManagementService: IExtensionFeaturesManagementService,
 		@IHoverService private readonly _hoverService: IHoverService,
@@ -390,13 +385,6 @@ export abstract class AbstractRuntimeExtensionsEditor extends EditorPane {
 				let extraLabel: string | null = null;
 				if (element.status.runningLocation && element.status.runningLocation.equals(new LocalWebWorkerRunningLocation(0))) {
 					extraLabel = `$(globe) web worker`;
-				} else if (element.description.extensionLocation.scheme === Schemas.vscodeRemote) {
-					const hostLabel = this._labelService.getHostLabel(Schemas.vscodeRemote, this._environmentService.remoteAuthority);
-					if (hostLabel) {
-						extraLabel = `$(remote) ${hostLabel}`;
-					} else {
-						extraLabel = `$(remote) ${element.description.extensionLocation.authority}`;
-					}
 				} else if (element.status.runningLocation && element.status.runningLocation.affinity > 0) {
 					extraLabel = element.status.runningLocation instanceof LocalWebWorkerRunningLocation
 						? `$(globe) web worker ${element.status.runningLocation.affinity + 1}`

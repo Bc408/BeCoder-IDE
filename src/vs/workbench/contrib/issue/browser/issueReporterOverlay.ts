@@ -24,7 +24,6 @@ import { DisposableStore, toDisposable } from '../../../../base/common/lifecycle
 import { localize } from '../../../../nls.js';
 import { IMarkdownRendererService } from '../../../../platform/markdown/browser/markdownRenderer.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
-import { isRemoteDiagnosticError } from '../../../../platform/diagnostics/common/diagnostics.js';
 import { defaultButtonStyles, defaultCheckboxStyles, defaultInputBoxStyles, defaultKeybindingLabelStyles, defaultSelectBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import product from '../../../../platform/product/common/product.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -2224,20 +2223,6 @@ export class IssueReporterOverlay {
 					['XDG_SESSION_DESKTOP', modelData.systemInfo.linuxEnv.xdgSessionDesktop],
 					['XDG_SESSION_TYPE', modelData.systemInfo.linuxEnv.xdgSessionType],
 				);
-			}
-
-			for (const remote of modelData.systemInfo.remoteData) {
-				if (isRemoteDiagnosticError(remote)) {
-					rows.push(['Remote Error', remote.errorMessage]);
-				} else {
-					rows.push(
-						['Remote', remote.latency ? `${remote.hostName} (latency: ${remote.latency.current.toFixed(2)}ms last, ${remote.latency.average.toFixed(2)}ms average)` : remote.hostName],
-						['Remote OS', remote.machineInfo.os],
-						['Remote CPUs', remote.machineInfo.cpus],
-						['Remote Memory (System)', remote.machineInfo.memory],
-						['Remote VM', remote.machineInfo.vmHint],
-					);
-				}
 			}
 		}
 

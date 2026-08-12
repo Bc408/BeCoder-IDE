@@ -46,7 +46,6 @@ import { VSCodeOscProperty, VSCodeOscPt, VSCodeSequence } from '../../terminal/b
 import { TerminalProcessExtHostProxy } from '../../terminal/browser/terminalProcessExtHostProxy.js';
 import { ITerminalProfileResolverService, TERMINAL_VIEW_ID } from '../../terminal/common/terminal.js';
 import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IOutputService } from '../../../services/output/common/output.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
@@ -211,7 +210,6 @@ export class TerminalTaskSystem extends Disposable implements ITaskSystem {
 		private _modelService: IModelService,
 		private _configurationResolverService: IConfigurationResolverService,
 		private _contextService: IWorkspaceContextService,
-		private _environmentService: IWorkbenchEnvironmentService,
 		private _outputChannelId: string,
 		private _fileService: IFileService,
 		private _terminalProfileResolverService: ITerminalProfileResolverService,
@@ -1215,7 +1213,7 @@ export class TerminalTaskSystem extends Disposable implements ITaskSystem {
 				}
 			}
 			// This must be normalized to the OS
-			cwd = isUNC(cwd) ? cwd : resources.toLocalResource(URI.from({ scheme: Schemas.file, path: cwd }), this._environmentService.remoteAuthority, this._pathService.defaultUriScheme);
+			cwd = isUNC(cwd) ? cwd : resources.toLocalResource(URI.from({ scheme: Schemas.file, path: cwd }), undefined, this._pathService.defaultUriScheme);
 		}
 		if (isShellCommand) {
 			let os: Platform.OperatingSystem;
@@ -1227,8 +1225,7 @@ export class TerminalTaskSystem extends Disposable implements ITaskSystem {
 			}
 			const defaultProfile = await this._terminalProfileResolverService.getDefaultProfile({
 				allowAutomationShell: true,
-				os,
-				remoteAuthority: this._environmentService.remoteAuthority
+				os
 			});
 			let icon: URI | ThemeIcon | { light: URI; dark: URI } | undefined;
 			if (task.configurationProperties.icon?.id) {
@@ -1308,7 +1305,6 @@ export class TerminalTaskSystem extends Disposable implements ITaskSystem {
 						// TODO: Handle by pulling the default terminal profile?
 						// const osxShellArgs = this._configurationService.inspect(TerminalSettingId.ShellArgsMacOs);
 						// if ((osxShellArgs.user === undefined) && (osxShellArgs.userLocal === undefined) && (osxShellArgs.userLocalValue === undefined)
-						// 	&& (osxShellArgs.userRemote === undefined) && (osxShellArgs.userRemoteValue === undefined)
 						// 	&& (osxShellArgs.userValue === undefined) && (osxShellArgs.workspace === undefined)
 						// 	&& (osxShellArgs.workspaceFolder === undefined) && (osxShellArgs.workspaceFolderValue === undefined)
 						// 	&& (osxShellArgs.workspaceValue === undefined)) {

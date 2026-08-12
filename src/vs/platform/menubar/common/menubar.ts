@@ -35,7 +35,6 @@ export interface IMenubarMenuRecentItemAction {
 	id: string;
 	label: string;
 	uri: URI;
-	remoteAuthority?: string;
 	enabled?: boolean;
 }
 

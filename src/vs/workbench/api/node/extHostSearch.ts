@@ -9,7 +9,6 @@ import { URI } from '../../../base/common/uri.js';
 import * as pfs from '../../../base/node/pfs.js';
 import { ILogService } from '../../../platform/log/common/log.js';
 import { IExtHostConfiguration } from '../common/extHostConfiguration.js';
-import { IExtHostInitDataService } from '../common/extHostInitDataService.js';
 import { IExtHostRpcService } from '../common/extHostRpcService.js';
 import { ExtHostSearch, reviveQuery } from '../common/extHostSearch.js';
 import { IURITransformerService } from '../common/extHostUriTransformerService.js';
@@ -38,7 +37,6 @@ export class NativeExtHostSearch extends ExtHostSearch implements IDisposable {
 
 	constructor(
 		@IExtHostRpcService extHostRpc: IExtHostRpcService,
-		@IExtHostInitDataService initData: IExtHostInitDataService,
 		@IURITransformerService _uriTransformer: IURITransformerService,
 		@IExtHostConfiguration private readonly configurationService: IExtHostConfiguration,
 		@ILogService _logService: ILogService,
@@ -49,10 +47,6 @@ export class NativeExtHostSearch extends ExtHostSearch implements IDisposable {
 		this.handleConfigurationChanged = this.handleConfigurationChanged.bind(this);
 		const outputChannel = new OutputChannel('RipgrepSearchUD', this._logService);
 		this._disposables.add(this.registerTextSearchProvider(Schemas.vscodeUserData, new RipgrepSearchProvider(outputChannel, this.getNumThreadsCached)));
-		if (initData.remote.isRemote && initData.remote.authority) {
-			this._registerEHSearchProviders();
-		}
-
 		configurationService.getConfigProvider().then(provider => {
 			if (this.isDisposed) {
 				return;

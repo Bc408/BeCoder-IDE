@@ -11,8 +11,6 @@ import { URI } from '../../../../base/common/uri.js';
 import { IPath } from '../../../../platform/window/common/window.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { IRemoteAuthorityResolverService, ResolverResult } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
-import { getRemoteAuthority } from '../../../../platform/remote/common/remoteHosts.js';
 import { isVirtualResource } from '../../../../platform/workspace/common/virtualWorkspace.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { ISingleFolderWorkspaceIdentifier, isSavedWorkspace, isSingleFolderWorkspaceIdentifier, isTemporaryWorkspace, IWorkspace, IWorkspaceContextService, IWorkspaceFolder, toWorkspaceIdentifier, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
@@ -20,9 +18,7 @@ import { WorkspaceTrustRequestOptions, IWorkspaceTrustManagementService, IWorksp
 import { Memento } from '../../../common/memento.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
-import { isEqualAuthority } from '../../../../base/common/resources.js';
 import { isWeb } from '../../../../base/common/platform.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
 import { promiseWithResolvers } from '../../../../base/common/async.js';
 import { ResourceMap } from '../../../../base/common/map.js';
 
@@ -109,20 +105,16 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 
 	private _isTrusted: boolean;
 	private _trustStateInfo: IWorkspaceTrustInfo;
-	private _remoteAuthority: ResolverResult | undefined;
-
 	private readonly _storedTrustState: WorkspaceTrustMemento;
 	private readonly _trustTransitionManager: WorkspaceTrustTransitionManager;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IRemoteAuthorityResolverService private readonly remoteAuthorityResolverService: IRemoteAuthorityResolverService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
-		@IWorkspaceTrustEnablementService private readonly workspaceTrustEnablementService: IWorkspaceTrustEnablementService,
-		@IFileService private readonly fileService: IFileService
+		@IWorkspaceTrustEnablementService private readonly workspaceTrustEnablementService: IWorkspaceTrustEnablementService
 	) {
 		super();
 
@@ -155,23 +147,8 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 			.finally(() => {
 				this._workspaceResolvedPromiseResolve();
 
-				if (!this.environmentService.remoteAuthority) {
-					this._workspaceTrustInitializedPromiseResolve();
-				}
+				this._workspaceTrustInitializedPromiseResolve();
 			});
-
-		// Remote - resolve remote authority
-		if (this.environmentService.remoteAuthority) {
-			this.remoteAuthorityResolverService.resolveAuthority(this.environmentService.remoteAuthority)
-				.then(async result => {
-					this._remoteAuthority = result;
-					await this.fileService.activateProvider(Schemas.vscodeRemote);
-					await this.updateWorkspaceTrust();
-				})
-				.finally(() => {
-					this._workspaceTrustInitializedPromiseResolve();
-				});
-		}
 
 		// Empty workspace - save initial state to memento
 		if (this.isEmptyWorkspace()) {
@@ -202,9 +179,7 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 
 	private async getCanonicalUri(uri: URI): Promise<URI> {
 		let canonicalUri = uri;
-		if (this.environmentService.remoteAuthority && uri.scheme === Schemas.vscodeRemote) {
-			canonicalUri = await this.remoteAuthorityResolverService.getCanonicalURI(uri);
-		} else if (uri.scheme === 'vscode-vfs') {
+		if (uri.scheme === 'vscode-vfs') {
 			const index = uri.authority.indexOf('+');
 			if (index !== -1) {
 				canonicalUri = uri.with({ authority: uri.authority.substr(0, index) });
@@ -318,11 +293,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 			return false;
 		}
 
-		// Remote - resolver explicitly sets workspace trust to TRUE
-		if (this.environmentService.remoteAuthority && this._remoteAuthority?.options?.isTrusted) {
-			return this._remoteAuthority.options.isTrusted;
-		}
-
 		// Empty workspace - use memento, open ediors, or user setting
 		if (this.isEmptyWorkspace()) {
 			// Use memento if present
@@ -388,10 +358,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 			return { trusted: true, uri };
 		}
 
-		if (this.isTrustedByRemote(uri)) {
-			return { trusted: true, uri };
-		}
-
 		let resultState = false;
 		let maxLength = -1;
 
@@ -417,10 +383,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 		for (const uri of uris) {
 			if (trusted) {
 				if (this.isTrustedVirtualResource(uri)) {
-					continue;
-				}
-
-				if (this.isTrustedByRemote(uri)) {
 					continue;
 				}
 
@@ -458,18 +420,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 
 	private isTrustedVirtualResource(uri: URI): boolean {
 		return isVirtualResource(uri) && uri.scheme !== 'vscode-vfs';
-	}
-
-	private isTrustedByRemote(uri: URI): boolean {
-		if (!this.environmentService.remoteAuthority) {
-			return false;
-		}
-
-		if (!this._remoteAuthority) {
-			return false;
-		}
-
-		return (isEqualAuthority(getRemoteAuthority(uri), this._remoteAuthority.authority.authority)) && !!this._remoteAuthority.options?.isTrusted;
 	}
 
 	private set isTrusted(value: boolean) {
@@ -511,11 +461,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 	}
 
 	isWorkspaceTrustForced(): boolean {
-		// Remote - remote authority explicitly sets workspace trust
-		if (this.environmentService.remoteAuthority && this._remoteAuthority?.options?.isTrusted !== undefined) {
-			return true;
-		}
-
 		// All workspace uris are trusted automatically
 		const workspaceUris = this.getWorkspaceUris().filter(uri => !this.isTrustedVirtualResource(uri));
 		if (workspaceUris.length === 0) {
@@ -532,7 +477,7 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 			return false;
 		}
 
-		if (workspaceIdentifier.uri.scheme !== Schemas.file && workspaceIdentifier.uri.scheme !== Schemas.vscodeRemote) {
+		if (workspaceIdentifier.uri.scheme !== Schemas.file) {
 			return false;
 		}
 
@@ -554,11 +499,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 	}
 
 	canSetWorkspaceTrust(): boolean {
-		// Remote - remote authority not yet resolved, or remote authority explicitly sets workspace trust
-		if (this.environmentService.remoteAuthority && (!this._remoteAuthority || this._remoteAuthority.options?.isTrusted !== undefined)) {
-			return false;
-		}
-
 		// Empty workspace
 		if (this.isEmptyWorkspace()) {
 			return true;
@@ -619,11 +559,6 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 	async getUriTrustInfo(uri: URI): Promise<IWorkspaceTrustUriInfo> {
 		// Return trusted when workspace trust is disabled
 		if (!this.workspaceTrustEnablementService.isWorkspaceTrustEnabled()) {
-			return { trusted: true, uri };
-		}
-
-		// Uri is trusted automatically by the remote
-		if (this.isTrustedByRemote(uri)) {
 			return { trusted: true, uri };
 		}
 

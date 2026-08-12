@@ -5,7 +5,7 @@
 
 import * as resources from '../../../../../base/common/resources.js';
 import assert from 'assert';
-import { TestEnvironmentService, TestLifecycleService, TestPathService, TestRemoteAgentService } from '../../../../test/browser/workbenchTestServices.js';
+import { TestEnvironmentService, TestLifecycleService, TestPathService } from '../../../../test/browser/workbenchTestServices.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { LabelService } from '../../common/labelService.js';
 import { TestContextService, TestStorageService } from '../../../../test/common/workbenchTestServices.js';
@@ -25,7 +25,7 @@ suite('URI Label', () => {
 
 	setup(() => {
 		storageService = new TestStorageService();
-		labelService = new LabelService(TestEnvironmentService, new TestContextService(), new TestPathService(URI.file('/foobar')), new TestRemoteAgentService(), storageService, new TestLifecycleService());
+		labelService = new LabelService(TestEnvironmentService, new TestContextService(), new TestPathService(URI.file('/foobar')), storageService, new TestLifecycleService());
 	});
 
 	ensureNoDisposablesAreLeakedInTestSuite();
@@ -245,7 +245,6 @@ suite('multi-root workspace', () => {
 					new WorkspaceFolder({ uri: other, index: 2, name: resources.basename(other) }),
 				])),
 			new TestPathService(),
-			new TestRemoteAgentService(),
 			disposables.add(new TestStorageService()),
 			disposables.add(new TestLifecycleService())
 		));
@@ -383,7 +382,6 @@ suite('multi-root workspace', () => {
 					new WorkspaceFolder({ uri: rootFolder, index: 0, name: 'FSProotFolder' }),
 				])),
 			new TestPathService(undefined, rootFolder.scheme),
-			new TestRemoteAgentService(),
 			disposables.add(new TestStorageService()),
 			disposables.add(new TestLifecycleService())
 		));
@@ -412,7 +410,6 @@ suite('workspace at FSP root', () => {
 					new WorkspaceFolder({ uri: rootFolder, index: 0, name: 'FSProotFolder' }),
 				])),
 			new TestPathService(),
-			new TestRemoteAgentService(),
 			new TestStorageService(),
 			new TestLifecycleService()
 		);

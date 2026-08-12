@@ -18,9 +18,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { IRectangle } from '../../../../platform/window/common/window.js';
 import { IAuxiliaryWindowService } from '../../../services/auxiliaryWindow/browser/auxiliaryWindowService.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { RemoteNameContext } from '../../../common/contextkeys.js';
 import { IsWebContext } from '../../../../platform/contextkey/common/contextkeys.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 
 //#region --- process explorer
 
@@ -80,7 +78,7 @@ Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEdit
 
 //#region --- process explorer commands
 
-const supported = ContextKeyExpr.or(IsWebContext.negate(), RemoteNameContext.notEqualsTo('')); // only on desktop or in web with a remote
+const supported = IsWebContext.negate();
 
 interface IProcessExplorerWindowState {
 	readonly bounds: Partial<IRectangle>;

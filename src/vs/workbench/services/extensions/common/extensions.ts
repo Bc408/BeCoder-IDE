@@ -125,7 +125,6 @@ export interface IExtensionInspectInfo {
 export interface IExtensionHost {
 	readonly pid: number | null;
 	readonly runningLocation: ExtensionRunningLocation;
-	readonly remoteAuthority: string | null;
 	readonly startup: ExtensionHostStartup;
 	/**
 	 * A collection of extensions which includes information about which
@@ -670,11 +669,6 @@ export interface IExtensionService {
 	 */
 	startExtensionHosts(updates?: { readonly toAdd: readonly IExtension[]; readonly toRemove: readonly string[] }): Promise<void>;
 
-	/**
-	 * Modify the environment of the remote extension host
-	 * @param env New properties for the remote extension host
-	 */
-	setRemoteEnvironment(env: { [key: string]: string | null }): Promise<void>;
 }
 
 export interface IInternalExtensionService {
@@ -741,7 +735,6 @@ export class NullExtensionService implements IExtensionService {
 	getInspectPorts(_extensionHostKind: ExtensionHostKind, _tryEnableInspector: boolean): Promise<IExtensionInspectInfo[]> { return Promise.resolve([]); }
 	async stopExtensionHosts(): Promise<boolean> { return true; }
 	async startExtensionHosts(): Promise<void> { }
-	async setRemoteEnvironment(_env: { [key: string]: string | null }): Promise<void> { }
 	canAddExtension(): boolean { return false; }
 	canRemoveExtension(): boolean { return false; }
 }

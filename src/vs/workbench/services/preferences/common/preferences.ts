@@ -270,7 +270,6 @@ export interface IPreferencesService {
 	openSettings(options?: IOpenSettingsOptions): Promise<IEditorPane | undefined>;
 	openApplicationSettings(options?: IOpenSettingsOptions): Promise<IEditorPane | undefined>;
 	openUserSettings(options?: IOpenSettingsOptions): Promise<IEditorPane | undefined>;
-	openRemoteSettings(options?: IOpenSettingsOptions): Promise<IEditorPane | undefined>;
 	openWorkspaceSettings(options?: IOpenSettingsOptions): Promise<IEditorPane | undefined>;
 	openFolderSettings(options: IOpenSettingsOptions & { folderUri: IOpenSettingsOptions['folderUri'] }): Promise<IEditorPane | undefined>;
 	openGlobalKeybindingSettings(textual: boolean, options?: IOpenKeybindingsEditorOptions): Promise<void>;

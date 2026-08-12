@@ -88,12 +88,6 @@ export interface IResolvedWorkspace extends IWorkspaceIdentifier, IBaseWorkspace
 export interface IBaseWorkspace {
 
 	/**
-	 * If present, marks the window that opens the workspace
-	 * as a remote window with the given authority.
-	 */
-	readonly remoteAuthority?: string;
-
-	/**
 	 * Transient workspaces are meant to go away after being used
 	 * once, e.g. a window reload of a transient workspace will
 	 * open an empty window.

@@ -6,7 +6,6 @@
 import { Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
-import { ITunnelProxyInfo } from '../../tunnel/common/tunnelProxy.js';
 import { IPermissionCategoryState, ISerializedBrowserPermissionsSnapshot, IBrowserDeviceCandidate, BrowserDeviceType, PermissionCategory } from './browserPermissions.js';
 
 const commandPrefix = 'workbench.action.browser';
@@ -71,13 +70,6 @@ export interface IBrowserViewWindowConfiguration {
 	readonly keybindings: { [commandId: string]: string };
 	/** Maximum number of entries to retain per browser session history. */
 	readonly maxHistoryEntries?: number;
-	/**
-	 * Resolved tunnel-proxy credentials for the window's remote browser views,
-	 * produced by the window's local node extension host (which hosts the HTTPS
-	 * tunnel proxy). `undefined` until the proxy has started, or when no proxy
-	 * is used. Applied to the Electron sessions of the window's remote views.
-	 */
-	readonly proxyInfo?: ITunnelProxyInfo;
 	/**
 	 * The window's contribution to the `file://` allowlist used by integrated
 	 * browser sessions. Main unions every window's contribution into a
@@ -207,7 +199,6 @@ export interface IBrowserViewState {
 	storageKeys: IBrowserViewStorageKeys;
 	permissions: ISerializedBrowserPermissionsSnapshot;
 	browserZoomIndex: number;
-	isRemoteSession: boolean;
 	device: IBrowserDeviceProfile | undefined;
 }
 
@@ -361,7 +352,6 @@ export interface IBrowserViewService {
 	onDynamicDidFindInPage(id: string): Event<IBrowserViewFindInPageResult>;
 	onDynamicDidClose(id: string): Event<void>;
 	onDynamicDidChangeDeviceEmulation(id: string): Event<IBrowserDeviceProfile | undefined>;
-	onDynamicDidChangeRemoteStatus(id: string): Event<boolean>;
 	onDynamicDidRequestPermission(id: string): Event<IBrowserViewPermissionRequestEvent>;
 	onDynamicDidChangePermissions(id: string): Event<ISerializedBrowserPermissionsSnapshot>;
 

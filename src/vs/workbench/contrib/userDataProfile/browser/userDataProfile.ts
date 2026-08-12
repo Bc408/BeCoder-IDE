@@ -272,7 +272,7 @@ export class UserDataProfilesWorkbenchContribution extends Disposable implements
 						canPickMany: false
 					});
 				if (pick) {
-					return hostService.openWindow({ remoteAuthority: null, forceProfile: pick.profile.name });
+					return hostService.openWindow({ forceProfile: pick.profile.name });
 				}
 			}
 		});
@@ -303,7 +303,7 @@ export class UserDataProfilesWorkbenchContribution extends Disposable implements
 
 			override run(accessor: ServicesAccessor): Promise<void> {
 				const hostService = accessor.get(IHostService);
-				return hostService.openWindow({ remoteAuthority: null, forceProfile: profile.name });
+				return hostService.openWindow({ forceProfile: profile.name });
 			}
 		}));
 

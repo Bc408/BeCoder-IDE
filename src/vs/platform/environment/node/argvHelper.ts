@@ -8,7 +8,7 @@ import { dirname, resolve } from '../../../base/common/path.js';
 import { IProcessEnvironment, isWindows } from '../../../base/common/platform.js';
 import { localize } from '../../../nls.js';
 import { NativeParsedArgs } from '../common/argv.js';
-import { ErrorReporter, NATIVE_CLI_COMMANDS, OPTIONS, parseArgs } from './argv.js';
+import { ErrorReporter, OPTIONS, parseArgs } from './argv.js';
 
 function parseAndValidate(cmdLineArgs: string[], reportWarnings: boolean): NativeParsedArgs {
 	const onMultipleValues = (id: string, val: string) => {
@@ -22,14 +22,12 @@ function parseAndValidate(cmdLineArgs: string[], reportWarnings: boolean): Nativ
 	};
 	const getSubcommandReporter = (command: string) => ({
 		onUnknownOption: (id: string) => {
-			if (!(NATIVE_CLI_COMMANDS as readonly string[]).includes(command)) {
-				console.warn(localize('unknownSubCommandOption', "Warning: '{0}' is not in the list of known options for subcommand '{1}'", id, command));
-			}
+			console.warn(localize('unknownSubCommandOption', "Warning: '{0}' is not in the list of known options for subcommand '{1}'", id, command));
 		},
 		onMultipleValues,
 		onEmptyValue,
 		onDeprecatedOption,
-		getSubcommandReporter: (NATIVE_CLI_COMMANDS as readonly string[]).includes(command) ? getSubcommandReporter : undefined
+		getSubcommandReporter: undefined
 	});
 	const errorReporter: ErrorReporter = {
 		onUnknownOption: (id) => {

@@ -17,7 +17,6 @@ import { IWorkbenchContribution, IWorkbenchContributionsRegistry, Extensions as 
 import { IExternalTerminalService } from '../../../../platform/externalTerminal/electron-browser/externalTerminalService.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { TerminalContextKeys } from '../../terminal/common/terminalContextKey.js';
-import { IRemoteAuthorityResolverService } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
@@ -35,7 +34,6 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 		// Open external terminal in local workspaces
 		const terminalService = accessor.get(IExternalTerminalService);
 		const configurationService = accessor.get(IConfigurationService);
-		const remoteAuthorityResolverService = accessor.get(IRemoteAuthorityResolverService);
 		const workspaceContextService = accessor.get(IWorkspaceContextService);
 		const quickInputService = accessor.get(IQuickInputService);
 		const labelService = accessor.get(ILabelService);
@@ -66,34 +64,13 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 			return;
 		}
 
-		// If it's a remote workspace, open the canonical URI if it is a local folder
-		try {
-			if (root?.scheme === Schemas.vscodeRemote) {
-				const canonicalUri = await remoteAuthorityResolverService.getCanonicalURI(root);
-				if (canonicalUri.scheme === Schemas.file) {
-					terminalService.openTerminal(config, canonicalUri.fsPath);
-					return;
-				}
-			}
-		} catch { }
-
-		// Open the current file's folder if it's local or its canonical URI is local
+		// Open the current file's folder if it's local.
 		// Opens current file's folder, if no folder is open in editor
 		const activeFile = historyService.getLastActiveFile(Schemas.file);
 		if (activeFile?.scheme === Schemas.file) {
 			terminalService.openTerminal(config, paths.dirname(activeFile.fsPath));
 			return;
 		}
-		try {
-			if (activeFile?.scheme === Schemas.vscodeRemote) {
-				const canonicalUri = await remoteAuthorityResolverService.getCanonicalURI(activeFile);
-				if (canonicalUri.scheme === Schemas.file) {
-					terminalService.openTerminal(config, canonicalUri.fsPath);
-					return;
-				}
-			}
-		} catch { }
-
 		// Fallback to opening without a cwd which will end up using the local home path
 		terminalService.openTerminal(config, undefined);
 	}

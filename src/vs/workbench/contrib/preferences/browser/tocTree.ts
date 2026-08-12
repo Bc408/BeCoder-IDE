@@ -19,7 +19,6 @@ import { IInstantiationService } from '../../../../platform/instantiation/common
 import { IListService, IWorkbenchObjectTreeOptions, WorkbenchObjectTree } from '../../../../platform/list/browser/listService.js';
 import { getListStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { editorBackground, focusBorder } from '../../../../platform/theme/common/colorRegistry.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { settingsHeaderForeground, settingsHeaderHoverForeground } from '../common/settingsEditorColorRegistry.js';
 import { SettingsTreeFilter } from './settingsTree.js';
 import { ISettingsEditorViewState, SearchResultModel, SettingsTreeElement, SettingsTreeGroupElement, SettingsTreeSettingElement } from './settingsTreeModels.js';
@@ -32,8 +31,7 @@ export class TOCTreeModel {
 	private _settingsTreeRoot!: SettingsTreeGroupElement;
 
 	constructor(
-		private _viewState: ISettingsEditorViewState,
-		@IWorkbenchEnvironmentService private environmentService: IWorkbenchEnvironmentService
+		private _viewState: ISettingsEditorViewState
 	) {
 	}
 
@@ -90,8 +88,7 @@ export class TOCTreeModel {
 			}
 
 			// Check everything that the SettingsFilter checks except whether it's filtered by a category
-			const isRemote = !!this.environmentService.remoteAuthority;
-			return child.matchesScope(this._viewState.settingsTarget, isRemote) &&
+			return child.matchesScope(this._viewState.settingsTarget) &&
 				child.matchesAllTags(this._viewState.tagFilters) &&
 				child.matchesAnyFeature(this._viewState.featureFilters) &&
 				child.matchesAnyExtension(this._viewState.extensionFilters) &&

@@ -634,8 +634,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 		return this.userDataProfilesService.getProfileForWorkspace(this.config.workspace ?? toWorkspaceIdentifier(this.backupPath, this.isExtensionDevelopmentHost)) ?? this.userDataProfilesService.defaultProfile;
 	}
 
-	get remoteAuthority(): string | undefined { return this._config?.remoteAuthority; }
-
 	private _config: INativeWindowConfiguration | undefined;
 	get config(): INativeWindowConfiguration | undefined { return this._config; }
 
@@ -1062,8 +1060,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 					},
 					urisToOpen: uriToOpen ? [uriToOpen] : undefined,
 					forceEmpty,
-					forceNewWindow: true,
-					remoteAuthority: this.remoteAuthority
+					forceNewWindow: true
 				})).at(0);
 				window?.focus();
 			}

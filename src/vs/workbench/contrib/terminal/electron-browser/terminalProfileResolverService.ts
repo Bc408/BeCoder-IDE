@@ -12,7 +12,6 @@ import { BaseTerminalProfileResolverService } from '../browser/terminalProfileRe
 import { ITerminalProfileService } from '../common/terminal.js';
 import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
 import { IHistoryService } from '../../../services/history/common/history.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 
 export class ElectronTerminalProfileResolverService extends BaseTerminalProfileResolverService {
 
@@ -23,22 +22,21 @@ export class ElectronTerminalProfileResolverService extends BaseTerminalProfileR
 		@ITerminalLogService logService: ITerminalLogService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
 		@ITerminalProfileService terminalProfileService: ITerminalProfileService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@ITerminalInstanceService terminalInstanceService: ITerminalInstanceService
 	) {
 		super(
 			{
-				getDefaultSystemShell: async (remoteAuthority, platform) => {
-					const backend = await terminalInstanceService.getBackend(remoteAuthority);
+				getDefaultSystemShell: async platform => {
+					const backend = await terminalInstanceService.getBackend();
 					if (!backend) {
-						throw new ErrorNoTelemetry(`Cannot get default system shell when there is no backend for remote authority '${remoteAuthority}'`);
+						throw new ErrorNoTelemetry('Cannot get default system shell when there is no local backend');
 					}
 					return backend.getDefaultSystemShell(platform);
 				},
-				getEnvironment: async (remoteAuthority) => {
-					const backend = await terminalInstanceService.getBackend(remoteAuthority);
+				getEnvironment: async () => {
+					const backend = await terminalInstanceService.getBackend();
 					if (!backend) {
-						throw new ErrorNoTelemetry(`Cannot get environment when there is no backend for remote authority '${remoteAuthority}'`);
+						throw new ErrorNoTelemetry('Cannot get environment when there is no local backend');
 					}
 					return backend.getEnvironment();
 				}
@@ -48,8 +46,7 @@ export class ElectronTerminalProfileResolverService extends BaseTerminalProfileR
 			historyService,
 			logService,
 			terminalProfileService,
-			workspaceContextService,
-			remoteAgentService
+			workspaceContextService
 		);
 	}
 }

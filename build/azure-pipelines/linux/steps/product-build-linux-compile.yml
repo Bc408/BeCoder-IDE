@@ -14,9 +14,6 @@ parameters:
   - name: VSCODE_RUN_BROWSER_TESTS
     type: boolean
     default: false
-  - name: VSCODE_RUN_REMOTE_TESTS
-    type: boolean
-    default: false
   - name: VSCODE_RUN_CHECKS
     type: boolean
     default: false
@@ -162,12 +159,6 @@ steps:
     condition: and(succeeded(), ne(variables.NODE_MODULES_RESTORED, 'true'))
     displayName: Create node_modules archive
 
-  - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - script: npx deemon --detach --wait -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=$(ARTIFACT_PREFIX)vscode_cli_linux_$(VSCODE_ARCH)_cli=Linux CLI (${{ upper(parameters.VSCODE_ARCH) }})" $(ARTIFACT_PREFIX)vscode_cli_linux_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact (background)
-
   - script: node build/azure-pipelines/distro/mixin-quality.ts
     displayName: Mixin distro quality
 
@@ -192,11 +183,10 @@ steps:
     - script: node build/azure-pipelines/common/extract-telemetry.ts
       displayName: Generate lists of telemetry events
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - script: |
         set -e
         npm run compile --prefix test/smoke
-        npm run compile --prefix test/integration/browser
       displayName: Compile test suites (non-OSS)
       condition: and(succeeded(), eq(variables['VSCODE_STEP_ON_IT'], 'false'))
 
@@ -228,62 +218,12 @@ steps:
       AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
     displayName: Build client
 
-  - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - script: npx deemon --attach -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=$(ARTIFACT_PREFIX)vscode_cli_linux_$(VSCODE_ARCH)_cli=Linux CLI (${{ upper(parameters.VSCODE_ARCH) }})" $(ARTIFACT_PREFIX)vscode_cli_linux_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact
-
-    - task: DownloadPipelineArtifact@2
-      inputs:
-        artifact: $(ARTIFACT_PREFIX)vscode_cli_linux_$(VSCODE_ARCH)_cli
-        patterns: "**"
-        path: $(Build.ArtifactStagingDirectory)/cli
-      displayName: Download VS Code CLI
-
-    - script: |
-        set -e
-        tar -xzvf $(Build.ArtifactStagingDirectory)/cli/*.tar.gz -C $(Build.ArtifactStagingDirectory)/cli
-        CLI_APP_NAME=$(node -p "require(\"$(agent.builddirectory)/VSCode-linux-$(VSCODE_ARCH)/resources/app/product.json\").tunnelApplicationName")
-        APP_NAME=$(node -p "require(\"$(agent.builddirectory)/VSCode-linux-$(VSCODE_ARCH)/resources/app/product.json\").applicationName")
-        mv $(Build.ArtifactStagingDirectory)/cli/$APP_NAME $(agent.builddirectory)/VSCode-linux-$(VSCODE_ARCH)/bin/$CLI_APP_NAME
-      displayName: Mix in CLI
-
   - script: |
       set -e
       tar -czf $CLIENT_PATH -C .. VSCode-linux-$(VSCODE_ARCH)
     env:
       GITHUB_TOKEN: "$(github-token-code-oss)"
     displayName: Archive client
-
-  - ${{ if ne(parameters.VSCODE_ARCH, 'armhf') }}:
-    - script: |
-        set -e
-        npm run gulp vscode-reh-linux-$(VSCODE_ARCH)-min-ci
-        mv ../vscode-reh-linux-$(VSCODE_ARCH) ../vscode-server-linux-$(VSCODE_ARCH) # TODO@joaomoreno
-        ARCHIVE_PATH=".build/linux/server/vscode-server-linux-$(VSCODE_ARCH).tar.gz"
-        UNARCHIVE_PATH="`pwd`/../vscode-server-linux-$(VSCODE_ARCH)"
-        mkdir -p $(dirname $ARCHIVE_PATH)
-        tar --owner=0 --group=0 -czf $ARCHIVE_PATH -C .. vscode-server-linux-$(VSCODE_ARCH)
-        echo "##vso[task.setvariable variable=SERVER_PATH]$ARCHIVE_PATH"
-        echo "##vso[task.setvariable variable=SERVER_UNARCHIVE_PATH]$UNARCHIVE_PATH"
-      env:
-        GITHUB_TOKEN: "$(github-token-code-oss)"
-        AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-      displayName: Build server
-
-    - script: |
-        set -e
-        npm run gulp vscode-reh-web-linux-$(VSCODE_ARCH)-min-ci
-        mv ../vscode-reh-web-linux-$(VSCODE_ARCH) ../vscode-server-linux-$(VSCODE_ARCH)-web # TODO@joaomoreno
-        ARCHIVE_PATH=".build/linux/web/vscode-server-linux-$(VSCODE_ARCH)-web.tar.gz"
-        mkdir -p $(dirname $ARCHIVE_PATH)
-        tar --owner=0 --group=0 -czf $ARCHIVE_PATH -C .. vscode-server-linux-$(VSCODE_ARCH)-web
-        echo "##vso[task.setvariable variable=WEB_PATH]$ARCHIVE_PATH"
-      env:
-        GITHUB_TOKEN: "$(github-token-code-oss)"
-        AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-      displayName: Build server (web)
 
   - ${{ if or(eq(parameters.VSCODE_ARCH, 'x64'), eq(parameters.VSCODE_ARCH, 'arm64')) }}:
     - script: |
@@ -407,12 +347,11 @@ steps:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       displayName: ✍️ Codesign deb & rpm
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - template: product-build-linux-test.yml@self
       parameters:
         VSCODE_RUN_ELECTRON_TESTS: ${{ parameters.VSCODE_RUN_ELECTRON_TESTS }}
         VSCODE_RUN_BROWSER_TESTS: ${{ parameters.VSCODE_RUN_BROWSER_TESTS }}
-        VSCODE_RUN_REMOTE_TESTS: ${{ parameters.VSCODE_RUN_REMOTE_TESTS }}
 
   - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
     - script: npx deemon --attach node build/azure-pipelines/linux/codesign.ts
@@ -424,14 +363,6 @@ steps:
 
         mkdir -p $(Build.ArtifactStagingDirectory)/out/client
         mv $(CLIENT_PATH) $(Build.ArtifactStagingDirectory)/out/client/$(CLIENT_ARCHIVE_NAME)
-
-        if [ "$(VSCODE_ARCH)" != "armhf" ]; then
-          mkdir -p $(Build.ArtifactStagingDirectory)/out/server
-          mv $(SERVER_PATH) $(Build.ArtifactStagingDirectory)/out/server/$(basename $(SERVER_PATH))
-
-          mkdir -p $(Build.ArtifactStagingDirectory)/out/web
-          mv $(WEB_PATH) $(Build.ArtifactStagingDirectory)/out/web/$(basename $(WEB_PATH))
-        fi
 
         mkdir -p $(Build.ArtifactStagingDirectory)/out/deb
         mv $(DEB_PATH) $(Build.ArtifactStagingDirectory)/out/deb/$(DEB_PACKAGE_NAME)

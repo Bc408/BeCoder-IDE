@@ -251,7 +251,6 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 			detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
 				initialCwd: '/parent/cwd',
 				os: OperatingSystem.Linux,
-				remoteAuthority: undefined,
 				userHome: '/home',
 				backend: undefined
 			}, resolver);
@@ -299,7 +298,6 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 			detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
 				initialCwd: '/parent/cwd',
 				os: OperatingSystem.Linux,
-				remoteAuthority: undefined,
 				userHome: '/home',
 				backend: undefined
 			}, resolver);
@@ -356,7 +354,6 @@ suite('Workbench - TerminalLocalLinkDetector', () => {
 				detector = instantiationService.createInstance(TerminalLocalLinkDetector, xterm, store.add(new TerminalCapabilityStore()), {
 					initialCwd: 'C:\\Parent\\Cwd',
 					os: OperatingSystem.Windows,
-					remoteAuthority: undefined,
 					userHome: 'C:\\Home',
 					backend: {
 						async getWslPath(original: string, direction: 'unix-to-win' | 'win-to-unix') {

@@ -14,7 +14,6 @@ import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/ex
 import { ILogService } from '../../../platform/log/common/log.js';
 import { ExtHostNotebookKernelsShape, ICellExecuteUpdateDto, IMainContext, INotebookKernelDto2, MainContext, MainThreadNotebookKernelsShape, NotebookOutputDto, VariablesResult } from './extHost.protocol.js';
 import { ApiCommand, ApiCommandArgument, ApiCommandResult, ExtHostCommands } from './extHostCommands.js';
-import { IExtHostInitDataService } from './extHostInitDataService.js';
 import { ExtHostNotebookController } from './extHostNotebook.js';
 import { ExtHostCell, ExtHostNotebookDocument } from './extHostNotebookDocument.js';
 import * as extHostTypeConverters from './extHostTypeConverters.js';
@@ -57,7 +56,6 @@ export class ExtHostNotebookKernels implements ExtHostNotebookKernelsShape {
 
 	constructor(
 		mainContext: IMainContext,
-		private readonly _initData: IExtHostInitDataService,
 		private readonly _extHostNotebook: ExtHostNotebookController,
 		private _commands: ExtHostCommands,
 		@ILogService private readonly _logService: ILogService,
@@ -293,7 +291,7 @@ export class ExtHostNotebookKernels implements ExtHostNotebookKernelsShape {
 			},
 			asWebviewUri(uri: URI) {
 				checkProposedApiEnabled(extension, 'notebookMessaging');
-				return asWebviewUri(uri, that._initData.remote);
+				return asWebviewUri(uri);
 			},
 		};
 

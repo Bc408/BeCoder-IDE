@@ -15,9 +15,9 @@ export const IDiagnosticsService = createDecorator<IDiagnosticsService>(ID);
 export interface IDiagnosticsService {
 	readonly _serviceBrand: undefined;
 
-	getPerformanceInfo(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[], options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo>;
-	getSystemInfo(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<SystemInfo>;
-	getDiagnostics(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<string>;
+	getPerformanceInfo(mainProcessInfo: IMainProcessDiagnostics, options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo>;
+	getSystemInfo(mainProcessInfo: IMainProcessDiagnostics): Promise<SystemInfo>;
+	getDiagnostics(mainProcessInfo: IMainProcessDiagnostics): Promise<string>;
 	getWorkspaceFileExtensions(workspace: IWorkspace): Promise<{ extensions: string[] }>;
 	reportWorkspaceStats(workspace: IWorkspaceInformation): Promise<void>;
 }
@@ -46,21 +46,7 @@ export interface SystemInfo extends IMachineInfo {
 	processArgs: string;
 	gpuStatus: any;
 	screenReader: string;
-	remoteData: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[];
 	load?: string;
-}
-
-export interface IRemoteDiagnosticInfo extends IDiagnosticInfo {
-	hostName: string;
-	latency?: {
-		current: number;
-		average: number;
-	};
-}
-
-export interface IRemoteDiagnosticError {
-	hostName: string;
-	errorMessage: string;
 }
 
 export interface IDiagnosticInfoOptions {
@@ -92,31 +78,25 @@ export interface IWorkspaceInformation extends IWorkspace {
 	rendererSessionId: string;
 }
 
-export function isRemoteDiagnosticError(x: unknown): x is IRemoteDiagnosticError {
-	const candidate = x as IRemoteDiagnosticError | undefined;
-	return !!candidate?.hostName && !!candidate?.errorMessage;
-}
-
 export class NullDiagnosticsService implements IDiagnosticsService {
 	_serviceBrand: undefined;
 
-	async getPerformanceInfo(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[], options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo> {
+	async getPerformanceInfo(mainProcessInfo: IMainProcessDiagnostics, options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo> {
 		return {};
 	}
 
-	async getSystemInfo(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<SystemInfo> {
+	async getSystemInfo(mainProcessInfo: IMainProcessDiagnostics): Promise<SystemInfo> {
 		return {
 			processArgs: 'nullProcessArgs',
 			gpuStatus: 'nullGpuStatus',
 			screenReader: 'nullScreenReader',
-			remoteData: [],
 			os: 'nullOs',
 			memory: 'nullMemory',
 			vmHint: 'nullVmHint',
 		};
 	}
 
-	async getDiagnostics(mainProcessInfo: IMainProcessDiagnostics, remoteInfo: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<string> {
+	async getDiagnostics(mainProcessInfo: IMainProcessDiagnostics): Promise<string> {
 		return '';
 	}
 
@@ -133,7 +113,6 @@ export interface IWindowDiagnostics {
 	readonly pid: number;
 	readonly title: string;
 	readonly folderURIs: UriComponents[];
-	readonly remoteAuthority?: string;
 }
 
 export interface IProcessDiagnostics {

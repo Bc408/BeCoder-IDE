@@ -40,10 +40,8 @@ import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { columnToEditorGroup } from '../../../services/editor/common/editorGroupColumn.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { ACTIVE_GROUP, ACTIVE_GROUP_TYPE, AUX_WINDOW_GROUP, AUX_WINDOW_GROUP_TYPE, IEditorService, SIDE_GROUP, SIDE_GROUP_TYPE } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { ILifecycleService, ShutdownReason, StartupKind, WillShutdownEvent } from '../../../services/lifecycle/common/lifecycle.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { XtermTerminal } from './xterm/xtermTerminal.js';
 import { TerminalInstance } from './terminalInstance.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
@@ -172,9 +170,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		@ITerminalLogService private readonly _logService: ITerminalLogService,
 		@IDialogService private _dialogService: IDialogService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
-		@IRemoteAgentService private _remoteAgentService: IRemoteAgentService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@ITerminalConfigurationService private readonly _terminalConfigurationService: ITerminalConfigurationService,
 		@ITerminalEditorService private readonly _terminalEditorService: ITerminalEditorService,
 		@ITerminalGroupService private readonly _terminalGroupService: ITerminalGroupService,
@@ -220,7 +216,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		this._handleInstanceContextKeys();
 		this._terminalShellTypeContextKey = TerminalContextKeys.shellType.bindTo(this._contextKeyService);
 		this._processSupportContextKey = TerminalContextKeys.processSupported.bindTo(this._contextKeyService);
-		this._processSupportContextKey.set(!isWeb || this._remoteAgentService.getConnection() !== null);
+		this._processSupportContextKey.set(!isWeb);
 		this._terminalHasBeenCreated = TerminalContextKeys.terminalHasBeenCreated.bindTo(this._contextKeyService);
 		this._terminalCountContextKey = TerminalContextKeys.count.bindTo(this._contextKeyService);
 
@@ -276,15 +272,13 @@ export class TerminalService extends Disposable implements ITerminalService {
 
 	private async _initializePrimaryBackend() {
 		mark('code/terminal/willGetTerminalBackend');
-		this._primaryBackend = await this._terminalInstanceService.getBackend(this._environmentService.remoteAuthority);
+		this._primaryBackend = await this._terminalInstanceService.getBackend();
 		mark('code/terminal/didGetTerminalBackend');
 		const enableTerminalReconnection = this._terminalConfigurationService.config.enablePersistentSessions;
 
 		// Connect to the extension host if it's there, set the connection state to connected when
 		// it's done. This should happen even when there is no extension host.
 		this._connectionState = TerminalConnectionState.Connecting;
-
-		const isPersistentRemote = !!this._environmentService.remoteAuthority && enableTerminalReconnection;
 
 		if (this._primaryBackend) {
 			this._register(this._primaryBackend.onDidRequestDetach(async (e) => {
@@ -309,9 +303,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 
 		mark('code/terminal/willReconnect');
 		let reconnectedPromise: Promise<unknown>;
-		if (isPersistentRemote) {
-			reconnectedPromise = this._reconnectToRemoteTerminals();
-		} else if (enableTerminalReconnection) {
+		if (enableTerminalReconnection) {
 			reconnectedPromise = this._reconnectToLocalTerminals();
 		} else {
 			reconnectedPromise = Promise.resolve();
@@ -325,7 +317,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 			mark('code/terminal/didReplay');
 			mark('code/terminal/willGetPerformanceMarks');
 			await Promise.all(Array.from(this._terminalInstanceService.getRegisteredBackends()).map(async backend => {
-				this._timerService.setPerformanceMarks(backend.remoteAuthority === undefined ? 'localPtyHost' : 'remotePtyHost', await backend.getPerformanceMarks());
+				this._timerService.setPerformanceMarks('localPtyHost', await backend.getPerformanceMarks());
 				backend.setReady();
 			}));
 			mark('code/terminal/didGetPerformanceMarks');
@@ -447,29 +439,6 @@ export class TerminalService extends Disposable implements ITerminalService {
 		this._connectionState = TerminalConnectionState.Connected;
 		this._onDidChangeConnectionState.fire();
 		this._logService.trace('Pty host ready');
-	}
-
-	private async _reconnectToRemoteTerminals(): Promise<void> {
-		const remoteAuthority = this._environmentService.remoteAuthority;
-		if (!remoteAuthority) {
-			return;
-		}
-		const backend = await this._terminalInstanceService.getBackend(remoteAuthority);
-		if (!backend) {
-			return;
-		}
-		mark('code/terminal/willGetTerminalLayoutInfo');
-		const layoutInfo = await backend.getTerminalLayoutInfo();
-		mark('code/terminal/didGetTerminalLayoutInfo');
-		backend.reduceConnectionGraceTime();
-		mark('code/terminal/willRecreateTerminalGroups');
-		await this._recreateTerminalGroups(layoutInfo);
-		mark('code/terminal/didRecreateTerminalGroups');
-		// now that terminals have been restored,
-		// attach listeners to update remote when terminals are changed
-		this._attachProcessLayoutListeners();
-
-		this._logService.trace('Reconnected to remote terminals');
 	}
 
 	private async _reconnectToLocalTerminals(): Promise<void> {
@@ -973,13 +942,10 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async createTerminal(options?: ICreateTerminalOptions): Promise<ITerminalInstance> {
-		// Await the initialization of available profiles as long as this is not a pty terminal or a
-		// local terminal in a remote workspace as profile won't be used in those cases and these
-		// terminals need to be launched before remote connections are established.
-		const isLocalInRemoteTerminal = this._remoteAgentService.getConnection() && URI.isUri(options?.cwd) && options?.cwd.scheme === Schemas.file;
+		// Await the initialization of available profiles as long as this is not a pty terminal.
 		if (this._terminalProfileService.availableProfiles.length === 0) {
 			const isPtyTerminal = options?.config && hasKey(options.config, { customPtyImplementation: true });
-			if (!isPtyTerminal && !isLocalInRemoteTerminal) {
+			if (!isPtyTerminal) {
 				if (this._connectionState === TerminalConnectionState.Connecting) {
 					mark(`code/terminal/willGetProfiles`);
 				}
@@ -991,14 +957,6 @@ export class TerminalService extends Disposable implements ITerminalService {
 		}
 
 		let config = options?.config;
-		if (!config && isLocalInRemoteTerminal) {
-			const backend = await this._terminalInstanceService.getBackend(undefined);
-			const executable = await backend?.getDefaultSystemShell();
-			if (executable) {
-				config = { executable };
-			}
-		}
-
 		if (!config) {
 			config = this._terminalProfileService.getDefaultProfile();
 		}
@@ -1284,14 +1242,10 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	private _evaluateLocalCwd(shellLaunchConfig: IShellLaunchConfig) {
-		// Add welcome message and title annotation for local terminals launched within remote or
-		// virtual workspaces
+		// Add welcome message and title annotation for local terminals launched within virtual workspaces.
 		if (!isString(shellLaunchConfig.cwd) && shellLaunchConfig.cwd?.scheme === Schemas.file) {
 			if (VirtualWorkspaceContext.getValue(this._contextKeyService)) {
 				shellLaunchConfig.initialText = formatMessageForTerminal(nls.localize('localTerminalVirtualWorkspace', "This shell is open to a {0}local{1} folder, NOT to the virtual folder", '\x1b[3m', '\x1b[23m'), { excludeLeadingNewLine: true, loudFormatting: true });
-				shellLaunchConfig.type = 'Local';
-			} else if (this._remoteAgentService.getConnection()) {
-				shellLaunchConfig.initialText = formatMessageForTerminal(nls.localize('localTerminalRemote', "This shell is running on your {0}local{1} machine, NOT on the connected remote machine", '\x1b[3m', '\x1b[23m'), { excludeLeadingNewLine: true, loudFormatting: true });
 				shellLaunchConfig.type = 'Local';
 			}
 		}

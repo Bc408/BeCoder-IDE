@@ -127,7 +127,7 @@ export class FileBasedRecommendations extends ExtensionRecommendations {
 			return;
 		}
 
-		const supportedSchemes = distinct([Schemas.untitled, Schemas.file, Schemas.vscodeRemote, ...this.workspaceContextService.getWorkspace().folders.map(folder => folder.uri.scheme)]);
+		const supportedSchemes = distinct([Schemas.untitled, Schemas.file, ...this.workspaceContextService.getWorkspace().folders.map(folder => folder.uri.scheme)]);
 		if (!uri || !supportedSchemes.includes(uri.scheme)) {
 			return;
 		}

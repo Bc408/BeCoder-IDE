@@ -15,7 +15,7 @@ import { getServiceMachineId } from '../../externalServices/common/serviceMachin
 import { IStorageService } from '../../storage/common/storage.js';
 import { TelemetryLevel } from '../../telemetry/common/telemetry.js';
 import { getTelemetryLevel, supportsTelemetry } from '../../telemetry/common/telemetryUtils.js';
-import { RemoteAuthorities } from '../../../base/common/network.js';
+import { WebResourceAccess } from '../../../base/common/network.js';
 import { TargetPlatform } from '../../extensions/common/extensions.js';
 import { ExtensionGalleryResourceType, getExtensionGalleryManifestResourceUri, IExtensionGalleryManifest, IExtensionGalleryManifestService } from '../../extensionManagement/common/extensionGalleryManifest.js';
 import { ILogService } from '../../log/common/log.js';
@@ -120,7 +120,7 @@ export abstract class AbstractExtensionResourceLoaderService extends Disposable 
 					: version,
 				path: 'extension'
 			}));
-			return this._isWebExtensionResourceEndPoint(uri) ? uri.with({ scheme: RemoteAuthorities.getPreferredWebSchema() }) : uri;
+			return this._isWebExtensionResourceEndPoint(uri) ? uri.with({ scheme: WebResourceAccess.getPreferredWebSchema() }) : uri;
 		}
 		return undefined;
 	}
@@ -163,7 +163,7 @@ export abstract class AbstractExtensionResourceLoaderService extends Disposable 
 	}
 
 	protected _isWebExtensionResourceEndPoint(uri: URI): boolean {
-		const uriPath = uri.path, serverRootPath = RemoteAuthorities.getServerRootPath();
+		const uriPath = uri.path, serverRootPath = WebResourceAccess.getServerRootPath();
 		// test if the path starts with the server root path followed by the web extension resource end point segment
 		return uriPath.startsWith(serverRootPath) && uriPath.startsWith(WEB_EXTENSION_RESOURCE_END_POINT_SEGMENT, serverRootPath.length);
 	}

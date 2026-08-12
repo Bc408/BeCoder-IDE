@@ -18,7 +18,6 @@ import { ExtensionType, IExtensionManifest, TargetPlatform } from '../../extensi
 import { IProductService } from '../../product/common/productService.js';
 import { CommontExtensionManagementService } from './abstractExtensionManagementService.js';
 import { language } from '../../../base/common/platform.js';
-import { RemoteAgentConnectionContext } from '../../remote/common/remoteAgentEnvironment.js';
 
 function transformIncomingURI(uri: UriComponents, transformer: IURITransformer | null): URI;
 function transformIncomingURI(uri: UriComponents | undefined, transformer: IURITransformer | null): URI | undefined;
@@ -45,7 +44,7 @@ function transformOutgoingExtension(extension: ILocalExtension, transformer: IUR
 	return transformer ? cloneAndChange(extension, value => value instanceof URI ? transformer.transformOutgoingURI(value) : undefined) : extension;
 }
 
-export class ExtensionManagementChannel<TContext = RemoteAgentConnectionContext | string> implements IServerChannel<TContext> {
+export class ExtensionManagementChannel<TContext = string> implements IServerChannel<TContext> {
 
 	readonly onInstallExtension: Event<InstallExtensionEvent>;
 	readonly onDidInstallExtensions: Event<readonly InstallExtensionResult[]>;

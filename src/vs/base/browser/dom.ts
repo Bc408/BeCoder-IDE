@@ -12,7 +12,7 @@ import { BugIndicatingError, onUnexpectedError } from '../common/errors.js';
 import * as event from '../common/event.js';
 import { KeyCode } from '../common/keyCodes.js';
 import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../common/lifecycle.js';
-import { RemoteAuthorities } from '../common/network.js';
+import { WebResourceAccess } from '../common/network.js';
 import * as platform from '../common/platform.js';
 import { URI } from '../common/uri.js';
 import { hash } from '../common/hash.js';
@@ -1676,7 +1676,7 @@ export function animate(targetWindow: Window, fn: () => void): IDisposable {
 	return toDisposable(() => stepDisposable.dispose());
 }
 
-RemoteAuthorities.setPreferredWebSchema(/^https:/.test(mainWindow.location.href) ? 'https' : 'http');
+WebResourceAccess.setPreferredWebSchema(/^https:/.test(mainWindow.location.href) ? 'https' : 'http');
 
 export function triggerDownload(dataOrUri: Uint8Array | URI, name: string): void {
 

@@ -7,8 +7,6 @@ import { ipcRenderer } from '../../../../base/parts/sandbox/electron-browser/glo
 import { INativeOpenFileRequest } from '../../../../platform/window/common/window.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
-import { registerRemoteContributions } from './terminalRemote.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { INativeHostService } from '../../../../platform/native/common/native.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { ITerminalService } from '../browser/terminal.js';
@@ -21,7 +19,6 @@ export class TerminalNativeContribution extends Disposable implements IWorkbench
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
 		@ITerminalService private readonly _terminalService: ITerminalService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@INativeHostService nativeHostService: INativeHostService
 	) {
 		super();
@@ -32,11 +29,6 @@ export class TerminalNativeContribution extends Disposable implements IWorkbench
 		this._terminalService.setNativeDelegate({
 			getWindowCount: () => nativeHostService.getWindowCount()
 		});
-
-		const connection = remoteAgentService.getConnection();
-		if (connection && connection.remoteAuthority) {
-			registerRemoteContributions();
-		}
 	}
 
 	private _onOsResume(): void {

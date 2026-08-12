@@ -2091,7 +2091,6 @@ class EditorHelper {
 		// durable across editor changes and restarts
 		const hasValidResourceEditorInputScheme =
 			resource?.scheme === Schemas.file ||
-			resource?.scheme === Schemas.vscodeRemote ||
 			resource?.scheme === Schemas.vscodeUserData ||
 			resource?.scheme === this.pathService.defaultUriScheme;
 

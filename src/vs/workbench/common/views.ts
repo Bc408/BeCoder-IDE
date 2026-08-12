@@ -290,10 +290,7 @@ export interface IViewDescriptor {
 
 	readonly focusCommand?: { id: string; keybindings?: IKeybindings };
 
-	// For contributed remote explorer views
 	readonly group?: string;
-
-	readonly remoteAuthority?: string | string[];
 	readonly virtualWorkspace?: string;
 
 	readonly openCommandActionDescriptor?: OpenCommandActionDescriptor;

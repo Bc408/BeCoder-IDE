@@ -13,12 +13,12 @@ import { Schemas } from '../../../../base/common/network.js';
 import { assertType, hasKey } from '../../../../base/common/types.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IWriteFileOptions, IFileStatWithMetadata, FileOperationError, FileOperationResult } from '../../../../platform/files/common/files.js';
+import { IWriteFileOptions, IFileStatWithMetadata } from '../../../../platform/files/common/files.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IRevertOptions, ISaveOptions, IUntypedEditorInput } from '../../../common/editor.js';
 import { EditorModel } from '../../../common/editor/editorModel.js';
 import { NotebookTextModel } from './model/notebookTextModel.js';
-import { INotebookEditorModel, INotebookLoadOptions, IResolvedNotebookEditorModel, NotebookCellsChangeType, NotebookSetting } from './notebookCommon.js';
+import { INotebookEditorModel, INotebookLoadOptions, IResolvedNotebookEditorModel, NotebookCellsChangeType } from './notebookCommon.js';
 import { INotebookLoggingService } from './notebookLoggingService.js';
 import { INotebookSerializer, INotebookService, SimpleNotebookProviderInfo } from './notebookService.js';
 import { IFilesConfigurationService } from '../../../services/filesConfiguration/common/filesConfigurationService.js';
@@ -196,8 +196,8 @@ export class NotebookFileWorkingCopyModel extends Disposable implements IStoredF
 	constructor(
 		private readonly _notebookModel: NotebookTextModel,
 		private readonly _notebookService: INotebookService,
-		private readonly _configurationService: IConfigurationService,
-		private readonly _telemetryService: ITelemetryService,
+		_configurationService: IConfigurationService,
+		_telemetryService: ITelemetryService,
 		private readonly _notebookLogService: INotebookLoggingService,
 	) {
 		super();
@@ -221,72 +221,6 @@ export class NotebookFileWorkingCopyModel extends Disposable implements IStoredF
 			}
 		}));
 
-		const saveWithReducedCommunication = this._configurationService.getValue(NotebookSetting.remoteSaving);
-
-		if (saveWithReducedCommunication || _notebookModel.uri.scheme === Schemas.vscodeRemote) {
-			this.configuration = {
-				// Intentionally pick a larger delay for triggering backups to allow auto-save
-				// to complete first on the optimized save path
-				backupDelay: 10000
-			};
-		}
-
-		// Override save behavior to avoid transferring the buffer across the wire 3 times
-		if (saveWithReducedCommunication) {
-			this.setSaveDelegate().catch(error => this._notebookLogService.error('WorkingCopyModel', `Failed to set save delegate: ${error}`));
-		}
-	}
-
-	private async setSaveDelegate() {
-		// make sure we wait for a serializer to resolve before we try to handle saves in the EH
-		await this.getNotebookSerializer();
-
-		this.save = async (options: IWriteFileOptions, token: CancellationToken) => {
-			try {
-				let serializer = this._notebookService.tryGetDataProviderSync(this.notebookModel.viewType)?.serializer;
-
-				if (!serializer) {
-					this._notebookLogService.info('WorkingCopyModel', 'No serializer found for notebook model, checking if provider still needs to be resolved');
-					serializer = await this.getNotebookSerializer().catch(error => {
-						this._notebookLogService.error('WorkingCopyModel', `Failed to get notebook serializer: ${error}`);
-						// The serializer was set initially but somehow is no longer available
-						this.save = undefined;
-						throw new NotebookSaveError('Failed to get notebook serializer');
-					});
-				}
-
-				if (token.isCancellationRequested) {
-					throw new CancellationError();
-				}
-
-				const stat = await serializer.save(this._notebookModel.uri, this._notebookModel.versionId, options, token);
-				return stat;
-			} catch (error) {
-				if (!token.isCancellationRequested && error.name !== 'Canceled') {
-					type notebookSaveErrorData = {
-						isRemote: boolean;
-						isIPyNbWorkerSerializer: boolean;
-						error: string;
-					};
-					type notebookSaveErrorClassification = {
-						owner: 'amunger';
-						comment: 'Detect if we are having issues saving a notebook on the Extension Host';
-						isRemote: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'Whether the save is happening on a remote file system' };
-						isIPyNbWorkerSerializer: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'Whether the IPynb files are serialized in workers' };
-						error: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'Info about the error that occurred' };
-					};
-					const isIPynb = this._notebookModel.viewType === 'jupyter-notebook' || this._notebookModel.viewType === 'interactive';
-					const errorMessage = getSaveErrorMessage(error);
-					this._telemetryService.publicLogError2<notebookSaveErrorData, notebookSaveErrorClassification>('notebook/SaveError', {
-						isRemote: this._notebookModel.uri.scheme === Schemas.vscodeRemote,
-						isIPyNbWorkerSerializer: isIPynb && this._configurationService.getValue<boolean>('ipynb.experimental.serialization'),
-						error: errorMessage
-					});
-				}
-
-				throw error;
-			}
-		};
 	}
 
 	override dispose(): void {
@@ -361,36 +295,4 @@ class NotebookSaveError extends Error {
 		super(message);
 		this.name = 'NotebookSaveError';
 	}
-}
-
-function getSaveErrorMessage(error: Error): string {
-	if (error.name === 'NotebookSaveError') {
-		return error.message;
-	} else if (error instanceof FileOperationError) {
-		switch (error.fileOperationResult) {
-			case FileOperationResult.FILE_IS_DIRECTORY:
-				return 'File is a directory';
-			case FileOperationResult.FILE_NOT_FOUND:
-				return 'File not found';
-			case FileOperationResult.FILE_NOT_MODIFIED_SINCE:
-				return 'File not modified since';
-			case FileOperationResult.FILE_MODIFIED_SINCE:
-				return 'File modified since';
-			case FileOperationResult.FILE_MOVE_CONFLICT:
-				return 'File move conflict';
-			case FileOperationResult.FILE_WRITE_LOCKED:
-				return 'File write locked';
-			case FileOperationResult.FILE_PERMISSION_DENIED:
-				return 'File permission denied';
-			case FileOperationResult.FILE_TOO_LARGE:
-				return 'File too large';
-			case FileOperationResult.FILE_INVALID_PATH:
-				return 'File invalid path';
-			case FileOperationResult.FILE_NOT_DIRECTORY:
-				return 'File not directory';
-			case FileOperationResult.FILE_OTHER_ERROR:
-				return 'File other error';
-		}
-	}
-	return 'Unknown error';
 }

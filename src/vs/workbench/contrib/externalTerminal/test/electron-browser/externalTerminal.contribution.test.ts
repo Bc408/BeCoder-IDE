@@ -13,7 +13,6 @@ import { IExternalTerminalService } from '../../../../../platform/externalTermin
 import { IExternalTerminalSettings } from '../../../../../platform/externalTerminal/common/externalTerminal.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
-import { IRemoteAuthorityResolverService } from '../../../../../platform/remote/common/remoteAuthorityResolver.js';
 import { IWorkspace, IWorkspaceContextService, IWorkspaceFolder } from '../../../../../platform/workspace/common/workspace.js';
 import { CommandsRegistry } from '../../../../../platform/commands/common/commands.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../../platform/quickinput/common/quickInput.js';
@@ -65,9 +64,6 @@ suite('ExternalTerminal contribution', () => {
 		instantiationService.stub(IConfigurationService, new TestConfigurationService({
 			terminal: { external: { linuxExec: 'xterm', osxExec: 'Terminal.app', windowsExec: 'cmd' } }
 		}));
-
-		instantiationService.stub(IRemoteAuthorityResolverService, new class extends mock<IRemoteAuthorityResolverService>() {
-		});
 
 		instantiationService.stub(IWorkspaceContextService, new class extends mock<IWorkspaceContextService>() {
 			override getWorkspace(): IWorkspace {

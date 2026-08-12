@@ -50,7 +50,6 @@ suite('Windows State Storing', () => {
 		}
 		assert.strictEqual(expected.backupPath, actual.backupPath, message);
 		assertEqualURI(expected.folderUri, actual.folderUri, message);
-		assert.strictEqual(expected.remoteAuthority, actual.remoteAuthority, message);
 		assertEqualWorkspace(expected.workspace, actual.workspace, message);
 		assert.deepStrictEqual(expected.uiState, actual.uiState, message);
 	}
@@ -100,7 +99,7 @@ suite('Windows State Storing', () => {
 		assertRestoring(windowState, 'folder');
 
 		windowState = {
-			openedWindows: [{ backupPath: testBackupPath1, uiState: getUIState(), folderUri: testFolderURI }, { backupPath: testBackupPath1, uiState: getUIState(), folderUri: testRemoteFolderURI, remoteAuthority: 'bar' }]
+			openedWindows: [{ backupPath: testBackupPath1, uiState: getUIState(), folderUri: testFolderURI }, { backupPath: testBackupPath1, uiState: getUIState(), folderUri: testRemoteFolderURI }]
 		};
 		assertRestoring(windowState, 'multiple windows');
 

@@ -24,13 +24,8 @@ import { Disposable } from '../../base/common/lifecycle.js';
 import { ISharedProcessService } from '../../platform/ipc/electron-browser/services.js';
 import { IMainProcessService } from '../../platform/ipc/common/mainProcessService.js';
 import { SharedProcessService } from '../services/sharedProcess/electron-browser/sharedProcessService.js';
-import { RemoteAuthorityResolverService } from '../../platform/remote/electron-browser/remoteAuthorityResolverService.js';
-import { IRemoteAuthorityResolverService, RemoteConnectionType } from '../../platform/remote/common/remoteAuthorityResolver.js';
-import { RemoteAgentService } from '../services/remote/electron-browser/remoteAgentService.js';
-import { IRemoteAgentService } from '../services/remote/common/remoteAgentService.js';
 import { FileService } from '../../platform/files/common/fileService.js';
 import { IFileService } from '../../platform/files/common/files.js';
-import { RemoteFileSystemProviderClient } from '../services/remote/common/remoteFileSystemProviderClient.js';
 import { ConfigurationCache } from '../services/configuration/common/configurationCache.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
 import { IProductService } from '../../platform/product/common/productService.js';
@@ -55,9 +50,6 @@ import { PolicyChannelClient } from '../../platform/policy/common/policyIpc.js';
 import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
 import { UserDataProfileService } from '../services/userDataProfile/common/userDataProfileService.js';
 import { IUserDataProfileService } from '../services/userDataProfile/common/userDataProfile.js';
-import { BrowserSocketFactory } from '../../platform/remote/browser/browserSocketFactory.js';
-import { RemoteSocketFactoryService, IRemoteSocketFactoryService } from '../../platform/remote/common/remoteSocketFactoryService.js';
-import { ElectronRemoteResourceLoader } from '../../platform/remote/electron-browser/electronRemoteResourceLoader.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { applyZoom } from '../../platform/window/electron-browser/window.js';
 import { mainWindow } from '../../base/browser/window.js';
@@ -236,10 +228,6 @@ export class DesktopMain extends Disposable {
 		const fileService = this._register(new FileService(logService));
 		serviceCollection.set(IFileService, fileService);
 
-		// Remote
-		const remoteAuthorityResolverService = new RemoteAuthorityResolverService(productService, new ElectronRemoteResourceLoader(environmentService.window.id, mainProcessService, fileService));
-		serviceCollection.set(IRemoteAuthorityResolverService, remoteAuthorityResolverService);
-
 		// Local Files
 		const diskFileSystemProvider = this._register(new DiskFileSystemProvider(mainProcessService, utilityProcessWorkerWorkbenchService, logService, loggerService));
 		fileService.registerProvider(Schemas.file, diskFileSystemProvider);
@@ -258,16 +246,6 @@ export class DesktopMain extends Disposable {
 		// enable atomic read / write operations.
 		fileService.registerProvider(Schemas.vscodeUserData, this._register(new FileUserDataProvider(Schemas.file, diskFileSystemProvider, Schemas.vscodeUserData, userDataProfilesService, uriIdentityService, logService)));
 
-		// Remote Agent
-		const remoteSocketFactoryService = new RemoteSocketFactoryService();
-		remoteSocketFactoryService.register(RemoteConnectionType.WebSocket, new BrowserSocketFactory(null));
-		serviceCollection.set(IRemoteSocketFactoryService, remoteSocketFactoryService);
-		const remoteAgentService = this._register(new RemoteAgentService(remoteSocketFactoryService, userDataProfileService, environmentService, productService, remoteAuthorityResolverService, signService, logService));
-		serviceCollection.set(IRemoteAgentService, remoteAgentService);
-
-		// Remote Files
-		this._register(RemoteFileSystemProviderClient.register(remoteAgentService, fileService, logService));
-
 		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		//
 		// NOTE: Please do NOT register services here. Use `registerSingleton()`
@@ -280,7 +258,7 @@ export class DesktopMain extends Disposable {
 		// Create services that require resolving in parallel
 		const workspace = this.resolveWorkspaceIdentifier(environmentService);
 		const [configurationService, storageService] = await Promise.all([
-			this.createWorkspaceService(workspace, environmentService, userDataProfileService, userDataProfilesService, fileService, remoteAgentService, uriIdentityService, logService, policyService).then(service => {
+			this.createWorkspaceService(workspace, environmentService, userDataProfileService, userDataProfilesService, fileService, uriIdentityService, logService, policyService).then(service => {
 
 				// Workspace
 				serviceCollection.set(IWorkspaceContextService, service);
@@ -312,7 +290,7 @@ export class DesktopMain extends Disposable {
 		const workspaceTrustEnablementService = new WorkspaceTrustEnablementService(configurationService, environmentService);
 		serviceCollection.set(IWorkspaceTrustEnablementService, workspaceTrustEnablementService);
 
-		const workspaceTrustManagementService = new WorkspaceTrustManagementService(configurationService, remoteAuthorityResolverService, storageService, uriIdentityService, environmentService, configurationService, workspaceTrustEnablementService, fileService);
+		const workspaceTrustManagementService = new WorkspaceTrustManagementService(configurationService, storageService, uriIdentityService, environmentService, configurationService, workspaceTrustEnablementService);
 		serviceCollection.set(IWorkspaceTrustManagementService, workspaceTrustManagementService);
 
 		// Update workspace trust so that configuration is updated accordingly
@@ -350,13 +328,12 @@ export class DesktopMain extends Disposable {
 		userDataProfileService: IUserDataProfileService,
 		userDataProfilesService: IUserDataProfilesService,
 		fileService: FileService,
-		remoteAgentService: IRemoteAgentService,
 		uriIdentityService: IUriIdentityService,
 		logService: ILogService,
 		policyService: IPolicyService
 	): Promise<WorkspaceService> {
 		const configurationCache = new ConfigurationCache([Schemas.file, Schemas.vscodeUserData] /* Cache all non native resources */, environmentService, fileService);
-		const workspaceService = new WorkspaceService({ remoteAuthority: environmentService.remoteAuthority, configurationCache }, environmentService, userDataProfileService, userDataProfilesService, fileService, remoteAgentService, uriIdentityService, logService, policyService);
+		const workspaceService = new WorkspaceService({ configurationCache }, environmentService, userDataProfileService, userDataProfilesService, fileService, uriIdentityService, logService, policyService);
 
 		try {
 			await workspaceService.initialize(workspace);

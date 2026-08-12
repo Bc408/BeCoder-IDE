@@ -41,7 +41,6 @@ import { RangeHighlightDecorations } from '../../../browser/codeeditor.js';
 import { settingsEditIcon } from './preferencesIcons.js';
 import { EditPreferenceWidget } from './preferencesWidgets.js';
 import { APPLICATION_SCOPES, APPLY_ALL_PROFILES_SETTING, IWorkbenchConfigurationService } from '../../../services/configuration/common/configuration.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IPreferencesEditorModel, IPreferencesService, ISetting, ISettingsEditorModel, ISettingsGroup } from '../../../services/preferences/common/preferences.js';
 import { DefaultSettingsEditorModel, SettingsEditorModel, WorkspaceConfigurationEditorModel } from '../../../services/preferences/common/preferencesModels.js';
 import { IUserDataProfileService } from '../../../services/userDataProfile/common/userDataProfile.js';
@@ -489,7 +488,6 @@ class UnsupportedSettingsRenderer extends Disposable implements languages.CodeAc
 		private readonly editor: ICodeEditor,
 		private readonly settingsEditorModel: SettingsEditorModel,
 		@IMarkerService private readonly markerService: IMarkerService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkbenchConfigurationService private readonly configurationService: IWorkbenchConfigurationService,
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
@@ -555,9 +553,6 @@ class UnsupportedSettingsRenderer extends Disposable implements languages.CodeAc
 						switch (this.settingsEditorModel.configurationTarget) {
 							case ConfigurationTarget.USER_LOCAL:
 								this.handleLocalUserConfiguration(setting, configuration, markerData);
-								break;
-							case ConfigurationTarget.USER_REMOTE:
-								this.handleRemoteUserConfiguration(setting, configuration, markerData);
 								break;
 							case ConfigurationTarget.WORKSPACE:
 								this.handleWorkspaceConfiguration(setting, configuration, markerData);
@@ -637,20 +632,6 @@ class UnsupportedSettingsRenderer extends Disposable implements languages.CodeAc
 				}
 			}
 		}
-		if (this.environmentService.remoteAuthority && (configuration.scope === ConfigurationScope.MACHINE || configuration.scope === ConfigurationScope.APPLICATION_MACHINE || configuration.scope === ConfigurationScope.MACHINE_OVERRIDABLE)) {
-			markerData.push({
-				severity: MarkerSeverity.Hint,
-				tags: [MarkerTag.Unnecessary],
-				...setting.range,
-				message: nls.localize('unsupportedRemoteMachineSetting', "This setting cannot be applied in this window. It will be applied when you open a local window.")
-			});
-		}
-	}
-
-	private handleRemoteUserConfiguration(setting: ISetting, configuration: IConfigurationPropertySchema, markerData: IMarkerData[]): void {
-		if (configuration.scope === ConfigurationScope.APPLICATION) {
-			markerData.push(this.generateUnsupportedApplicationSettingMarker(setting));
-		}
 	}
 
 	private handleWorkspaceConfiguration(setting: ISetting, configuration: IConfigurationPropertySchema, markerData: IMarkerData[]): void {
@@ -718,7 +699,7 @@ class UnsupportedSettingsRenderer extends Disposable implements languages.CodeAc
 			severity: MarkerSeverity.Hint,
 			tags: [MarkerTag.Unnecessary],
 			...setting.range,
-			message: nls.localize('unsupportedMachineSetting', "This setting can only be applied in user settings in local window or in remote settings in remote window.")
+			message: nls.localize('unsupportedMachineSetting', "This setting can only be applied in user settings.")
 		};
 	}
 
@@ -785,7 +766,7 @@ class UnsupportedSettingsRenderer extends Disposable implements languages.CodeAc
 }
 
 class WorkspaceConfigurationRenderer extends Disposable {
-	private static readonly supportedKeys = ['folders', 'tasks', 'extensions', 'settings', 'remoteAuthority', 'transient'];
+	private static readonly supportedKeys = ['folders', 'tasks', 'extensions', 'settings', 'transient'];
 
 	private readonly decorations: editorCommon.IEditorDecorationsCollection;
 	private renderingDelayer = this._register(new Delayer<void>(200));

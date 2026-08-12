@@ -74,7 +74,6 @@ import { TERMINAL_BACKGROUND_COLOR } from '../common/terminalColorRegistry.js';
 import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { getUriLabelForShell, getShellIntegrationTimeout, getWorkspaceForTerminal, preparePathForShell } from '../common/terminalEnvironment.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IHistoryService } from '../../../services/history/common/history.js';
 import { isHorizontal, IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
@@ -275,8 +274,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	get shellLaunchConfig(): IShellLaunchConfig { return this._shellLaunchConfig; }
 	get shellType(): TerminalShellType | undefined { return this._shellType; }
 	get os(): OperatingSystem | undefined { return this._processManager.os; }
-	get hasRemoteAuthority(): boolean { return this._processManager.remoteAuthority !== undefined; }
-	get remoteAuthority(): string | undefined { return this._processManager.remoteAuthority; }
 	get hasFocus(): boolean { return dom.isAncestorOfActiveElement(this._wrapperElement); }
 	get title(): string { return this._title; }
 	get titleSource(): TitleEventSource { return this._titleSource; }
@@ -385,7 +382,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		@IAccessibilityService private readonly _accessibilityService: IAccessibilityService,
 		@IProductService _productService: IProductService,
 		@IQuickInputService private readonly _quickInputService: IQuickInputService,
-		@IWorkbenchEnvironmentService private readonly _workbenchEnvironmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IWorkspaceTrustRequestService private readonly _workspaceTrustRequestService: IWorkspaceTrustRequestService,
@@ -509,7 +505,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		// which would result in the wrong profile being selected and the wrong icon being
 		// permanently attached to the terminal. This also doesn't work when the default profile
 		// setting is set to null, that's handled after the process is created.
-		if (!this.shellLaunchConfig.executable && !this._workbenchEnvironmentService.remoteAuthority) {
+		if (!this.shellLaunchConfig.executable) {
 			this._terminalProfileResolverService.resolveIcon(this._shellLaunchConfig, OS);
 		}
 		this._icon = _shellLaunchConfig.attachPersistentProcess?.icon || _shellLaunchConfig.icon;
@@ -537,7 +533,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			let os: OperatingSystem | undefined;
 			if (!this.shellLaunchConfig.customPtyImplementation && this._terminalConfigurationService.config.shellIntegration?.enabled && !this.shellLaunchConfig.executable) {
 				os = await this._processManager.getBackendOS();
-				const defaultProfile = (await this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority: this.remoteAuthority, os }));
+				const defaultProfile = (await this._terminalProfileResolverService.getDefaultProfile({ os }));
 				this.shellLaunchConfig.executable = defaultProfile.path;
 				this.shellLaunchConfig.args = defaultProfile.args;
 				// Only use default icon and color and env if they are undefined in the SLC
@@ -987,7 +983,6 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		const timeoutMs = getShellIntegrationTimeout(
 			this._configurationService,
 			siInjectionEnabled,
-			this.hasRemoteAuthority,
 			this._processManager.processReadyTimestamp
 		);
 
@@ -1586,10 +1581,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			return;
 		}
 		const trusted = await this._trust();
-		// Allow remote terminals in a remote workspace to be created when trust is denied, but
-		// still block local terminals (those without a remoteAuthority) even when the workspace is remote.
-		const isRemoteTerminal = !!this.remoteAuthority;
-		if (!trusted && !(isRemoteTerminal && this._workbenchEnvironmentService.remoteAuthority)) {
+		if (!trusted) {
 			this._onProcessExit({ message: nls.localize('workspaceNotTrustedCreateTerminal', "Cannot launch a terminal process in an untrusted workspace") });
 		} else if (this._workspaceContextService.getWorkspace().folders.length === 0 && this._cwd && this._userHome && normalizeDriveLetter(this._cwd) !== normalizeDriveLetter(this._userHome)) {
 			// something strange is going on if cwd is not userHome in an empty workspace
@@ -2306,9 +2298,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			!this._shellLaunchConfig.isExtensionOwnedTerminal &&
 			// Not a reconnected or revived terminal
 			!this._shellLaunchConfig.attachPersistentProcess &&
-			// Not a Windows remote using ConPTY which cannot relaunch (#187084). ConPTY is used on
-			// Windows builds 18309+.
-			!(this._processManager.remoteAuthority && (await this._processManager.getBackendOS()) === OperatingSystem.Windows && this._processManager.processTraits?.windowsPty?.buildNumber && this._processManager.processTraits.windowsPty.buildNumber >= 18309)
+			true
 		) {
 			this.relaunch();
 			return;
@@ -2339,17 +2329,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		if (!cwd) {
 			return undefined;
 		}
-		let resource: URI;
-		if (this.remoteAuthority) {
-			resource = await this._pathService.fileURI(cwd);
-		} else {
-			resource = URI.file(cwd);
-		}
-		// In VS Code web (server-linux-x64-web accessed via browser), remoteAuthority
-		// is falsy from the terminal's perspective, so URI.file() is used above.
-		// The browser FileService has no file:// provider registered (only the remote
-		// provider), so guard with canHandleResource before calling exists() to avoid
-		// an ENOPRO error propagating to callers.
+		const resource = URI.file(cwd);
 		if (!await this._fileService.canHandleResource(resource)) {
 			return undefined;
 		}

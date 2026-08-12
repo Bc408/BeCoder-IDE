@@ -13,7 +13,6 @@ import { ILabelService } from '../../../../platform/label/common/label.js';
 import { IEditorService } from '../../editor/common/editorService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { isEqual, toLocalResource } from '../../../../base/common/resources.js';
-import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { IPathService } from '../../path/common/pathService.js';
 import { ITextEditorOptions } from '../../../../platform/editor/common/editor.js';
 import { IFilesConfigurationService } from '../../filesConfiguration/common/filesConfigurationService.js';
@@ -47,7 +46,6 @@ export class UntitledTextEditorInput extends AbstractTextResourceEditorInput imp
 		@ILabelService labelService: ILabelService,
 		@IEditorService editorService: IEditorService,
 		@IFileService fileService: IFileService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IPathService private readonly pathService: IPathService,
 		@IFilesConfigurationService filesConfigurationService: IFilesConfigurationService,
 		@ITextModelService private readonly textModelService: ITextModelService,
@@ -169,7 +167,7 @@ export class UntitledTextEditorInput extends AbstractTextResourceEditorInput imp
 
 	override toUntyped(options?: IUntypedEditorOptions): IUntitledTextResourceEditorInput {
 		const untypedInput: IUntitledTextResourceEditorInput & { resource: URI | undefined; options: ITextEditorOptions } = {
-			resource: this.model.hasAssociatedFilePath ? toLocalResource(this.model.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme) : this.resource,
+			resource: this.model.hasAssociatedFilePath ? toLocalResource(this.model.resource, undefined, this.pathService.defaultUriScheme) : this.resource,
 			forceUntitled: true,
 			options: {
 				override: this.editorId

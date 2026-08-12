@@ -11,9 +11,6 @@ parameters:
   - name: VSCODE_RUN_BROWSER_TESTS
     type: boolean
     default: false
-  - name: VSCODE_RUN_REMOTE_TESTS
-    type: boolean
-    default: false
 
 steps:
   - template: ../../common/checkout.yml@self
@@ -102,12 +99,6 @@ steps:
     condition: and(succeeded(), ne(variables.NODE_MODULES_RESTORED, 'true'))
     displayName: Create node_modules archive
 
-  - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - pwsh: npx deemon --detach --wait -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=unsigned_vscode_cli_win32_$(VSCODE_ARCH)_cli=WindowsCLI_${{ upper(parameters.VSCODE_ARCH) }}" unsigned_vscode_cli_win32_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact (background)
-
   - powershell: node build/azure-pipelines/distro/mixin-quality.ts
     displayName: Mixin distro quality
 
@@ -131,12 +122,11 @@ steps:
   - script: node build/azure-pipelines/common/extract-telemetry.ts
     displayName: Generate lists of telemetry events
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - powershell: |
         . build/azure-pipelines/win32/exec.ps1
         $ErrorActionPreference = "Stop"
         exec { npm run compile --prefix test/smoke }
-        exec { npm run compile --prefix test/integration/browser }
       displayName: Compile test suites (non-OSS)
       condition: and(succeeded(), eq(variables['VSCODE_STEP_ON_IT'], 'false'))
 
@@ -194,61 +184,7 @@ steps:
         Remove-Item -Path "$(Agent.BuildDirectory)/VSCode-win32-$(VSCODE_ARCH)/appx/manifest" -Recurse -Force
       displayName: Prepare appx package
 
-  - powershell: |
-      . build/azure-pipelines/win32/exec.ps1
-      $ErrorActionPreference = "Stop"
-      # Add Windows SDK to PATH for patchWin32DependenciesTask signtool usage.
-      $sdk = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
-      $env:PATH = "$sdk;$env:PATH"
-      exec { npm run gulp "vscode-reh-win32-$(VSCODE_ARCH)-min-ci" }
-      mv ..\vscode-reh-win32-$(VSCODE_ARCH) ..\vscode-server-win32-$(VSCODE_ARCH) # TODO@joaomoreno
-      echo "##vso[task.setvariable variable=BUILT_SERVER]true"
-      echo "##vso[task.setvariable variable=CodeSigningFolderPath]$(CodeSigningFolderPath),$(Agent.BuildDirectory)/vscode-server-win32-$(VSCODE_ARCH)"
-    env:
-      GITHUB_TOKEN: "$(github-token-code-oss)"
-      AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-    displayName: Build server
-
-  - powershell: |
-      . build/azure-pipelines/win32/exec.ps1
-      $ErrorActionPreference = "Stop"
-      # Add Windows SDK to PATH for patchWin32DependenciesTask signtool usage.
-      $sdk = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
-      $env:PATH = "$sdk;$env:PATH"
-      exec { npm run gulp "vscode-reh-web-win32-$(VSCODE_ARCH)-min-ci" }
-      mv ..\vscode-reh-web-win32-$(VSCODE_ARCH) ..\vscode-server-win32-$(VSCODE_ARCH)-web # TODO@joaomoreno
-      echo "##vso[task.setvariable variable=BUILT_WEB]true"
-      echo "##vso[task.setvariable variable=CodeSigningFolderPath]$(CodeSigningFolderPath),$(Agent.BuildDirectory)/vscode-server-win32-$(VSCODE_ARCH)-web"
-    env:
-      GITHUB_TOKEN: "$(github-token-code-oss)"
-      AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-    displayName: Build server (web)
-
   - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - pwsh: npx deemon --attach -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=unsigned_vscode_cli_win32_$(VSCODE_ARCH)_cli=WindowsCLI_${{ upper(parameters.VSCODE_ARCH) }}" unsigned_vscode_cli_win32_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact
-
-    - task: DownloadPipelineArtifact@2
-      inputs:
-        artifact: unsigned_vscode_cli_win32_$(VSCODE_ARCH)_cli
-        patterns: "**"
-        path: $(Build.ArtifactStagingDirectory)/cli
-      displayName: Download VS Code CLI
-
-    - powershell: |
-        . build/azure-pipelines/win32/exec.ps1
-        $ErrorActionPreference = "Stop"
-        $ArtifactName = (gci -Path "$(Build.ArtifactStagingDirectory)/cli" | Select-Object -last 1).FullName
-        Expand-Archive -Path $ArtifactName -DestinationPath "$(Build.ArtifactStagingDirectory)/cli"
-        $ProductJsonPath = (Get-ChildItem -Path "$(Agent.BuildDirectory)\VSCode-win32-$(VSCODE_ARCH)" -Name "product.json" -Recurse | Select-Object -First 1)
-        $AppProductJson = Get-Content -Raw -Path "$(Agent.BuildDirectory)\VSCode-win32-$(VSCODE_ARCH)\$ProductJsonPath" | ConvertFrom-Json
-        $CliAppName = $AppProductJson.tunnelApplicationName
-        $AppName = $AppProductJson.applicationName
-        Move-Item -Path "$(Build.ArtifactStagingDirectory)/cli/$AppName.exe" -Destination "$(Agent.BuildDirectory)/VSCode-win32-$(VSCODE_ARCH)/bin/$CliAppName.exe"
-      displayName: Move VS Code CLI
-
     - task: UseDotNet@2
       inputs:
         version: 6.x
@@ -281,13 +217,12 @@ steps:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       displayName: ✍️ Codesign
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - template: product-build-win32-test.yml@self
       parameters:
         VSCODE_ARCH: ${{ parameters.VSCODE_ARCH }}
         VSCODE_RUN_ELECTRON_TESTS: ${{ parameters.VSCODE_RUN_ELECTRON_TESTS }}
         VSCODE_RUN_BROWSER_TESTS: ${{ parameters.VSCODE_RUN_BROWSER_TESTS }}
-        VSCODE_RUN_REMOTE_TESTS: ${{ parameters.VSCODE_RUN_REMOTE_TESTS }}
 
   - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
     - powershell: |
@@ -312,12 +247,6 @@ steps:
 
         mkdir $(Build.ArtifactStagingDirectory)\out\archive -Force
         mv .build\win32-$(VSCODE_ARCH)\VSCode-win32-$(VSCODE_ARCH).zip $(Build.ArtifactStagingDirectory)\out\archive\VSCode-win32-$(VSCODE_ARCH)-$Version.zip
-
-        mkdir $(Build.ArtifactStagingDirectory)\out\server -Force
-        mv .build\win32-$(VSCODE_ARCH)\vscode-server-win32-$(VSCODE_ARCH).zip $(Build.ArtifactStagingDirectory)\out\server\vscode-server-win32-$(VSCODE_ARCH).zip
-
-        mkdir $(Build.ArtifactStagingDirectory)\out\web -Force
-        mv .build\win32-$(VSCODE_ARCH)\vscode-server-win32-$(VSCODE_ARCH)-web.zip $(Build.ArtifactStagingDirectory)\out\web\vscode-server-win32-$(VSCODE_ARCH)-web.zip
 
         echo "##vso[task.setvariable variable=VSCODE_VERSION]$Version"
       displayName: Move artifacts to out directory

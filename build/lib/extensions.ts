@@ -38,7 +38,7 @@ export const excludedForOIDistribution = new Set([
 	'jeff-hykin.better-cpp-syntax', 'julia', 'less', 'lua', 'media-preview', 'merge-conflict', 'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm',
 	'objective-c', 'perl', 'php', 'php-language-features', 'powershell', 'pug', 'r', 'razor',
 	'references-view', 'restructuredtext', 'ruby', 'rust', 'scss', 'search-result', 'shaderlab', 'simple-browser', 'sql', 'swift',
-	'terminal-suggest', 'tunnel-forwarding', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests',
+	'terminal-suggest', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests',
 	'vscode-colorize-perf-tests', 'vscode-colorize-tests', 'vscode-test-resolver', 'xml',
 	'theme-abyss', 'theme-kimbie-dark', 'theme-monokai', 'theme-monokai-dimmed', 'theme-quietlight', 'theme-red', 'theme-solarized-dark', 'theme-solarized-light', 'theme-tomorrow-night-blue'
 ]);

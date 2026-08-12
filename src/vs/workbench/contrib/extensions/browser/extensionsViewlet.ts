@@ -17,10 +17,9 @@ import { renderMarkdown, renderAsPlaintext } from '../../../../base/browser/mark
 import { isMarkdownString } from '../../../../base/common/htmlContent.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IExtensionsWorkbenchService, IExtensionsViewPaneContainer, VIEWLET_ID, CloseExtensionDetailsOnViewChangeKey, INSTALL_EXTENSION_FROM_VSIX_COMMAND_ID, WORKSPACE_RECOMMENDATIONS_VIEW_ID, AutoCheckUpdatesConfigurationKey, OUTDATED_EXTENSIONS_VIEW_ID, CONTEXT_HAS_GALLERY, extensionsSearchActionsMenu, AutoRestartConfigurationKey, ExtensionRuntimeActionType, DefaultViewsContext, CONTEXT_EXTENSIONS_GALLERY_STATUS } from '../common/extensions.js';
-import { InstallLocalExtensionsInRemoteAction, InstallRemoteExtensionsInLocalAction } from './extensionsActions.js';
 import { IExtensionManagementService, ILocalExtension } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { IWorkbenchExtensionEnablementService, IExtensionManagementServerService, IExtensionManagementServer } from '../../../services/extensionManagement/common/extensionManagement.js';
 import { ExtensionsInput } from '../common/extensionsInput.js';
@@ -53,14 +52,11 @@ import { IPreferencesService } from '../../../services/preferences/common/prefer
 import { SIDE_BAR_DRAG_AND_DROP_BACKGROUND } from '../../../common/theme.js';
 import { VirtualWorkspaceContext, WorkbenchStateContext } from '../../../common/contextkeys.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { installLocalInRemoteIcon } from './extensionsIcons.js';
-import { registerAction2, Action2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { IPaneComposite } from '../../../common/panecomposite.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { coalesce } from '../../../../base/common/arrays.js';
 import { extractEditorsAndFilesDropData } from '../../../../platform/dnd/browser/dnd.js';
 import { extname } from '../../../../base/common/resources.js';
-import { ILocalizedString } from '../../../../platform/action/common/action.js';
 import { registerNavigableContainer } from '../../../browser/actions/widgetNavigationCommands.js';
 import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
 import { createActionViewItem } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
@@ -90,8 +86,6 @@ export const RecommendedExtensionsContext = new RawContextKey<boolean>('recommen
 const SortByUpdateDateContext = new RawContextKey<boolean>('sortByUpdateDate', false);
 export const ExtensionsSearchValueContext = new RawContextKey<string>('extensionsSearchValue', '');
 
-const REMOTE_CATEGORY: ILocalizedString = localize2({ key: 'remote', comment: ['Remote as in remote machine'] }, "Remote");
-
 interface IExtensionsViewletState {
 	'query.value'?: string;
 }
@@ -102,8 +96,7 @@ export class ExtensionsViewletViewsContribution extends Disposable implements IW
 
 	constructor(
 		@IExtensionManagementServerService private readonly extensionManagementServerService: IExtensionManagementServerService,
-		@ILabelService private readonly labelService: ILabelService,
-		@IContextKeyService private readonly contextKeyService: IContextKeyService
+		@ILabelService private readonly labelService: ILabelService
 	) {
 		super();
 
@@ -169,25 +162,16 @@ export class ExtensionsViewletViewsContribution extends Disposable implements IW
 		if (this.extensionManagementServerService.localExtensionManagementServer) {
 			servers.push(this.extensionManagementServerService.localExtensionManagementServer);
 		}
-		if (this.extensionManagementServerService.remoteExtensionManagementServer) {
-			servers.push(this.extensionManagementServerService.remoteExtensionManagementServer);
-		}
 		if (this.extensionManagementServerService.webExtensionManagementServer) {
 			servers.push(this.extensionManagementServerService.webExtensionManagementServer);
 		}
 		const getViewName = (viewTitle: string, server: IExtensionManagementServer): string => {
 			return servers.length > 1 ? `${server.label} - ${viewTitle}` : viewTitle;
 		};
-		let installedWebExtensionsContextChangeEvent = Event.None;
-		if (this.extensionManagementServerService.webExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			const interestingContextKeys = new Set();
-			interestingContextKeys.add('hasInstalledWebExtensions');
-			installedWebExtensionsContextChangeEvent = Event.filter(this.contextKeyService.onDidChangeContext, e => e.affectsSome(interestingContextKeys));
-		}
-		const serverLabelChangeEvent = Event.any(this.labelService.onDidChangeFormatters, installedWebExtensionsContextChangeEvent);
+		const serverLabelChangeEvent = this.labelService.onDidChangeFormatters;
 		for (const server of servers) {
 			const getInstalledViewName = (): string => getViewName(localize('installed', "Installed"), server);
-			const onDidChangeTitle = Event.map<void, string>(serverLabelChangeEvent, () => getInstalledViewName());
+			const onDidChangeTitle = Event.map(serverLabelChangeEvent, () => getInstalledViewName());
 			const id = servers.length > 1 ? `workbench.views.extensions.${server.id}.installed` : `workbench.views.extensions.installed`;
 			/* Installed extensions view */
 			viewDescriptors.push({
@@ -205,46 +189,6 @@ export class ExtensionsViewletViewsContribution extends Disposable implements IW
 				/* Installed extensions views shall not be allowed to hidden when there are more than one server */
 				canToggleVisibility: servers.length === 1
 			});
-
-			if (server === this.extensionManagementServerService.remoteExtensionManagementServer && this.extensionManagementServerService.localExtensionManagementServer) {
-				this._register(registerAction2(class InstallLocalExtensionsInRemoteAction2 extends Action2 {
-					constructor() {
-						super({
-							id: 'workbench.extensions.installLocalExtensions',
-							get title() {
-								return localize2('select and install local extensions', "Install Local Extensions in '{0}'...", server.label);
-							},
-							category: REMOTE_CATEGORY,
-							icon: installLocalInRemoteIcon,
-							f1: true,
-							menu: {
-								id: MenuId.ViewTitle,
-								when: ContextKeyExpr.equals('view', id),
-								group: 'navigation',
-							}
-						});
-					}
-					run(accessor: ServicesAccessor): Promise<void> {
-						return accessor.get(IInstantiationService).createInstance(InstallLocalExtensionsInRemoteAction).run();
-					}
-				}));
-			}
-		}
-
-		if (this.extensionManagementServerService.localExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			this._register(registerAction2(class InstallRemoteExtensionsInLocalAction2 extends Action2 {
-				constructor() {
-					super({
-						id: 'workbench.extensions.actions.installLocalExtensionsInRemote',
-						title: localize2('install remote in local', 'Install Remote Extensions Locally...'),
-						category: REMOTE_CATEGORY,
-						f1: true
-					});
-				}
-				run(accessor: ServicesAccessor): Promise<void> {
-					return accessor.get(IInstantiationService).createInstance(InstallRemoteExtensionsInLocalAction, 'workbench.extensions.actions.installLocalExtensionsInRemote').run();
-				}
-			}));
 		}
 
 		/*
@@ -863,7 +807,7 @@ export class ExtensionsViewPaneContainer extends ViewPaneContainer<IExtensionsVi
 				.replace(/@tag:/g, 'tag:')
 				.replace(/@ext:/g, 'ext:')
 				.replace(/@featured/g, 'featured')
-				.replace(/@popular/g, this.extensionManagementServerService.webExtensionManagementServer && !this.extensionManagementServerService.localExtensionManagementServer && !this.extensionManagementServerService.remoteExtensionManagementServer ? '@web' : '@popular')
+				.replace(/@popular/g, this.extensionManagementServerService.webExtensionManagementServer && !this.extensionManagementServerService.localExtensionManagementServer ? '@web' : '@popular')
 			: '';
 	}
 

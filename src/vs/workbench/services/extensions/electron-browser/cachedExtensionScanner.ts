@@ -16,7 +16,6 @@ import { IUserDataProfileService } from '../../userDataProfile/common/userDataPr
 import { getErrorMessage } from '../../../../base/common/errors.js';
 import { IWorkbenchExtensionManagementService } from '../../extensionManagement/common/extensionManagement.js';
 import { toExtensionDescription } from '../common/extensions.js';
-import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 
 // Keep the development build aligned with the curated distribution. The source checkout contains
 // many builtin extensions that are intentionally not compiled or shipped for OI.
@@ -26,7 +25,7 @@ const excludedOIDistributionExtensions = new Set([
 	'handlebars', 'hlsl', 'html', 'html-language-features', 'ini', 'ipynb', 'jake', 'javascript', 'julia', 'less', 'lua', 'media-preview', 'merge-conflict',
 	'microsoft-authentication', 'node_modules', 'notebook-renderers', 'npm', 'objective-c', 'perl', 'php', 'php-language-features', 'powershell', 'pug', 'r',
 	'razor', 'references-view', 'restructuredtext', 'ruby', 'rust', 'scss', 'search-result', 'shaderlab', 'simple-browser', 'sql', 'swift', 'terminal-suggest',
-	'tunnel-forwarding', 'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests', 'vscode-colorize-perf-tests', 'vscode-colorize-tests',
+	'typescript-basics', 'typescript-language-features', 'vb', 'vscode-api-tests', 'vscode-colorize-perf-tests', 'vscode-colorize-tests',
 	'vscode-test-resolver', 'xml'
 ]);
 
@@ -45,7 +44,6 @@ export class CachedExtensionScanner {
 		@IExtensionsScannerService private readonly _extensionsScannerService: IExtensionsScannerService,
 		@IUserDataProfileService private readonly _userDataProfileService: IUserDataProfileService,
 		@IWorkbenchExtensionManagementService private readonly _extensionManagementService: IWorkbenchExtensionManagementService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		this.scannedExtensions = new Promise<IExtensionDescription[]>((resolve, reject) => {
@@ -69,7 +67,7 @@ export class CachedExtensionScanner {
 			const result = await Promise.allSettled([
 				this._extensionsScannerService.scanSystemExtensions({ language, checkControlFile: true }),
 				this._extensionsScannerService.scanUserExtensions({ language, profileLocation: this._userDataProfileService.currentProfile.extensionsResource, useCache: true }),
-				this._environmentService.remoteAuthority ? [] : this._extensionManagementService.getInstalledWorkspaceExtensions(false)
+				this._extensionManagementService.getInstalledWorkspaceExtensions(false)
 			]);
 
 			let hasErrors = false;

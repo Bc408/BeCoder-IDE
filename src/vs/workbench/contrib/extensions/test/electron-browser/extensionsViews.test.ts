@@ -33,8 +33,6 @@ import { NativeURLService } from '../../../../../platform/url/common/urlService.
 import { URI } from '../../../../../base/common/uri.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { SinonStub } from 'sinon';
-import { IRemoteAgentService } from '../../../../services/remote/common/remoteAgentService.js';
-import { RemoteAgentService } from '../../../../services/remote/electron-browser/remoteAgentService.js';
 import { ExtensionType, IExtension } from '../../../../../platform/extensions/common/extensions.js';
 import { ISharedProcessService } from '../../../../../platform/ipc/electron-browser/services.js';
 import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
@@ -117,7 +115,6 @@ suite('ExtensionsViews Tests', () => {
 			async getTargetPlatform() { return getTargetPlatform(platform, arch); },
 			async updateMetadata(local) { return local; }
 		});
-		instantiationService.stub(IRemoteAgentService, RemoteAgentService);
 		instantiationService.stub(IContextKeyService, new MockContextKeyService());
 		instantiationService.stub(IMenuService, new TestMenuService());
 

@@ -7,13 +7,12 @@ import { deepStrictEqual } from 'assert';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { Emitter } from '../../../../../base/common/event.js';
-import { isLinux, isWindows, OperatingSystem } from '../../../../../base/common/platform.js';
+import { isLinux, isWindows } from '../../../../../base/common/platform.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { ConfigurationTarget, IConfigurationService, type IConfigurationChangeEvent } from '../../../../../platform/configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { IPickOptions, IQuickInputService, Omit, QuickPickInput } from '../../../../../platform/quickinput/common/quickInput.js';
-import { IRemoteAgentEnvironment } from '../../../../../platform/remote/common/remoteAgentEnvironment.js';
 import { IExtensionTerminalProfile, ITerminalBackend, ITerminalProfile } from '../../../../../platform/terminal/common/terminal.js';
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
 import { TestThemeService } from '../../../../../platform/theme/test/common/testThemeService.js';
@@ -22,15 +21,20 @@ import { IProfileQuickPickItem, TerminalProfileQuickpick } from '../../browser/t
 import { TerminalProfileService } from '../../browser/terminalProfileService.js';
 import { ITerminalConfiguration, ITerminalProfileService } from '../../common/terminal.js';
 import { ITerminalContributionService } from '../../common/terminalExtensionPoints.js';
-import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
-import { IRemoteAgentService } from '../../../../services/remote/common/remoteAgentService.js';
 import { workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { TestExtensionService } from '../../../../test/common/workbenchTestServices.js';
 import type { SingleOrMany } from '../../../../../base/common/types.js';
 
 class TestTerminalProfileService extends TerminalProfileService implements Partial<ITerminalProfileService> {
+	private _platformKey = isWindows ? 'windows' : (isLinux ? 'linux' : 'osx');
 	hasRefreshedProfiles: Promise<void> | undefined;
+	override async getPlatformKey(): Promise<string> {
+		return this._platformKey;
+	}
+	setPlatformKey(platformKey: 'windows' | 'linux' | 'osx'): void {
+		this._platformKey = platformKey;
+	}
 	override refreshAvailableProfiles(): void {
 		this.hasRefreshedProfiles = this._refreshAvailableProfilesNow();
 	}
@@ -98,11 +102,11 @@ class TestTerminalContributionService implements ITerminalContributionService {
 class TestTerminalInstanceService implements Partial<ITerminalInstanceService> {
 	private _profiles: Map<string, ITerminalProfile[]> = new Map();
 	private _hasReturnedNone = true;
-	async getBackend(remoteAuthority: string | undefined): Promise<ITerminalBackend> {
+	async getBackend(): Promise<ITerminalBackend> {
 		return {
 			getProfiles: async () => {
 				if (this._hasReturnedNone) {
-					return this._profiles.get(remoteAuthority ?? '') || [];
+					return this._profiles.get('') || [];
 				} else {
 					this._hasReturnedNone = true;
 					return [];
@@ -110,21 +114,11 @@ class TestTerminalInstanceService implements Partial<ITerminalInstanceService> {
 			}
 		} satisfies Partial<ITerminalBackend> as unknown as ITerminalBackend;
 	}
-	setProfiles(remoteAuthority: string | undefined, profiles: ITerminalProfile[]) {
-		this._profiles.set(remoteAuthority ?? '', profiles);
+	setProfiles(profiles: ITerminalProfile[]) {
+		this._profiles.set('', profiles);
 	}
 	setReturnNone() {
 		this._hasReturnedNone = false;
-	}
-}
-
-class TestRemoteAgentService implements Partial<IRemoteAgentService> {
-	private _os: OperatingSystem | undefined;
-	setEnvironment(os: OperatingSystem) {
-		this._os = os;
-	}
-	async getEnvironment(): Promise<IRemoteAgentEnvironment | null> {
-		return { os: this._os } satisfies Partial<IRemoteAgentEnvironment> as unknown as IRemoteAgentEnvironment;
 	}
 }
 
@@ -150,7 +144,6 @@ suite('TerminalProfileService', () => {
 	let configurationService: TestConfigurationService;
 	let terminalInstanceService: TestTerminalInstanceService;
 	let terminalProfileService: TestTerminalProfileService;
-	let remoteAgentService: TestRemoteAgentService;
 	let extensionService: TestTerminalExtensionService;
 	let instantiationService: TestInstantiationService;
 
@@ -164,7 +157,6 @@ suite('TerminalProfileService', () => {
 		instantiationService = workbenchInstantiationService({
 			configurationService: () => configurationService
 		}, store);
-		remoteAgentService = new TestRemoteAgentService();
 		terminalInstanceService = new TestTerminalInstanceService();
 		extensionService = new TestTerminalExtensionService();
 
@@ -173,10 +165,8 @@ suite('TerminalProfileService', () => {
 
 		instantiationService.stub(IExtensionService, extensionService);
 		instantiationService.stub(IConfigurationService, configurationService);
-		instantiationService.stub(IRemoteAgentService, remoteAgentService);
 		instantiationService.stub(ITerminalContributionService, terminalContributionService);
 		instantiationService.stub(ITerminalInstanceService, terminalInstanceService);
-		instantiationService.stub(IWorkbenchEnvironmentService, { remoteAuthority: undefined });
 		instantiationService.stub(IThemeService, themeService);
 
 		terminalProfileService = store.add(instantiationService.createInstance(TestTerminalProfileService));
@@ -195,22 +185,14 @@ suite('TerminalProfileService', () => {
 			title: 'JavaScript Debug Terminal'
 		};
 
-		terminalInstanceService.setProfiles(undefined, [powershellProfile]);
-		terminalInstanceService.setProfiles('fakeremote', []);
+		terminalInstanceService.setProfiles([powershellProfile]);
 		terminalContributionService.setProfiles([jsdebugProfile]);
-		if (isWindows) {
-			remoteAgentService.setEnvironment(OperatingSystem.Windows);
-		} else if (isLinux) {
-			remoteAgentService.setEnvironment(OperatingSystem.Linux);
-		} else {
-			remoteAgentService.setEnvironment(OperatingSystem.Macintosh);
-		}
 		configurationService.setUserConfiguration('terminal', { integrated: defaultTerminalConfig });
 	});
 
 	suite('Contributed Profiles', () => {
 		test('should filter out contributed profiles set to null (Linux)', async () => {
-			remoteAgentService.setEnvironment(OperatingSystem.Linux);
+			terminalProfileService.setPlatformKey('linux');
 			await configurationService.setUserConfiguration('terminal', {
 				integrated: {
 					profiles: {
@@ -226,7 +208,7 @@ suite('TerminalProfileService', () => {
 			deepStrictEqual(terminalProfileService.contributedProfiles, []);
 		});
 		test('should filter out contributed profiles set to null (Windows)', async () => {
-			remoteAgentService.setEnvironment(OperatingSystem.Windows);
+			terminalProfileService.setPlatformKey('windows');
 			await configurationService.setUserConfiguration('terminal', {
 				integrated: {
 					profiles: {
@@ -242,7 +224,7 @@ suite('TerminalProfileService', () => {
 			deepStrictEqual(terminalProfileService.contributedProfiles, []);
 		});
 		test('should filter out contributed profiles set to null (macOS)', async () => {
-			remoteAgentService.setEnvironment(OperatingSystem.Macintosh);
+			terminalProfileService.setPlatformKey('osx');
 			await configurationService.setUserConfiguration('terminal', {
 				integrated: {
 					profiles: {
@@ -262,18 +244,6 @@ suite('TerminalProfileService', () => {
 			deepStrictEqual(terminalProfileService.availableProfiles, [powershellProfile]);
 			deepStrictEqual(terminalProfileService.contributedProfiles, [jsdebugProfile]);
 		});
-	});
-
-	test('should get profiles from remoteTerminalService when there is a remote authority', async () => {
-		instantiationService.stub(IWorkbenchEnvironmentService, { remoteAuthority: 'fakeremote' });
-		terminalProfileService = store.add(instantiationService.createInstance(TestTerminalProfileService));
-		await terminalProfileService.hasRefreshedProfiles;
-		deepStrictEqual(terminalProfileService.availableProfiles, []);
-		deepStrictEqual(terminalProfileService.contributedProfiles, [jsdebugProfile]);
-		terminalInstanceService.setProfiles('fakeremote', [powershellProfile]);
-		await terminalProfileService.refreshAndAwaitAvailableProfiles();
-		deepStrictEqual(terminalProfileService.availableProfiles, [powershellProfile]);
-		deepStrictEqual(terminalProfileService.contributedProfiles, [jsdebugProfile]);
 	});
 
 	test('should fire onDidChangeAvailableProfiles only when available profiles have changed via user config', async () => {
@@ -300,9 +270,9 @@ suite('TerminalProfileService', () => {
 		deepStrictEqual(calls, []);
 	});
 
-	test('should fire onDidChangeAvailableProfiles when available or contributed profiles have changed via remote/localTerminalService', async () => {
+	test('should fire onDidChangeAvailableProfiles when available or contributed profiles have changed via local terminal service', async () => {
 		powershellProfile.isDefault = false;
-		terminalInstanceService.setProfiles(undefined, [powershellProfile]);
+		terminalInstanceService.setProfiles([powershellProfile]);
 		const calls: ITerminalProfile[][] = [];
 		store.add(terminalProfileService.onDidChangeAvailableProfiles(e => calls.push(e)));
 		await terminalProfileService.hasRefreshedProfiles;

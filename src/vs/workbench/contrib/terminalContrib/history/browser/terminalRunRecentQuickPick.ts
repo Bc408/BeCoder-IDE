@@ -28,7 +28,6 @@ import { Disposable, DisposableStore } from '../../../../../base/common/lifecycl
 import { getCommandHistory, getDirectoryHistory, getShellFileHistory } from '../common/history.js';
 import { ResourceSet } from '../../../../../base/common/map.js';
 import { extUri, extUriIgnorePathCase } from '../../../../../base/common/resources.js';
-import { IPathService } from '../../../../services/path/common/pathService.js';
 import { isObject } from '../../../../../base/common/types.js';
 
 export async function showRunRecentQuickPick(
@@ -48,7 +47,6 @@ export async function showRunRecentQuickPick(
 	const instantiationService = accessor.get(IInstantiationService);
 	const quickInputService = accessor.get(IQuickInputService);
 	const storageService = accessor.get(IStorageService);
-	const pathService = accessor.get(IPathService);
 
 	const runRecentStorageKey = `${TerminalStorageKeys.PinnedRecentCommandsPrefix}.${instance.shellType}`;
 	let placeholder: string;
@@ -225,18 +223,15 @@ export async function showRunRecentQuickPick(
 		// Gather previous session history
 		const history = instantiationService.invokeFunction(getDirectoryHistory);
 		const previousSessionItems: (IQuickPickItem & { rawLabel: string })[] = [];
-		// Only add previous session item if it's not in this session and it matches the remote authority
-		for (const [label, info] of history.entries) {
-			if (info === null || info.remoteAuthority === instance.remoteAuthority) {
-				const itemUri = info?.remoteAuthority ? await pathService.fileURI(label) : URI.file(label);
-				if (!uniqueUris.has(itemUri)) {
-					uniqueUris.add(itemUri);
-					previousSessionItems.unshift({
-						label: await instance.getUriLabelForShell(itemUri),
-						rawLabel: label,
-						buttons: [removeFromCommandHistoryButton]
-					});
-				}
+		for (const [label] of history.entries) {
+			const itemUri = URI.file(label);
+			if (!uniqueUris.has(itemUri)) {
+				uniqueUris.add(itemUri);
+				previousSessionItems.unshift({
+					label: await instance.getUriLabelForShell(itemUri),
+					rawLabel: label,
+					buttons: [removeFromCommandHistoryButton]
+				});
 			}
 		}
 		if (previousSessionItems.length > 0) {

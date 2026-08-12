@@ -39,11 +39,9 @@ export function connectProxyResolver(
 	disposables: DisposableStore,
 ) {
 
-	const isRemote = initData.remote.isRemote;
-	const useHostProxyDefault = initData.environment.useHostProxy ?? !isRemote;
-	const fallbackToLocalKerberos = useHostProxyDefault;
+	const useHostProxyDefault = initData.environment.useHostProxy ?? true;
 	const loadLocalCertificates = useHostProxyDefault;
-	const isUseHostProxyEnabled = () => !isRemote || configProvider.getConfiguration('http').get<boolean>('useLocalProxyConfiguration', useHostProxyDefault);
+	const isUseHostProxyEnabled = () => true;
 	const timedResolveProxy = createTimedResolveProxy(extHostWorkspace, mainThreadTelemetry);
 	const params: ProxyAgentParams = {
 		resolveProxy: timedResolveProxy,
@@ -51,33 +49,26 @@ export function connectProxyResolver(
 			log: extHostLogService,
 			lookupKerberosAuthorization: async proxyURL => {
 				try {
-					const spnConfig = getExtHostConfigValue<string>(configProvider, isRemote, 'http.proxyKerberosServicePrincipal');
+					const spnConfig = getExtHostConfigValue<string>(configProvider, 'http.proxyKerberosServicePrincipal');
 					const response = await lookupKerberosAuthorization(proxyURL, spnConfig, extHostLogService, 'ProxyResolver#lookupProxyAuthorization');
 					return 'Negotiate ' + response;
 				} catch (err) {
 					extHostLogService.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication failed', err);
 				}
 
-				if (isRemote && fallbackToLocalKerberos) {
-					extHostLogService.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication lookup on host', `proxyURL:${proxyURL}`);
-					const auth = await extHostWorkspace.lookupKerberosAuthorization(proxyURL);
-					if (auth) {
-						return auth;
-					}
-				}
 				return undefined;
 			},
 			lookupAuthorization: authInfo => extHostWorkspace.lookupAuthorization(authInfo),
-			onDidRequestAuthentication: authenticate => sendTelemetry(mainThreadTelemetry, authenticate, isRemote),
+			onDidRequestAuthentication: authenticate => sendTelemetry(mainThreadTelemetry, authenticate),
 		}),
-		getProxyURL: () => getExtHostConfigValue<string>(configProvider, isRemote, 'http.proxy'),
-		getProxySupport: () => getExtHostConfigValue<ProxySupportSetting>(configProvider, isRemote, 'http.proxySupport') || 'off',
-		getNoProxyConfig: () => getExtHostConfigValue<string[]>(configProvider, isRemote, 'http.noProxy') || [],
-		isAdditionalFetchSupportEnabled: () => getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.fetchAdditionalSupport', true),
-		isWebSocketPatchEnabled: () => getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.webSocketAdditionalSupport', true),
-		addCertificatesV1: () => certSettingV1(configProvider, isRemote),
-		addCertificatesV2: () => certSettingV2(configProvider, isRemote),
-		loadSystemCertificatesFromNode: () => getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.systemCertificatesNode', systemCertificatesNodeDefault),
+		getProxyURL: () => getExtHostConfigValue<string>(configProvider, 'http.proxy'),
+		getProxySupport: () => getExtHostConfigValue<ProxySupportSetting>(configProvider, 'http.proxySupport') || 'off',
+		getNoProxyConfig: () => getExtHostConfigValue<string[]>(configProvider, 'http.noProxy') || [],
+		isAdditionalFetchSupportEnabled: () => getExtHostConfigValue<boolean>(configProvider, 'http.fetchAdditionalSupport', true),
+		isWebSocketPatchEnabled: () => getExtHostConfigValue<boolean>(configProvider, 'http.webSocketAdditionalSupport', true),
+		addCertificatesV1: () => certSettingV1(configProvider),
+		addCertificatesV2: () => certSettingV2(configProvider),
+		loadSystemCertificatesFromNode: () => getExtHostConfigValue<boolean>(configProvider, 'http.systemCertificatesNode', systemCertificatesNodeDefault),
 		log: extHostLogService,
 		getLogLevel: () => {
 			const level = extHostLogService.getLevel();
@@ -98,20 +89,14 @@ export function connectProxyResolver(
 		proxyResolveTelemetry: () => { },
 		isUseHostProxyEnabled,
 		getNetworkInterfaceCheckInterval: () => {
-			const intervalSeconds = getExtHostConfigValue<number>(configProvider, isRemote, 'http.experimental.networkInterfaceCheckInterval', 300);
+			const intervalSeconds = getExtHostConfigValue<number>(configProvider, 'http.experimental.networkInterfaceCheckInterval', 300);
 			return intervalSeconds * 1000;
 		},
 		loadAdditionalCertificates: async () => {
-			const useNodeSystemCerts = getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.systemCertificatesNode', systemCertificatesNodeDefault);
+			const useNodeSystemCerts = getExtHostConfigValue<boolean>(configProvider, 'http.systemCertificatesNode', systemCertificatesNodeDefault);
 			const promises: Promise<string[]>[] = [];
-			if (isRemote) {
-				promises.push(loadSystemCertificates({
-					loadSystemCertificatesFromNode: () => useNodeSystemCerts,
-					log: extHostLogService,
-				}));
-			}
 			if (loadLocalCertificates) {
-				if (!isRemote && useNodeSystemCerts) {
+				if (useNodeSystemCerts) {
 					promises.push(loadSystemCertificates({
 						loadSystemCertificatesFromNode: () => useNodeSystemCerts,
 						log: extHostLogService,
@@ -126,7 +111,6 @@ export function connectProxyResolver(
 			const result = (await Promise.all(promises)).flat();
 			mainThreadTelemetry.$publicLog2<AdditionalCertificatesEvent, AdditionalCertificatesClassification>('additionalCertificates', {
 				count: result.length,
-				isRemote,
 				loadLocalCertificates,
 				useNodeSystemCerts,
 			});
@@ -140,7 +124,7 @@ export function connectProxyResolver(
 	target.resolveProxyURL = resolveProxyURL;
 	target.resolveProxyByURL = resolveProxyByURL;
 
-	patchGlobalFetch(params, configProvider, mainThreadTelemetry, initData, resolveProxyURL, disposables);
+	patchGlobalFetch(params, configProvider, mainThreadTelemetry, resolveProxyURL, disposables);
 	patchGlobalWebSocket(params, resolveProxyURL);
 
 	const lookup = createPatchedModules(params, resolveProxyWithRequest);
@@ -159,7 +143,7 @@ const unsafeHeaders = [
 	'set-cookie',
 ];
 
-function patchGlobalFetch(params: ProxyAgentParams, configProvider: ExtHostConfigProvider, mainThreadTelemetry: MainThreadTelemetryShape, initData: IExtensionHostInitData, resolveProxyURL: (url: string) => Promise<string | undefined>, disposables: DisposableStore) {
+function patchGlobalFetch(params: ProxyAgentParams, configProvider: ExtHostConfigProvider, mainThreadTelemetry: MainThreadTelemetryShape, resolveProxyURL: (url: string) => Promise<string | undefined>, disposables: DisposableStore) {
 	// eslint-disable-next-line local/code-no-any-casts
 	if (!(globalThis as any).__vscodeOriginalFetch) {
 		const originalFetch = globalThis.fetch;
@@ -171,15 +155,12 @@ function patchGlobalFetch(params: ProxyAgentParams, configProvider: ExtHostConfi
 		(globalThis as any).__vscodePatchedFetch = patchedFetch;
 		// eslint-disable-next-line local/code-no-any-casts
 		(globalThis as any).__vscodeCreateFetchPatch = createPatchedFetch;
-		let useElectronFetch = false;
-		if (!initData.remote.isRemote) {
-			useElectronFetch = configProvider.getConfiguration('http').get<boolean>('electronFetch', useElectronFetchDefault);
-			disposables.add(configProvider.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration('http.electronFetch')) {
-					useElectronFetch = configProvider.getConfiguration('http').get<boolean>('electronFetch', useElectronFetchDefault);
-				}
-			}));
-		}
+		let useElectronFetch = configProvider.getConfiguration('http').get<boolean>('electronFetch', useElectronFetchDefault);
+		disposables.add(configProvider.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('http.electronFetch')) {
+				useElectronFetch = configProvider.getConfiguration('http').get<boolean>('electronFetch', useElectronFetchDefault);
+			}
+		}));
 		// https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API
 		globalThis.fetch = async function fetch(input: string | URL | Request, init?: RequestInit) {
 			function getRequestProperty(name: keyof Request & keyof RequestInit) {
@@ -301,14 +282,12 @@ type AdditionalCertificatesClassification = {
 	owner: 'chrmarti';
 	comment: 'Tracks the number of additional certificates loaded for TLS connections';
 	count: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of additional certificates loaded' };
-	isRemote: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Whether this is a remote extension host' };
 	loadLocalCertificates: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Whether local certificates are loaded' };
 	useNodeSystemCerts: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Whether Node.js system certificates are used' };
 };
 
 type AdditionalCertificatesEvent = {
 	count: number;
-	isRemote: boolean;
 	loadLocalCertificates: boolean;
 	useNodeSystemCerts: boolean;
 };
@@ -413,12 +392,12 @@ function createPatchedModules(params: ProxyAgentParams, resolveProxy: ResolvePro
 	};
 }
 
-function certSettingV1(configProvider: ExtHostConfigProvider, isRemote: boolean) {
-	return !getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.experimental.systemCertificatesV2', systemCertificatesV2Default) && !!getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.systemCertificates');
+function certSettingV1(configProvider: ExtHostConfigProvider) {
+	return !getExtHostConfigValue<boolean>(configProvider, 'http.experimental.systemCertificatesV2', systemCertificatesV2Default) && !!getExtHostConfigValue<boolean>(configProvider, 'http.systemCertificates');
 }
 
-function certSettingV2(configProvider: ExtHostConfigProvider, isRemote: boolean) {
-	return !!getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.experimental.systemCertificatesV2', systemCertificatesV2Default) && !!getExtHostConfigValue<boolean>(configProvider, isRemote, 'http.systemCertificates');
+function certSettingV2(configProvider: ExtHostConfigProvider) {
+	return !!getExtHostConfigValue<boolean>(configProvider, 'http.experimental.systemCertificatesV2', systemCertificatesV2Default) && !!getExtHostConfigValue<boolean>(configProvider, 'http.systemCertificates');
 }
 
 const modulesCache = new Map<IExtensionDescription | undefined, { http?: typeof http; https?: typeof https; undici?: typeof undiciType }>();
@@ -464,17 +443,15 @@ type ProxyAuthenticationClassification = {
 	owner: 'chrmarti';
 	comment: 'Data about proxy authentication requests';
 	authenticationType: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'Type of the authentication requested' };
-	extensionHostType: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Type of the extension host' };
 };
 
 type ProxyAuthenticationEvent = {
 	authenticationType: string;
-	extensionHostType: string;
 };
 
 let telemetrySent = false;
 const enableProxyAuthenticationTelemetry = false;
-function sendTelemetry(mainThreadTelemetry: MainThreadTelemetryShape, authenticate: string[], isRemote: boolean) {
+function sendTelemetry(mainThreadTelemetry: MainThreadTelemetryShape, authenticate: string[]) {
 	if (!enableProxyAuthenticationTelemetry || telemetrySent || !authenticate.length) {
 		return;
 	}
@@ -482,16 +459,12 @@ function sendTelemetry(mainThreadTelemetry: MainThreadTelemetryShape, authentica
 
 	mainThreadTelemetry.$publicLog2<ProxyAuthenticationEvent, ProxyAuthenticationClassification>('proxyAuthenticationRequest', {
 		authenticationType: authenticate.map(a => a.split(' ')[0]).join(','),
-		extensionHostType: isRemote ? 'remote' : 'local',
 	});
 }
 
-function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, isRemote: boolean, key: string, fallback: T): T;
-function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, isRemote: boolean, key: string): T | undefined;
-function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, isRemote: boolean, key: string, fallback?: T): T | undefined {
-	if (isRemote) {
-		return configProvider.getConfiguration().get<T>(key) ?? fallback;
-	}
+function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, key: string, fallback: T): T;
+function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, key: string): T | undefined;
+function getExtHostConfigValue<T>(configProvider: ExtHostConfigProvider, key: string, fallback?: T): T | undefined {
 	const values: ConfigurationInspect<T> | undefined = configProvider.getConfiguration().inspect<T>(key);
 	return values?.globalLocalValue ?? values?.defaultValue ?? fallback;
 }

@@ -95,7 +95,6 @@ export class ExtensionHostProcess {
 export class NativeLocalProcessExtensionHost extends Disposable implements IExtensionHost {
 
 	public pid: number | null = null;
-	public readonly remoteAuthority = null;
 	public extensions: ExtensionHostExtensions | null = null;
 
 	private readonly _onExit: Emitter<[number, string]> = this._register(new Emitter<[number, string]>());
@@ -314,7 +313,7 @@ export class NativeLocalProcessExtensionHost extends Disposable implements IExte
 
 		// Help in case we fail to start it
 		let startupTimeoutHandle: Timeout | undefined;
-		if (!this._environmentService.isBuilt && !this._environmentService.remoteAuthority || this._isExtensionDevHost) {
+		if (!this._environmentService.isBuilt || this._isExtensionDevHost) {
 			startupTimeoutHandle = setTimeout(() => {
 				this._logService.error('[LocalProcessExtensionHost]: Extension host did not start in 10 seconds');
 
@@ -480,11 +479,6 @@ export class NativeLocalProcessExtensionHost extends Disposable implements IExte
 				isUntitled: workspace.configuration ? isUntitledWorkspace(workspace.configuration, this._environmentService) : false,
 				transient: workspace.transient
 			},
-			remote: {
-				authority: this._environmentService.remoteAuthority,
-				connectionData: null,
-				isRemote: false
-			},
 			consoleForward: {
 				includeStack: !this._isExtensionDevTestFromCli && (this._isExtensionDevHost || !this._environmentService.isBuilt || this._productService.quality !== 'stable' || this._environmentService.verbose),
 				logNative: !this._isExtensionDevTestFromCli && this._isExtensionDevHost
@@ -498,8 +492,6 @@ export class NativeLocalProcessExtensionHost extends Disposable implements IExte
 				firstSessionDate: this._telemetryService.firstSessionDate,
 				msftInternal: this._telemetryService.msftInternal
 			},
-			remoteExtensionTips: this._productService.remoteExtensionTips,
-			virtualWorkspaceExtensionTips: this._productService.virtualWorkspaceExtensionTips,
 			logLevel: this._logService.getLevel(),
 			loggers: [...this._loggerService.getRegisteredLoggers()],
 			logsLocation: this._environmentService.extHostLogsPath,

@@ -10,10 +10,7 @@ import { VSBuffer, decodeBase64, encodeBase64 } from '../../../base/common/buffe
 import { Emitter } from '../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../base/common/lifecycle.js';
 import { parse } from '../../../base/common/marshalling.js';
-import { Schemas } from '../../../base/common/network.js';
-import { posix } from '../../../base/common/path.js';
 import { isEqual } from '../../../base/common/resources.js';
-import { ltrim } from '../../../base/common/strings.js';
 import { URI, UriComponents } from '../../../base/common/uri.js';
 import product from '../../../platform/product/common/product.js';
 import { ISecretStorageProvider } from '../../../platform/secrets/common/secrets.js';
@@ -427,27 +424,13 @@ class WorkspaceProvider implements IWorkspaceProvider {
 
 				// Folder
 				case WorkspaceProvider.QUERY_PARAM_FOLDER:
-					if (config.remoteAuthority && value.startsWith(posix.sep)) {
-						// when connected to a remote and having a value
-						// that is a path (begins with a `/`), assume this
-						// is a vscode-remote resource as simplified URL.
-						workspace = { folderUri: URI.from({ scheme: Schemas.vscodeRemote, path: value, authority: config.remoteAuthority }) };
-					} else {
-						workspace = { folderUri: URI.parse(value) };
-					}
+					workspace = { folderUri: URI.parse(value) };
 					foundWorkspace = true;
 					break;
 
 				// Workspace
 				case WorkspaceProvider.QUERY_PARAM_WORKSPACE:
-					if (config.remoteAuthority && value.startsWith(posix.sep)) {
-						// when connected to a remote and having a value
-						// that is a path (begins with a `/`), assume this
-						// is a vscode-remote resource as simplified URL.
-						workspace = { workspaceUri: URI.from({ scheme: Schemas.vscodeRemote, path: value, authority: config.remoteAuthority }) };
-					} else {
-						workspace = { workspaceUri: URI.parse(value) };
-					}
+					workspace = { workspaceUri: URI.parse(value) };
 					foundWorkspace = true;
 					break;
 
@@ -478,7 +461,7 @@ class WorkspaceProvider implements IWorkspaceProvider {
 			}
 		}
 
-		return new WorkspaceProvider(workspace, payload, config);
+		return new WorkspaceProvider(workspace, payload);
 	}
 
 	readonly trusted = true;
@@ -486,7 +469,6 @@ class WorkspaceProvider implements IWorkspaceProvider {
 	private constructor(
 		readonly workspace: IWorkspace,
 		readonly payload: object,
-		private readonly config: IWorkbenchConstructionOptions
 	) {
 	}
 
@@ -544,18 +526,6 @@ class WorkspaceProvider implements IWorkspaceProvider {
 	}
 
 	private encodeWorkspacePath(uri: URI): string {
-		if (this.config.remoteAuthority && uri.scheme === Schemas.vscodeRemote) {
-
-			// when connected to a remote and having a folder
-			// or workspace for that remote, only use the path
-			// as query value to form shorter, nicer URLs.
-			// however, we still need to `encodeURIComponent`
-			// to ensure to preserve special characters, such
-			// as `+` in the path.
-
-			return encodeURIComponent(`${posix.sep}${ltrim(uri.path, posix.sep)}`).replaceAll('%2F', '/');
-		}
-
 		return encodeURIComponent(uri.toString(true));
 	}
 
@@ -575,19 +545,6 @@ class WorkspaceProvider implements IWorkspaceProvider {
 		return false;
 	}
 
-	hasRemote(): boolean {
-		if (this.workspace) {
-			if (isFolderToOpen(this.workspace)) {
-				return this.workspace.folderUri.scheme === Schemas.vscodeRemote;
-			}
-
-			if (isWorkspaceToOpen(this.workspace)) {
-				return this.workspace.workspaceUri.scheme === Schemas.vscodeRemote;
-			}
-		}
-
-		return true;
-	}
 }
 
 function readCookie(name: string): string | undefined {
@@ -618,12 +575,10 @@ function readCookie(name: string): string | undefined {
 	// Create workbench
 	create(mainWindow.document.body, {
 		...config,
-		windowIndicator: config.windowIndicator ?? { label: '$(remote)', tooltip: `${product.nameShort} Web` },
+		windowIndicator: config.windowIndicator ?? { label: product.nameShort, tooltip: `${product.nameShort} Web` },
 		settingsSyncOptions: config.settingsSyncOptions ? { enabled: config.settingsSyncOptions.enabled, } : undefined,
 		workspaceProvider: WorkspaceProvider.create(config),
 		urlCallbackProvider: new LocalStorageURLCallbackProvider(config.callbackRoute),
-		secretStorageProvider: config.remoteAuthority && !secretStorageKeyPath
-			? undefined /* with a remote without embedder-preferred storage, store on the remote */
-			: new LocalStorageSecretStorageProvider(secretStorageCrypto),
+		secretStorageProvider: new LocalStorageSecretStorageProvider(secretStorageCrypto),
 	});
 })();

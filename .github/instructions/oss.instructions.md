@@ -1,5 +1,5 @@
 ---
-applyTo: '{ThirdPartyNotices.txt,cli/ThirdPartyNotices.txt,cglicenses.json,cgmanifest.json}'
+applyTo: '{ThirdPartyNotices.txt,cglicenses.json,cgmanifest.json}'
 ---
 
 # OSS License Review

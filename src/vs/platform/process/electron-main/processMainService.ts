@@ -5,7 +5,7 @@
 
 import { listProcesses } from '../../../base/node/ps.js';
 import { localize } from '../../../nls.js';
-import { IDiagnosticsService, IRemoteDiagnosticError, isRemoteDiagnosticError, PerformanceInfo, SystemInfo } from '../../diagnostics/common/diagnostics.js';
+import { IDiagnosticsService, PerformanceInfo, SystemInfo } from '../../diagnostics/common/diagnostics.js';
 import { IDiagnosticsMainService } from '../../diagnostics/electron-main/diagnosticsMainService.js';
 import { IProcessService, IResolvedProcessInformation } from '../common/process.js';
 import { ILogService } from '../../log/common/log.js';
@@ -35,26 +35,9 @@ export class ProcessMainService implements IProcessService {
 			pidToNames.push([pid, name]);
 		}
 
-		const processes: { name: string; rootProcess: ProcessItem | IRemoteDiagnosticError }[] = [];
+		const processes: { name: string; rootProcess: ProcessItem }[] = [];
 		try {
 			processes.push({ name: localize('local', "Local"), rootProcess: await listProcesses(process.pid) });
-
-			const remoteDiagnostics = await this.diagnosticsMainService.getRemoteDiagnostics({ includeProcesses: true });
-			remoteDiagnostics.forEach(data => {
-				if (isRemoteDiagnosticError(data)) {
-					processes.push({
-						name: data.hostName,
-						rootProcess: data
-					});
-				} else {
-					if (data.processes) {
-						processes.push({
-							name: data.hostName,
-							rootProcess: data.processes
-						});
-					}
-				}
-			});
 		} catch (e) {
 			this.logService.error(`Listing processes failed: ${e}`);
 		}
@@ -63,22 +46,22 @@ export class ProcessMainService implements IProcessService {
 	}
 
 	async getSystemStatus(): Promise<string> {
-		const [info, remoteData] = await Promise.all([this.diagnosticsMainService.getMainDiagnostics(), this.diagnosticsMainService.getRemoteDiagnostics({ includeProcesses: false, includeWorkspaceMetadata: false })]);
+		const info = await this.diagnosticsMainService.getMainDiagnostics();
 
-		return this.diagnosticsService.getDiagnostics(info, remoteData);
+		return this.diagnosticsService.getDiagnostics(info);
 	}
 
 	async getSystemInfo(): Promise<SystemInfo> {
-		const [info, remoteData] = await Promise.all([this.diagnosticsMainService.getMainDiagnostics(), this.diagnosticsMainService.getRemoteDiagnostics({ includeProcesses: false, includeWorkspaceMetadata: false })]);
-		const msg = await this.diagnosticsService.getSystemInfo(info, remoteData);
+		const info = await this.diagnosticsMainService.getMainDiagnostics();
+		const msg = await this.diagnosticsService.getSystemInfo(info);
 
 		return msg;
 	}
 
 	async getPerformanceInfo(options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo> {
 		try {
-			const [info, remoteData] = await Promise.all([this.diagnosticsMainService.getMainDiagnostics(), this.diagnosticsMainService.getRemoteDiagnostics({ includeProcesses: true, includeWorkspaceMetadata: true })]);
-			return await this.diagnosticsService.getPerformanceInfo(info, remoteData, options);
+			const info = await this.diagnosticsMainService.getMainDiagnostics();
+			return await this.diagnosticsService.getPerformanceInfo(info, options);
 		} catch (error) {
 			this.logService.warn('issueService#getPerformanceInfo ', error.message);
 

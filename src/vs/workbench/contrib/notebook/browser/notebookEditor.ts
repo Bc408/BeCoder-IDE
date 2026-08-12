@@ -39,7 +39,6 @@ import { NotebookEditorInput } from '../common/notebookEditorInput.js';
 import { NotebookPerfMarks } from '../common/notebookPerformance.js';
 import { GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IEditorProgressService } from '../../../../platform/progress/common/progress.js';
 import { InstallRecommendedExtensionAction } from '../../extensions/browser/extensionsActions.js';
 import { INotebookService } from '../common/notebookService.js';
@@ -110,7 +109,6 @@ export class NotebookEditor extends EditorPane implements INotebookEditorPane, I
 		@ILogService private readonly logService: ILogService,
 		@IPreferencesService private readonly _preferencesService: IPreferencesService,
 		@IDialogService private readonly _dialogService: IDialogService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService
 	) {
 		super(NotebookEditor.ID, group, telemetryService, themeService, _storageService);
 		this._editorMemento = this.getEditorMemento<INotebookEditorViewState>(_editorGroupService, configurationService, NOTEBOOK_EDITOR_VIEW_STATE_PREFERENCE_KEY);
@@ -216,7 +214,7 @@ export class NotebookEditor extends EditorPane implements INotebookEditorPane, I
 	 * choice can be remembered for the whole workspace via a "Don't ask again" checkbox.
 	 */
 	private async _confirmOpenOnWebHost(input: NotebookEditorInput): Promise<void> {
-		const isServerlessWeb = isWeb && !this._environmentService.remoteAuthority;
+		const isServerlessWeb = isWeb;
 		if (!isServerlessWeb) {
 			return;
 		}

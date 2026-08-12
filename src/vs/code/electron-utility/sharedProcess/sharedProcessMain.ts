@@ -74,10 +74,6 @@ import { SharedProcessUserDataProfileStorageService } from '../../../platform/us
 import { ActiveWindowManager } from '../../../platform/windows/node/windowTracker.js';
 import { ISignService } from '../../../platform/sign/common/sign.js';
 import { SignService } from '../../../platform/sign/node/signService.js';
-import { ISharedTunnelsService } from '../../../platform/tunnel/common/tunnel.js';
-import { SharedTunnelsService } from '../../../platform/tunnel/node/tunnelService.js';
-import { ipcSharedProcessTunnelChannelName, ISharedProcessTunnelService } from '../../../platform/remote/common/sharedProcessTunnelService.js';
-import { SharedProcessTunnelService } from '../../../platform/tunnel/node/sharedProcessTunnelService.js';
 import { IUriIdentityService } from '../../../platform/uriIdentity/common/uriIdentity.js';
 import { UriIdentityService } from '../../../platform/uriIdentity/common/uriIdentityService.js';
 import { isLinux } from '../../../base/common/platform.js';
@@ -94,13 +90,11 @@ import { IPolicyService, NullPolicyService } from '../../../platform/policy/comm
 import { UserDataProfilesService } from '../../../platform/userDataProfile/common/userDataProfileIpc.js';
 import { OneDataSystemAppender } from '../../../platform/telemetry/node/1dsAppender.js';
 import { UserDataProfilesCleaner } from './contrib/userDataProfilesCleaner.js';
-import { IRemoteTunnelService } from '../../../platform/remoteTunnel/common/remoteTunnel.js';
 import { UserDataSyncResourceProviderService } from '../../../platform/userDataSync/common/userDataSyncResourceProvider.js';
 import { ExtensionsContributions } from './contrib/extensions.js';
 import { localize } from '../../../nls.js';
 import { LogService } from '../../../platform/log/common/logService.js';
 import { ISharedProcessLifecycleService, SharedProcessLifecycleService } from '../../../platform/lifecycle/node/sharedProcessLifecycleService.js';
-import { RemoteTunnelService } from '../../../platform/remoteTunnel/node/remoteTunnelService.js';
 import { ExtensionsProfileScannerService } from '../../../platform/extensionManagement/node/extensionsProfileScannerService.js';
 import { ExtensionRecommendationNotificationServiceChannelClient } from '../../../platform/extensionRecommendations/common/extensionRecommendationsIpc.js';
 import { INativeHostService } from '../../../platform/native/common/native.js';
@@ -109,9 +103,6 @@ import { UserDataAutoSyncService } from '../../../platform/userDataSync/node/use
 import { ExtensionTipsService } from '../../../platform/extensionManagement/node/extensionTipsService.js';
 import { IMainProcessService, MainProcessService } from '../../../platform/ipc/common/mainProcessService.js';
 import { RemoteStorageService } from '../../../platform/storage/common/storageService.js';
-import { IRemoteSocketFactoryService, RemoteSocketFactoryService } from '../../../platform/remote/common/remoteSocketFactoryService.js';
-import { RemoteConnectionType } from '../../../platform/remote/common/remoteAuthorityResolver.js';
-import { nodeSocketFactory } from '../../../platform/remote/node/nodeSocketFactory.js';
 import { NativeEnvironmentService } from '../../../platform/environment/node/environmentService.js';
 import { SharedProcessRawConnection, SharedProcessLifecycle } from '../../../platform/sharedProcess/common/sharedProcess.js';
 import { getOSReleaseInfo } from '../../../base/node/osReleaseInfo.js';
@@ -374,16 +365,6 @@ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
 		// Signing
 		services.set(ISignService, new SyncDescriptor(SignService, undefined, false /* proxied to other processes */));
 
-		// Tunnel
-		const remoteSocketFactoryService = new RemoteSocketFactoryService();
-		services.set(IRemoteSocketFactoryService, remoteSocketFactoryService);
-		remoteSocketFactoryService.register(RemoteConnectionType.WebSocket, nodeSocketFactory);
-		services.set(ISharedTunnelsService, new SyncDescriptor(SharedTunnelsService));
-		services.set(ISharedProcessTunnelService, new SyncDescriptor(SharedProcessTunnelService));
-
-		// Remote Tunnel
-		services.set(IRemoteTunnelService, new SyncDescriptor(RemoteTunnelService));
-
 		return new InstantiationService(services);
 	}
 
@@ -434,14 +415,6 @@ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
 		this.server.registerChannel('userDataAutoSync', ProxyChannel.fromService(userDataAutoSync, this._store));
 
 		this.server.registerChannel('IUserDataSyncResourceProviderService', ProxyChannel.fromService(accessor.get(IUserDataSyncResourceProviderService), this._store));
-
-		// Tunnel
-		const sharedProcessTunnelChannel = ProxyChannel.fromService(accessor.get(ISharedProcessTunnelService), this._store);
-		this.server.registerChannel(ipcSharedProcessTunnelChannelName, sharedProcessTunnelChannel);
-
-		// Remote Tunnel
-		const remoteTunnelChannel = ProxyChannel.fromService(accessor.get(IRemoteTunnelService), this._store);
-		this.server.registerChannel('remoteTunnel', remoteTunnelChannel);
 
 	}
 

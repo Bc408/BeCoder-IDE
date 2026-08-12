@@ -12,7 +12,7 @@ import { areSameExtensions, BetterMergeId, getExtensionDependencies, isMalicious
 import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
-import { ExtensionType, IExtension, IExtensionManifest, isAuthenticationProviderExtension, isLanguagePackExtension, isResolverExtension } from '../../../../platform/extensions/common/extensions.js';
+import { ExtensionType, IExtension, IExtensionManifest, isAuthenticationProviderExtension, isLanguagePackExtension } from '../../../../platform/extensions/common/extensions.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { StorageManager } from '../../../../platform/extensionManagement/common/extensionEnablementService.js';
@@ -420,7 +420,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 
 	private _isDisabledInEnv(extension: IExtension): boolean {
 		if (this.allUserExtensionsDisabled) {
-			return !extension.isBuiltin && !isResolverExtension(extension.manifest, this.environmentService.remoteAuthority);
+			return !extension.isBuiltin;
 		}
 
 		const disabledExtensions = this.environmentService.disableExtensions;
@@ -464,7 +464,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 	}
 
 	private _isDisabledByExtensionKind(extension: IExtension): boolean {
-		if (this.extensionManagementServerService.remoteExtensionManagementServer || this.extensionManagementServerService.webExtensionManagementServer) {
+		if (this.extensionManagementServerService.webExtensionManagementServer) {
 			const installLocation = this.extensionManagementServerService.getExtensionInstallLocation(extension);
 			for (const extensionKind of this.extensionManifestPropertiesService.getExtensionKind(extension.manifest)) {
 				if (extensionKind === 'ui') {
@@ -472,14 +472,9 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 						return false;
 					}
 				}
-				if (extensionKind === 'workspace') {
-					if (installLocation === ExtensionInstallLocation.Remote) {
-						return false;
-					}
-				}
 				if (extensionKind === 'web') {
 					if (this.extensionManagementServerService.webExtensionManagementServer /* web */) {
-						if (installLocation === ExtensionInstallLocation.Web || installLocation === ExtensionInstallLocation.Remote) {
+						if (installLocation === ExtensionInstallLocation.Web) {
 							return false;
 						}
 					} else if (installLocation === ExtensionInstallLocation.Local) {

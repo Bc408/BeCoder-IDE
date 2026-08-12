@@ -7,9 +7,7 @@ import { Emitter, Event } from '../../../../base/common/event.js';
 import { IHostService, IToastOptions, IToastResult } from '../browser/host.js';
 import { FocusMode, INativeHostService } from '../../../../platform/native/common/native.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
-import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
-import { IWindowOpenable, IOpenWindowOptions, isFolderToOpen, isWorkspaceToOpen, IOpenEmptyWindowOptions, IPoint, IRectangle, IOpenedAuxiliaryWindow, IOpenedMainWindow } from '../../../../platform/window/common/window.js';
+import { IWindowOpenable, IOpenWindowOptions, IOpenEmptyWindowOptions, IPoint, IRectangle, IOpenedAuxiliaryWindow, IOpenedMainWindow } from '../../../../platform/window/common/window.js';
 import { Disposable, DisposableSet, IDisposable } from '../../../../base/common/lifecycle.js';
 import { NativeHostService } from '../../../../platform/native/common/nativeHostService.js';
 import { INativeWorkbenchEnvironmentService } from '../../environment/electron-browser/environmentService.js';
@@ -37,9 +35,7 @@ class WorkbenchHostService extends Disposable implements IHostService {
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@INativeHostService private readonly nativeHostService: INativeHostService,
-		@ILabelService private readonly labelService: ILabelService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService
+		@INativeHostService private readonly nativeHostService: INativeHostService
 	) {
 		super();
 
@@ -126,38 +122,10 @@ class WorkbenchHostService extends Disposable implements IHostService {
 	}
 
 	private doOpenWindow(toOpen: IWindowOpenable[], options?: IOpenWindowOptions): Promise<void> {
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		if (remoteAuthority) {
-			toOpen.forEach(openable => openable.label = openable.label || this.getRecentLabel(openable));
-
-			if (options?.remoteAuthority === undefined) {
-				// set the remoteAuthority of the window the request came from.
-				// It will be used when the input is neither file nor vscode-remote.
-				options = options ? { ...options, remoteAuthority } : { remoteAuthority };
-			}
-		}
-
 		return this.nativeHostService.openWindow(toOpen, options);
 	}
 
-	private getRecentLabel(openable: IWindowOpenable): string {
-		if (isFolderToOpen(openable)) {
-			return this.labelService.getWorkspaceLabel(openable.folderUri, { verbose: Verbosity.LONG });
-		}
-
-		if (isWorkspaceToOpen(openable)) {
-			return this.labelService.getWorkspaceLabel({ id: '', configPath: openable.workspaceUri }, { verbose: Verbosity.LONG });
-		}
-
-		return this.labelService.getUriLabel(openable.fileUri, { appendWorkspaceSuffix: true });
-	}
-
 	private doOpenEmptyWindow(options?: IOpenEmptyWindowOptions): Promise<void> {
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		if (!!remoteAuthority && options?.remoteAuthority === undefined) {
-			// set the remoteAuthority of the window the request came from
-			options = options ? { ...options, remoteAuthority } : { remoteAuthority };
-		}
 		return this.nativeHostService.openWindow(options);
 	}
 

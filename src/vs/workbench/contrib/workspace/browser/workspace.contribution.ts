@@ -44,7 +44,6 @@ import { ILabelService, Verbosity } from '../../../../platform/label/common/labe
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { MANAGE_TRUST_COMMAND_ID, WorkspaceTrustContext } from '../common/workspace.js';
 import { isWeb } from '../../../../base/common/platform.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { securityConfigurationNodeBase } from '../../../common/configuration.js';
 import { basename, dirname as uriDirname } from '../../../../base/common/resources.js';
 
@@ -275,7 +274,6 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 		@ILabelService private readonly labelService: ILabelService,
 		@IHostService private readonly hostService: IHostService,
 		@IProductService private readonly productService: IProductService,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 	) {
 		super();
 
@@ -548,7 +546,7 @@ export class WorkspaceTrustUXHandler extends Disposable implements IWorkbenchCon
 		const result = this.configurationService.getValue<'always' | 'untilDismissed' | 'never'>(WORKSPACE_TRUST_BANNER);
 
 		// In serverless environments, we don't need to aggressively show the banner
-		if (result !== 'always' && isWeb && !this.remoteAgentService.getConnection()?.remoteAuthority) {
+		if (result !== 'always' && isWeb) {
 			return 'never';
 		}
 

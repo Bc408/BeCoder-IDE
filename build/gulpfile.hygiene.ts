@@ -38,8 +38,6 @@ function checkPackageJSON(this: NodeJS.ReadWriteStream, actualPath: string) {
 const checkPackageJSONTask = task.define('check-package-json', () => {
 	return gulp.src('package.json').pipe(
 		es.through(function () {
-			checkPackageJSON.call(this, 'remote/package.json');
-			checkPackageJSON.call(this, 'remote/web/package.json');
 			checkPackageJSON.call(this, 'build/package.json');
 
 			const repoRoot = path.join(dirName, '..');

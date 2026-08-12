@@ -5,7 +5,6 @@
 
 import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
-import { Schemas } from '../../../../base/common/network.js';
 import { isBoolean, isObject, isString } from '../../../../base/common/types.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ICodeEditor, isCodeEditor } from '../../../../editor/browser/editorBrowser.js';
@@ -21,7 +20,6 @@ import { InputFocusedContext, IsMacNativeContext } from '../../../../platform/co
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { KeybindingWeight, KeybindingsRegistry } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { ILabelService } from '../../../../platform/label/common/label.js';
 import { IListService } from '../../../../platform/list/browser/listService.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
@@ -29,14 +27,12 @@ import { IWorkspaceContextService, IWorkspaceFolder, WorkbenchState } from '../.
 import { PICK_WORKSPACE_FOLDER_COMMAND_ID } from '../../../browser/actions/workspaceCommands.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { resolveCommandsContext } from '../../../browser/parts/editor/editorCommandsContext.js';
-import { RemoteNameContext, ResourceContextKey, WorkbenchStateContext } from '../../../common/contextkeys.js';
+import { ResourceContextKey, WorkbenchStateContext } from '../../../common/contextkeys.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
-import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { KeybindingsEditorInput } from '../../../services/preferences/browser/keybindingsEditorInput.js';
 import { DEFINE_KEYBINDING_EDITOR_CONTRIB_ID, IDefineKeybindingEditorContribution, IPreferencesService } from '../../../services/preferences/common/preferences.js';
 import { PreferencesEditorInput, SettingsEditor2Input } from '../../../services/preferences/common/preferencesEditorInput.js';
@@ -205,12 +201,9 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 	static readonly ID = 'workbench.contrib.preferencesActions';
 
 	constructor(
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IUserDataProfileService private readonly userDataProfileService: IUserDataProfileService,
 		@IPreferencesService private readonly preferencesService: IPreferencesService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
-		@ILabelService private readonly labelService: ILabelService,
-		@IExtensionService private readonly extensionService: IExtensionService,
 		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
 	) {
 		super();
@@ -523,45 +516,6 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 
 		this.registerSettingsEditorActions();
 
-		this.extensionService.whenInstalledExtensionsRegistered()
-			.then(() => {
-				const remoteAuthority = this.environmentService.remoteAuthority;
-				const hostLabel = this.labelService.getHostLabel(Schemas.vscodeRemote, remoteAuthority) || remoteAuthority;
-				this._register(registerAction2(class extends Action2 {
-					constructor() {
-						super({
-							id: 'workbench.action.openRemoteSettings',
-							title: nls.localize2('openRemoteSettings', "Open Remote Settings ({0})", hostLabel),
-							category,
-							menu: {
-								id: MenuId.CommandPalette,
-								when: RemoteNameContext.notEqualsTo('')
-							}
-						});
-					}
-					run(accessor: ServicesAccessor, args?: IOpenSettingsActionOptions) {
-						args = sanitizeOpenSettingsArgs(args);
-						return accessor.get(IPreferencesService).openRemoteSettings(args);
-					}
-				}));
-				this._register(registerAction2(class extends Action2 {
-					constructor() {
-						super({
-							id: 'workbench.action.openRemoteSettingsFile',
-							title: nls.localize2('openRemoteSettingsJSON', "Open Remote Settings (JSON) ({0})", hostLabel),
-							category,
-							menu: {
-								id: MenuId.CommandPalette,
-								when: RemoteNameContext.notEqualsTo('')
-							}
-						});
-					}
-					run(accessor: ServicesAccessor, args?: IOpenSettingsActionOptions) {
-						args = sanitizeOpenSettingsArgs(args);
-						return accessor.get(IPreferencesService).openRemoteSettings({ jsonEditor: true, ...args });
-					}
-				}));
-			});
 	}
 
 	private registerSettingsEditorActions() {

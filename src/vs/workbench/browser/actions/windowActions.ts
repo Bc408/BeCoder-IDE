@@ -41,7 +41,6 @@ export const inRecentFilesPickerContextKey = 'inRecentFilesPicker';
 interface IRecentlyOpenedPick extends IQuickPickItem {
 	resource: URI;
 	openable: IWindowOpenable;
-	remoteAuthority: string | undefined;
 }
 
 abstract class BaseOpenRecentAction extends Action2 {
@@ -198,10 +197,7 @@ abstract class BaseOpenRecentAction extends Action2 {
 					});
 
 					if (confirmed) {
-						hostService.openWindow(
-							[context.item.openable], {
-							remoteAuthority: context.item.remoteAuthority || null // local window if remoteAuthority is not set or can not be deducted from the openable
-						});
+						hostService.openWindow([context.item.openable]);
 						quickInputService.cancel();
 					}
 				}
@@ -211,8 +207,7 @@ abstract class BaseOpenRecentAction extends Action2 {
 		if (pick) {
 			return hostService.openWindow([pick.openable], {
 				forceNewWindow: keyMods?.ctrlCmd,
-				forceReuseWindow: keyMods?.alt,
-				remoteAuthority: pick.remoteAuthority || null // local window if remoteAuthority is not set or can not be deducted from the openable
+				forceReuseWindow: keyMods?.alt
 			});
 		}
 	}
@@ -271,8 +266,7 @@ abstract class BaseOpenRecentAction extends Action2 {
 			description: parentPath,
 			buttons,
 			openable,
-			resource,
-			remoteAuthority: recent.remoteAuthority
+			resource
 		};
 	}
 }
@@ -437,7 +431,7 @@ class NewWindowAction extends Action2 {
 	override run(accessor: ServicesAccessor): Promise<void> {
 		const hostService = accessor.get(IHostService);
 
-		return hostService.openWindow({ remoteAuthority: null });
+		return hostService.openWindow();
 	}
 }
 

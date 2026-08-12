@@ -6,16 +6,13 @@
 import { Barrier } from '../../../../base/common/async.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { URI } from '../../../../base/common/uri.js';
 import { ExtensionIdentifier, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { RemoteAuthorityResolverErrorCode } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
 import { ExtensionHostKind } from './extensionHostKind.js';
 import { ExtensionHostManager, friendlyExtHostName } from './extensionHostManager.js';
 import { IExtensionHostManager } from './extensionHostManagers.js';
 import { IExtensionDescriptionDelta } from './extensionHostProtocol.js';
-import { IResolveAuthorityResult } from './extensionHostProxy.js';
 import { ExtensionRunningLocation } from './extensionRunningLocation.js';
 import { ActivationKind, ExtensionActivationReason, ExtensionHostStartup, IExtensionHost, IExtensionInspectInfo, IInternalExtensionService } from './extensions.js';
 import { ResponsiveState } from './rpcProtocol.js';
@@ -162,29 +159,6 @@ export class LazyCreateExtensionHostManager extends Disposable implements IExten
 		return this._actual?.getInspectPort(tryEnableInspector);
 	}
 
-	public async resolveAuthority(remoteAuthority: string, resolveAttempt: number): Promise<IResolveAuthorityResult> {
-		await this._startCalled.wait();
-		if (this._actual) {
-			return this._actual.resolveAuthority(remoteAuthority, resolveAttempt);
-		}
-		return {
-			type: 'error',
-			error: {
-				message: `Cannot resolve authority`,
-				code: RemoteAuthorityResolverErrorCode.Unknown,
-				detail: undefined
-			}
-		};
-	}
-
-	public async getCanonicalURI(remoteAuthority: string, uri: URI): Promise<URI | null> {
-		await this._startCalled.wait();
-		if (this._actual) {
-			return this._actual.getCanonicalURI(remoteAuthority, uri);
-		}
-		throw new Error(`Cannot resolve canonical URI`);
-	}
-
 	public async start(extensionRegistryVersionId: number, allExtensions: IExtensionDescription[], myExtensions: ExtensionIdentifier[]): Promise<void> {
 		if (myExtensions.length > 0) {
 			// there are actual extensions, so let's launch the extension host (auto-start)
@@ -203,10 +177,4 @@ export class LazyCreateExtensionHostManager extends Disposable implements IExten
 		return actual.extensionTestsExecute();
 	}
 
-	public async setRemoteEnvironment(env: { [key: string]: string | null }): Promise<void> {
-		await this._startCalled.wait();
-		if (this._actual) {
-			return this._actual.setRemoteEnvironment(env);
-		}
-	}
 }

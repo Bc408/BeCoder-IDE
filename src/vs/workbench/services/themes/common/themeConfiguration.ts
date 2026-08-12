@@ -381,8 +381,6 @@ export class ThemeConfiguration {
 			return ConfigurationTarget.WORKSPACE_FOLDER;
 		} else if (!types.isUndefined(settings.workspaceValue)) {
 			return ConfigurationTarget.WORKSPACE;
-		} else if (!types.isUndefined(settings.userRemoteValue)) {
-			return ConfigurationTarget.USER_REMOTE;
 		}
 		return ConfigurationTarget.USER;
 	}
@@ -406,7 +404,7 @@ export class ThemeConfiguration {
 				}
 				value = undefined; // remove configuration from user settings
 			}
-		} else if (settingsTarget === ConfigurationTarget.WORKSPACE || settingsTarget === ConfigurationTarget.WORKSPACE_FOLDER || settingsTarget === ConfigurationTarget.USER_REMOTE) {
+		} else if (settingsTarget === ConfigurationTarget.WORKSPACE || settingsTarget === ConfigurationTarget.WORKSPACE_FOLDER) {
 			if (value === settings.value) {
 				return Promise.resolve(undefined); // nothing to do
 			}

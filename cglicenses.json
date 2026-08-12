@@ -763,12 +763,6 @@
 		]
 	},
 	{
-		"name": "@anthropic-ai/claude-agent-sdk",
-		"licenseDetail": [
-			"© Anthropic PBC. All rights reserved. Use is subject to Anthropic's Commercial Terms of Service."
-		]
-	},
-	{
 		"name": "@github/blackbird-external-ingest-utils",
 		"licenseDetail": [
 			"MIT License",
@@ -1114,14 +1108,6 @@
 		// Source: https://github.com/xtermjs/xterm.js/blob/master/LICENSE
 		"name": "@xterm/addon-serialize",
 		"fullLicenseTextUri": "https://raw.githubusercontent.com/xtermjs/xterm.js/master/LICENSE"
-	},
-	{
-		// Reason: @github/copilot-sdk does not ship a LICENSE file in its npm tarball,
-		// and ClearlyDefined has not harvested it, so CG emits no license text and the
-		// on-disk scanner finds nothing. The source repo is public MIT with a LICENSE file.
-		// Source: https://github.com/github/copilot-sdk/blob/main/LICENSE
-		"name": "@github/copilot-sdk",
-		"fullLicenseTextUri": "https://raw.githubusercontent.com/github/copilot-sdk/main/LICENSE"
 	},
 	{
 		// Reason: @vscode/windows-ca-certs is os:["win32"], so npm never installs it on

@@ -30,8 +30,6 @@ suite('FileWorkingCopyManager', () => {
 		accessor = instantiationService.createInstance(TestServiceAccessor);
 
 		accessor.fileService.registerProvider(Schemas.file, new TestInMemoryFileSystemProvider());
-		accessor.fileService.registerProvider(Schemas.vscodeRemote, new TestInMemoryFileSystemProvider());
-
 		manager = disposables.add(new FileWorkingCopyManager(
 			'testFileWorkingCopyType',
 			new TestStoredFileWorkingCopyModelFactory(),
@@ -40,7 +38,7 @@ suite('FileWorkingCopyManager', () => {
 			accessor.workingCopyFileService, accessor.workingCopyBackupService, accessor.uriIdentityService, accessor.fileDialogService,
 			accessor.filesConfigurationService, accessor.workingCopyService, accessor.notificationService,
 			accessor.workingCopyEditorService, accessor.editorService, accessor.elevatedFileService, accessor.pathService,
-			accessor.environmentService, accessor.dialogService, accessor.decorationsService, accessor.progressService,
+			accessor.dialogService, accessor.decorationsService, accessor.progressService,
 		));
 	});
 

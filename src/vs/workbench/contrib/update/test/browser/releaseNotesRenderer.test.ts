@@ -78,7 +78,6 @@ Navigation End -->
 			openSettings: async () => undefined,
 			openApplicationSettings: async () => undefined,
 			openUserSettings: async () => undefined,
-			openRemoteSettings: async () => undefined,
 			openWorkspaceSettings: async () => undefined,
 			openFolderSettings: async () => undefined,
 			openGlobalKeybindingSettings: async () => undefined,

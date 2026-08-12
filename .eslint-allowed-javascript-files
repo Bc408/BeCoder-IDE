@@ -110,11 +110,8 @@ scripts/chat-simulation/common/utils.js
 scripts/chat-simulation/merge-ci-summary.js
 scripts/chat-simulation/test-chat-mem-leaks.js
 scripts/chat-simulation/test-chat-perf-regression.js
-scripts/code-agent-host.js
 scripts/code-perf.js
 scripts/code-server.js
-scripts/code-sessions-web.js
-scripts/code-web.js
 scripts/xterm-update.js
 src/vs/base/browser/dompurify/dompurify.js
 src/vs/base/common/marked/marked.js
@@ -136,10 +133,6 @@ src/vs/platform/files/test/node/fixtures/service/deep/company.js
 src/vs/platform/files/test/node/fixtures/service/deep/conway.js
 src/vs/platform/files/test/node/fixtures/service/deep/employee.js
 src/vs/platform/files/test/node/fixtures/service/deep/small.js
-src/vs/sessions/test/e2e/common.cjs
-src/vs/sessions/test/e2e/extensions/sessions-e2e-mock/extension.js
-src/vs/sessions/test/e2e/generate.cjs
-src/vs/sessions/test/e2e/test.cjs
 src/vs/workbench/contrib/webview/browser/pre/service-worker.js
 src/vs/workbench/services/keybinding/test/node/linux_de_ch.js
 src/vs/workbench/services/keybinding/test/node/linux_en_uk.js

@@ -41,7 +41,6 @@ export const enum ConfigurationTarget {
 	APPLICATION = 1,
 	USER,
 	USER_LOCAL,
-	USER_REMOTE,
 	WORKSPACE,
 	WORKSPACE_FOLDER,
 	DEFAULT,
@@ -52,7 +51,6 @@ export function ConfigurationTargetToString(configurationTarget: ConfigurationTa
 		case ConfigurationTarget.APPLICATION: return 'APPLICATION';
 		case ConfigurationTarget.USER: return 'USER';
 		case ConfigurationTarget.USER_LOCAL: return 'USER_LOCAL';
-		case ConfigurationTarget.USER_REMOTE: return 'USER_REMOTE';
 		case ConfigurationTarget.WORKSPACE: return 'WORKSPACE';
 		case ConfigurationTarget.WORKSPACE_FOLDER: return 'WORKSPACE_FOLDER';
 		case ConfigurationTarget.DEFAULT: return 'DEFAULT';
@@ -86,7 +84,6 @@ export interface IConfigurationValue<T> {
 	readonly applicationValue?: T;
 	readonly userValue?: T;
 	readonly userLocalValue?: T;
-	readonly userRemoteValue?: T;
 	readonly workspaceValue?: T;
 	readonly workspaceFolderValue?: T;
 	readonly memoryValue?: T;
@@ -97,7 +94,6 @@ export interface IConfigurationValue<T> {
 	readonly application?: IInspectValue<T>;
 	readonly user?: IInspectValue<T>;
 	readonly userLocal?: IInspectValue<T>;
-	readonly userRemote?: IInspectValue<T>;
 	readonly workspace?: IInspectValue<T>;
 	readonly workspaceFolder?: IInspectValue<T>;
 	readonly memory?: IInspectValue<T>;
@@ -114,8 +110,6 @@ export function getConfigValueInTarget<T>(configValue: IConfigurationValue<T>, s
 			return configValue.userValue;
 		case ConfigurationTarget.USER_LOCAL:
 			return configValue.userLocalValue;
-		case ConfigurationTarget.USER_REMOTE:
-			return configValue.userRemoteValue;
 		case ConfigurationTarget.WORKSPACE:
 			return configValue.workspaceValue;
 		case ConfigurationTarget.WORKSPACE_FOLDER:
@@ -133,7 +127,6 @@ export function isConfigured<T>(configValue: IConfigurationValue<T>): configValu
 	return configValue.applicationValue !== undefined ||
 		configValue.userValue !== undefined ||
 		configValue.userLocalValue !== undefined ||
-		configValue.userRemoteValue !== undefined ||
 		configValue.workspaceValue !== undefined ||
 		configValue.workspaceFolderValue !== undefined;
 }
@@ -224,7 +217,6 @@ export interface IConfigurationData {
 	policy: IConfigurationModel;
 	application: IConfigurationModel;
 	userLocal: IConfigurationModel;
-	userRemote: IConfigurationModel;
 	workspace: IConfigurationModel;
 	folders: [UriComponents, IConfigurationModel][];
 }

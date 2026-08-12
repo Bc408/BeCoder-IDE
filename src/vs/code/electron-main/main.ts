@@ -50,8 +50,6 @@ import product from '../../platform/product/common/product.js';
 import { IProductService } from '../../platform/product/common/productService.js';
 import { IProtocolMainService } from '../../platform/protocol/electron-main/protocol.js';
 import { ProtocolMainService } from '../../platform/protocol/electron-main/protocolMainService.js';
-import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
-import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
 import { IRequestService } from '../../platform/request/common/request.js';
 import { RequestService } from '../../platform/request/electron-utility/requestService.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
@@ -251,9 +249,6 @@ class CodeMain {
 		// Signing
 		services.set(ISignService, new SyncDescriptor(SignService, undefined, false /* proxied to other processes */));
 
-		// Tunnel
-		services.set(ITunnelService, new SyncDescriptor(TunnelService));
-
 		// Protocol (instantiated early and not using sync descriptor for security reasons)
 		services.set(IProtocolMainService, new ProtocolMainService(environmentMainService, userDataProfilesMainService, logService));
 
@@ -401,8 +396,7 @@ class CodeMain {
 				return instantiationService.invokeFunction(async () => {
 					const diagnosticsService = new DiagnosticsService(NullTelemetryService, productService);
 					const mainDiagnostics = await otherInstanceDiagnosticsMainService.getMainDiagnostics();
-					const remoteDiagnostics = await otherInstanceDiagnosticsMainService.getRemoteDiagnostics({ includeProcesses: true, includeWorkspaceMetadata: true });
-					const diagnostics = await diagnosticsService.getDiagnostics(mainDiagnostics, remoteDiagnostics);
+					const diagnostics = await diagnosticsService.getDiagnostics(mainDiagnostics);
 					console.log(diagnostics);
 
 					throw new ExpectedError();
@@ -577,10 +571,8 @@ class CodeMain {
 		}
 
 		// Normalize paths and watch out for goto line mode
-		if (!args['remote']) {
-			const paths = this.doValidatePaths(args._, args.goto);
-			args._ = paths;
-		}
+		const paths = this.doValidatePaths(args._, args.goto);
+		args._ = paths;
 
 		return args;
 	}

@@ -70,13 +70,12 @@ export class BrowserWorkspacesService extends Disposable implements IWorkspacesS
 
 	private addWorkspaceToRecentlyOpened(): void {
 		const workspace = this.contextService.getWorkspace();
-		const remoteAuthority = this.environmentService.remoteAuthority;
 		switch (this.contextService.getWorkbenchState()) {
 			case WorkbenchState.FOLDER:
-				this.addRecentlyOpened([{ folderUri: workspace.folders[0].uri, remoteAuthority }]);
+				this.addRecentlyOpened([{ folderUri: workspace.folders[0].uri }]);
 				break;
 			case WorkbenchState.WORKSPACE:
-				this.addRecentlyOpened([{ workspace: { id: workspace.id, configPath: workspace.configuration! }, remoteAuthority }]);
+				this.addRecentlyOpened([{ workspace: { id: workspace.id, configPath: workspace.configuration! } }]);
 				break;
 		}
 	}
@@ -164,7 +163,7 @@ export class BrowserWorkspacesService extends Disposable implements IWorkspacesS
 		return { workspace: await this.getWorkspaceIdentifier(workspaceUri) };
 	}
 
-	async createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[], remoteAuthority?: string): Promise<IWorkspaceIdentifier> {
+	async createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[]): Promise<IWorkspaceIdentifier> {
 		const randomId = (Date.now() + Math.round(Math.random() * 1000)).toString();
 		const newUntitledWorkspacePath = joinPath(this.environmentService.untitledWorkspacesHome, `Untitled-${randomId}.${WORKSPACE_EXTENSION}`);
 
@@ -177,7 +176,7 @@ export class BrowserWorkspacesService extends Disposable implements IWorkspacesS
 		}
 
 		// Store at untitled workspaces location
-		const storedWorkspace: IStoredWorkspace = { folders: storedWorkspaceFolder, remoteAuthority };
+		const storedWorkspace: IStoredWorkspace = { folders: storedWorkspaceFolder };
 		await this.fileService.writeFile(newUntitledWorkspacePath, VSBuffer.fromString(JSON.stringify(storedWorkspace, null, '\t')));
 
 		return this.getWorkspaceIdentifier(newUntitledWorkspacePath);

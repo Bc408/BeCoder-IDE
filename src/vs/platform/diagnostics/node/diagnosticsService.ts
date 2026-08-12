@@ -14,7 +14,7 @@ import { URI } from '../../../base/common/uri.js';
 import { virtualMachineHint } from '../../../base/node/id.js';
 import { IDirent, Promises as pfs } from '../../../base/node/pfs.js';
 import { listProcesses } from '../../../base/node/ps.js';
-import { IDiagnosticsService, IMachineInfo, IMainProcessDiagnostics, IRemoteDiagnosticError, IRemoteDiagnosticInfo, isRemoteDiagnosticError, IWorkspaceInformation, PerformanceInfo, SystemInfo, WorkspaceStatItem, WorkspaceStats } from '../common/diagnostics.js';
+import { IDiagnosticsService, IMachineInfo, IMainProcessDiagnostics, IWorkspaceInformation, PerformanceInfo, SystemInfo, WorkspaceStatItem, WorkspaceStats } from '../common/diagnostics.js';
 import { ByteSize } from '../../files/common/files.js';
 import { IProductService } from '../../product/common/productService.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
@@ -200,16 +200,6 @@ export class DiagnosticsService implements IDiagnosticsService {
 		@IProductService private readonly productService: IProductService
 	) { }
 
-	private formatMachineInfo(info: IMachineInfo): string {
-		const output: string[] = [];
-		output.push(`OS Version:       ${info.os}`);
-		output.push(`CPUs:             ${info.cpus}`);
-		output.push(`Memory (System):  ${info.memory}`);
-		output.push(`VM:               ${info.vmHint}`);
-
-		return output.join('\n');
-	}
-
 	private formatEnvironment(info: IMainProcessDiagnostics): string {
 		const output: string[] = [];
 		output.push(`Version:          ${this.productService.nameShort} ${this.productService.version} (${this.productService.commit || 'Commit unknown'}, ${this.productService.date || 'Date unknown'})`);
@@ -236,37 +226,10 @@ export class DiagnosticsService implements IDiagnosticsService {
 		return output.join('\n');
 	}
 
-	public async getPerformanceInfo(info: IMainProcessDiagnostics, remoteData: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[], options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo> {
+	public async getPerformanceInfo(info: IMainProcessDiagnostics, options?: { skipCache?: boolean; unbounded?: boolean }): Promise<PerformanceInfo> {
 		return Promise.all([listProcesses(info.mainPID), this.formatWorkspaceMetadata(info, options)]).then(async result => {
-			let [rootProcess, workspaceInfo] = result;
-			let processInfo = this.formatProcessList(info, rootProcess);
-
-			remoteData.forEach(diagnostics => {
-				if (isRemoteDiagnosticError(diagnostics)) {
-					processInfo += `\n${diagnostics.errorMessage}`;
-					workspaceInfo += `\n${diagnostics.errorMessage}`;
-				} else {
-					processInfo += `\n\nRemote: ${diagnostics.hostName}`;
-					if (diagnostics.processes) {
-						processInfo += `\n${this.formatProcessList(info, diagnostics.processes)}`;
-					}
-
-					if (diagnostics.workspaceMetadata) {
-						workspaceInfo += `\n|  Remote: ${diagnostics.hostName}`;
-						for (const folder of Object.keys(diagnostics.workspaceMetadata)) {
-							const metadata = diagnostics.workspaceMetadata[folder];
-
-							let countMessage = `${metadata.fileCount} files`;
-							if (metadata.maxFilesReached) {
-								countMessage = `more than ${countMessage}`;
-							}
-
-							workspaceInfo += `|    Folder (${folder}): ${countMessage}`;
-							workspaceInfo += this.formatWorkspaceStats(metadata);
-						}
-					}
-				}
-			});
+			const [rootProcess, workspaceInfo] = result;
+			const processInfo = this.formatProcessList(info, rootProcess);
 
 			return {
 				processInfo,
@@ -275,7 +238,7 @@ export class DiagnosticsService implements IDiagnosticsService {
 		});
 	}
 
-	public async getSystemInfo(info: IMainProcessDiagnostics, remoteData: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<SystemInfo> {
+	public async getSystemInfo(info: IMainProcessDiagnostics): Promise<SystemInfo> {
 		const { memory, vmHint, os, cpus } = getMachineInfo();
 		const systemInfo: SystemInfo = {
 			os,
@@ -284,8 +247,7 @@ export class DiagnosticsService implements IDiagnosticsService {
 			vmHint,
 			processArgs: `${info.mainArguments.join(' ')}`,
 			gpuStatus: info.gpuFeatureStatus,
-			screenReader: `${info.screenReader ? 'yes' : 'no'}`,
-			remoteData
+			screenReader: `${info.screenReader ? 'yes' : 'no'}`
 		};
 
 		if (!isWindows) {
@@ -304,7 +266,7 @@ export class DiagnosticsService implements IDiagnosticsService {
 		return Promise.resolve(systemInfo);
 	}
 
-	public async getDiagnostics(info: IMainProcessDiagnostics, remoteDiagnostics: (IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]): Promise<string> {
+	public async getDiagnostics(info: IMainProcessDiagnostics): Promise<string> {
 		const output: string[] = [];
 		return listProcesses(info.mainPID).then(async rootProcess => {
 
@@ -317,39 +279,11 @@ export class DiagnosticsService implements IDiagnosticsService {
 			output.push(this.formatProcessList(info, rootProcess));
 
 			// Workspace Stats
-			if (info.windows.some(window => window.folderURIs && window.folderURIs.length > 0 && !window.remoteAuthority)) {
+			if (info.windows.some(window => window.folderURIs && window.folderURIs.length > 0)) {
 				output.push('');
 				output.push('Workspace Stats: ');
 				output.push(await this.formatWorkspaceMetadata(info));
 			}
-
-			remoteDiagnostics.forEach(diagnostics => {
-				if (isRemoteDiagnosticError(diagnostics)) {
-					output.push(`\n${diagnostics.errorMessage}`);
-				} else {
-					output.push('\n\n');
-					output.push(`Remote:           ${diagnostics.hostName}`);
-					output.push(this.formatMachineInfo(diagnostics.machineInfo));
-
-					if (diagnostics.processes) {
-						output.push(this.formatProcessList(info, diagnostics.processes));
-					}
-
-					if (diagnostics.workspaceMetadata) {
-						for (const folder of Object.keys(diagnostics.workspaceMetadata)) {
-							const metadata = diagnostics.workspaceMetadata[folder];
-
-							let countMessage = `${metadata.fileCount} files`;
-							if (metadata.maxFilesReached) {
-								countMessage = `more than ${countMessage}`;
-							}
-
-							output.push(`Folder (${folder}): ${countMessage}`);
-							output.push(this.formatWorkspaceStats(metadata));
-						}
-					}
-				}
-			});
 
 			output.push('');
 			output.push('');
@@ -424,7 +358,7 @@ export class DiagnosticsService implements IDiagnosticsService {
 		const workspaceStatPromises: Promise<void>[] = [];
 
 		info.windows.forEach(window => {
-			if (window.folderURIs.length === 0 || !!window.remoteAuthority) {
+			if (window.folderURIs.length === 0) {
 				return;
 			}
 

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, BrowserWindow, desktopCapturer, Details, globalShortcut, GPUFeatureStatus, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
+import { app, BrowserWindow, desktopCapturer, Details, globalShortcut, GPUFeatureStatus, powerMonitor, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
 import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
 import { hostname, release } from 'os';
@@ -15,7 +15,7 @@ import { parse } from '../../base/common/jsonc.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
-import { join, posix } from '../../base/common/path.js';
+import { join } from '../../base/common/path.js';
 import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { assertType } from '../../base/common/types.js';
 import { URI } from '../../base/common/uri.js';
@@ -66,7 +66,6 @@ import { METERED_CONNECTION_CHANNEL } from '../../platform/meteredConnection/com
 import { MeteredConnectionChannel } from '../../platform/meteredConnection/electron-main/meteredConnectionChannel.js';
 import { MeteredConnectionMainService } from '../../platform/meteredConnection/electron-main/meteredConnectionMainService.js';
 import { IProductService } from '../../platform/product/common/productService.js';
-import { getRemoteAuthority } from '../../platform/remote/common/remoteHosts.js';
 import { SharedProcess } from '../../platform/sharedProcess/electron-main/sharedProcess.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
 import { IStateService } from '../../platform/state/node/state.js';
@@ -120,8 +119,6 @@ import { ipcUtilityProcessWorkerChannelName } from '../../platform/utilityProces
 import { ILocalPtyService, LocalReconnectConstants, TerminalIpcChannels, TerminalSettingId } from '../../platform/terminal/common/terminal.js';
 import { ElectronPtyHostStarter } from '../../platform/terminal/electron-main/electronPtyHostStarter.js';
 import { PtyHostService } from '../../platform/terminal/node/ptyHostService.js';
-import { NODE_REMOTE_RESOURCE_CHANNEL_NAME, NODE_REMOTE_RESOURCE_IPC_METHOD_NAME, NodeRemoteResourceResponse, NodeRemoteResourceRouter } from '../../platform/remote/common/electronRemoteResources.js';
-import { Lazy } from '../../base/common/lazy.js';
 import { IAuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindows.js';
 import { AuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.js';
 import { normalizeNFC } from '../../base/common/normalization.js';
@@ -187,8 +184,7 @@ type OSProxyConfigClassification = {
 export class CodeApplication extends Disposable {
 
 	private static readonly SECURITY_PROTOCOL_HANDLING_CONFIRMATION_SETTING_KEY = {
-		[Schemas.file]: 'security.promptForLocalFileProtocolHandling' as const,
-		[Schemas.vscodeRemote]: 'security.promptForRemoteFileProtocolHandling' as const
+		[Schemas.file]: 'security.promptForLocalFileProtocolHandling' as const
 	};
 
 	private windowsMainService: IWindowsMainService | undefined;
@@ -325,7 +321,7 @@ export class CodeApplication extends Disposable {
 		//#region Request filtering
 
 		// Block all SVG requests from unsupported origins
-		const supportedSvgSchemes = new Set([Schemas.file, Schemas.vscodeFileResource, Schemas.vscodeRemoteResource, Schemas.vscodeManagedRemoteResource, 'devtools']);
+		const supportedSvgSchemes = new Set([Schemas.file, Schemas.vscodeFileResource, 'devtools']);
 
 		// But allow them if they are made from inside an webview
 		const isSafeFrame = (requestFrame: WebFrameMain | null | undefined): boolean => {
@@ -431,28 +427,8 @@ export class CodeApplication extends Disposable {
 					}
 				}
 
-				// remote extension schemes have the following format
-				// http://127.0.0.1:<port>/vscode-remote-resource?path=
-				if (!uri.path.endsWith(Schemas.vscodeRemoteResource) && contentTypes.some(contentType => contentType.toLowerCase().includes('image/svg'))) {
+				if (contentTypes.some(contentType => contentType.toLowerCase().includes('image/svg'))) {
 					return callback({ cancel: !isSvgRequestFromSafeContext(details) });
-				}
-			}
-
-			return callback({ cancel: false });
-		});
-
-		//#endregion
-
-		//#region Allow CORS for the PRSS CDN
-
-		// https://github.com/microsoft/vscode-remote-release/issues/9246
-		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-			if (details.url.startsWith('https://vscode.download.prss.microsoft.com/')) {
-				const responseHeaders = details.responseHeaders ?? Object.create(null);
-
-				if (responseHeaders['Access-Control-Allow-Origin'] === undefined) {
-					responseHeaders['Access-Control-Allow-Origin'] = ['*'];
-					return callback({ cancel: false, responseHeaders });
 				}
 			}
 
@@ -721,9 +697,6 @@ export class CodeApplication extends Disposable {
 		// Setup Protocol URL Handlers
 		const initialProtocolUrls = await appInstantiationService.invokeFunction(accessor => this.setupProtocolUrlHandlers(accessor, mainProcessElectronServer));
 
-		// Setup vscode-remote-resource protocol handler
-		this.setupManagedRemoteResourceUrlHandler(mainProcessElectronServer);
-
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
 
@@ -781,28 +754,6 @@ export class CodeApplication extends Disposable {
 		this._register(new ElectronURLListener(initialProtocolUrls?.urls, urlService, windowsMainService, this.environmentMainService, this.productService, this.logService));
 
 		return initialProtocolUrls;
-	}
-
-	private setupManagedRemoteResourceUrlHandler(mainProcessElectronServer: ElectronIPCServer) {
-		const notFound = (): Electron.ProtocolResponse => ({ statusCode: 404, data: 'Not found' });
-		const remoteResourceChannel = new Lazy(() => mainProcessElectronServer.getChannel(
-			NODE_REMOTE_RESOURCE_CHANNEL_NAME,
-			new NodeRemoteResourceRouter(),
-		));
-
-		protocol.registerBufferProtocol(Schemas.vscodeManagedRemoteResource, (request, callback) => {
-			const url = URI.parse(request.url);
-			if (!url.authority.startsWith('window:')) {
-				return callback(notFound());
-			}
-
-			remoteResourceChannel.value.call<NodeRemoteResourceResponse>(NODE_REMOTE_RESOURCE_IPC_METHOD_NAME, [url]).then(
-				r => callback({ ...r, data: Buffer.from(r.body, 'base64') }),
-				err => {
-					this.logService.warn('error dispatching remote resource call', err);
-					callback({ statusCode: 500, data: String(err) });
-				});
-		});
 	}
 
 	private async resolveInitialProtocolUrls(windowsMainService: IWindowsMainService, dialogMainService: IDialogMainService): Promise<IInitialProtocolUrls | undefined> {
@@ -884,12 +835,12 @@ export class CodeApplication extends Disposable {
 			message = localize('confirmOpenMessageFileOrFolder', "An external application wants to open '{0}' in {1}. Do you want to open this file or folder?", openableUri.scheme === Schemas.file ? getPathLabel(openableUri, { os: OS, tildify: this.environmentMainService }) : openableUri.toString(true), this.productService.nameShort);
 		}
 
-		if (openableUri.scheme !== Schemas.file && openableUri.scheme !== Schemas.vscodeRemote) {
+		if (openableUri.scheme !== Schemas.file) {
 
 			// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			//
-			// NOTE: we currently only ask for confirmation for `file` and `vscode-remote`
-			// authorities here. There is an additional confirmation for `extension.id`
+			// NOTE: we currently only ask for confirmation for `file` paths here.
+			// There is an additional confirmation for `extension.id`
 			// authorities from within the window.
 			//
 			// IF YOU ARE PLANNING ON ADDING ANOTHER AUTHORITY HERE, MAKE SURE TO ALSO
@@ -900,7 +851,7 @@ export class CodeApplication extends Disposable {
 			return false;
 		}
 
-		const askForConfirmation = this.configurationService.getValue<unknown>(CodeApplication.SECURITY_PROTOCOL_HANDLING_CONFIRMATION_SETTING_KEY[openableUri.scheme]);
+		const askForConfirmation = this.configurationService.getValue<unknown>(CodeApplication.SECURITY_PROTOCOL_HANDLING_CONFIRMATION_SETTING_KEY[Schemas.file]);
 		if (askForConfirmation === false) {
 			return false; // not blocked via settings
 		}
@@ -913,7 +864,7 @@ export class CodeApplication extends Disposable {
 			],
 			message,
 			detail: localize('confirmOpenDetail', "If you did not initiate this request, it may represent an attempted attack on your system. Unless you took an explicit action to initiate this request, you should press 'No'"),
-			checkboxLabel: openableUri.scheme === Schemas.file ? localize('doNotAskAgainLocal', "Allow opening local paths without asking") : localize('doNotAskAgainRemote', "Allow opening remote paths without asking"),
+			checkboxLabel: localize('doNotAskAgainLocal', "Allow opening local paths without asking"),
 			cancelId: 1
 		});
 
@@ -926,7 +877,7 @@ export class CodeApplication extends Disposable {
 			// update settings from within a window. But we do not know if a window
 			// is about to open or can already handle the request, so we have to send
 			// to any current window and any newly opening window.
-			const request = { channel: 'vscode:disablePromptForProtocolHandling', args: openableUri.scheme === Schemas.file ? 'local' : 'remote' };
+			const request = { channel: 'vscode:disablePromptForProtocolHandling', args: 'local' };
 			windowsMainService.sendToFocused(request.channel, request.args);
 			windowsMainService.sendToOpeningWindow(request.channel, request.args);
 		}
@@ -950,46 +901,6 @@ export class CodeApplication extends Disposable {
 			return { fileUri };
 		}
 
-		// Remote path
-		else if (uri.authority === Schemas.vscodeRemote) {
-
-			// Example conversion:
-			// From: vscode://vscode-remote/wsl+ubuntu/mnt/c/GitDevelopment/monaco
-			//   To: vscode-remote://wsl+ubuntu/mnt/c/GitDevelopment/monaco
-
-			const secondSlash = uri.path.indexOf(posix.sep, 1 /* skip over the leading slash */);
-			let authority: string;
-			let path: string;
-			if (secondSlash !== -1) {
-				authority = uri.path.substring(1, secondSlash);
-				path = uri.path.substring(secondSlash);
-			} else {
-				authority = uri.path.substring(1);
-				path = '/';
-			}
-
-			let query = uri.query;
-			const params = new URLSearchParams(uri.query);
-			if (params.get('windowId') === '_blank') {
-				// Make sure to unset any `windowId=_blank` here
-				// https://github.com/microsoft/vscode/issues/191902
-				params.delete('windowId');
-				query = params.toString();
-			}
-
-			const remoteUri = URI.from({ scheme: Schemas.vscodeRemote, authority, path, query, fragment: uri.fragment });
-
-			if (hasWorkspaceFileExtension(path)) {
-				return { workspaceUri: remoteUri };
-			}
-
-			if (/:[\d]+$/.test(path)) {
-				// path with :line:column syntax
-				return { fileUri: remoteUri };
-			}
-
-			return { folderUri: remoteUri };
-		}
 		return undefined;
 	}
 
@@ -1052,7 +963,6 @@ export class CodeApplication extends Disposable {
 					urisToOpen: [windowOpenableFromProtocolUrl],
 					forceNewWindow: shouldOpenInNewWindow,
 					gotoLineMode: true
-					// remoteAuthority: will be determined based on windowOpenableFromProtocolUrl
 				})).at(0);
 
 				window?.focus(); // this should help ensuring that the right window gets focus when multiple are opened
@@ -1070,8 +980,7 @@ export class CodeApplication extends Disposable {
 				cli: { ...this.environmentMainService.args },
 				forceNewWindow: true,
 				forceEmpty: true,
-				gotoLineMode: true,
-				remoteAuthority: getRemoteAuthority(uri)
+				gotoLineMode: true
 			})).at(0);
 
 			await window?.ready();
@@ -1385,7 +1294,6 @@ export class CodeApplication extends Disposable {
 					urisToOpen: initialProtocolUrls.openables,
 					gotoLineMode: true,
 					initialStartup: true
-					// remoteAuthority: will be determined based on openables
 				});
 			}
 
@@ -1416,7 +1324,6 @@ export class CodeApplication extends Disposable {
 							forceEmpty: true,
 							gotoLineMode: true,
 							initialStartup: true
-							// remoteAuthority: will be determined based on openables
 						});
 					}
 				}
@@ -1429,7 +1336,6 @@ export class CodeApplication extends Disposable {
 		const hasFileURIs = !!args['file-uri'];
 		const noRecentEntry = args['skip-add-to-recently-opened'] === true;
 		const waitMarkerFileURI = args.wait && args.waitMarkerFilePath ? URI.file(args.waitMarkerFilePath) : undefined;
-		const remoteAuthority = args.remote || undefined;
 		const forceProfile = args.profile;
 		const forceTempProfile = args['profile-temp'];
 
@@ -1446,7 +1352,6 @@ export class CodeApplication extends Disposable {
 					noRecentEntry,
 					waitMarkerFileURI,
 					initialStartup: true,
-					remoteAuthority,
 					forceProfile,
 					forceTempProfile
 				});
@@ -1465,7 +1370,6 @@ export class CodeApplication extends Disposable {
 					noRecentEntry,
 					waitMarkerFileURI,
 					initialStartup: true,
-					// remoteAuthority: will be determined based on macOpenFiles
 				});
 			}
 		}
@@ -1481,7 +1385,6 @@ export class CodeApplication extends Disposable {
 			waitMarkerFileURI,
 			gotoLineMode: args.goto,
 			initialStartup: true,
-			remoteAuthority,
 			forceProfile,
 			forceTempProfile
 		});
@@ -1496,14 +1399,6 @@ export class CodeApplication extends Disposable {
 
 		// Windows: mutex
 		this.installMutex();
-
-		// Remote Authorities
-		protocol.registerHttpProtocol(Schemas.vscodeRemoteResource, (request, callback) => {
-			callback({
-				url: request.url.replace(/^vscode-remote-resource:/, 'http:'),
-				method: request.method
-			});
-		});
 
 		// Start to fetch shell environment (if needed) after window has opened
 		// Since this operation can take a long time, we want to warm it up while

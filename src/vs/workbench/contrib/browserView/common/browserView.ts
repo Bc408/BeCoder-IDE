@@ -8,7 +8,6 @@ import { Emitter, Event } from '../../../../base/common/event.js';
 import { structuralEquals } from '../../../../base/common/equals.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
-import { ITunnelProxyInfo } from '../../../../platform/tunnel/common/tunnelProxy.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import {
 	BrowserHistoryStore,
@@ -149,17 +148,6 @@ export const IBrowserViewWorkbenchService = createDecorator<IBrowserViewWorkbenc
 export interface IBrowserViewWorkbenchService {
 	readonly _serviceBrand: undefined;
 
-	/** Returns true if the remote proxy is enabled; i.e. we are in a remote workspace and the setting is enabled. */
-	willUseRemoteProxy(): boolean;
-
-	/**
-	 * Set the tunnel-proxy credentials resolved by the window's local node
-	 * extension host (which hosts the HTTPS tunnel proxy), or `undefined` to
-	 * clear them. Folded into the window configuration sent to the main
-	 * process so this window's remote browser views (re)apply the proxy.
-	 */
-	setRemoteProxyInfo(info: ITunnelProxyInfo | undefined): void;
-
 	/**
 	 * Fires when the set of known browser views changes, or a model is created for an existing input.
 	 */
@@ -222,7 +210,6 @@ export interface IBrowserViewModel extends IDisposable {
 	readonly storageScope: BrowserViewStorageScope;
 	readonly history: BrowserHistoryStore;
 	readonly permissions: BrowserPermissionStore;
-	readonly isRemoteSession: boolean;
 	readonly zoomFactor: number;
 	readonly canZoomIn: boolean;
 	readonly canZoomOut: boolean;
@@ -242,7 +229,6 @@ export interface IBrowserViewModel extends IDisposable {
 	readonly onDidClose: Event<void>;
 	readonly onWillDispose: Event<void>;
 	readonly onDidChangeDevice: Event<IBrowserDeviceProfile | undefined>;
-	readonly onDidChangeRemoteStatus: Event<boolean>;
 	readonly onDidRequestPermission: Event<IBrowserViewPermissionRequestEvent>;
 
 	layout(bounds: IBrowserViewBounds): Promise<void>;
@@ -284,7 +270,6 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
 	private _error: IBrowserViewLoadError | undefined = undefined;
 	private _certificateError: IBrowserViewCertificateError | undefined = undefined;
 	private _storageScope: BrowserViewStorageScope = BrowserViewStorageScope.Ephemeral;
-	private _isRemoteSession: boolean = false;
 	private _isEphemeral: boolean = false;
 	private _zoomHost: string | undefined = undefined;
 	private _browserZoomIndex: number = browserZoomDefaultIndex;
@@ -331,7 +316,6 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
 		this._error = initialState.lastError;
 		this._certificateError = initialState.certificateError;
 		this._storageScope = initialState.storageScope;
-		this._isRemoteSession = initialState.isRemoteSession;
 		this._browserZoomIndex = initialState.browserZoomIndex;
 		this._device = initialState.device;
 		this._isEphemeral = this._storageScope === BrowserViewStorageScope.Ephemeral;
@@ -430,9 +414,6 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
 			}
 		}));
 
-		this._register(this.onDidChangeRemoteStatus(isRemoteSession => {
-			this._isRemoteSession = isRemoteSession;
-		}));
 	}
 
 	get url(): string { return this._url; }
@@ -448,7 +429,6 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
 	get error(): IBrowserViewLoadError | undefined { return this._error; }
 	get certificateError(): IBrowserViewCertificateError | undefined { return this._certificateError; }
 	get storageScope(): BrowserViewStorageScope { return this._storageScope; }
-	get isRemoteSession(): boolean { return this._isRemoteSession; }
 	get zoomFactor(): number { return browserZoomFactors[this._browserZoomIndex]; }
 	get canZoomIn(): boolean { return this._browserZoomIndex < browserZoomFactors.length - 1; }
 	get canZoomOut(): boolean { return this._browserZoomIndex > 0; }
@@ -492,10 +472,6 @@ export class BrowserViewModel extends Disposable implements IBrowserViewModel {
 
 	get onDidClose(): Event<void> {
 		return this.browserViewService.onDynamicDidClose(this.id);
-	}
-
-	get onDidChangeRemoteStatus(): Event<boolean> {
-		return this.browserViewService.onDynamicDidChangeRemoteStatus(this.id);
 	}
 
 	get onDidRequestPermission(): Event<IBrowserViewPermissionRequestEvent> {

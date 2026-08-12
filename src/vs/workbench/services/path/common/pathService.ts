@@ -13,7 +13,6 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { getVirtualWorkspaceScheme } from '../../../../platform/workspace/common/virtualWorkspace.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 
 export const IPathService = createDecorator<IPathService>('pathService');
 
@@ -89,25 +88,16 @@ export abstract class AbstractPathService implements IPathService {
 
 	constructor(
 		private localUserHome: URI,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService private contextService: IWorkspaceContextService
 	) {
 
 		// OS
-		this.resolveOS = (async () => {
-			const env = await this.remoteAgentService.getEnvironment();
-
-			return env?.os || OS;
-		})();
+		this.resolveOS = Promise.resolve(OS);
 
 		// User Home
-		this.resolveUserHome = (async () => {
-			const env = await this.remoteAgentService.getEnvironment();
-			const userHome = this.maybeUnresolvedUserHome = env?.userHome ?? localUserHome;
-
-			return userHome;
-		})();
+		this.maybeUnresolvedUserHome = localUserHome;
+		this.resolveUserHome = Promise.resolve(localUserHome);
 	}
 
 	hasValidBasename(resource: URI, basename?: string): Promise<boolean>;
@@ -128,7 +118,7 @@ export abstract class AbstractPathService implements IPathService {
 		// Our `isValidBasename` method only works with our
 		// standard schemes for files on disk, either locally
 		// or remote.
-		if (resource.scheme === Schemas.file || resource.scheme === Schemas.vscodeRemote) {
+		if (resource.scheme === Schemas.file) {
 			return isValidBasename(name ?? basename(resource), os === OperatingSystem.Windows);
 		}
 
@@ -140,10 +130,6 @@ export abstract class AbstractPathService implements IPathService {
 	}
 
 	static findDefaultUriScheme(environmentService: IWorkbenchEnvironmentService, contextService: IWorkspaceContextService): string {
-		if (environmentService.remoteAuthority) {
-			return Schemas.vscodeRemote;
-		}
-
 		const virtualWorkspace = getVirtualWorkspaceScheme(contextService.getWorkspace());
 		if (virtualWorkspace) {
 			return virtualWorkspace;

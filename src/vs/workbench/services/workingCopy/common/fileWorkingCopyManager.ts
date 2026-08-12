@@ -14,7 +14,6 @@ import { URI } from '../../../../base/common/uri.js';
 import { IFileDialogService, IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ISaveOptions, SaveSourceRegistry } from '../../../common/editor.js';
-import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { IPathService } from '../../path/common/pathService.js';
 import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
 import { IStoredFileWorkingCopy, IStoredFileWorkingCopyModel, IStoredFileWorkingCopyModelFactory, IStoredFileWorkingCopyResolveOptions, StoredFileWorkingCopyState } from './storedFileWorkingCopy.js';
@@ -161,7 +160,6 @@ export class FileWorkingCopyManager<S extends IStoredFileWorkingCopyModel, U ext
 		@IEditorService editorService: IEditorService,
 		@IElevatedFileService elevatedFileService: IElevatedFileService,
 		@IPathService private readonly pathService: IPathService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IDecorationsService private readonly decorationsService: IDecorationsService,
 		@IProgressService progressService: IProgressService
@@ -411,7 +409,7 @@ export class FileWorkingCopyManager<S extends IStoredFileWorkingCopyModel, U ext
 			sourceWorkingCopy instanceof UntitledFileWorkingCopy &&
 			sourceWorkingCopy.hasAssociatedFilePath &&
 			targetFileExists &&
-			this.uriIdentityService.extUri.isEqual(target, toLocalResource(sourceWorkingCopy.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme))
+			this.uriIdentityService.extUri.isEqual(target, toLocalResource(sourceWorkingCopy.resource, undefined, this.pathService.defaultUriScheme))
 		) {
 			const overwrite = await this.confirmOverwrite(target);
 			if (!overwrite) {
@@ -529,7 +527,7 @@ export class FileWorkingCopyManager<S extends IStoredFileWorkingCopyModel, U ext
 		// 2.) Pick the associated file path for untitled working copies if any
 		const workingCopy = this.get(resource);
 		if (workingCopy instanceof UntitledFileWorkingCopy && workingCopy.hasAssociatedFilePath) {
-			return toLocalResource(resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme);
+			return toLocalResource(resource, undefined, this.pathService.defaultUriScheme);
 		}
 
 		const defaultFilePath = await this.fileDialogService.defaultFilePath();

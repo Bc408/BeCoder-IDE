@@ -10,9 +10,9 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
 import { IEditorGroup } from '../../../services/editor/common/editorGroupsService.js';
-import { BrowserProcessExplorerControl, ProcessExplorerControl } from './processExplorerControl.js';
+import { ProcessExplorerControl } from './processExplorerControl.js';
 
-export class ProcessExplorerEditor extends EditorPane {
+export abstract class ProcessExplorerEditor extends EditorPane {
 
 	static readonly ID: string = 'workbench.editor.processExplorer';
 
@@ -26,10 +26,6 @@ export class ProcessExplorerEditor extends EditorPane {
 		@IInstantiationService protected readonly instantiationService: IInstantiationService
 	) {
 		super(ProcessExplorerEditor.ID, group, telemetryService, themeService, storageService);
-	}
-
-	protected override createEditor(parent: HTMLElement): void {
-		this.processExplorerControl = this._register(this.instantiationService.createInstance(BrowserProcessExplorerControl, parent));
 	}
 
 	override focus(): void {

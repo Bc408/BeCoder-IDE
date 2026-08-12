@@ -25,7 +25,6 @@ import { URI } from '../../../../base/common/uri.js';
 import * as resources from '../../../../base/common/resources.js';
 import { registerColorThemeSchemas } from '../common/colorThemeSchema.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { getRemoteAuthority } from '../../../../platform/remote/common/remoteHosts.js';
 import { IWorkbenchLayoutService } from '../../layout/browser/layoutService.js';
 import { IExtensionResourceLoaderService } from '../../../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
 import { ThemeRegistry, registerColorThemeExtensionPoint, registerFileIconThemeExtensionPoint, registerProductIconThemeExtensionPoint } from '../common/themeExtensionPoints.js';
@@ -323,7 +322,6 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
 			const inspection = this.configurationService.inspect<string>(key);
 			for (const [target, value] of [
 				[ConfigurationTarget.USER, inspection.userValue],
-				[ConfigurationTarget.USER_REMOTE, inspection.userRemoteValue],
 				[ConfigurationTarget.WORKSPACE, inspection.workspaceValue],
 			] as const) {
 				if (value) {
@@ -670,7 +668,7 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
 		const themeData = this.currentFileIconTheme;
 
 		// remember theme data for a quick restore
-		if (themeData.isLoaded && settingsTarget !== 'preview' && (!themeData.location || !getRemoteAuthority(themeData.location))) {
+		if (themeData.isLoaded && settingsTarget !== 'preview') {
 			themeData.toStorage(this.storageService);
 		}
 		await this.settings.setFileIconTheme(this.currentFileIconTheme, settingsTarget);
@@ -775,7 +773,7 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
 		const themeData = this.currentProductIconTheme;
 
 		// remember theme data for a quick restore
-		if (themeData.isLoaded && settingsTarget !== 'preview' && (!themeData.location || !getRemoteAuthority(themeData.location))) {
+		if (themeData.isLoaded && settingsTarget !== 'preview') {
 			themeData.toStorage(this.storageService);
 		}
 		await this.settings.setProductIconTheme(this.currentProductIconTheme, settingsTarget);

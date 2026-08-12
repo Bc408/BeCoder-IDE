@@ -124,7 +124,6 @@ export interface IConfigurationEditingOptions extends IConfigurationUpdateOption
 
 export const enum EditableConfigurationTarget {
 	USER_LOCAL = 1,
-	USER_REMOTE,
 	WORKSPACE,
 	WORKSPACE_FOLDER
 }
@@ -143,7 +142,6 @@ export class ConfigurationEditing {
 	private queue: Queue<void>;
 
 	constructor(
-		private readonly remoteSettingsResource: URI | null,
 		@IWorkbenchConfigurationService private readonly configurationService: IWorkbenchConfigurationService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IUserDataProfileService private readonly userDataProfileService: IUserDataProfileService,
@@ -331,9 +329,6 @@ export class ConfigurationEditing {
 			case EditableConfigurationTarget.USER_LOCAL:
 				this.preferencesService.openUserSettings(options);
 				break;
-			case EditableConfigurationTarget.USER_REMOTE:
-				this.preferencesService.openRemoteSettings(options);
-				break;
 			case EditableConfigurationTarget.WORKSPACE:
 				this.preferencesService.openWorkspaceSettings(options);
 				break;
@@ -380,8 +375,6 @@ export class ConfigurationEditing {
 				switch (target) {
 					case EditableConfigurationTarget.USER_LOCAL:
 						return nls.localize('errorInvalidConfiguration', "Unable to write into user settings. Please open the user settings to correct errors/warnings in it and try again.");
-					case EditableConfigurationTarget.USER_REMOTE:
-						return nls.localize('errorInvalidRemoteConfiguration', "Unable to write into remote user settings. Please open the remote user settings to correct errors/warnings in it and try again.");
 					case EditableConfigurationTarget.WORKSPACE:
 						return nls.localize('errorInvalidConfigurationWorkspace', "Unable to write into workspace settings. Please open the workspace settings to correct errors/warnings in the file and try again.");
 					case EditableConfigurationTarget.WORKSPACE_FOLDER: {
@@ -405,8 +398,6 @@ export class ConfigurationEditing {
 				switch (target) {
 					case EditableConfigurationTarget.USER_LOCAL:
 						return nls.localize('errorConfigurationFileDirty', "Unable to write into user settings because the file has unsaved changes. Please save the user settings file first and then try again.");
-					case EditableConfigurationTarget.USER_REMOTE:
-						return nls.localize('errorRemoteConfigurationFileDirty', "Unable to write into remote user settings because the file has unsaved changes. Please save the remote user settings file first and then try again.");
 					case EditableConfigurationTarget.WORKSPACE:
 						return nls.localize('errorConfigurationFileDirtyWorkspace', "Unable to write into workspace settings because the file has unsaved changes. Please save the workspace settings file first and then try again.");
 					case EditableConfigurationTarget.WORKSPACE_FOLDER: {
@@ -430,8 +421,6 @@ export class ConfigurationEditing {
 				switch (target) {
 					case EditableConfigurationTarget.USER_LOCAL:
 						return nls.localize('errorConfigurationFileModifiedSince', "Unable to write into user settings because the content of the file is newer.");
-					case EditableConfigurationTarget.USER_REMOTE:
-						return nls.localize('errorRemoteConfigurationFileModifiedSince', "Unable to write into remote user settings because the content of the file is newer.");
 					case EditableConfigurationTarget.WORKSPACE:
 						return nls.localize('errorConfigurationFileModifiedSinceWorkspace', "Unable to write into workspace settings because the content of the file is newer.");
 					case EditableConfigurationTarget.WORKSPACE_FOLDER:
@@ -445,8 +434,6 @@ export class ConfigurationEditing {
 		switch (target) {
 			case EditableConfigurationTarget.USER_LOCAL:
 				return nls.localize('userTarget', "User Settings");
-			case EditableConfigurationTarget.USER_REMOTE:
-				return nls.localize('remoteUserTarget', "Remote User Settings");
 			case EditableConfigurationTarget.WORKSPACE:
 				return nls.localize('workspaceTarget', "Workspace Settings");
 			case EditableConfigurationTarget.WORKSPACE_FOLDER:
@@ -508,7 +495,7 @@ export class ConfigurationEditing {
 
 		if (operation.workspaceStandAloneConfigurationKey) {
 			// Tasks are the only supported user-level standalone configuration.
-			if (operation.workspaceStandAloneConfigurationKey !== TASKS_CONFIGURATION_KEY && (target === EditableConfigurationTarget.USER_LOCAL || target === EditableConfigurationTarget.USER_REMOTE)) {
+			if (operation.workspaceStandAloneConfigurationKey !== TASKS_CONFIGURATION_KEY && target === EditableConfigurationTarget.USER_LOCAL) {
 				throw this.toConfigurationEditingError(ConfigurationEditingErrorCode.ERROR_INVALID_USER_TARGET, target, operation);
 			}
 		}
@@ -585,7 +572,7 @@ export class ConfigurationEditing {
 		const configurationProperties = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).getConfigurationProperties();
 		const configurationScope = configurationProperties[key]?.scope;
 		let jsonPath = overrides.overrideIdentifiers?.length ? [keyFromOverrideIdentifiers(overrides.overrideIdentifiers), key] : [key];
-		if (target === EditableConfigurationTarget.USER_LOCAL || target === EditableConfigurationTarget.USER_REMOTE) {
+		if (target === EditableConfigurationTarget.USER_LOCAL) {
 			return { key, jsonPath, value: config.value, resource: this.getConfigurationFileResource(target, key, '', null, configurationScope) ?? undefined, target };
 		}
 
@@ -611,9 +598,6 @@ export class ConfigurationEditing {
 				}
 				return this.userDataProfileService.currentProfile.settingsResource;
 			}
-		}
-		if (target === EditableConfigurationTarget.USER_REMOTE) {
-			return this.remoteSettingsResource;
 		}
 		const workbenchState = this.contextService.getWorkbenchState();
 		if (workbenchState !== WorkbenchState.EMPTY) {

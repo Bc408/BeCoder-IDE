@@ -18,8 +18,7 @@ import { IEditorService, MODAL_GROUP, PreferredGroup } from '../../../editor/com
 import { IEditorGroupsService, IModalEditorPart } from '../../../editor/common/editorGroupsService.js';
 import { PreferencesService } from '../../browser/preferencesService.js';
 import { IPreferencesService, ISettingsEditorOptions } from '../../common/preferences.js';
-import { IRemoteAgentService } from '../../../remote/common/remoteAgentService.js';
-import { TestRemoteAgentService, ITestInstantiationService, workbenchInstantiationService, TestEditorService, TestEditorGroupsService, TestEditorGroupView } from '../../../../test/browser/workbenchTestServices.js';
+import { ITestInstantiationService, workbenchInstantiationService, TestEditorService, TestEditorGroupsService, TestEditorGroupView } from '../../../../test/browser/workbenchTestServices.js';
 import { IEditorOptions } from '../../../../../platform/editor/common/editor.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 
@@ -51,7 +50,6 @@ suite('PreferencesService', () => {
 
 		testInstantiationService.stub(IEditorService, disposables.add(new TestPreferencesEditorService()));
 		testInstantiationService.stub(IJSONEditingService, TestJSONEditingService);
-		testInstantiationService.stub(IRemoteAgentService, TestRemoteAgentService);
 		testInstantiationService.stub(ICommandService, TestCommandService);
 		testInstantiationService.stub(IURLService, { registerHandler: () => { } });
 		if (editorGroupsService) {

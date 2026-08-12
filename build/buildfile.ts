@@ -46,8 +46,6 @@ export const code = [
 export const codeWeb = createModuleDescription('vs/code/browser/workbench/workbench');
 
 export const codeServer = [
-	// 'vs/server/node/server.main' is not included here because it gets inlined via ./src/server-main.js
-	// 'vs/server/node/server.cli' is not included here because it gets inlined via ./src/server-cli.js
 	createModuleDescription('vs/workbench/api/node/extensionHostProcess'),
 	createModuleDescription('vs/platform/files/node/watcher/watcherMain'),
 	createModuleDescription('vs/platform/terminal/node/ptyHostMain'),

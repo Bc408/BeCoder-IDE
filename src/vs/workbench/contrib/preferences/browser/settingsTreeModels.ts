@@ -15,9 +15,7 @@ import { ConfigurationTarget, getLanguageTagSettingPlainKey, IConfigurationValue
 import { ConfigurationDefaultValueSource, ConfigurationScope, EditPresentationTypes, Extensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
-import { USER_LOCAL_AND_REMOTE_SETTINGS } from '../../../../platform/request/common/request.js';
-import { APPLICATION_SCOPES, FOLDER_SCOPES, IWorkbenchConfigurationService, LOCAL_MACHINE_SCOPES, REMOTE_MACHINE_SCOPES, WORKSPACE_SCOPES } from '../../../services/configuration/common/configuration.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
+import { APPLICATION_SCOPES, FOLDER_SCOPES, IWorkbenchConfigurationService, WORKSPACE_SCOPES } from '../../../services/configuration/common/configuration.js';
 import { IExtensionSetting, ISearchResult, ISetting, ISettingMatch, SettingMatchType, SettingValueType } from '../../../services/preferences/common/preferences.js';
 import { IUserDataProfileService } from '../../../services/userDataProfile/common/userDataProfile.js';
 import { ENABLE_EXTENSION_TOGGLE_SETTINGS, ENABLE_LANGUAGE_FILTER, MODIFIED_SETTING_TAG, POLICY_SETTING_TAG, REQUIRE_TRUSTED_WORKSPACE_SETTING_TAG, compareTwoNullableNumbers, wordifyKey } from '../common/preferences.js';
@@ -307,9 +305,6 @@ export class SettingsTreeSettingElement extends SettingsTreeElement {
 		if ((languageSelector || targetSelector !== 'workspaceValue') && typeof inspected.workspaceValue !== 'undefined') {
 			overriddenScopeList.push('workspace:');
 		}
-		if ((languageSelector || targetSelector !== 'userRemoteValue') && typeof inspected.userRemoteValue !== 'undefined') {
-			overriddenScopeList.push('remote:');
-		}
 		if ((languageSelector || targetSelector !== 'userLocalValue') && typeof inspected.userLocalValue !== 'undefined') {
 			overriddenScopeList.push('user:');
 		}
@@ -324,9 +319,6 @@ export class SettingsTreeSettingElement extends SettingsTreeElement {
 						}
 						if ((languageSelector !== overrideIdentifier || targetSelector !== 'workspaceValue') && typeof inspectedOverride.workspace?.override !== 'undefined') {
 							overriddenScopeList.push(`workspace:${overrideIdentifier}`);
-						}
-						if ((languageSelector !== overrideIdentifier || targetSelector !== 'userRemoteValue') && typeof inspectedOverride.userRemote?.override !== 'undefined') {
-							overriddenScopeList.push(`remote:${overrideIdentifier}`);
 						}
 						if ((languageSelector !== overrideIdentifier || targetSelector !== 'userLocalValue') && typeof inspectedOverride.userLocal?.override !== 'undefined') {
 							overriddenScopeList.push(`user:${overrideIdentifier}`);
@@ -422,7 +414,7 @@ export class SettingsTreeSettingElement extends SettingsTreeElement {
 			Array.from(tagFilters).every(tag => this.tags!.has(tag));
 	}
 
-	matchesScope(scope: SettingsTarget, isRemote: boolean): boolean {
+	matchesScope(scope: SettingsTarget): boolean {
 		const configTarget = URI.isUri(scope) ? ConfigurationTarget.WORKSPACE_FOLDER : scope;
 
 		if (!this.setting.scope) {
@@ -439,16 +431,6 @@ export class SettingsTreeSettingElement extends SettingsTreeElement {
 
 		if (configTarget === ConfigurationTarget.WORKSPACE) {
 			return WORKSPACE_SCOPES.includes(this.setting.scope);
-		}
-
-		if (configTarget === ConfigurationTarget.USER_REMOTE) {
-			return REMOTE_MACHINE_SCOPES.includes(this.setting.scope) || USER_LOCAL_AND_REMOTE_SETTINGS.includes(this.setting.key);
-		}
-
-		if (configTarget === ConfigurationTarget.USER_LOCAL) {
-			if (isRemote) {
-				return LOCAL_MACHINE_SCOPES.includes(this.setting.scope) || USER_LOCAL_AND_REMOTE_SETTINGS.includes(this.setting.key);
-			}
 		}
 
 		return true;
@@ -690,7 +672,7 @@ export class SettingsTreeModel implements IDisposable {
 interface IInspectResult {
 	isConfigured: boolean;
 	inspected: IConfigurationValue<unknown>;
-	targetSelector: 'applicationValue' | 'userLocalValue' | 'userRemoteValue' | 'workspaceValue' | 'workspaceFolderValue';
+	targetSelector: 'applicationValue' | 'userLocalValue' | 'workspaceValue' | 'workspaceFolderValue';
 	inspectedLanguageOverrides: Map<string, IConfigurationValue<unknown>>;
 	languageSelector: string | undefined;
 }
@@ -700,14 +682,12 @@ export function inspectSetting(key: string, target: SettingsTarget, languageFilt
 	const inspected = configurationService.inspect(key, inspectOverrides);
 	const targetSelector = target === ConfigurationTarget.APPLICATION ? 'applicationValue' :
 		target === ConfigurationTarget.USER_LOCAL ? 'userLocalValue' :
-			target === ConfigurationTarget.USER_REMOTE ? 'userRemoteValue' :
-				target === ConfigurationTarget.WORKSPACE ? 'workspaceValue' :
-					'workspaceFolderValue';
+			target === ConfigurationTarget.WORKSPACE ? 'workspaceValue' :
+				'workspaceFolderValue';
 	const targetOverrideSelector = target === ConfigurationTarget.APPLICATION ? 'application' :
 		target === ConfigurationTarget.USER_LOCAL ? 'userLocal' :
-			target === ConfigurationTarget.USER_REMOTE ? 'userRemote' :
-				target === ConfigurationTarget.WORKSPACE ? 'workspace' :
-					'workspaceFolder';
+			target === ConfigurationTarget.WORKSPACE ? 'workspace' :
+				'workspaceFolder';
 	let isConfigured = typeof inspected[targetSelector] !== 'undefined';
 
 	const overrideIdentifiers = inspected.overrideIdentifiers;
@@ -965,7 +945,6 @@ export class SearchResultModel extends SettingsTreeModel {
 		settingsOrderByTocIndex: Map<string, number> | null,
 		isWorkspaceTrusted: boolean,
 		@IWorkbenchConfigurationService configurationService: IWorkbenchConfigurationService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@ILanguageService languageService: ILanguageService,
 		@IUserDataProfileService userDataProfileService: IUserDataProfileService,
 		@IProductService productService: IProductService
@@ -1066,13 +1045,11 @@ export class SearchResultModel extends SettingsTreeModel {
 		});
 
 		// Save time by filtering children in the search model instead of relying on the tree filter, which still requires heights to be calculated.
-		const isRemote = !!this.environmentService.remoteAuthority;
-
 		const newChildren = [];
 		for (const child of this.root.children) {
 			if (child instanceof SettingsTreeSettingElement
 				&& child.matchesAllTags(this._viewState.tagFilters)
-				&& child.matchesScope(this._viewState.settingsTarget, isRemote)
+				&& child.matchesScope(this._viewState.settingsTarget)
 				&& child.matchesAnyExtension(this._viewState.extensionFilters)
 				&& child.matchesAnyId(this._viewState.idFilters)
 				&& child.matchesAnyFeature(this._viewState.featureFilters)

@@ -12,7 +12,6 @@ import { MainContext, MainThreadTerminalServiceShape } from '../../common/extHos
 import { ArgumentProcessor, ExtHostCommands } from '../../common/extHostCommands.js';
 import { WorkerExtHostTerminalService } from '../../common/extHostTerminalService.js';
 import { TerminalExitReason } from '../../common/extHostTypes.js';
-import { IExtHostInitDataService } from '../../common/extHostInitDataService.js';
 import { TestRPCProtocol } from './testRPCProtocol.js';
 
 suite('ExtHostTerminalService', () => {
@@ -30,11 +29,7 @@ suite('ExtHostTerminalService', () => {
 		const commands = new class extends mock<ExtHostCommands>() {
 			override registerArgumentProcessor(_processor: ArgumentProcessor): void { }
 		};
-		const initData = new class extends mock<IExtHostInitDataService>() {
-			override readonly remote = { authority: 'test+remote', isRemote: true, connectionData: null };
-		};
-
-		const service = store.add(new WorkerExtHostTerminalService(commands, rpcProtocol, initData));
+		const service = store.add(new WorkerExtHostTerminalService(commands, rpcProtocol));
 
 		const terminalId = 42;
 		service.$acceptTerminalOpened(terminalId, undefined, 'test', {} as IShellLaunchConfigDto);

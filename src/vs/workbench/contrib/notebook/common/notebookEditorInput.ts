@@ -31,7 +31,6 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IMarkdownString } from '../../../../base/common/htmlContent.js';
 import { ITextResourceConfigurationService } from '../../../../editor/common/services/textResourceConfiguration.js';
 import { ICustomEditorLabelService } from '../../../services/editor/common/customEditorLabelService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { isAbsolute } from '../../../../base/common/path.js';
 
@@ -75,7 +74,6 @@ export class NotebookEditorInput extends AbstractResourceEditorInput {
 		@IEditorService editorService: IEditorService,
 		@ITextResourceConfigurationService textResourceConfigurationService: ITextResourceConfigurationService,
 		@ICustomEditorLabelService customEditorLabelService: ICustomEditorLabelService,
-		@IWorkbenchEnvironmentService protected readonly environmentService: IWorkbenchEnvironmentService,
 		@IPathService private readonly pathService: IPathService
 	) {
 		super(resource, preferredResource, labelService, fileService, filesConfigurationService, textResourceConfigurationService, customEditorLabelService);
@@ -251,8 +249,7 @@ export class NotebookEditorInput extends AbstractResourceEditorInput {
 
 	private async _suggestName(provider: NotebookProviderInfo) {
 		const resource = await this.ensureAbsolutePath(this.ensureProviderExtension(provider));
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		return toLocalResource(resource, remoteAuthority, this.pathService.defaultUriScheme);
+		return toLocalResource(resource, undefined, this.pathService.defaultUriScheme);
 	}
 
 	private async ensureAbsolutePath(resource: URI): Promise<URI> {

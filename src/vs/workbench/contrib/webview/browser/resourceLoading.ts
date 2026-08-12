@@ -108,7 +108,7 @@ export function getResourceToLoad(
 	const requestUriNoQueryString = requestUri.with({ query: '' });
 	for (const root of roots) {
 		if (containsResource(root, requestUriNoQueryString, uriIdentityService)) {
-			return normalizeResourcePath(requestUri);
+			return requestUri;
 		}
 	}
 
@@ -139,19 +139,4 @@ function containsResource(root: URI, resource: URI, uriIdentityService: IUriIden
 	}
 
 	return uriIdentityService.extUri.isEqualOrParent(resource, root, /* ignoreFragment */ true);
-}
-
-function normalizeResourcePath(resource: URI): URI {
-	// Rewrite remote uris to a path that the remote file system can understand
-	if (resource.scheme === Schemas.vscodeRemote) {
-		return URI.from({
-			scheme: Schemas.vscodeRemote,
-			authority: resource.authority,
-			path: '/vscode-resource',
-			query: JSON.stringify({
-				requestResourcePath: resource.path
-			})
-		});
-	}
-	return resource;
 }

@@ -14,7 +14,7 @@ import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.j
 import { EditorResourceAccessor, Verbosity, SideBySideEditor } from '../../../common/editor.js';
 import { IBrowserWorkbenchEnvironmentService } from '../../../services/environment/browser/environmentService.js';
 import { IWorkspaceContextService, WorkbenchState, IWorkspaceFolder } from '../../../../platform/workspace/common/workspace.js';
-import { isWindows, isWeb, isMacintosh, isNative } from '../../../../base/common/platform.js';
+import { isWindows, isMacintosh, isNative } from '../../../../base/common/platform.js';
 import { URI } from '../../../../base/common/uri.js';
 import { trim } from '../../../../base/common/strings.js';
 import { template } from '../../../../base/common/labels.js';
@@ -22,8 +22,6 @@ import { ILabelService, Verbosity as LabelVerbosity } from '../../../../platform
 import { Emitter } from '../../../../base/common/event.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { Schemas } from '../../../../base/common/network.js';
-import { getVirtualWorkspaceLocation } from '../../../../platform/workspace/common/virtualWorkspace.js';
 import { IUserDataProfileService } from '../../../services/userDataProfile/common/userDataProfile.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { ICodeEditor, isCodeEditor, isDiffEditor } from '../../../../editor/browser/editorBrowser.js';
@@ -43,12 +41,7 @@ export const defaultWindowTitle = (() => {
 		return '${activeEditorShort}${separator}${rootName}${separator}${profileName}'; // macOS has native dirty indicator
 	}
 
-	const base = '${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}';
-	if (isWeb) {
-		return base + '${separator}${remoteName}'; // Web: always show remote name
-	}
-
-	return base;
+	return '${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}';
 })();
 export const defaultWindowTitleSeparator = isMacintosh ? ' \u2014 ' : ' - ';
 
@@ -297,7 +290,6 @@ export class WindowTitle extends Disposable {
 	 * {folderName}: e.g. myFolder
 	 * {folderPath}: e.g. /Users/Development/myFolder
 	 * {appName}: e.g. VS Code
-	 * {remoteName}: e.g. SSH
 	 * {dirty}: indicator
 	 * {focusedView}: e.g. Terminal
 	 * {separator}: conditional separator
@@ -330,19 +322,6 @@ export class WindowTitle extends Disposable {
 			folder = workspace.folders[0];
 		} else if (editorResource) {
 			folder = this.contextService.getWorkspaceFolder(editorResource) ?? undefined;
-		}
-
-		// Compute remote
-		// vscode-remtoe: use as is
-		// otherwise figure out if we have a virtual folder opened
-		let remoteName: string | undefined = undefined;
-		if (this.environmentService.remoteAuthority && !isWeb) {
-			remoteName = this.labelService.getHostLabel(Schemas.vscodeRemote, this.environmentService.remoteAuthority);
-		} else {
-			const virtualWorkspaceLocation = getVirtualWorkspaceLocation(workspace);
-			if (virtualWorkspaceLocation) {
-				remoteName = this.labelService.getHostLabel(virtualWorkspaceLocation.scheme, virtualWorkspaceLocation.authority);
-			}
 		}
 
 		// Variables
@@ -399,7 +378,6 @@ export class WindowTitle extends Disposable {
 			folderPath,
 			dirty,
 			appName,
-			remoteName,
 			profileName,
 			focusedView,
 			activeEditorState,

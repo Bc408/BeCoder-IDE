@@ -10,7 +10,6 @@ import { IExtension, IExtensionsWorkbenchService, IExtensionContainer, Extension
 import { append, $, reset, addDisposableListener, EventType, finalHandler } from '../../../../base/browser/dom.js';
 import * as platform from '../../../../base/common/platform.js';
 import { localize } from '../../../../nls.js';
-import { IExtensionManagementServerService } from '../../../services/extensionManagement/common/extensionManagement.js';
 import { IExtensionIgnoredRecommendationsService, IExtensionRecommendationsService } from '../../../services/extensionRecommendations/common/extensionRecommendations.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
 import { extensionButtonProminentBackground, ExtensionStatusAction } from './extensionsActions.js';
@@ -18,11 +17,10 @@ import { IThemeService, registerThemingParticipant } from '../../../../platform/
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { EXTENSION_BADGE_BACKGROUND, EXTENSION_BADGE_FOREGROUND } from '../../../common/theme.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { CountBadge } from '../../../../base/browser/ui/countBadge/countBadge.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IUserDataSyncEnablementService } from '../../../../platform/userDataSync/common/userDataSync.js';
-import { activationTimeIcon, errorIcon, infoIcon, installCountIcon, preReleaseIcon, privateExtensionIcon, ratingIcon, remoteIcon, restartRequiredIcon, sponsorIcon, starEmptyIcon, starFullIcon, starHalfIcon, syncIgnoredIcon, warningIcon } from './extensionsIcons.js';
+import { activationTimeIcon, errorIcon, infoIcon, installCountIcon, preReleaseIcon, privateExtensionIcon, ratingIcon, restartRequiredIcon, sponsorIcon, starEmptyIcon, starFullIcon, starHalfIcon, syncIgnoredIcon, warningIcon } from './extensionsIcons.js';
 import { registerColor, textLinkForeground } from '../../../../platform/theme/common/colorRegistry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
@@ -479,43 +477,6 @@ export class PreReleaseBookmarkWidget extends ExtensionWidget {
 		}
 	}
 
-}
-
-export class RemoteBadgeWidget extends ExtensionWidget {
-
-	private readonly remoteBadge = this._register(new MutableDisposable<ExtensionIconBadge>());
-
-	private element: HTMLElement;
-
-	constructor(
-		parent: HTMLElement,
-		private readonly tooltip: boolean,
-		@IExtensionManagementServerService private readonly extensionManagementServerService: IExtensionManagementServerService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
-	) {
-		super();
-		this.element = append(parent, $(''));
-		this.render();
-		this._register(toDisposable(() => this.clear()));
-	}
-
-	private clear(): void {
-		this.remoteBadge.value?.element.remove();
-		this.remoteBadge.clear();
-	}
-
-	render(): void {
-		this.clear();
-		if (!this.extension || !this.extension.local || !this.extension.server || !(this.extensionManagementServerService.localExtensionManagementServer && this.extensionManagementServerService.remoteExtensionManagementServer) || this.extension.server !== this.extensionManagementServerService.remoteExtensionManagementServer) {
-			return;
-		}
-		let tooltip: string | undefined;
-		if (this.tooltip && this.extensionManagementServerService.remoteExtensionManagementServer) {
-			tooltip = localize('remote extension title', "Extension in {0}", this.extensionManagementServerService.remoteExtensionManagementServer.label);
-		}
-		this.remoteBadge.value = this.instantiationService.createInstance(ExtensionIconBadge, remoteIcon, tooltip);
-		append(this.element, this.remoteBadge.value.element);
-	}
 }
 
 export class ExtensionIconBadge extends Disposable {

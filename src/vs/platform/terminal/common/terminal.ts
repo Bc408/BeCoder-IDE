@@ -1112,8 +1112,6 @@ export interface ITerminalCommandSelector {
 }
 
 export interface ITerminalBackend extends ITerminalBackendPtyServiceContributions {
-	readonly remoteAuthority: string | undefined;
-
 	readonly isResponsive: boolean;
 
 	/**
@@ -1195,14 +1193,14 @@ export interface ITerminalBackendRegistry {
 	backends: ReadonlyMap<string, ITerminalBackend>;
 
 	/**
-	 * Registers a terminal backend for a remote authority.
+	 * Registers the local terminal backend.
 	 */
 	registerTerminalBackend(backend: ITerminalBackend): void;
 
 	/**
-	 * Returns the registered terminal backend for a remote authority.
+	 * Returns the registered local terminal backend.
 	 */
-	getTerminalBackend(remoteAuthority?: string): ITerminalBackend | undefined;
+	getTerminalBackend(): ITerminalBackend | undefined;
 }
 
 class TerminalBackendRegistry implements ITerminalBackendRegistry {
@@ -1211,20 +1209,15 @@ class TerminalBackendRegistry implements ITerminalBackendRegistry {
 	get backends(): ReadonlyMap<string, ITerminalBackend> { return this._backends; }
 
 	registerTerminalBackend(backend: ITerminalBackend): void {
-		const key = this._sanitizeRemoteAuthority(backend.remoteAuthority);
+		const key = '';
 		if (this._backends.has(key)) {
-			throw new Error(`A terminal backend with remote authority '${key}' was already registered.`);
+			throw new Error('A local terminal backend was already registered.');
 		}
 		this._backends.set(key, backend);
 	}
 
-	getTerminalBackend(remoteAuthority: string | undefined): ITerminalBackend | undefined {
-		return this._backends.get(this._sanitizeRemoteAuthority(remoteAuthority));
-	}
-
-	private _sanitizeRemoteAuthority(remoteAuthority: string | undefined) {
-		// Normalize the key to lowercase as the authority is case-insensitive
-		return remoteAuthority?.toLowerCase() ?? '';
+	getTerminalBackend(): ITerminalBackend | undefined {
+		return this._backends.get('');
 	}
 }
 Registry.add(TerminalExtensions.Backend, new TerminalBackendRegistry());

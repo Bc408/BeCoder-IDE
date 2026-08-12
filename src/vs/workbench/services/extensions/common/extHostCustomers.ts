@@ -11,7 +11,6 @@ import { IInternalExtensionService } from './extensions.js';
 import { IRPCProtocol, ProxyIdentifier } from './proxyIdentifier.js';
 
 export interface IExtHostContext extends IRPCProtocol {
-	readonly remoteAuthority: string | null;
 	readonly extensionHostKind: ExtensionHostKind;
 }
 

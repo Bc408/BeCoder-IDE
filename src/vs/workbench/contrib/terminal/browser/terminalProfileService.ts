@@ -20,9 +20,7 @@ import { refreshTerminalActions } from './terminalActions.js';
 import { IRegisterContributedProfileArgs, ITerminalProfileProvider, ITerminalProfileService } from '../common/terminal.js';
 import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { ITerminalContributionService } from '../common/terminalExtensionPoints.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { hasKey, isString } from '../../../../base/common/types.js';
 
 /*
@@ -66,8 +64,6 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ITerminalContributionService private readonly _terminalContributionService: ITerminalContributionService,
 		@IExtensionService private readonly _extensionService: IExtensionService,
-		@IRemoteAgentService private _remoteAgentService: IRemoteAgentService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@ITerminalInstanceService private readonly _terminalInstanceService: ITerminalInstanceService
 	) {
 		super();
@@ -78,14 +74,11 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 
 		this._webExtensionContributedProfileContextKey = TerminalContextKeys.webExtensionContributedProfile.bindTo(this._contextKeyService);
 		this._updateWebContextKey();
-		this._profilesReadyPromise = this._remoteAgentService.getEnvironment()
-			.then(() => {
-				// Wait up to 20 seconds for profiles to be ready so it's assured that we know the actual
-				// default terminal before launching the first terminal. This isn't expected to ever take
-				// this long.
-				this._profilesReadyBarrier = new AutoOpenBarrier(20000);
-				return this._profilesReadyBarrier.wait().then(() => { });
-			});
+		// Wait up to 20 seconds for profiles to be ready so it's assured that we know the actual
+		// default terminal before launching the first terminal. This isn't expected to ever take
+		// this long.
+		this._profilesReadyBarrier = new AutoOpenBarrier(20000);
+		this._profilesReadyPromise = this._profilesReadyBarrier.wait().then(() => { });
 		this.refreshAvailableProfiles();
 		this._setupConfigListener();
 	}
@@ -194,13 +187,13 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 	private async _detectProfiles(includeDetectedProfiles?: boolean): Promise<ITerminalProfile[]> {
 		// On web without a pty host, getBackend() waits forever for a backend
 		// that will never register. Check synchronously first to avoid hanging.
-		if (isWeb && !this._environmentService.remoteAuthority) {
+		if (isWeb) {
 			const hasAnyBackend = [...this._terminalInstanceService.getRegisteredBackends()].length > 0;
 			if (!hasAnyBackend) {
 				return this._availableProfiles || [];
 			}
 		}
-		const primaryBackend = await this._terminalInstanceService.getBackend(this._environmentService.remoteAuthority);
+		const primaryBackend = await this._terminalInstanceService.getBackend();
 		if (!primaryBackend) {
 			return this._availableProfiles || [];
 		}
@@ -214,16 +207,11 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 	}
 
 	private async _refreshPlatformConfig(profiles: ITerminalProfile[]) {
-		const env = await this._remoteAgentService.getEnvironment();
-		registerTerminalDefaultProfileConfiguration({ os: env?.os || OS, profiles }, this._contributedProfiles);
+		registerTerminalDefaultProfileConfiguration({ os: OS, profiles }, this._contributedProfiles);
 		this._refreshTerminalActionsDisposable.value = refreshTerminalActions(profiles);
 	}
 
 	async getPlatformKey(): Promise<string> {
-		const env = await this._remoteAgentService.getEnvironment();
-		if (env) {
-			return env.os === OperatingSystem.Windows ? 'windows' : (env.os === OperatingSystem.Macintosh ? 'osx' : 'linux');
-		}
 		return isWindows ? 'windows' : (isMacintosh ? 'osx' : 'linux');
 	}
 

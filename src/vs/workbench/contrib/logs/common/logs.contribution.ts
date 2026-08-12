@@ -19,7 +19,6 @@ import { windowLogId, showWindowLogActionId } from '../../../services/log/common
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { CounterSet } from '../../../../base/common/map.js';
 import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
-import { Schemas } from '../../../../base/common/network.js';
 import { IDefaultLogLevelsService } from '../../../services/log/common/defaultLogLevels.js';
 
 registerAction2(class extends Action2 {
@@ -145,15 +144,7 @@ class LogOutputChannels extends Disposable implements IWorkbenchContribution {
 			return;
 		}
 
-		const existingChannel = this.outputChannelRegistry.getChannel(logger.id);
-		const remoteLogger = existingChannel && isSingleSourceOutputChannelDescriptor(existingChannel) && existingChannel.source.resource.scheme === Schemas.vscodeRemote ? this.loggerService.getRegisteredLogger(existingChannel.source.resource) : undefined;
-		if (remoteLogger) {
-			this.deregisterLogChannel(remoteLogger);
-		}
-		const hasToAppendRemote = existingChannel && logger.resource.scheme === Schemas.vscodeRemote;
-		const id = hasToAppendRemote ? `${logger.id}.remote` : logger.id;
-		const label = hasToAppendRemote ? nls.localize('remote name', "{0} (Remote)", logger.name ?? logger.id) : logger.name ?? logger.id;
-		this.outputChannelRegistry.registerChannel({ id, label, source: { resource: logger.resource }, log: true, extensionId: logger.extensionId });
+		this.outputChannelRegistry.registerChannel({ id: logger.id, label: logger.name ?? logger.id, source: { resource: logger.resource }, log: true, extensionId: logger.extensionId });
 	}
 
 	private registerCompoundLogChannel(id: string, name: string, logger: ILoggerResource): void {

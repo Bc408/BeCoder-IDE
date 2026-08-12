@@ -871,7 +871,6 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 			|| ExtensionsListView.isKeymapsRecommendedExtensionsQuery(query.value)
 			|| ExtensionsListView.isLanguageRecommendedExtensionsQuery(query.value)
 			|| ExtensionsListView.isExeRecommendedExtensionsQuery(query.value)
-			|| ExtensionsListView.isRemoteRecommendedExtensionsQuery(query.value)
 			|| /@recommended:all/i.test(query.value)
 			|| ExtensionsListView.isSearchRecommendedExtensionsQuery(query.value)
 			|| ExtensionsListView.isRecommendedExtensionsQuery(query.value);
@@ -896,11 +895,6 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 		// Exe recommendations
 		if (ExtensionsListView.isExeRecommendedExtensionsQuery(query.value)) {
 			return this.getExeRecommendationsModel(query, options, token);
-		}
-
-		// Remote recommendations
-		if (ExtensionsListView.isRemoteRecommendedExtensionsQuery(query.value)) {
-			return this.getRemoteRecommendationsModel(query, options, token);
 		}
 
 		// All recommendations
@@ -990,14 +984,6 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 		const value = query.value.replace(/@recommended:languages/g, '').trim().toLowerCase();
 		const recommendations = this.extensionRecommendationsService.getLanguageRecommendations();
 		const installableRecommendations = (await this.getInstallableRecommendations(recommendations, { ...options, source: 'recommendations-languages' }, token))
-			.filter(extension => extension.identifier.id.toLowerCase().indexOf(value) > -1);
-		return new PagedModel(installableRecommendations);
-	}
-
-	private async getRemoteRecommendationsModel(query: Query, options: IQueryOptions, token: CancellationToken): Promise<IPagedModel<IExtension>> {
-		const value = query.value.replace(/@recommended:remotes/g, '').trim().toLowerCase();
-		const recommendations = this.extensionRecommendationsService.getRemoteRecommendations();
-		const installableRecommendations = (await this.getInstallableRecommendations(recommendations, { ...options, source: 'recommendations-remotes' }, token))
 			.filter(extension => extension.identifier.id.toLowerCase().indexOf(value) > -1);
 		return new PagedModel(installableRecommendations);
 	}
@@ -1236,10 +1222,6 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 		return /@exe:.+/i.test(query);
 	}
 
-	static isRemoteRecommendedExtensionsQuery(query: string): boolean {
-		return /@recommended:remotes/i.test(query);
-	}
-
 	static isKeymapsRecommendedExtensionsQuery(query: string): boolean {
 		return /@recommended:keymaps/i.test(query);
 	}
@@ -1296,7 +1278,7 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 export class DefaultPopularExtensionsView extends ExtensionsListView {
 
 	override async show(): Promise<IPagedModel<IExtension>> {
-		const query = this.extensionManagementServerService.webExtensionManagementServer && !this.extensionManagementServerService.localExtensionManagementServer && !this.extensionManagementServerService.remoteExtensionManagementServer ? '@web' : '';
+		const query = this.extensionManagementServerService.webExtensionManagementServer && !this.extensionManagementServerService.localExtensionManagementServer ? '@web' : '';
 		return super.show(query);
 	}
 

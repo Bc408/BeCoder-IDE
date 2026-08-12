@@ -17,7 +17,7 @@ import { isUndefinedOrNull } from '../../../../../base/common/types.js';
 import { areSameExtensions } from '../../../../../platform/extensionManagement/common/extensionManagementUtil.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { URI } from '../../../../../base/common/uri.js';
-import { Schemas } from '../../../../../base/common/network.js';
+import { Schemas as ProductSchemas } from '../../../../../base/common/network.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TestLifecycleService } from '../../../../test/browser/workbenchTestServices.js';
 import { GlobalExtensionEnablementService } from '../../../../../platform/extensionManagement/common/extensionEnablementService.js';
@@ -42,6 +42,8 @@ import { FileService } from '../../../../../platform/files/common/fileService.js
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { AllowedExtensionsService } from '../../../../../platform/extensionManagement/common/allowedExtensionsService.js';
 import { IStringDictionary } from '../../../../../base/common/collections.js';
+
+const Schemas = { ...ProductSchemas, vscodeRemote: 'test-remote' };
 
 function createStorageService(instantiationService: TestInstantiationService, disposableStore: DisposableStore): IStorageService {
 	let service = instantiationService.get(IStorageService);
@@ -1241,30 +1243,24 @@ function anExtensionManagementServer(authority: string, instantiationService: Te
 
 function aMultiExtensionManagementServerService(instantiationService: TestInstantiationService): IExtensionManagementServerService {
 	const localExtensionManagementServer = anExtensionManagementServer('vscode-local', instantiationService);
-	const remoteExtensionManagementServer = anExtensionManagementServer('vscode-remote', instantiationService);
-	return anExtensionManagementServerService(localExtensionManagementServer, remoteExtensionManagementServer, null);
+	return anExtensionManagementServerService(localExtensionManagementServer, null, null);
 }
 
-export function anExtensionManagementServerService(localExtensionManagementServer: IExtensionManagementServer | null, remoteExtensionManagementServer: IExtensionManagementServer | null, webExtensionManagementServer: IExtensionManagementServer | null): IExtensionManagementServerService {
+export function anExtensionManagementServerService(localExtensionManagementServer: IExtensionManagementServer | null, _remoteExtensionManagementServer: IExtensionManagementServer | null, webExtensionManagementServer: IExtensionManagementServer | null): IExtensionManagementServerService {
 	return {
 		_serviceBrand: undefined,
 		localExtensionManagementServer,
-		remoteExtensionManagementServer,
 		webExtensionManagementServer,
 		getExtensionManagementServer: (extension: IExtension) => {
 			if (extension.location.scheme === Schemas.file) {
 				return localExtensionManagementServer;
 			}
-			if (extension.location.scheme === Schemas.vscodeRemote) {
-				return remoteExtensionManagementServer;
-			}
 			return webExtensionManagementServer;
 		},
 		getExtensionInstallLocation(extension: IExtension): ExtensionInstallLocation | null {
 			const server = this.getExtensionManagementServer(extension);
-			return server === remoteExtensionManagementServer ? ExtensionInstallLocation.Remote
-				: server === webExtensionManagementServer ? ExtensionInstallLocation.Web
-					: ExtensionInstallLocation.Local;
+			return server === webExtensionManagementServer ? ExtensionInstallLocation.Web
+				: ExtensionInstallLocation.Local;
 		}
 	};
 }

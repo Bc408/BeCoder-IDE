@@ -8,7 +8,6 @@ import type * as vscode from 'vscode';
 import { MainContext, MainThreadMessageServiceShape, MainThreadMessageOptions, IMainContext } from './extHost.protocol.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { ILogService } from '../../../platform/log/common/log.js';
-import { checkProposedApiEnabled } from '../../services/extensions/common/extensions.js';
 
 function isMessageItem(item: any): item is vscode.MessageItem {
 	return item && item.title;
@@ -40,13 +39,8 @@ export class ExtHostMessageService {
 			items = [optionsOrFirstItem, ...rest];
 		} else {
 			options.modal = optionsOrFirstItem?.modal;
-			options.useCustom = optionsOrFirstItem?.useCustom;
 			options.detail = optionsOrFirstItem?.detail;
 			items = rest;
-		}
-
-		if (options.useCustom) {
-			checkProposedApiEnabled(extension, 'resolvers');
 		}
 
 		const commands: { title: string; isCloseAffordance: boolean; handle: number }[] = [];

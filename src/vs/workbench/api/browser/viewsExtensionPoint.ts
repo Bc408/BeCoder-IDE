@@ -23,7 +23,6 @@ import { ViewPaneContainer } from '../../browser/parts/views/viewPaneContainer.j
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../common/contributions.js';
 import { ICustomViewDescriptor, IViewContainersRegistry, IViewDescriptor, IViewsRegistry, ViewContainer, Extensions as ViewContainerExtensions, ViewContainerLocation } from '../../common/views.js';
 import { VIEWLET_ID as EXPLORER } from '../../contrib/files/common/files.js';
-import { VIEWLET_ID as REMOTE } from '../../contrib/remote/browser/remoteExplorer.js';
 import { WebviewViewPane } from '../../contrib/webviewView/browser/webviewViewPane.js';
 import { Extensions as ExtensionFeaturesRegistryExtensions, IExtensionFeatureTableRenderer, IExtensionFeaturesRegistry, IRenderedData, IRowData, ITableData } from '../../services/extensionManagement/common/extensionFeatures.js';
 import { isProposedApiEnabled } from '../../services/extensions/common/extensions.js';
@@ -97,9 +96,7 @@ interface IUserFriendlyViewDescriptor {
 
 	initialSize?: number;
 
-	// From 'remoteViewDescriptor' type
 	group?: string;
-	remoteName?: string | string[];
 	virtualWorkspace?: string;
 
 	accessibilityHelpContent?: string;
@@ -174,35 +171,6 @@ const viewDescriptor: IJSONSchema = {
 	}
 };
 
-const remoteViewDescriptor: IJSONSchema = {
-	type: 'object',
-	required: ['id', 'name'],
-	properties: {
-		id: {
-			description: localize('vscode.extension.contributes.view.id', 'Identifier of the view. This should be unique across all views. It is recommended to include your extension id as part of the view id. Use this to register a data provider through `vscode.window.registerTreeDataProviderForView` API. Also to trigger activating your extension by registering `onView:${id}` event to `activationEvents`.'),
-			type: 'string'
-		},
-		name: {
-			description: localize('vscode.extension.contributes.view.name', 'The human-readable name of the view. Will be shown'),
-			type: 'string'
-		},
-		when: {
-			description: localize('vscode.extension.contributes.view.when', 'Condition which must be true to show this view'),
-			type: 'string'
-		},
-		group: {
-			description: localize('vscode.extension.contributes.view.group', 'Nested group in the viewlet'),
-			type: 'string'
-		},
-		remoteName: {
-			description: localize('vscode.extension.contributes.view.remoteName', 'The name of the remote type associated with this view'),
-			type: ['string', 'array'],
-			items: {
-				type: 'string'
-			}
-		}
-	}
-};
 const viewsContribution: IJSONSchema = {
 	description: localize('vscode.extension.contributes.views', "Contributes views to the editor"),
 	type: 'object',
@@ -217,12 +185,6 @@ const viewsContribution: IJSONSchema = {
 			description: localize('views.test', "Contributes views to Test container in the Activity bar"),
 			type: 'array',
 			items: viewDescriptor,
-			default: []
-		},
-		'remote': {
-			description: localize('views.remote', "Contributes views to Remote container in the Activity bar. To contribute to this container, the 'contribViewsRemote' API proposal must be enabled."),
-			type: 'array',
-			items: remoteViewDescriptor,
 			default: []
 		},
 	},
@@ -436,11 +398,6 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 					return;
 				}
 
-				if (key === 'remote' && !isProposedApiEnabled(extension.description, 'contribViewsRemote')) {
-					collector.warn(localize('ViewContainerRequiresProposedAPI', "View container '{0}' requires 'enabledApiProposals: [\"contribViewsRemote\"]' to be added to 'Remote'.", key));
-					return;
-				}
-
 				const viewContainer = this.getViewContainer(key);
 				if (!viewContainer) {
 					collector.warn(localize('ViewContainerDoesnotExist', "View container '{0}' does not exist and all views registered to it will be added to 'Explorer'.", key));
@@ -502,18 +459,15 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 						containerIcon: icon || viewContainer?.icon,
 						containerTitle: item.contextualTitle || (viewContainer && (typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value)),
 						canToggleVisibility: true,
-						canMoveView: viewContainer?.id !== REMOTE,
+						canMoveView: true,
 						treeView: type === ViewType.Tree ? this.instantiationService.createInstance(CustomTreeView, item.id, item.name, extension.description.identifier.value) : undefined,
 						collapsed: this.showCollapsed(container) || initialVisibility === InitialVisibility.Collapsed,
 						order: order,
 						extensionId: extension.description.identifier,
 						originalContainerId: key,
 						group: item.group,
-						// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
-						remoteAuthority: item.remoteName || (<any>item).remoteAuthority, // TODO@roblou - delete after remote extensions are updated
 						virtualWorkspace: item.virtualWorkspace,
 						hideByDefault: initialVisibility === InitialVisibility.Hidden,
-						workspace: viewContainer?.id === REMOTE ? true : undefined,
 						weight,
 						accessibilityHelpContent
 					};
@@ -607,7 +561,6 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 	private getViewContainer(value: string): ViewContainer | undefined {
 		switch (value) {
 			case 'explorer': return this.viewContainersRegistry.get(EXPLORER);
-			case 'remote': return this.viewContainersRegistry.get(REMOTE);
 			default: return this.viewContainersRegistry.get(`workbench.view.extension.${value}`);
 		}
 	}

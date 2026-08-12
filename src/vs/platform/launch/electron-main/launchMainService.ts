@@ -115,8 +115,6 @@ export class LaunchMainService implements ILaunchMainService {
 		let usedWindows: ICodeWindow[] = [];
 
 		const waitMarkerFileURI = args.wait && args.waitMarkerFilePath ? URI.file(args.waitMarkerFilePath) : undefined;
-		const remoteAuthority = args.remote || undefined;
-
 		const baseConfig: IOpenConfiguration = {
 			context,
 			cli: args,
@@ -133,7 +131,6 @@ export class LaunchMainService implements ILaunchMainService {
 			 */
 			userEnv: (args['preserve-env'] || context === OpenContext.CLI) ? userEnv : undefined,
 			waitMarkerFileURI,
-			remoteAuthority,
 			forceProfile: args.profile,
 			forceTempProfile: args['profile-temp']
 		};

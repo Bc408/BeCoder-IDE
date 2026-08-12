@@ -6,7 +6,7 @@
 import { localize, localize2 } from '../../../../nls.js';
 import { IExtensionManagementService, IGlobalExtensionEnablementService, ILocalExtension } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
-import { ExtensionType, IExtension, isResolverExtension } from '../../../../platform/extensions/common/extensions.js';
+import { ExtensionType, IExtension } from '../../../../platform/extensions/common/extensions.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { INotificationService, IPromptChoice, NotificationPriority, Severity } from '../../../../platform/notification/common/notification.js';
 import { IHostService } from '../../host/browser/host.js';
@@ -102,10 +102,6 @@ class ExtensionBisectService implements IExtensionBisectService {
 	isDisabledByBisect(extension: IExtension): boolean {
 		if (!this._state) {
 			// bisect isn't active
-			return false;
-		}
-		if (isResolverExtension(extension.manifest, this._envService.remoteAuthority)) {
-			// the current remote resolver extension cannot be disabled
 			return false;
 		}
 		if (this._isEnabledInEnv(extension)) {

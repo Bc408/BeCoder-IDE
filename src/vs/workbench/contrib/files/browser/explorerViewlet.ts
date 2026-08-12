@@ -30,8 +30,7 @@ import { KeyChord, KeyMod, KeyCode } from '../../../../base/common/keyCodes.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { WorkbenchStateContext, RemoteNameContext, OpenFolderWorkspaceSupportContext } from '../../../common/contextkeys.js';
-import { IsWebContext } from '../../../../platform/contextkey/common/contextkeys.js';
+import { WorkbenchStateContext, OpenFolderWorkspaceSupportContext } from '../../../common/contextkeys.js';
 import { AddRootFolderAction, OpenFolderAction, OpenFolderViaWorkspaceAction } from '../../../browser/actions/workspaceActions.js';
 import { OpenRecentAction } from '../../../browser/actions/windowActions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
@@ -310,31 +309,11 @@ viewsRegistry.registerViewWelcomeContent(EmptyView.ID, {
 });
 
 viewsRegistry.registerViewWelcomeContent(EmptyView.ID, {
-	content: localize({ key: 'remoteNoFolderHelp', comment: ['Please do not translate the word "command", it is part of our internal syntax which must not change'] },
-		"Connected to remote.\n{0}", openFolderButton),
-	when: ContextKeyExpr.and(
-		// not inside a .code-workspace
-		WorkbenchStateContext.notEqualsTo('workspace'),
-		// connected to a remote
-		RemoteNameContext.notEqualsTo(''),
-		// but not in web
-		IsWebContext.toNegated()),
-	group: ViewContentGroups.Open,
-	order: 1
-});
-
-viewsRegistry.registerViewWelcomeContent(EmptyView.ID, {
 	content: localize({ key: 'noFolderButEditorsHelp', comment: ['Please do not translate the word "command", it is part of our internal syntax which must not change'] },
 		"You have not yet opened a folder.\n{0}\nOpening a folder will close all currently open editors. To keep them open, {1} instead.", openFolderButton, addAFolderButton),
 	when: ContextKeyExpr.and(
-		// editors are opened
 		ContextKeyExpr.has('editorIsOpen'),
-		ContextKeyExpr.or(
-			// not inside a .code-workspace and local
-			ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('workspace'), RemoteNameContext.isEqualTo('')),
-			// not inside a .code-workspace and web
-			ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('workspace'), IsWebContext)
-		)
+		WorkbenchStateContext.notEqualsTo('workspace')
 	),
 	group: ViewContentGroups.Open,
 	order: 1
@@ -344,14 +323,8 @@ viewsRegistry.registerViewWelcomeContent(EmptyView.ID, {
 	content: localize({ key: 'noFolderHelp', comment: ['Please do not translate the word "command", it is part of our internal syntax which must not change'] },
 		"You have not yet opened a folder.\n{0}", openFolderButton),
 	when: ContextKeyExpr.and(
-		// no editor is open
 		ContextKeyExpr.has('editorIsOpen')?.negate(),
-		ContextKeyExpr.or(
-			// not inside a .code-workspace and local
-			ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('workspace'), RemoteNameContext.isEqualTo('')),
-			// not inside a .code-workspace and web
-			ContextKeyExpr.and(WorkbenchStateContext.notEqualsTo('workspace'), IsWebContext)
-		)
+		WorkbenchStateContext.notEqualsTo('workspace')
 	),
 	group: ViewContentGroups.Open,
 	order: 1

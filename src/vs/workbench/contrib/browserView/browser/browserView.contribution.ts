@@ -7,17 +7,10 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { IBrowserViewWorkbenchService, IBrowserViewModel, IBrowserEditorViewState } from '../common/browserView.js';
 import type { PreferredGroup } from '../../../services/editor/common/editorService.js';
 import { Event } from '../../../../base/common/event.js';
-import { ITunnelProxyInfo } from '../../../../platform/tunnel/common/tunnelProxy.js';
 import { BrowserEditorInput } from '../common/browserEditorInput.js';
 
 class WebBrowserViewWorkbenchService implements IBrowserViewWorkbenchService {
 	declare readonly _serviceBrand: undefined;
-
-	willUseRemoteProxy(): boolean {
-		return false;
-	}
-
-	setRemoteProxyInfo(_info: ITunnelProxyInfo | undefined): void { }
 
 	readonly onDidChangeBrowserViews = Event.None;
 

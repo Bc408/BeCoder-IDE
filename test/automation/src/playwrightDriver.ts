@@ -4,15 +4,33 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as playwright from '@playwright/test';
-import type { Protocol } from 'playwright-core/types/protocol';
-import { dirname, join } from 'path';
-import { promises, readFileSync } from 'fs';
+import { join } from 'path';
+import { readFileSync } from 'fs';
 import { IWindowDriver } from './driver';
 import { measureAndLog } from './logger';
 import { LaunchOptions } from './code';
 import { teardown } from './processes';
 import { ChildProcess } from 'child_process';
 import type { AxeResults, RunOptions } from 'axe-core';
+
+type CDPCommandParameters = Exclude<Parameters<playwright.CDPSession['send']>[1], undefined>;
+
+interface ICDPRemoteObject<T = unknown> {
+	readonly objectId?: string;
+	readonly value?: T;
+}
+
+interface ICDPRuntimeResult<T = unknown> {
+	readonly result: ICDPRemoteObject<T>;
+}
+
+interface ICDPQueryObjectsResult {
+	readonly objects: ICDPRemoteObject;
+}
+
+interface ICDPGetPropertiesResult {
+	readonly result: readonly unknown[];
+}
 
 // Load axe-core source for injection into pages (works with Electron)
 let axeSource = '';
@@ -417,36 +435,36 @@ export class PlaywrightDriver {
 		await this._cdpSession.send('HeapProfiler.collectGarbage');
 	}
 
-	async evaluate(options: Protocol.Runtime.evaluateParameters): Promise<Protocol.Runtime.evaluateReturnValue> {
+	async evaluate<T = unknown>(options: CDPCommandParameters): Promise<ICDPRuntimeResult<T>> {
 		if (!this._cdpSession) {
 			throw new Error('CDP not started');
 		}
 
-		return await this._cdpSession.send('Runtime.evaluate', options);
+		return await this._cdpSession.send('Runtime.evaluate', options as never);
 	}
 
-	async releaseObjectGroup(parameters: Protocol.Runtime.releaseObjectGroupParameters): Promise<void> {
+	async releaseObjectGroup(parameters: CDPCommandParameters): Promise<void> {
 		if (!this._cdpSession) {
 			throw new Error('CDP not started');
 		}
 
-		await this._cdpSession.send('Runtime.releaseObjectGroup', parameters);
+		await this._cdpSession.send('Runtime.releaseObjectGroup', parameters as never);
 	}
 
-	async queryObjects(parameters: Protocol.Runtime.queryObjectsParameters): Promise<Protocol.Runtime.queryObjectsReturnValue> {
+	async queryObjects(parameters: CDPCommandParameters): Promise<ICDPQueryObjectsResult> {
 		if (!this._cdpSession) {
 			throw new Error('CDP not started');
 		}
 
-		return await this._cdpSession.send('Runtime.queryObjects', parameters);
+		return await this._cdpSession.send('Runtime.queryObjects', parameters as never);
 	}
 
-	async callFunctionOn(parameters: Protocol.Runtime.callFunctionOnParameters): Promise<Protocol.Runtime.callFunctionOnReturnValue> {
+	async callFunctionOn<T = unknown>(parameters: CDPCommandParameters): Promise<ICDPRuntimeResult<T>> {
 		if (!this._cdpSession) {
 			throw new Error('CDP not started');
 		}
 
-		return await this._cdpSession.send('Runtime.callFunctionOn', parameters);
+		return await this._cdpSession.send('Runtime.callFunctionOn', parameters as never);
 	}
 
 	async takeHeapSnapshot(): Promise<string> {
@@ -467,12 +485,12 @@ export class PlaywrightDriver {
 		return snapshot;
 	}
 
-	async getProperties(parameters: Protocol.Runtime.getPropertiesParameters): Promise<Protocol.Runtime.getPropertiesReturnValue> {
+	async getProperties(parameters: CDPCommandParameters): Promise<ICDPGetPropertiesResult> {
 		if (!this._cdpSession) {
 			throw new Error('CDP not started');
 		}
 
-		return await this._cdpSession.send('Runtime.getProperties', parameters);
+		return await this._cdpSession.send('Runtime.getProperties', parameters as never);
 	}
 
 	private async takeScreenshot(name?: string): Promise<void> {
@@ -501,15 +519,6 @@ export class PlaywrightDriver {
 			// Ignore
 		}
 
-		// Web: Extract client logs
-		if (this.options.web) {
-			try {
-				await measureAndLog(() => this.saveWebClientLogs(), 'saveWebClientLogs()', this.options.logger);
-			} catch (error) {
-				this.options.logger.log(`Error saving web client logs (${error})`);
-			}
-		}
-
 		//  exit via `close` method
 		try {
 			await measureAndLog(() => this.application.close(), 'playwright.close()', this.options.logger);
@@ -520,17 +529,6 @@ export class PlaywrightDriver {
 		// Server: via `teardown`
 		if (this.serverProcess) {
 			await measureAndLog(() => teardown(this.serverProcess!, this.options.logger), 'teardown server process', this.options.logger);
-		}
-	}
-
-	private async saveWebClientLogs(): Promise<void> {
-		const logs = await this.getLogs();
-
-		for (const log of logs) {
-			const absoluteLogsPath = join(this.options.logsPath, log.relativePath);
-
-			await promises.mkdir(dirname(absoluteLogsPath), { recursive: true });
-			await promises.writeFile(absoluteLogsPath, log.contents);
 		}
 	}
 

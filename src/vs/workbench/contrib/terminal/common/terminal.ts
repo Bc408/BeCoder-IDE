@@ -57,7 +57,7 @@ export interface ITerminalProfileResolverService {
 	getDefaultShell(options: IShellLaunchConfigResolveOptions): Promise<string>;
 	getDefaultShellArgs(options: IShellLaunchConfigResolveOptions): Promise<SingleOrMany<string>>;
 	getDefaultIcon(): TerminalIcon & ThemeIcon;
-	getEnvironment(remoteAuthority: string | undefined): Promise<IProcessEnvironment>;
+	getEnvironment(): Promise<IProcessEnvironment>;
 }
 
 export interface IRegisterContributedProfileArgs {
@@ -94,7 +94,6 @@ export interface ITerminalProfileProvider {
 }
 
 export interface IShellLaunchConfigResolveOptions {
-	remoteAuthority: string | undefined;
 	os: OperatingSystem;
 	allowAutomationShell?: boolean;
 }
@@ -183,7 +182,7 @@ export interface ITerminalConfiguration {
 	splitCwd: 'workspaceRoot' | 'initial' | 'inherited';
 	windowsUseConptyDll?: boolean;
 	wordSeparators: string;
-	enableFileLinks: 'off' | 'on' | 'notRemote';
+	enableFileLinks: 'off' | 'on';
 	allowedLinkSchemes: string[];
 	unicodeVersion: '6' | '11';
 	enablePersistentSessions: boolean;
@@ -263,7 +262,6 @@ export interface ITerminalProcessInfo {
 	readonly processState: ProcessState;
 	readonly ptyProcessReady: Promise<void>;
 	readonly shellProcessId: number | undefined;
-	readonly remoteAuthority: string | undefined;
 	readonly os: OperatingSystem | undefined;
 	readonly userHome: string | undefined;
 	readonly initialCwd: string;

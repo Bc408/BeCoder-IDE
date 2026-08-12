@@ -118,12 +118,6 @@ const apiMenus: IAPIMenu[] = [
 		description: localize('menus.opy', "'Copy as' submenu in the top level Edit menu")
 	},
 	{
-		key: 'statusBar/remoteIndicator',
-		id: MenuId.StatusBarRemoteIndicatorMenu,
-		description: localize('menus.statusBarRemoteIndicator', "The remote indicator menu in the status bar"),
-		supportsSubmenus: false
-	},
-	{
 		key: 'terminal/context',
 		id: MenuId.TerminalInstanceContext,
 		description: localize('menus.terminalContext', "The terminal context menu")
@@ -282,21 +276,6 @@ const apiMenus: IAPIMenu[] = [
 		key: 'timeline/item/context',
 		id: MenuId.TimelineItemContext,
 		description: localize('view.timelineContext', "The Timeline view item context menu")
-	},
-	{
-		key: 'ports/item/context',
-		id: MenuId.TunnelContext,
-		description: localize('view.tunnelContext', "The Ports view item context menu")
-	},
-	{
-		key: 'ports/item/origin/inline',
-		id: MenuId.TunnelOriginInline,
-		description: localize('view.tunnelOriginInline', "The Ports view item origin inline menu")
-	},
-	{
-		key: 'ports/item/port/inline',
-		id: MenuId.TunnelPortInline,
-		description: localize('view.tunnelPortInline', "The Ports view item port inline menu")
 	},
 	{
 		key: 'file/newFile',

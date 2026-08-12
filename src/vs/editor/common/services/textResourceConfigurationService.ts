@@ -58,9 +58,6 @@ export class TextResourceConfigurationService extends Disposable implements ITex
 			if (configurationValue.workspace?.override !== undefined) {
 				return ConfigurationTarget.WORKSPACE;
 			}
-			if (configurationValue.userRemote?.override !== undefined) {
-				return ConfigurationTarget.USER_REMOTE;
-			}
 			if (configurationValue.userLocal?.override !== undefined) {
 				return ConfigurationTarget.USER_LOCAL;
 			}
@@ -73,9 +70,6 @@ export class TextResourceConfigurationService extends Disposable implements ITex
 		}
 		if (configurationValue.workspace?.value !== undefined) {
 			return ConfigurationTarget.WORKSPACE;
-		}
-		if (configurationValue.userRemote?.value !== undefined) {
-			return ConfigurationTarget.USER_REMOTE;
 		}
 		return ConfigurationTarget.USER_LOCAL;
 	}

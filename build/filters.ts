@@ -22,7 +22,6 @@ export const all = Object.freeze<string[]>([
 	'scripts/**/*',
 	'src/**/*',
 	'test/**/*',
-	'!cli/**/*',
 	'!out*/**',
 	'!extensions/**/out*/**',
 	'!test/**/out/**',
@@ -34,7 +33,6 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'**',
 
 	'!**/ThirdPartyNotices.txt',
-	'!**/ThirdPartyNotices.cli.txt',
 	'!**/LICENSE.{txt,rtf}',
 	'!LICENSES.chromium.html',
 	'!**/LICENSE',
@@ -81,7 +79,6 @@ export const indentationFilter = Object.freeze<string[]>([
 
 	// except specific files
 	'!**/ThirdPartyNotices.txt',
-	'!**/ThirdPartyNotices.cli.txt',
 	'!**/LICENSE.{txt,rtf}',
 	'!LICENSES.chromium.html',
 	'!**/LICENSE',

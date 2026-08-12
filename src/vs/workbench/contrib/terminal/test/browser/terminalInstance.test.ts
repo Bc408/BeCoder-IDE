@@ -561,14 +561,12 @@ suite('Workbench - TerminalInstance', () => {
 
 	suite('getCwdResource', () => {
 		let mockFileService: any;
-		let mockPathService: any;
 
 		function createMockTerminalInstance(options: {
 			cwd?: string;
-			remoteAuthority?: string;
 			fileExists?: boolean;
 			fileServiceCanHandle?: boolean;
-		}): Pick<ITerminalInstance, 'getCwdResource' | 'capabilities' | 'remoteAuthority'> {
+		}): Pick<ITerminalInstance, 'getCwdResource' | 'capabilities'> {
 			const capabilities = store.add(new TerminalCapabilityStore());
 
 			if (options.cwd) {
@@ -584,30 +582,14 @@ suite('Workbench - TerminalInstance', () => {
 				exists: async (resource: URI) => options.fileExists !== false
 			};
 
-			// Mock path service
-			mockPathService = {
-				fileURI: async (path: string) => {
-					if (options.remoteAuthority) {
-						return URI.parse(`vscode-remote://${options.remoteAuthority}${path}`);
-					}
-					return URI.file(path);
-				}
-			};
-
 			return {
 				capabilities,
-				remoteAuthority: options.remoteAuthority,
 				async getCwdResource(): Promise<URI | undefined> {
 					const cwd = this.capabilities.get(TerminalCapability.CwdDetection)?.getCwd();
 					if (!cwd) {
 						return undefined;
 					}
-					let resource: URI;
-					if (this.remoteAuthority) {
-						resource = await mockPathService.fileURI(cwd);
-					} else {
-						resource = URI.file(cwd);
-					}
+					const resource = URI.file(cwd);
 					if (!await mockFileService.canHandleResource(resource)) {
 						return undefined;
 					}
@@ -650,20 +632,6 @@ suite('Workbench - TerminalInstance', () => {
 			strictEqual(result, undefined);
 		});
 
-		test('should use pathService.fileURI for remote terminal', async () => {
-			const testCwd = '/test/remote/path';
-			const instance = createMockTerminalInstance({
-				cwd: testCwd,
-				remoteAuthority: 'test-remote',
-				fileExists: true
-			});
-
-			const result = await instance.getCwdResource();
-			strictEqual(result?.scheme, 'vscode-remote');
-			strictEqual(result?.authority, 'test-remote');
-			strictEqual(result?.path, testCwd);
-		});
-
 		test('should handle Windows paths correctly', async () => {
 			const testCwd = isWindows ? 'C:\\test\\path' : '/test/path';
 			const instance = createMockTerminalInstance({ cwd: testCwd, fileExists: true });
@@ -685,9 +653,7 @@ suite('Workbench - TerminalInstance', () => {
 		});
 
 		test('should return undefined when fileService cannot handle the resource (VS Code web ENOPRO scenario)', async () => {
-			// Simulates server-linux-x64-web where remoteAuthority is falsy from the
-			// terminal's perspective, so URI.file() is produced but the browser
-			// FileService has no file:// provider registered.
+			// Simulates a browser FileService without a file:// provider registered.
 			const testCwd = '/workspace/my-project';
 			const instance = createMockTerminalInstance({
 				cwd: testCwd,

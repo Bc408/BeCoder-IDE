@@ -43,7 +43,7 @@ import { defaultMenuStyles } from '../../../../platform/theme/browser/defaultSty
 import { mainWindow } from '../../../../base/browser/window.js';
 import { ActivityBarPosition } from '../../../services/layout/browser/layoutService.js';
 
-export type IOpenRecentAction = IAction & { uri: URI; remoteAuthority?: string };
+export type IOpenRecentAction = IAction & { uri: URI };
 
 export abstract class MenubarControl extends Disposable {
 
@@ -232,8 +232,6 @@ export abstract class MenubarControl extends Disposable {
 		let uri: URI;
 		let commandId: string;
 		let openable: IWindowOpenable;
-		const remoteAuthority = recent.remoteAuthority;
-
 		if (isRecentFolder(recent)) {
 			uri = recent.folderUri;
 			label = recent.label || this.labelService.getWorkspaceLabel(uri, { verbose: Verbosity.LONG });
@@ -255,14 +253,11 @@ export abstract class MenubarControl extends Disposable {
 			id: commandId, label: unmnemonicLabel(label), run: (browserEvent: KeyboardEvent) => {
 				const openInNewWindow = browserEvent && ((!isMacintosh && (browserEvent.ctrlKey || browserEvent.shiftKey)) || (isMacintosh && (browserEvent.metaKey || browserEvent.altKey)));
 
-				return this.hostService.openWindow([openable], {
-					forceNewWindow: !!openInNewWindow,
-					remoteAuthority: remoteAuthority || null // local window if remoteAuthority is not set or can not be deducted from the openable
-				});
+				return this.hostService.openWindow([openable], { forceNewWindow: !!openInNewWindow });
 			}
 		});
 
-		return Object.assign(ret, { uri, remoteAuthority });
+		return Object.assign(ret, { uri });
 	}
 
 	private notifyUserOfCustomMenubarAccessibility(): void {

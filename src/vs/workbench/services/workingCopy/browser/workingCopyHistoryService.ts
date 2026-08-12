@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IFileService } from '../../../../platform/files/common/files.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
@@ -18,14 +17,13 @@ export class BrowserWorkingCopyHistoryService extends WorkingCopyHistoryService 
 
 	constructor(
 		@IFileService fileService: IFileService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@IUriIdentityService uriIdentityService: IUriIdentityService,
 		@ILabelService labelService: ILabelService,
 		@ILogService logService: ILogService,
 		@IConfigurationService configurationService: IConfigurationService
 	) {
-		super(fileService, remoteAgentService, environmentService, uriIdentityService, labelService, logService, configurationService);
+		super(fileService, environmentService, uriIdentityService, labelService, logService, configurationService);
 	}
 
 	protected getModelOptions(): IWorkingCopyHistoryModelOptions {

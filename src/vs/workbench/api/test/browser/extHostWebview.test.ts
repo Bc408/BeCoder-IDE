@@ -5,7 +5,6 @@
 
 import assert from 'assert';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
-import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 import { mock } from '../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
@@ -19,7 +18,7 @@ import { ExtHostWebviews } from '../../common/extHostWebview.js';
 import { ExtHostWebviewPanels } from '../../common/extHostWebviewPanels.js';
 import { IExtHostWorkspace } from '../../common/extHostWorkspace.js';
 import { SingleProxyRPCProtocol } from '../common/testRPCProtocol.js';
-import { decodeAuthority, webviewResourceBaseHost } from '../../../contrib/webview/common/webview.js';
+import { webviewResourceBaseHost } from '../../../contrib/webview/common/webview.js';
 import { EditorGroupColumn } from '../../../services/editor/common/editorGroupColumn.js';
 import { IExtHostContext } from '../../../services/extensions/common/extHostCustomers.js';
 import type * as vscode from 'vscode';
@@ -41,27 +40,20 @@ suite('ExtHostWebview', () => {
 
 	ensureNoDisposablesAreLeakedInTestSuite();
 
-	function createWebview(rpcProtocol: (IExtHostRpcService & IExtHostContext) | undefined, remoteAuthority: string | undefined) {
-		const extHostWebviews = disposables.add(new ExtHostWebviews(rpcProtocol!, {
-			authority: remoteAuthority,
-			isRemote: !!remoteAuthority,
-		}, undefined, new NullLogService(), NullApiDeprecationService));
+	function createWebview(rpcProtocol: (IExtHostRpcService & IExtHostContext) | undefined) {
+		const extHostWebviews = disposables.add(new ExtHostWebviews(rpcProtocol!, undefined, new NullLogService(), NullApiDeprecationService));
 
 		const extHostWebviewPanels = disposables.add(new ExtHostWebviewPanels(rpcProtocol!, extHostWebviews, undefined));
 
 		return disposables.add(extHostWebviewPanels.createWebviewPanel({
-			extensionLocation: URI.from({
-				scheme: remoteAuthority ? Schemas.vscodeRemote : Schemas.file,
-				authority: remoteAuthority,
-				path: '/ext/path',
-			})
+			extensionLocation: URI.file('/ext/path')
 		} as IExtensionDescription, 'type', 'title', 1, {}));
 	}
 
 	test('Cannot register multiple serializers for the same view type', async () => {
 		const viewType = 'view.type';
 
-		const extHostWebviews = disposables.add(new ExtHostWebviews(rpcProtocol!, { authority: undefined, isRemote: false }, undefined, new NullLogService(), NullApiDeprecationService));
+		const extHostWebviews = disposables.add(new ExtHostWebviews(rpcProtocol!, undefined, new NullLogService(), NullApiDeprecationService));
 
 		const extHostWebviewPanels = disposables.add(new ExtHostWebviewPanels(rpcProtocol!, extHostWebviews, undefined));
 
@@ -109,7 +101,7 @@ suite('ExtHostWebview', () => {
 	});
 
 	test('asWebviewUri for local file paths', () => {
-		const webview = createWebview(rpcProtocol, /* remoteAuthority */undefined);
+		const webview = createWebview(rpcProtocol);
 
 		assert.strictEqual(
 			(webview.webview.asWebviewUri(URI.parse('file:///Users/codey/file.html')).toString()),
@@ -142,62 +134,6 @@ suite('ExtHostWebview', () => {
 		);
 	});
 
-	test('asWebviewUri for remote file paths', () => {
-		const webview = createWebview(rpcProtocol, /* remoteAuthority */ 'remote');
-
-		assert.strictEqual(
-			(webview.webview.asWebviewUri(URI.parse('file:///Users/codey/file.html')).toString()),
-			`https://vscode-remote%2Bremote.vscode-resource.${webviewResourceBaseHost}/Users/codey/file.html`,
-			'Unix basic'
-		);
-	});
-
-	test('asWebviewUri for remote with / and + in name', () => {
-		const webview = createWebview(rpcProtocol, /* remoteAuthority */ 'remote');
-		const authority = 'ssh-remote+localhost=foo/bar';
-
-		const sourceUri = URI.from({
-			scheme: 'vscode-remote',
-			authority: authority,
-			path: '/Users/cody/x.png'
-		});
-
-		const webviewUri = webview.webview.asWebviewUri(sourceUri);
-		assert.strictEqual(
-			webviewUri.toString(),
-			`https://vscode-remote%2Bssh-002dremote-002blocalhost-003dfoo-002fbar.vscode-resource.vscode-cdn.net/Users/cody/x.png`,
-			'Check transform');
-
-		assert.strictEqual(
-			decodeAuthority(webviewUri.authority),
-			`vscode-remote+${authority}.vscode-resource.vscode-cdn.net`,
-			'Check decoded authority'
-		);
-	});
-
-	test('asWebviewUri for remote with port in name', () => {
-		const webview = createWebview(rpcProtocol, /* remoteAuthority */ 'remote');
-		const authority = 'localhost:8080';
-
-		const sourceUri = URI.from({
-			scheme: 'vscode-remote',
-			authority: authority,
-			path: '/Users/cody/x.png'
-		});
-
-		const webviewUri = webview.webview.asWebviewUri(sourceUri);
-		assert.strictEqual(
-			webviewUri.toString(),
-			`https://vscode-remote%2Blocalhost-003a8080.vscode-resource.vscode-cdn.net/Users/cody/x.png`,
-			'Check transform');
-
-		assert.strictEqual(
-			decodeAuthority(webviewUri.authority),
-			`vscode-remote+${authority}.vscode-resource.vscode-cdn.net`,
-			'Check decoded authority'
-		);
-	});
-
 	suite('ensureDefaultContentOptions', () => {
 		function createExtHostWebviewsWithCapture(workspaceFolders: URI[] | undefined) {
 			const setOptionsCalls: { handle: string; options: IWebviewContentOptions }[] = [];
@@ -220,7 +156,6 @@ suite('ExtHostWebview', () => {
 
 			const extHostWebviews = disposables.add(new ExtHostWebviews(
 				captureRpc,
-				{ authority: undefined, isRemote: false },
 				workspace,
 				new NullLogService(),
 				NullApiDeprecationService));

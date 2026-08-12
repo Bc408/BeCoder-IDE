@@ -14,17 +14,6 @@ export interface INativeCliOptions {
  */
 export interface NativeParsedArgs {
 
-	// subcommands
-	tunnel?: INativeCliOptions & {
-		user: {
-			login: {
-				'access-token'?: string;
-				'provider'?: string;
-			};
-		};
-	};
-	'serve-web'?: INativeCliOptions;
-
 	// arguments
 	_: string[];
 	'folder-uri'?: string[]; // undefined or array of 1 or more
@@ -105,7 +94,6 @@ export interface NativeParsedArgs {
 	'file-write'?: boolean;
 	'file-chmod'?: boolean;
 	'enable-smoke-test-driver'?: boolean;
-	'remote'?: string;
 	'force'?: boolean;
 	'do-not-sync'?: boolean;
 	'preserve-env'?: boolean;

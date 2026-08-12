@@ -28,8 +28,6 @@ import { ExtensionIdentifier } from '../../../../platform/extensions/common/exte
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import { IRemoteAuthorityResolverService } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
-import { ITunnelService } from '../../../../platform/tunnel/common/tunnel.js';
 import { WebviewPortMappingManager } from '../../../../platform/webview/common/webviewPortMapping.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { decodeAuthority, webviewGenericCspSource, webviewRootResourceAuthority } from '../common/webview.js';
@@ -172,8 +170,6 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		@INotificationService notificationService: INotificationService,
 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@ILogService private readonly _logService: ILogService,
-		@IRemoteAuthorityResolverService private readonly _remoteAuthorityResolverService: IRemoteAuthorityResolverService,
-		@ITunnelService private readonly _tunnelService: ITunnelService,
 		@IAccessibilityService private readonly _accessibilityService: IAccessibilityService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
@@ -193,9 +189,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		};
 
 		this._portMappingManager = this._register(new WebviewPortMappingManager(
-			() => this.extension?.location,
-			() => this._content.options.portMapping || [],
-			this._tunnelService
+			() => this._content.options.portMapping || []
 		));
 
 		this._element = this._createElement(initInfo.options, initInfo.contentOptions);
@@ -452,10 +446,6 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 
 		if (this._options.disableServiceWorker) {
 			params.disableServiceWorker = 'true';
-		}
-
-		if (this._environmentService.remoteAuthority) {
-			params.remoteAuthority = this._environmentService.remoteAuthority;
 		}
 
 		if (options.purpose) {
@@ -937,9 +927,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 	}
 
 	private async localLocalhost(id: string, origin: string) {
-		const authority = this._environmentService.remoteAuthority;
-		const resolveAuthority = authority ? await this._remoteAuthorityResolverService.resolveAuthority(authority) : undefined;
-		const redirect = resolveAuthority ? await this._portMappingManager.getRedirect(resolveAuthority.authority, origin) : undefined;
+		const redirect = await this._portMappingManager.getRedirect(origin);
 		return this._send('did-load-localhost', {
 			id,
 			origin,

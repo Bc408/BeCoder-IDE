@@ -47,4 +47,3 @@ jobs:
           ${{ if eq(parameters.VSCODE_TEST_SUITE, 'Browser') }}:
             VSCODE_RUN_BROWSER_TESTS: true
           ${{ if eq(parameters.VSCODE_TEST_SUITE, 'Remote') }}:
-            VSCODE_RUN_REMOTE_TESTS: true

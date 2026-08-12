@@ -31,7 +31,7 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/c
 flakySuite('BackupMainService', () => {
 
 	function assertEqualFolderInfos(actual: IFolderBackupInfo[], expected: IFolderBackupInfo[]) {
-		const withUriAsString = (f: IFolderBackupInfo) => ({ folderUri: f.folderUri.toString(), remoteAuthority: f.remoteAuthority });
+		const withUriAsString = (f: IFolderBackupInfo) => ({ folderUri: f.folderUri.toString() });
 		assert.deepStrictEqual(actual.map(withUriAsString), expected.map(withUriAsString));
 	}
 
@@ -42,18 +42,17 @@ flakySuite('BackupMainService', () => {
 		};
 	}
 
-	function toWorkspaceBackupInfo(path: string, remoteAuthority?: string): IWorkspaceBackupInfo {
+	function toWorkspaceBackupInfo(path: string): IWorkspaceBackupInfo {
 		return {
 			workspace: {
 				id: createHash('md5').update(sanitizePath(path)).digest('hex'), // CodeQL [SM04514] Using MD5 to convert a file path to a fixed length
 				configPath: URI.file(path)
-			},
-			remoteAuthority
+			}
 		};
 	}
 
-	function toFolderBackupInfo(uri: URI, remoteAuthority?: string): IFolderBackupInfo {
-		return { folderUri: uri, remoteAuthority };
+	function toFolderBackupInfo(uri: URI): IFolderBackupInfo {
+		return { folderUri: uri };
 	}
 
 	function toSerializedWorkspace(ws: IWorkspaceIdentifier): ISerializedWorkspaceBackupInfo {

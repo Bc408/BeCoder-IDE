@@ -7,11 +7,6 @@ import { CharCode } from '../../../../base/common/charCode.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 
-export interface WebviewRemoteInfo {
-	readonly isRemote: boolean;
-	readonly authority: string | undefined;
-}
-
 /**
  * Root from which resources in webviews are loaded.
  *
@@ -28,26 +23,17 @@ export const webviewGenericCspSource = `'self' https://*.${webviewResourceBaseHo
  * Construct a uri that can load resources inside a webview
  *
  * We encode the resource component of the uri so that on the main thread
- * we know where to load the resource from (remote or truly local):
+ * we know where to load the local resource from:
  *
  * ```txt
  * ${scheme}+${resource-authority}.vscode-resource.vscode-cdn.net/${path}
  * ```
  *
  * @param resource Uri of the resource to load.
- * @param remoteInfo Optional information about the remote that specifies where `resource` should be resolved from.
  */
-export function asWebviewUri(resource: URI, remoteInfo?: WebviewRemoteInfo): URI {
+export function asWebviewUri(resource: URI): URI {
 	if (resource.scheme === Schemas.http || resource.scheme === Schemas.https) {
 		return resource;
-	}
-
-	if (remoteInfo && remoteInfo.authority && remoteInfo.isRemote && resource.scheme === Schemas.file) {
-		resource = URI.from({
-			scheme: Schemas.vscodeRemote,
-			authority: remoteInfo.authority,
-			path: resource.path,
-		});
 	}
 
 	return URI.from({

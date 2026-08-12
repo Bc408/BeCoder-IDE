@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../base/common/uri.js';
-import { IBaseBackupInfo, IFolderBackupInfo, IWorkspaceBackupInfo } from '../common/backup.js';
+import { IFolderBackupInfo, IWorkspaceBackupInfo } from '../common/backup.js';
 
-export interface IEmptyWindowBackupInfo extends IBaseBackupInfo {
+export interface IEmptyWindowBackupInfo {
 	readonly backupFolder: string;
 }
 
@@ -19,7 +19,6 @@ export function isEmptyWindowBackupInfo(obj: unknown): obj is IEmptyWindowBackup
 export interface ISerializedWorkspaceBackupInfo {
 	readonly id: string;
 	readonly configURIPath: string;
-	remoteAuthority?: string;
 }
 
 export function deserializeWorkspaceInfos(serializedBackupWorkspaces: ISerializedBackupWorkspaces): IWorkspaceBackupInfo[] {
@@ -31,8 +30,7 @@ export function deserializeWorkspaceInfos(serializedBackupWorkspaces: ISerialize
 					workspace: {
 						id: workspace.id,
 						configPath: URI.parse(workspace.configURIPath)
-					},
-					remoteAuthority: workspace.remoteAuthority
+					}
 				}
 			));
 		}
@@ -45,7 +43,6 @@ export function deserializeWorkspaceInfos(serializedBackupWorkspaces: ISerialize
 
 export interface ISerializedFolderBackupInfo {
 	readonly folderUri: string;
-	remoteAuthority?: string;
 }
 
 export function deserializeFolderInfos(serializedBackupWorkspaces: ISerializedBackupWorkspaces): IFolderBackupInfo[] {
@@ -53,10 +50,7 @@ export function deserializeFolderInfos(serializedBackupWorkspaces: ISerializedBa
 	try {
 		if (Array.isArray(serializedBackupWorkspaces.folders)) {
 			folderBackupInfos = serializedBackupWorkspaces.folders.map(folder => (
-				{
-					folderUri: URI.parse(folder.folderUri),
-					remoteAuthority: folder.remoteAuthority
-				}
+				{ folderUri: URI.parse(folder.folderUri) }
 			));
 		}
 	} catch {

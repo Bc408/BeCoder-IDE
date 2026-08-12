@@ -578,7 +578,7 @@ export class ExplorerFindProvider implements IAsyncFindProvider<ExplorerItem> {
 
 	private searchSupportsScheme(scheme: string): boolean {
 		// Limited by the search API
-		if (scheme !== Schemas.file && scheme !== Schemas.vscodeRemote) {
+		if (scheme !== Schemas.file) {
 			return false;
 		}
 		return this.searchService.schemeHasFileSearchProvider(scheme);

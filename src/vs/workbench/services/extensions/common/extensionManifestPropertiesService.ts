@@ -44,7 +44,6 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
 
 	private _extensionPointExtensionKindsMap: Map<string, ExtensionKind[]> | null = null;
 	private _productExtensionKindsMap: ExtensionIdentifierMap<ExtensionKind[]> | null = null;
-	private _configuredExtensionKindsMap: ExtensionIdentifierMap<ExtensionKind | ExtensionKind[]> | null = null;
 
 	private _productVirtualWorkspaceSupportMap: ExtensionIdentifierMap<{ default?: boolean; override?: boolean }> | null = null;
 	private _configuredVirtualWorkspaceSupportMap: ExtensionIdentifierMap<boolean> | null = null;
@@ -135,17 +134,7 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
 	}
 
 	getUserConfiguredExtensionKind(extensionIdentifier: IExtensionIdentifier): ExtensionKind[] | undefined {
-		if (this._configuredExtensionKindsMap === null) {
-			const configuredExtensionKindsMap = new ExtensionIdentifierMap<ExtensionKind | ExtensionKind[]>();
-			const configuredExtensionKinds = this.configurationService.getValue<{ [key: string]: ExtensionKind | ExtensionKind[] }>('remote.extensionKind') || {};
-			for (const id of Object.keys(configuredExtensionKinds)) {
-				configuredExtensionKindsMap.set(id, configuredExtensionKinds[id]);
-			}
-			this._configuredExtensionKindsMap = configuredExtensionKindsMap;
-		}
-
-		const userConfiguredExtensionKind = this._configuredExtensionKindsMap.get(extensionIdentifier.id);
-		return userConfiguredExtensionKind ? this.toArray(userConfiguredExtensionKind) : undefined;
+		return undefined;
 	}
 
 	getExtensionUntrustedWorkspaceSupportType(manifest: IExtensionManifest): ExtensionUntrustedWorkspaceSupportType {

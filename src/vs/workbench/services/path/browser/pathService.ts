@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IPathService, AbstractPathService } from '../common/pathService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -14,13 +13,11 @@ import { dirname } from '../../../../base/common/resources.js';
 export class BrowserPathService extends AbstractPathService {
 
 	constructor(
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService contextService: IWorkspaceContextService
 	) {
 		super(
 			guessLocalUserHome(environmentService, contextService),
-			remoteAgentService,
 			environmentService,
 			contextService
 		);
@@ -51,7 +48,7 @@ function guessLocalUserHome(environmentService: IWorkbenchEnvironmentService, co
 
 	return URI.from({
 		scheme: AbstractPathService.findDefaultUriScheme(environmentService, contextService),
-		authority: environmentService.remoteAuthority,
+		authority: '',
 		path: '/'
 	});
 }

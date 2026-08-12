@@ -13,7 +13,6 @@ import { mock } from '../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
-import { IFileStatWithMetadata } from '../../../../../platform/files/common/files.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
@@ -266,47 +265,6 @@ suite('NotebookFileWorkingCopyModel', function () {
 
 	});
 
-	test('Notebook model will not return a save delegate if the serializer has not been retreived', async function () {
-		const notebook = instantiationService.createInstance(NotebookTextModel,
-			'notebook',
-			URI.file('test'),
-			[{ cellKind: CellKind.Code, language: 'foo', mime: 'foo', source: 'foo', outputs: [], metadata: { foo: 123, bar: 456 } }],
-			{},
-			{ transientCellMetadata: {}, transientDocumentMetadata: {}, cellContentMetadata: {}, transientOutputs: false, }
-		);
-		disposables.add(notebook);
-
-		const serializer = new class extends mock<INotebookSerializer>() {
-			override save(): Promise<IFileStatWithMetadata> {
-				return Promise.resolve({ name: 'savedFile' } as IFileStatWithMetadata);
-			}
-		};
-
-		let resolveSerializer: (serializer: INotebookSerializer) => void = () => { };
-		const serializerPromise = new Promise<INotebookSerializer>(resolve => {
-			resolveSerializer = resolve;
-		});
-		const notebookService = mockNotebookService(notebook, serializerPromise);
-		configurationService.setUserConfiguration(NotebookSetting.remoteSaving, true);
-
-		const model = disposables.add(new NotebookFileWorkingCopyModel(
-			notebook,
-			notebookService,
-			configurationService,
-			telemetryService,
-			logservice
-		));
-
-		// the save method should not be set if the serializer is not yet resolved
-		const notExist = model.save;
-		assert.strictEqual(notExist, undefined);
-
-		resolveSerializer(serializer);
-		await model.getNotebookSerializer();
-		const result = await model.save?.({} as IFileStatWithMetadata, {} as CancellationToken);
-
-		assert.strictEqual(result!.name, 'savedFile');
-	});
 });
 
 function mockNotebookService(notebook: NotebookTextModel, notebookSerializer: Promise<INotebookSerializer> | INotebookSerializer, configurationService: TestConfigurationService = new TestConfigurationService()): INotebookService {

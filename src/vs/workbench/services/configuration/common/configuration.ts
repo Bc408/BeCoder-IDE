@@ -53,7 +53,6 @@ export type RestrictedSettings = {
 	default: ReadonlyArray<string>;
 	application?: ReadonlyArray<string>;
 	userLocal?: ReadonlyArray<string>;
-	userRemote?: ReadonlyArray<string>;
 	workspace?: ReadonlyArray<string>;
 	workspaceFolder?: ResourceMap<ReadonlyArray<string>>;
 };

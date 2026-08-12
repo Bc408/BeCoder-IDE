@@ -47,7 +47,6 @@ export interface IWebWorkerExtensionHostDataProvider {
 export class WebWorkerExtensionHost extends Disposable implements IExtensionHost {
 
 	public readonly pid = null;
-	public readonly remoteAuthority = null;
 	public extensions: ExtensionHostExtensions | null = null;
 
 	private readonly _onDidExit = this._register(new Emitter<[number, string | null]>());
@@ -340,17 +339,10 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 				firstSessionDate: this._telemetryService.firstSessionDate,
 				msftInternal: this._telemetryService.msftInternal
 			},
-			remoteExtensionTips: this._productService.remoteExtensionTips,
-			virtualWorkspaceExtensionTips: this._productService.virtualWorkspaceExtensionTips,
 			logLevel: this._logService.getLevel(),
 			loggers: [...this._loggerService.getRegisteredLoggers()],
 			logsLocation: this._extensionHostLogsLocation,
 			autoStart: (this.startup === ExtensionHostStartup.EagerAutoStart || this.startup === ExtensionHostStartup.LazyAutoStart),
-			remote: {
-				authority: this._environmentService.remoteAuthority,
-				connectionData: null,
-				isRemote: false
-			},
 			uiKind: platform.isWeb ? UIKind.Web : UIKind.Desktop
 		};
 	}

@@ -1379,7 +1379,7 @@ async function main(): Promise<void> {
 	// =========================================================================
 	// SECTION 4: Harvest Rust crate licenses from Cargo.lock files
 	//
-	// Rust crates reach the product via Cargo.lock (cli/, build/win32/) but CG
+	// Rust crates reach the product via Cargo.lock files such as build/win32, but CG
 	// handles them imperfectly, leaving two gaps Section 4 closes:
 	//   (a) Coverage gap: ~17 crates ship but appear in NO cgmanifest and are
 	//       absent from CG entirely (the scanner doesn't walk Cargo today).

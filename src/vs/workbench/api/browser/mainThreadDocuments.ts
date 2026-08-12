@@ -14,7 +14,6 @@ import { IFileService, FileOperation } from '../../../platform/files/common/file
 import { ExtHostContext, ExtHostDocumentsShape, MainThreadDocumentsShape } from '../common/extHost.protocol.js';
 import { EncodingMode, ITextFileEditorModel, ITextFileService, TextFileResolveReason } from '../../services/textfile/common/textfiles.js';
 import { IUntitledTextEditorModel } from '../../services/untitled/common/untitledTextEditorModel.js';
-import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { toLocalResource, extUri, IExtUri } from '../../../base/common/resources.js';
 import { IWorkingCopyFileService } from '../../services/workingCopy/common/workingCopyFileService.js';
 import { IUriIdentityService } from '../../../platform/uriIdentity/common/uriIdentity.js';
@@ -138,7 +137,6 @@ export class MainThreadDocuments extends Disposable implements MainThreadDocumen
 		@ITextFileService private readonly _textFileService: ITextFileService,
 		@IFileService private readonly _fileService: IFileService,
 		@ITextModelService private readonly _textModelResolverService: ITextModelService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@IUriIdentityService private readonly _uriIdentityService: IUriIdentityService,
 		@IWorkingCopyFileService workingCopyFileService: IWorkingCopyFileService,
 		@IPathService private readonly _pathService: IPathService
@@ -289,7 +287,7 @@ export class MainThreadDocuments extends Disposable implements MainThreadDocumen
 	}
 
 	private async _handleUntitledScheme(uri: URI, options?: { encoding?: string }): Promise<URI> {
-		const asLocalUri = toLocalResource(uri, this._environmentService.remoteAuthority, this._pathService.defaultUriScheme);
+		const asLocalUri = toLocalResource(uri, undefined, this._pathService.defaultUriScheme);
 		const exists = await this._fileService.exists(asLocalUri);
 		if (exists) {
 			// don't create a new file ontop of an existing file

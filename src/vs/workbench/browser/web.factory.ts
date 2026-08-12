@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ITunnel, ITunnelOptions, IWorkbench, IWorkbenchConstructionOptions, Menu } from './web.api.js';
+import { IWorkbench, IWorkbenchConstructionOptions, Menu } from './web.api.js';
 import { BrowserMain } from './web.main.js';
 import { URI, UriComponents } from '../../base/common/uri.js';
 import { IDisposable, toDisposable } from '../../base/common/lifecycle.js';
@@ -154,25 +154,5 @@ export namespace window {
 	export async function showInformationMessage<T extends string>(message: string, ...items: T[]): Promise<T | undefined> {
 		const workbench = await workbenchPromise.p;
 		return await workbench.window.showInformationMessage(message, ...items);
-	}
-}
-
-export namespace workspace {
-
-	/**
-	 * {@linkcode IWorkbench.workspace IWorkbench.workspace.didResolveRemoteAuthority}
-	 */
-	export async function didResolveRemoteAuthority() {
-		const workbench = await workbenchPromise.p;
-		await workbench.workspace.didResolveRemoteAuthority();
-	}
-
-	/**
-	 * {@linkcode IWorkbench.workspace IWorkbench.workspace.openTunnel}
-	 */
-	export async function openTunnel(tunnelOptions: ITunnelOptions): Promise<ITunnel> {
-		const workbench = await workbenchPromise.p;
-
-		return workbench.workspace.openTunnel(tunnelOptions);
 	}
 }

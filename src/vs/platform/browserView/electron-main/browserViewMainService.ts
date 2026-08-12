@@ -21,7 +21,6 @@ import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { localize } from '../../../nls.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
 import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
-import { equals } from '../../../base/common/objects.js';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -175,10 +174,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return this._getBrowserView(id).emulator.onDidChange;
 	}
 
-	onDynamicDidChangeRemoteStatus(id: string) {
-		return this._getBrowserView(id).onDidChangeRemoteStatus;
-	}
-
 	onDynamicDidRequestPermission(id: string) {
 		return this._getBrowserView(id).onDidRequestPermission;
 	}
@@ -308,17 +303,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async updateWindowConfiguration(windowId: number, config: IBrowserViewWindowConfiguration): Promise<void> {
-		const oldConfig = this._windowConfigurations.get(windowId);
-		const didProxyChange = !equals(oldConfig?.proxyInfo, config.proxyInfo);
-
 		this._windowConfigurations.set(windowId, config);
 		this._ensureWindowCloseSubscription(windowId);
 
 		for (const [, view] of this.browserViews) {
 			if (view.owner.mainWindowId === windowId) {
-				if (didProxyChange) {
-					view.session.remote.acquire(view.id, config.proxyInfo);
-				}
 				if (typeof config.maxHistoryEntries === 'number') {
 					view.session.history.setMaxEntries(config.maxHistoryEntries);
 				}
@@ -371,9 +360,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			browserSession.history.setMaxEntries(windowConfiguration.maxHistoryEntries);
 		}
 
-		// Hold a ref to the tunnel proxy for as long as this view is alive.
-		browserSession.remote.acquire(id, windowConfiguration?.proxyInfo);
-
 		const view = this.instantiationService.createInstance(
 			BrowserView,
 			id,
@@ -400,7 +386,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		);
 		this.browserViews.set(id, view);
 		Event.once(view.onDidClose)(() => {
-			browserSession.remote.release(id);
 			this.browserViews.deleteAndDispose(id);
 		});
 

@@ -15,7 +15,6 @@ import { URI } from '../../../base/common/uri.js';
 import { Schemas } from '../../../base/common/network.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { ExtensionRuntime } from '../common/extHostTypes.js';
-import { CLIServer } from './extHostCLIServer.js';
 import { realpathSync } from '../../../base/node/pfs.js';
 import { ExtHostConsoleForwarder } from './extHostConsoleForwarder.js';
 import { ExtHostDiskFileSystemProvider } from './extHostDiskFileSystemProvider.js';
@@ -157,12 +156,6 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		// Register Download command
 		this._instaService.createInstance(ExtHostDownloadService);
 
-		// Register CLI Server for ipc
-		if (this._initData.remote.isRemote && this._initData.remote.authority) {
-			const cliServer = this._instaService.createInstance(CLIServer);
-			process.env['VSCODE_IPC_HOOK_CLI'] = cliServer.ipcHandlePath;
-		}
-
 		// Register local file system shortcut
 		this._instaService.createInstance(ExtHostDiskFileSystemProvider);
 
@@ -223,18 +216,4 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		return this._doLoadModule<T>(extension, module, activationTimesBuilder, 'esm');
 	}
 
-	public async $setRemoteEnvironment(env: { [key: string]: string | null }): Promise<void> {
-		if (!this._initData.remote.isRemote) {
-			return;
-		}
-
-		for (const key in env) {
-			const value = env[key];
-			if (value === null) {
-				delete process.env[key];
-			} else {
-				process.env[key] = value;
-			}
-		}
-	}
 }

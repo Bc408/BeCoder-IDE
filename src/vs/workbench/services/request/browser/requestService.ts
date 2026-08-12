@@ -6,8 +6,6 @@
 import { IRequestOptions, IRequestContext } from '../../../../base/parts/request/common/request.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { RequestChannelClient } from '../../../../platform/request/common/requestIpc.js';
-import { IRemoteAgentService, IRemoteAgentConnection } from '../../remote/common/remoteAgentService.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { AbstractRequestService, AuthInfo, Credentials, IRequestService } from '../../../../platform/request/common/request.js';
@@ -22,7 +20,6 @@ export class BrowserRequestService extends AbstractRequestService implements IRe
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILoggerService loggerService: ILoggerService,
 	) {
@@ -38,18 +35,8 @@ export class BrowserRequestService extends AbstractRequestService implements IRe
 			if (!options.proxyAuthorization) {
 				options.proxyAuthorization = this.configurationService.inspect<string>('http.proxyAuthorization').userLocalValue;
 			}
-			const context = await this.logAndRequest(options, () => request(options, token, () => navigator.onLine));
-
-			const connection = this.remoteAgentService.getConnection();
-			if (connection && context.res.statusCode === 405) {
-				return this._makeRemoteRequest(connection, options, token);
-			}
-			return context;
+			return await this.logAndRequest(options, () => request(options, token, () => navigator.onLine));
 		} catch (error) {
-			const connection = this.remoteAgentService.getConnection();
-			if (connection) {
-				return this._makeRemoteRequest(connection, options, token);
-			}
 			throw error;
 		}
 	}
@@ -70,9 +57,6 @@ export class BrowserRequestService extends AbstractRequestService implements IRe
 		return []; // not implemented in the web
 	}
 
-	private _makeRemoteRequest(connection: IRemoteAgentConnection, options: IRequestOptions, token: CancellationToken): Promise<IRequestContext> {
-		return connection.withChannel('request', channel => new RequestChannelClient(channel).request(options, token));
-	}
 }
 
 // --- Internal commands to help authentication for extensions

@@ -21,11 +21,8 @@ import { IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection }
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { findGroup } from '../../../services/editor/common/editorGroupFinder.js';
 import { Schemas } from '../../../../base/common/network.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
-import { ITunnelProxyInfo } from '../../../../platform/tunnel/common/tunnelProxy.js';
 
 export const BrowserMaxHistoryEntriesSettingId = 'workbench.browser.maxHistoryEntries';
-export const BrowserRemoteProxyEnabledSettingId = 'workbench.browser.enableRemoteProxy';
 export const BrowserNewTabPlacementSettingId = 'workbench.browser.newTabPlacement';
 
 /**
@@ -53,9 +50,6 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 	private readonly _known = new Map<string, BrowserEditorInput>();
 	private readonly _mainWindowId: number;
 
-	/** Latest tunnel-proxy credentials pushed from the local extension host. */
-	private _remoteProxyInfo: ITunnelProxyInfo | undefined;
-
 	/**
 	 * In-flight creation of the dedicated browser window group, used to coalesce
 	 * concurrent requests so we don't spawn multiple auxiliary windows. The group
@@ -78,7 +72,6 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IWorkspaceTrustEnablementService private readonly workspaceTrustEnablementService: IWorkspaceTrustEnablementService,
 		@ILogService private readonly logService: ILogService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 	) {
 		super();
 		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
@@ -93,7 +86,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		this._register(this.workspaceTrustManagementService.onDidChangeTrust(() => this._updateWindowConfiguration()));
 		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => this._updateWindowConfiguration()));
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(BrowserMaxHistoryEntriesSettingId) || e.affectsConfiguration(BrowserRemoteProxyEnabledSettingId)) {
+			if (e.affectsConfiguration(BrowserMaxHistoryEntriesSettingId)) {
 				this._updateWindowConfiguration();
 			}
 		}));
@@ -119,21 +112,6 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 				});
 			}
 		}));
-	}
-
-	willUseRemoteProxy(): boolean {
-		if (!this.environmentService.remoteAuthority) {
-			return false;
-		}
-		if (!this.configurationService.getValue<boolean>(BrowserRemoteProxyEnabledSettingId)) {
-			return false;
-		}
-		return true;
-	}
-
-	setRemoteProxyInfo(info: ITunnelProxyInfo | undefined): void {
-		this._remoteProxyInfo = info;
-		this._updateWindowConfiguration();
 	}
 
 	getKnownBrowserViews(): Map<string, BrowserEditorInput> {
@@ -286,10 +264,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 			// Always use ephemeral sessions for untrusted workspaces
 			dataStorage = BrowserViewStorageScope.Ephemeral;
 		} else if (dataStorage === 'default') {
-			// Workspace-scoped for remote workspaces.
-			dataStorage = this.environmentService.remoteAuthority
-				? BrowserViewStorageScope.Workspace
-				: BrowserViewStorageScope.Global;
+			dataStorage = BrowserViewStorageScope.Global;
 		}
 
 		return dataStorage;
@@ -376,7 +351,6 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		void this._browserViewService.updateWindowConfiguration(this._mainWindowId, {
 			keybindings: this._getKeybindings(),
 			maxHistoryEntries: this.configurationService.getValue<number>(BrowserMaxHistoryEntriesSettingId),
-			proxyInfo: this._remoteProxyInfo,
 			trustedFileRoots: this._getTrustedFileRoots(),
 			trustAllFiles: !this.workspaceTrustEnablementService.isWorkspaceTrustEnabled(),
 		});

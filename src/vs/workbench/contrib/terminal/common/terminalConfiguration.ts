@@ -500,11 +500,10 @@ const terminalConfiguration: IStringDictionary<IConfigurationPropertySchema> = {
 	[TerminalSettingId.EnableFileLinks]: {
 		description: localize('terminal.integrated.enableFileLinks', "Whether to enable file links in terminals. Links can be slow when working on a network drive in particular because each file link is verified against the file system. Changing this will take effect only in new terminals."),
 		type: 'string',
-		enum: ['off', 'on', 'notRemote'],
+		enum: ['off', 'on'],
 		enumDescriptions: [
 			localize('enableFileLinks.off', "Always off."),
-			localize('enableFileLinks.on', "Always on."),
-			localize('enableFileLinks.notRemote', "Enable only when not in a remote workspace.")
+			localize('enableFileLinks.on', "Always on.")
 		],
 		default: 'on'
 	},

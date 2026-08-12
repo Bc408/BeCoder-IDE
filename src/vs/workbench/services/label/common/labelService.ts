@@ -22,7 +22,6 @@ import { InstantiationType, registerSingleton } from '../../../../platform/insta
 import { IPathService } from '../../path/common/pathService.js';
 import { isProposedApiEnabled } from '../../extensions/common/extensions.js';
 import { OperatingSystem, OS } from '../../../../base/common/platform.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { Memento } from '../../../common/memento.js';
@@ -147,7 +146,6 @@ export class LabelService extends Disposable implements ILabelService {
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IPathService private readonly pathService: IPathService,
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService,
 		@IStorageService storageService: IStorageService,
 		@ILifecycleService lifecycleService: ILifecycleService,
 	) {
@@ -164,18 +162,6 @@ export class LabelService extends Disposable implements ILabelService {
 		this.storedFormatters = memento.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
 		this.formatters = this.storedFormatters?.formatters?.slice() || [];
 
-		// Remote environment is potentially long running
-		this.resolveRemoteEnvironment();
-	}
-
-	private async resolveRemoteEnvironment(): Promise<void> {
-
-		// OS
-		const env = await this.remoteAgentService.getEnvironment();
-		this.os = env?.os ?? OS;
-
-		// User home
-		this.userHome = await this.pathService.userHome();
 	}
 
 	findFormatting(resource: URI): ResourceLabelFormatting | undefined {

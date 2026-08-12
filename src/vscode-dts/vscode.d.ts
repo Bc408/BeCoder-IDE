@@ -8131,8 +8131,7 @@ declare module 'vscode' {
 
 
 	/**
-	 * In a remote window the extension kind describes if an extension
-	 * runs where the UI (window) runs or if an extension runs remotely.
+	 * The extension kind describes which local extension host runs an extension.
 	 */
 	export enum ExtensionKind {
 
@@ -8142,7 +8141,7 @@ declare module 'vscode' {
 		UI = 1,
 
 		/**
-		 * Extension runs where the remote extension host runs.
+		 * Extension runs in the workspace extension host.
 		 */
 		Workspace = 2
 	}
@@ -8181,11 +8180,8 @@ declare module 'vscode' {
 		readonly packageJSON: any;
 
 		/**
-		 * The extension kind describes if an extension runs where the UI runs
-		 * or if an extension runs where the remote extension host runs. The extension kind
-		 * is defined in the `package.json`-file of extensions but can also be refined
-		 * via the `remote.extensionKind`-setting. When no remote extension host exists,
-		 * the value is {@linkcode ExtensionKind.UI}.
+		 * The extension kind describes which local extension host runs an extension.
+		 * It is defined in the extension's `package.json` file.
 		 */
 		extensionKind: ExtensionKind;
 

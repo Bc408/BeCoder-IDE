@@ -571,8 +571,7 @@ export class Menubar extends Disposable {
 					cli: this.environmentMainService.args,
 					urisToOpen: [openable],
 					forceNewWindow: openInNewWindow,
-					gotoLineMode: false,
-					remoteAuthority: item.remoteAuthority
+					gotoLineMode: false
 				})).length > 0;
 
 				if (!success) {

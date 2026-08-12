@@ -1041,7 +1041,6 @@ export const NotebookSetting = {
 	findFilters: 'notebook.find.filters',
 	logging: 'notebook.logging',
 	confirmDeleteRunningCell: 'notebook.confirmDeleteRunningCell',
-	remoteSaving: 'notebook.experimental.remoteSave',
 	gotoSymbolsAllSymbols: 'notebook.gotoSymbols.showAllSymbols',
 	outlineShowMarkdownHeadersOnly: 'notebook.outline.showMarkdownHeadersOnly',
 	outlineShowCodeCells: 'notebook.outline.showCodeCells',

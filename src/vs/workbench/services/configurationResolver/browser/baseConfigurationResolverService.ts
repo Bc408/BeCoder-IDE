@@ -218,7 +218,6 @@ export abstract class BaseConfigurationResolverService extends AbstractVariableR
 				case ConfigurationTarget.DEFAULT: inputs = result.defaultValue?.inputs; break;
 				case ConfigurationTarget.USER: inputs = result.userValue?.inputs; break;
 				case ConfigurationTarget.USER_LOCAL: inputs = result.userLocalValue?.inputs; break;
-				case ConfigurationTarget.USER_REMOTE: inputs = result.userRemoteValue?.inputs; break;
 				case ConfigurationTarget.APPLICATION: inputs = result.applicationValue?.inputs; break;
 				case ConfigurationTarget.WORKSPACE: inputs = result.workspaceValue?.inputs; break;
 

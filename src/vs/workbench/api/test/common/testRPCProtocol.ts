@@ -14,7 +14,6 @@ import { parseJsonAndRestoreBufferRefs, stringifyJsonWithBufferRefs } from '../.
 export function SingleProxyRPCProtocol(thing: any): IExtHostContext & IExtHostRpcService {
 	return {
 		_serviceBrand: undefined,
-		remoteAuthority: null!,
 		getProxy<T>(): T {
 			return thing;
 		},

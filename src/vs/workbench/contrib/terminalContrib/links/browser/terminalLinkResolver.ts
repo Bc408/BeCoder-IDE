@@ -7,7 +7,6 @@ import { ITerminalLinkResolver, ResolvedLink } from './links.js';
 import { removeLinkSuffix, removeLinkQueryString, winDrivePrefix } from './terminalLinkParsing.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { ITerminalProcessManager } from '../../../terminal/common/terminal.js';
-import { Schemas } from '../../../../../base/common/network.js';
 import { isWindows, OperatingSystem, OS } from '../../../../../base/common/platform.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { IPath, posix, win32 } from '../../../../../base/common/path.js';
@@ -15,31 +14,15 @@ import { ITerminalBackend } from '../../../../../platform/terminal/common/termin
 import { mainWindow } from '../../../../../base/browser/window.js';
 
 export class TerminalLinkResolver implements ITerminalLinkResolver {
-	// Link cache could be shared across all terminals, but that could lead to weird results when
-	// both local and remote terminals are present
-	private readonly _resolvedLinkCaches: Map<string, LinkCache> = new Map();
+	private readonly _resolvedLinkCache = new LinkCache();
 
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
 	) {
 	}
 
-	async resolveLink(processManager: Pick<ITerminalProcessManager, 'initialCwd' | 'os' | 'remoteAuthority' | 'userHome'> & { backend?: Pick<ITerminalBackend, 'getWslPath'> }, link: string, uri?: URI): Promise<ResolvedLink> {
-		// Correct scheme and authority for remote terminals
-		if (uri && uri.scheme === Schemas.file && processManager.remoteAuthority) {
-			uri = uri.with({
-				scheme: Schemas.vscodeRemote,
-				authority: processManager.remoteAuthority
-			});
-		}
-
-		// Get the link cache
-		let cache = this._resolvedLinkCaches.get(processManager.remoteAuthority ?? '');
-		if (!cache) {
-			cache = new LinkCache();
-			this._resolvedLinkCaches.set(processManager.remoteAuthority ?? '', cache);
-		}
-
+	async resolveLink(processManager: Pick<ITerminalProcessManager, 'initialCwd' | 'os' | 'userHome'> & { backend?: Pick<ITerminalBackend, 'getWslPath'> }, link: string, uri?: URI): Promise<ResolvedLink> {
+		const cache = this._resolvedLinkCache;
 		// Check resolved link cache first
 		const cached = cache.get(uri || link);
 		if (cached !== undefined) {
@@ -92,16 +75,7 @@ export class TerminalLinkResolver implements ITerminalLinkResolver {
 		}
 
 		try {
-			let uri: URI;
-			if (processManager.remoteAuthority) {
-				uri = URI.from({
-					scheme: Schemas.vscodeRemote,
-					authority: processManager.remoteAuthority,
-					path: linkUrl
-				});
-			} else {
-				uri = URI.file(linkUrl);
-			}
+			const uri = URI.file(linkUrl);
 
 			try {
 				const stat = await this._fileService.stat(uri);

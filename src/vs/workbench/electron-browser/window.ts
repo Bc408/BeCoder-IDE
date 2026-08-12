@@ -44,14 +44,11 @@ import { IOpenerService, IResolvedExternalUri, OpenOptions } from '../../platfor
 import { Schemas } from '../../base/common/network.js';
 import { INativeHostService } from '../../platform/native/common/native.js';
 import { posix } from '../../base/common/path.js';
-import { ITunnelService, RemoteTunnel, extractLocalHostUriMetaDataForPortMapping, extractQueryLocalHostUriMetaDataForPortMapping } from '../../platform/tunnel/common/tunnel.js';
 import { IWorkbenchLayoutService, positionFromString, Position } from '../services/layout/browser/layoutService.js';
 import { IWorkingCopyService } from '../services/workingCopy/common/workingCopyService.js';
 import { WorkingCopyCapabilities } from '../services/workingCopy/common/workingCopy.js';
 import { IFilesConfigurationService } from '../services/filesConfiguration/common/filesConfigurationService.js';
 import { Event } from '../../base/common/event.js';
-import { IRemoteAuthorityResolverService } from '../../platform/remote/common/remoteAuthorityResolver.js';
-import { IAddressProvider, IAddress } from '../../platform/remote/common/remoteAgentConnection.js';
 import { IEditorGroupsService, IEditorPart } from '../services/editor/common/editorGroupsService.js';
 import { IDialogService } from '../../platform/dialogs/common/dialogs.js';
 import { AuthInfo } from '../../base/parts/sandbox/electron-browser/electronTypes.js';
@@ -111,12 +108,10 @@ export class NativeWindow extends BaseWindow {
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@INativeHostService private readonly nativeHostService: INativeHostService,
-		@ITunnelService private readonly tunnelService: ITunnelService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
 		@IFilesConfigurationService private readonly filesConfigurationService: IFilesConfigurationService,
 		@IProductService private readonly productService: IProductService,
-		@IRemoteAuthorityResolverService private readonly remoteAuthorityResolverService: IRemoteAuthorityResolverService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IStorageService private readonly storageService: IStorageService,
 		@ILogService private readonly logService: ILogService,
@@ -367,9 +362,7 @@ export class NativeWindow extends BaseWindow {
 
 		// Allow to update security settings around protocol handlers
 		ipcRenderer.on('vscode:disablePromptForProtocolHandling', (event: unknown, ...argsRaw: unknown[]) => {
-			const kind = argsRaw[0] as 'local' | 'remote';
-			const setting = kind === 'local' ? 'security.promptForLocalFileProtocolHandling' : 'security.promptForRemoteFileProtocolHandling';
-			this.configurationService.updateValue(setting, false);
+			this.configurationService.updateValue('security.promptForLocalFileProtocolHandling', false);
 		});
 
 		// Window Settings
@@ -793,48 +786,6 @@ export class NativeWindow extends BaseWindow {
 	}
 
 	async resolveExternalUri(uri: URI, options?: OpenOptions): Promise<IResolvedExternalUri | undefined> {
-		let queryTunnel: RemoteTunnel | string | undefined;
-		if (options?.allowTunneling) {
-			const portMappingRequest = extractLocalHostUriMetaDataForPortMapping(uri);
-			const queryPortMapping = extractQueryLocalHostUriMetaDataForPortMapping(uri);
-			if (queryPortMapping) {
-				queryTunnel = await this.openTunnel(queryPortMapping.address, queryPortMapping.port);
-				if (queryTunnel && (typeof queryTunnel !== 'string')) {
-					// If the tunnel was mapped to a different port, dispose it, because some services
-					// validate the port number in the query string.
-					if (queryTunnel.tunnelRemotePort !== queryPortMapping.port) {
-						queryTunnel.dispose();
-						queryTunnel = undefined;
-					} else {
-						if (!portMappingRequest) {
-							const tunnel = queryTunnel;
-							return {
-								resolved: uri,
-								dispose: () => tunnel.dispose()
-							};
-						}
-					}
-				}
-			}
-
-			if (portMappingRequest) {
-				const tunnel = await this.openTunnel(portMappingRequest.address, portMappingRequest.port);
-				if (tunnel && (typeof tunnel !== 'string')) {
-					const addressAsUri = URI.parse(tunnel.localAddress).with({ path: uri.path });
-					const resolved = addressAsUri.scheme.startsWith(uri.scheme) ? addressAsUri : uri.with({ authority: tunnel.localAddress });
-					return {
-						resolved,
-						dispose() {
-							tunnel.dispose();
-							if (queryTunnel && (typeof queryTunnel !== 'string')) {
-								queryTunnel.dispose();
-							}
-						}
-					};
-				}
-			}
-		}
-
 		if (!options?.openExternal) {
 			const canHandleResource = await this.fileService.canHandleResource(uri);
 			if (canHandleResource) {
@@ -850,22 +801,6 @@ export class NativeWindow extends BaseWindow {
 		}
 
 		return undefined;
-	}
-
-	private async openTunnel(address: string, port: number): Promise<RemoteTunnel | string | undefined> {
-		const remoteAuthority = this.environmentService.remoteAuthority;
-		const addressProvider: IAddressProvider | undefined = remoteAuthority ? {
-			getAddress: async (): Promise<IAddress> => {
-				return (await this.remoteAuthorityResolverService.resolveAuthority(remoteAuthority)).authority;
-			}
-		} : undefined;
-
-		const tunnel = await this.tunnelService.getExistingTunnel(address, port);
-		if (!tunnel || (typeof tunnel === 'string')) {
-			return this.tunnelService.openTunnel(addressProvider, address, port);
-		}
-
-		return tunnel;
 	}
 
 	private setupOpenHandlers(): void {

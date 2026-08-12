@@ -15,7 +15,6 @@ import { IPathService } from '../../../services/path/common/pathService.js';
 import { API_OPEN_DIFF_EDITOR_COMMAND_ID } from '../../../browser/parts/editor/editorCommands.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { LocalHistoryFileSystemProvider } from './localHistoryFileSystemProvider.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { SaveSourceRegistry } from '../../../common/editor.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { COMPARE_WITH_FILE_LABEL, toDiffEditorArguments } from './localHistoryCommands.js';
@@ -47,7 +46,6 @@ export class LocalHistoryTimeline extends Disposable implements IWorkbenchContri
 		@IWorkingCopyHistoryService private readonly workingCopyHistoryService: IWorkingCopyHistoryService,
 		@IPathService private readonly pathService: IPathService,
 		@IFileService private readonly fileService: IFileService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService
 	) {
@@ -121,11 +119,11 @@ export class LocalHistoryTimeline extends Disposable implements IWorkbenchContri
 			// try best to convert the URI back into a form that is
 			// likely to match the workspace URIs. That means:
 			// - change to the default URI scheme
-			// - change to the remote authority or virtual workspace authority
+			// - change to the virtual workspace authority
 			// - preserve the path
 			resource = URI.from({
 				scheme: this.pathService.defaultUriScheme,
-				authority: this.environmentService.remoteAuthority ?? getVirtualWorkspaceAuthority(this.contextService.getWorkspace()),
+				authority: getVirtualWorkspaceAuthority(this.contextService.getWorkspace()),
 				path: uri.path
 			});
 		}

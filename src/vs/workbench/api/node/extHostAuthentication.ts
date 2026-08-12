@@ -56,8 +56,8 @@ export class NodeDynamicAuthProvider extends DynamicAuthProvider {
 		);
 
 		// Prepend Node-specific flows to the existing flows
-		if (!initData.remote.isRemote && serverMetadata.authorization_endpoint) {
-			// If we are not in a remote environment, we can use the loopback server for authentication
+		if (serverMetadata.authorization_endpoint) {
+			// The local extension host can use the loopback server for authentication.
 			this._createFlows.unshift({
 				label: nls.localize('loopback', "Loopback Server"),
 				handler: (scopes, progress, token) => this._createWithLoopbackServer(scopes, progress, token)

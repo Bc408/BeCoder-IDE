@@ -14,7 +14,6 @@ import { BrowserViewStorageScope, IBrowserSessionOptions } from '../common/brows
 import { BrowserSessionTrust, IBrowserSessionTrust } from './browserSessionTrust.js';
 import { BrowserSessionHistory, IBrowserSessionHistory } from './browserSessionHistory.js';
 import { BrowserSessionPermissions, IBrowserSessionPermissions } from './browserSessionPermissions.js';
-import { BrowserSessionRemote, IBrowserSessionRemote } from './browserSessionRemote.js';
 import { FileAccess, Schemas } from '../../../base/common/network.js';
 import { IInstantiationService } from '../../instantiation/common/instantiation.js';
 import { localize } from '../../../nls.js';
@@ -205,7 +204,6 @@ export class BrowserSession {
 
 	private readonly _trust: BrowserSessionTrust;
 	private readonly _history: BrowserSessionHistory;
-	private readonly _remote: BrowserSessionRemote;
 	private readonly _permissions: BrowserSessionPermissions;
 
 	/**
@@ -225,7 +223,6 @@ export class BrowserSession {
 	) {
 		this._trust = new BrowserSessionTrust(this);
 		this._history = new BrowserSessionHistory(this);
-		this._remote = new BrowserSessionRemote(this);
 		this._permissions = new BrowserSessionPermissions(this);
 		this.configure();
 		BrowserSession.knownSessions.add(electronSession);
@@ -242,11 +239,6 @@ export class BrowserSession {
 	/** Public history interface for consumers that record visits. */
 	get history(): IBrowserSessionHistory {
 		return this._history;
-	}
-
-	/** Public remote interface owning the proxy lifecycle for this session. */
-	get remote(): IBrowserSessionRemote {
-		return this._remote;
 	}
 
 	/** Public permissions interface owning per-origin permission state. */

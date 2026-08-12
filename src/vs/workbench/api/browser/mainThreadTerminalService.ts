@@ -16,7 +16,6 @@ import { TerminalProcessExtHostProxy } from '../../contrib/terminal/browser/term
 import { IEnvironmentVariableService } from '../../contrib/terminal/common/environmentVariable.js';
 import { deserializeEnvironmentDescriptionMap, deserializeEnvironmentVariableCollection, serializeEnvironmentVariableCollection } from '../../../platform/terminal/common/environmentVariableShared.js';
 import { IStartExtensionTerminalRequest, ITerminalProcessExtHostProxy, ITerminalProfileResolverService, ITerminalProfileService } from '../../contrib/terminal/common/terminal.js';
-import { IRemoteAgentService } from '../../services/remote/common/remoteAgentService.js';
 import { OperatingSystem, OS } from '../../../base/common/platform.js';
 import { TerminalEditorLocationOptions } from 'vscode';
 import { Promises } from '../../../base/common/async.js';
@@ -24,7 +23,6 @@ import { ISerializableEnvironmentDescriptionMap, ISerializableEnvironmentVariabl
 import { ITerminalLinkProviderService } from '../../contrib/terminalContrib/links/browser/links.js';
 import { ITerminalQuickFixService, ITerminalQuickFix, TerminalQuickFixType } from '../../contrib/terminalContrib/quickFix/browser/quickFix.js';
 import { TerminalCapability } from '../../../platform/terminal/common/capabilities/capabilities.js';
-import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { hasKey } from '../../../base/common/types.js';
 
 interface TerminalProcessProxyEntry extends IDisposable {
@@ -67,11 +65,9 @@ export class MainThreadTerminalService extends Disposable implements MainThreadT
 		@IEnvironmentVariableService private readonly _environmentVariableService: IEnvironmentVariableService,
 		@ILogService private readonly _logService: ILogService,
 		@ITerminalProfileResolverService private readonly _terminalProfileResolverService: ITerminalProfileResolverService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@ITerminalGroupService private readonly _terminalGroupService: ITerminalGroupService,
 		@ITerminalEditorService private readonly _terminalEditorService: ITerminalEditorService,
 		@ITerminalProfileService private readonly _terminalProfileService: ITerminalProfileService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 	) {
 		super();
 		this._proxy = _extHostContext.getProxy(ExtHostContext.ExtHostTerminalService);
@@ -112,17 +108,13 @@ export class MainThreadTerminalService extends Disposable implements MainThreadT
 			});
 			this._proxy.$initEnvironmentVariableCollections(serializedCollections);
 		}
-		remoteAgentService.getEnvironment().then(async env => {
-			this._os = env?.os || OS;
-			this._updateDefaultProfile();
-		});
+		this._updateDefaultProfile();
 		this._register(this._terminalProfileService.onDidChangeAvailableProfiles(() => this._updateDefaultProfile()));
 	}
 
 	private async _updateDefaultProfile() {
-		const remoteAuthority = this._environmentService.remoteAuthority;
-		const defaultProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os });
-		const defaultAutomationProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os, allowAutomationShell: true });
+		const defaultProfile = this._terminalProfileResolverService.getDefaultProfile({ os: this._os });
+		const defaultAutomationProfile = this._terminalProfileResolverService.getDefaultProfile({ os: this._os, allowAutomationShell: true });
 		this._proxy.$acceptDefaultProfile(...await Promise.all([defaultProfile, defaultAutomationProfile]));
 	}
 

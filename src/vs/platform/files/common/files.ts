@@ -1627,21 +1627,13 @@ export class ByteSize {
 
 // File limits
 
-export function getLargeFileConfirmationLimit(remoteAuthority?: string): number;
 export function getLargeFileConfirmationLimit(uri?: URI): number;
-export function getLargeFileConfirmationLimit(arg?: string | URI): number {
-	const isRemote = typeof arg === 'string' || arg?.scheme === Schemas.vscodeRemote;
-	const isLocal = typeof arg !== 'string' && arg?.scheme === Schemas.file;
+export function getLargeFileConfirmationLimit(uri?: URI): number {
+	const isLocal = uri?.scheme === Schemas.file;
 
 	if (isLocal) {
 		// Local almost has no limit in file size
 		return 1024 * ByteSize.MB;
-	}
-
-	if (isRemote) {
-		// With a remote, pick a low limit to avoid
-		// potentially costly file transfers
-		return 10 * ByteSize.MB;
 	}
 
 	if (isWeb) {

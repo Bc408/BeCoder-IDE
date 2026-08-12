@@ -561,7 +561,6 @@ class ConfigurationInspectValue<V> implements IConfigurationValue<V> {
 		private readonly applicationConfiguration: ConfigurationModel | undefined,
 		private readonly userConfiguration: ConfigurationModel,
 		private readonly localUserConfiguration: ConfigurationModel,
-		private readonly remoteUserConfiguration: ConfigurationModel,
 		private readonly workspaceConfiguration: ConfigurationModel | undefined,
 		private readonly folderConfigurationModel: ConfigurationModel | undefined,
 		private readonly memoryConfigurationModel: ConfigurationModel
@@ -656,22 +655,6 @@ class ConfigurationInspectValue<V> implements IConfigurationValue<V> {
 		return this.toInspectValue(this.userLocalInspectValue);
 	}
 
-	private _userRemoteInspectValue: InspectValue<V> | undefined;
-	private get userRemoteInspectValue(): InspectValue<V> {
-		if (!this._userRemoteInspectValue) {
-			this._userRemoteInspectValue = this.remoteUserConfiguration.inspect<V>(this.key, this.overrides.overrideIdentifier);
-		}
-		return this._userRemoteInspectValue;
-	}
-
-	get userRemoteValue(): V | undefined {
-		return this.userRemoteInspectValue.merged;
-	}
-
-	get userRemote(): IInspectValue<V> | undefined {
-		return this.toInspectValue(this.userRemoteInspectValue);
-	}
-
 	private _workspaceInspectValue: InspectValue<V> | undefined | null;
 	private get workspaceInspectValue(): InspectValue<V> | null {
 		if (this._workspaceInspectValue === undefined) {
@@ -732,7 +715,6 @@ export class Configuration {
 		private _policyConfiguration: ConfigurationModel,
 		private _applicationConfiguration: ConfigurationModel,
 		private _localUserConfiguration: ConfigurationModel,
-		private _remoteUserConfiguration: ConfigurationModel,
 		private _workspaceConfiguration: ConfigurationModel,
 		private _folderConfigurations: ResourceMap<ConfigurationModel>,
 		private _memoryConfiguration: ConfigurationModel,
@@ -792,7 +774,6 @@ export class Configuration {
 			this.applicationConfiguration.isEmpty() ? undefined : this.applicationConfiguration,
 			this.userConfiguration,
 			this.localUserConfiguration,
-			this.remoteUserConfiguration,
 			workspace ? this._workspaceConfiguration : undefined,
 			folderConfigurationModel ? folderConfigurationModel : undefined,
 			memoryConfigurationModel
@@ -835,14 +816,6 @@ export class Configuration {
 
 	updateLocalUserConfiguration(localUserConfiguration: ConfigurationModel): void {
 		this._localUserConfiguration = localUserConfiguration;
-		this._userConfiguration = null;
-		this._workspaceConsolidatedConfiguration = null;
-		this._foldersConsolidatedConfigurations.clear();
-	}
-
-	updateRemoteUserConfiguration(remoteUserConfiguration: ConfigurationModel): void {
-		this._remoteUserConfiguration = remoteUserConfiguration;
-		this._userConfiguration = null;
 		this._workspaceConsolidatedConfiguration = null;
 		this._foldersConsolidatedConfigurations.clear();
 	}
@@ -912,15 +885,6 @@ export class Configuration {
 		return { keys, overrides };
 	}
 
-	compareAndUpdateRemoteUserConfiguration(user: ConfigurationModel): IConfigurationChange {
-		const { added, updated, removed, overrides } = compare(this.remoteUserConfiguration, user);
-		const keys = [...added, ...updated, ...removed];
-		if (keys.length) {
-			this.updateRemoteUserConfiguration(user);
-		}
-		return { keys, overrides };
-	}
-
 	compareAndUpdateWorkspaceConfiguration(workspaceConfiguration: ConfigurationModel): IConfigurationChange {
 		const { added, updated, removed, overrides } = compare(this.workspaceConfiguration, workspaceConfiguration);
 		const keys = [...added, ...updated, ...removed];
@@ -958,25 +922,12 @@ export class Configuration {
 		return this._applicationConfiguration;
 	}
 
-	private _userConfiguration: ConfigurationModel | null = null;
 	get userConfiguration(): ConfigurationModel {
-		if (!this._userConfiguration) {
-			if (this._remoteUserConfiguration.isEmpty()) {
-				this._userConfiguration = this._localUserConfiguration;
-			} else {
-				const merged = this._localUserConfiguration.merge(this._remoteUserConfiguration);
-				this._userConfiguration = new ConfigurationModel(merged.contents, merged.keys, merged.overrides, undefined, this.logService);
-			}
-		}
-		return this._userConfiguration;
+		return this._localUserConfiguration;
 	}
 
 	get localUserConfiguration(): ConfigurationModel {
 		return this._localUserConfiguration;
-	}
-
-	get remoteUserConfiguration(): ConfigurationModel {
-		return this._remoteUserConfiguration;
 	}
 
 	get workspaceConfiguration(): ConfigurationModel {
@@ -1075,12 +1026,6 @@ export class Configuration {
 				keys: this.localUserConfiguration.keys,
 				raw: Array.isArray(this.localUserConfiguration.raw) ? undefined : this.localUserConfiguration.raw
 			},
-			userRemote: {
-				contents: this.remoteUserConfiguration.contents,
-				overrides: this.remoteUserConfiguration.overrides,
-				keys: this.remoteUserConfiguration.keys,
-				raw: Array.isArray(this.remoteUserConfiguration.raw) ? undefined : this.remoteUserConfiguration.raw
-			},
 			workspace: {
 				contents: this._workspaceConfiguration.contents,
 				overrides: this._workspaceConfiguration.overrides,
@@ -1126,7 +1071,6 @@ export class Configuration {
 		const policyConfiguration = this.parseConfigurationModel(data.policy, logService);
 		const applicationConfiguration = this.parseConfigurationModel(data.application, logService);
 		const userLocalConfiguration = this.parseConfigurationModel(data.userLocal, logService);
-		const userRemoteConfiguration = this.parseConfigurationModel(data.userRemote, logService);
 		const workspaceConfiguration = this.parseConfigurationModel(data.workspace, logService);
 		const folders: ResourceMap<ConfigurationModel> = data.folders.reduce((result, value) => {
 			result.set(URI.revive(value[0]), this.parseConfigurationModel(value[1], logService));
@@ -1137,7 +1081,6 @@ export class Configuration {
 			policyConfiguration,
 			applicationConfiguration,
 			userLocalConfiguration,
-			userRemoteConfiguration,
 			workspaceConfiguration,
 			folders,
 			ConfigurationModel.createEmptyModel(logService),

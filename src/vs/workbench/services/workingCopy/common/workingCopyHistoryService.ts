@@ -13,7 +13,6 @@ import { WorkingCopyHistoryTracker } from './workingCopyHistoryTracker.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IWorkingCopyHistoryEntry, IWorkingCopyHistoryEntryDescriptor, IWorkingCopyHistoryEvent, IWorkingCopyHistoryService, MAX_PARALLEL_HISTORY_IO_OPS } from './workingCopyHistory.js';
 import { FileOperationError, FileOperationResult, IFileService, IFileStatWithMetadata } from '../../../../platform/files/common/files.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { DeferredPromise, Limiter, RunOnceScheduler } from '../../../../base/common/async.js';
 import { dirname, extname, isEqual, joinPath } from '../../../../base/common/resources.js';
@@ -605,7 +604,6 @@ export abstract class WorkingCopyHistoryService extends Disposable implements IW
 
 	constructor(
 		@IFileService protected readonly fileService: IFileService,
-		@IRemoteAgentService protected readonly remoteAgentService: IRemoteAgentService,
 		@IWorkbenchEnvironmentService protected readonly environmentService: IWorkbenchEnvironmentService,
 		@IUriIdentityService protected readonly uriIdentityService: IUriIdentityService,
 		@ILabelService protected readonly labelService: ILabelService,
@@ -617,25 +615,8 @@ export abstract class WorkingCopyHistoryService extends Disposable implements IW
 		this.resolveLocalHistoryHome();
 	}
 
-	private async resolveLocalHistoryHome(): Promise<void> {
-		let historyHome: URI | undefined = undefined;
-
-		// Prefer history to be stored in the remote if we are connected to a remote
-		try {
-			const remoteEnv = await this.remoteAgentService.getEnvironment();
-			if (remoteEnv) {
-				historyHome = remoteEnv.localHistoryHome;
-			}
-		} catch (error) {
-			this.logService.trace(error); // ignore and fallback to local
-		}
-
-		// But fallback to local if there is no remote
-		if (!historyHome) {
-			historyHome = this.environmentService.localHistoryHome;
-		}
-
-		this.localHistoryHome.complete(historyHome);
+	private resolveLocalHistoryHome(): void {
+		this.localHistoryHome.complete(this.environmentService.localHistoryHome);
 	}
 
 	async moveEntries(source: URI, target: URI): Promise<URI[]> {
@@ -828,14 +809,11 @@ export class NativeWorkingCopyHistoryService extends WorkingCopyHistoryService {
 
 	private static readonly STORE_ALL_INTERVAL = 5 * 60 * 1000; // 5min
 
-	private readonly isRemotelyStored = typeof this.environmentService.remoteAuthority === 'string';
-
 	private readonly storeAllCts = this._register(new CancellationTokenSource());
 	private readonly storeAllScheduler = this._register(new RunOnceScheduler(() => this.storeAll(this.storeAllCts.token), NativeWorkingCopyHistoryService.STORE_ALL_INTERVAL));
 
 	constructor(
 		@IFileService fileService: IFileService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@IUriIdentityService uriIdentityService: IUriIdentityService,
 		@ILabelService labelService: ILabelService,
@@ -843,24 +821,18 @@ export class NativeWorkingCopyHistoryService extends WorkingCopyHistoryService {
 		@ILogService logService: ILogService,
 		@IConfigurationService configurationService: IConfigurationService
 	) {
-		super(fileService, remoteAgentService, environmentService, uriIdentityService, labelService, logService, configurationService);
+		super(fileService, environmentService, uriIdentityService, labelService, logService, configurationService);
 
 		this.registerListeners();
 	}
 
 	private registerListeners(): void {
-		if (!this.isRemotelyStored) {
-
-			// Local: persist all on shutdown
-			this._register(this.lifecycleService.onWillShutdown(e => this.onWillShutdown(e)));
-
-			// Local: schedule persist on change
-			this._register(Event.any(this.onDidAddEntry, this.onDidChangeEntry, this.onDidReplaceEntry, this.onDidRemoveEntry)(() => this.onDidChangeModels()));
-		}
+		this._register(this.lifecycleService.onWillShutdown(e => this.onWillShutdown(e)));
+		this._register(Event.any(this.onDidAddEntry, this.onDidChangeEntry, this.onDidReplaceEntry, this.onDidRemoveEntry)(() => this.onDidChangeModels()));
 	}
 
 	protected getModelOptions(): IWorkingCopyHistoryModelOptions {
-		return { flushOnChange: this.isRemotelyStored /* because the connection might drop anytime */ };
+		return { flushOnChange: false };
 	}
 
 	private onWillShutdown(e: WillShutdownEvent): void {

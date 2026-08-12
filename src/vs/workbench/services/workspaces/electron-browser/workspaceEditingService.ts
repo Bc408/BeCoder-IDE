@@ -118,8 +118,7 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
 							const newWorkspaceIdentifier = await this.workspacesService.getWorkspaceIdentifier(newWorkspacePath);
 							await this.workspacesService.addRecentlyOpened([{
 								label: this.labelService.getWorkspaceLabel(newWorkspaceIdentifier, { verbose: Verbosity.LONG }),
-								workspace: newWorkspaceIdentifier,
-								remoteAuthority: this.environmentService.remoteAuthority // remember whether this was a remote window
+								workspace: newWorkspaceIdentifier
 							}]);
 
 							// Delete the untitled one
@@ -196,11 +195,6 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
 
 			// Fire event to allow participants to join
 			await this.fireDidEnterWorkspace(oldWorkspace, result.workspace);
-		}
-
-		// TODO@aeschli: workaround until restarting works
-		if (this.environmentService.remoteAuthority) {
-			this.hostService.reload();
 		}
 
 		// Restart the extension host: entering a workspace means a new location for

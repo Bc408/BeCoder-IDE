@@ -788,67 +788,65 @@ export class ViewDescriptorService extends Disposable implements IViewDescriptor
 	private registerViewsVisibilityActionsForContainer(viewContainerModel: ViewContainerModel): IDisposable {
 		const disposables = new DisposableStore();
 		viewContainerModel.activeViewDescriptors.forEach((viewDescriptor, index) => {
-			if (!viewDescriptor.remoteAuthority) {
-				disposables.add(registerAction2(class extends ViewPaneContainerAction<ViewPaneContainer> {
-					constructor() {
-						super({
-							id: `${viewDescriptor.id}.toggleVisibility`,
-							viewPaneContainerId: viewContainerModel.viewContainer.id,
-							precondition: viewDescriptor.canToggleVisibility && (!viewContainerModel.isVisible(viewDescriptor.id) || viewContainerModel.visibleViewDescriptors.length > 1) ? ContextKeyExpr.true() : ContextKeyExpr.false(),
-							toggled: ContextKeyExpr.has(`${viewDescriptor.id}.visible`),
-							title: viewDescriptor.name,
-							metadata: {
-								description: localize2('toggleVisibilityDescription', 'Toggles the visibility of the {0} view if the view container it is located in is visible', viewDescriptor.name.value)
-							},
-							menu: [{
-								id: ViewsSubMenu,
-								when: ContextKeyExpr.equals('viewContainer', viewContainerModel.viewContainer.id),
-								order: index,
-							}, {
-								id: MenuId.ViewContainerTitleContext,
-								when: ContextKeyExpr.equals('viewContainer', viewContainerModel.viewContainer.id),
-								order: index,
-								group: '1_toggleVisibility'
-							}, {
-								id: MenuId.ViewTitleContext,
-								when: ContextKeyExpr.or(...viewContainerModel.visibleViewDescriptors.map(v => ContextKeyExpr.equals('view', v.id))),
-								order: index,
-								group: '2_toggleVisibility'
-							}]
-						});
-					}
-					async runInViewPaneContainer(serviceAccessor: ServicesAccessor, viewPaneContainer: ViewPaneContainer): Promise<void> {
+			disposables.add(registerAction2(class extends ViewPaneContainerAction<ViewPaneContainer> {
+				constructor() {
+					super({
+						id: `${viewDescriptor.id}.toggleVisibility`,
+						viewPaneContainerId: viewContainerModel.viewContainer.id,
+						precondition: viewDescriptor.canToggleVisibility && (!viewContainerModel.isVisible(viewDescriptor.id) || viewContainerModel.visibleViewDescriptors.length > 1) ? ContextKeyExpr.true() : ContextKeyExpr.false(),
+						toggled: ContextKeyExpr.has(`${viewDescriptor.id}.visible`),
+						title: viewDescriptor.name,
+						metadata: {
+							description: localize2('toggleVisibilityDescription', 'Toggles the visibility of the {0} view if the view container it is located in is visible', viewDescriptor.name.value)
+						},
+						menu: [{
+							id: ViewsSubMenu,
+							when: ContextKeyExpr.equals('viewContainer', viewContainerModel.viewContainer.id),
+							order: index,
+						}, {
+							id: MenuId.ViewContainerTitleContext,
+							when: ContextKeyExpr.equals('viewContainer', viewContainerModel.viewContainer.id),
+							order: index,
+							group: '1_toggleVisibility'
+						}, {
+							id: MenuId.ViewTitleContext,
+							when: ContextKeyExpr.or(...viewContainerModel.visibleViewDescriptors.map(v => ContextKeyExpr.equals('view', v.id))),
+							order: index,
+							group: '2_toggleVisibility'
+						}]
+					});
+				}
+				async runInViewPaneContainer(serviceAccessor: ServicesAccessor, viewPaneContainer: ViewPaneContainer): Promise<void> {
+					viewPaneContainer.toggleViewVisibility(viewDescriptor.id);
+				}
+			}));
+			disposables.add(registerAction2(class extends ViewPaneContainerAction<ViewPaneContainer> {
+				constructor() {
+					super({
+						id: `${viewDescriptor.id}.removeView`,
+						viewPaneContainerId: viewContainerModel.viewContainer.id,
+						title: localize('hideView', "Hide '{0}'", viewDescriptor.name.value),
+						metadata: {
+							description: localize2('hideViewDescription', 'Hides the {0} view if it is visible and the view container it is located in is visible', viewDescriptor.name.value)
+						},
+						precondition: viewDescriptor.canToggleVisibility && (!viewContainerModel.isVisible(viewDescriptor.id) || viewContainerModel.visibleViewDescriptors.length > 1) ? ContextKeyExpr.true() : ContextKeyExpr.false(),
+						menu: [{
+							id: MenuId.ViewTitleContext,
+							when: ContextKeyExpr.and(
+								ContextKeyExpr.equals('view', viewDescriptor.id),
+								ContextKeyExpr.has(`${viewDescriptor.id}.visible`),
+							),
+							group: '1_hide',
+							order: 1
+						}]
+					});
+				}
+				async runInViewPaneContainer(serviceAccessor: ServicesAccessor, viewPaneContainer: ViewPaneContainer): Promise<void> {
+					if (viewPaneContainer.getView(viewDescriptor.id)?.isVisible()) {
 						viewPaneContainer.toggleViewVisibility(viewDescriptor.id);
 					}
-				}));
-				disposables.add(registerAction2(class extends ViewPaneContainerAction<ViewPaneContainer> {
-					constructor() {
-						super({
-							id: `${viewDescriptor.id}.removeView`,
-							viewPaneContainerId: viewContainerModel.viewContainer.id,
-							title: localize('hideView', "Hide '{0}'", viewDescriptor.name.value),
-							metadata: {
-								description: localize2('hideViewDescription', 'Hides the {0} view if it is visible and the view container it is located in is visible', viewDescriptor.name.value)
-							},
-							precondition: viewDescriptor.canToggleVisibility && (!viewContainerModel.isVisible(viewDescriptor.id) || viewContainerModel.visibleViewDescriptors.length > 1) ? ContextKeyExpr.true() : ContextKeyExpr.false(),
-							menu: [{
-								id: MenuId.ViewTitleContext,
-								when: ContextKeyExpr.and(
-									ContextKeyExpr.equals('view', viewDescriptor.id),
-									ContextKeyExpr.has(`${viewDescriptor.id}.visible`),
-								),
-								group: '1_hide',
-								order: 1
-							}]
-						});
-					}
-					async runInViewPaneContainer(serviceAccessor: ServicesAccessor, viewPaneContainer: ViewPaneContainer): Promise<void> {
-						if (viewPaneContainer.getView(viewDescriptor.id)?.isVisible()) {
-							viewPaneContainer.toggleViewVisibility(viewDescriptor.id);
-						}
-					}
-				}));
-			}
+				}
+			}));
 		});
 		return disposables;
 	}

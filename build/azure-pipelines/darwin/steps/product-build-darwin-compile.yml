@@ -9,9 +9,6 @@ parameters:
   - name: VSCODE_RUN_BROWSER_TESTS
     type: boolean
     default: false
-  - name: VSCODE_RUN_REMOTE_TESTS
-    type: boolean
-    default: false
 
 steps:
   - template: ../../common/checkout.yml@self
@@ -115,12 +112,6 @@ steps:
     condition: and(succeeded(), ne(variables.NODE_MODULES_RESTORED, 'true'))
     displayName: Create node_modules archive
 
-  - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - script: npx deemon --detach --wait -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=unsigned_vscode_cli_darwin_$(VSCODE_ARCH)_cli=macOS CLI (${{ upper(parameters.VSCODE_ARCH) }})" unsigned_vscode_cli_darwin_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact (background)
-
   - script: node build/azure-pipelines/distro/mixin-quality.ts
     displayName: Mixin distro quality
 
@@ -144,11 +135,10 @@ steps:
   - script: node build/azure-pipelines/common/extract-telemetry.ts
     displayName: Generate lists of telemetry events
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - script: |
         set -e
         npm run compile --prefix test/smoke
-        npm run compile --prefix test/integration/browser
       displayName: Compile test suites (non-OSS)
       condition: and(succeeded(), eq(variables['VSCODE_STEP_ON_IT'], 'false'))
 
@@ -178,49 +168,7 @@ steps:
       AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
     displayName: Build client
 
-  - script: |
-      set -e
-      npm run gulp vscode-reh-darwin-$(VSCODE_ARCH)-min-ci
-      mv ../vscode-reh-darwin-$(VSCODE_ARCH) ../vscode-server-darwin-$(VSCODE_ARCH) # TODO@joaomoreno
-    env:
-      GITHUB_TOKEN: "$(github-token-code-oss)"
-      AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-    displayName: Build server
-
-  - script: |
-      set -e
-      npm run gulp vscode-reh-web-darwin-$(VSCODE_ARCH)-min-ci
-      mv ../vscode-reh-web-darwin-$(VSCODE_ARCH) ../vscode-server-darwin-$(VSCODE_ARCH)-web # TODO@joaomoreno
-    env:
-      GITHUB_TOKEN: "$(github-token-code-oss)"
-      AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
-    displayName: Build server (web)
-
   - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
-    - script: npx deemon --attach -- node build/azure-pipelines/common/waitForArtifacts.ts "--producer=unsigned_vscode_cli_darwin_$(VSCODE_ARCH)_cli=macOS CLI (${{ upper(parameters.VSCODE_ARCH) }})" unsigned_vscode_cli_darwin_$(VSCODE_ARCH)_cli
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-      displayName: Wait for CLI artifact
-
-    - task: DownloadPipelineArtifact@2
-      inputs:
-        artifact: unsigned_vscode_cli_darwin_$(VSCODE_ARCH)_cli
-        patterns: "**"
-        path: $(Build.ArtifactStagingDirectory)/cli
-      displayName: Download VS Code CLI
-
-    - script: |
-        set -e
-        APP_ROOT="$(Agent.BuildDirectory)/VSCode-darwin-$(VSCODE_ARCH)"
-        APP_NAME="`ls $APP_ROOT | head -n 1`"
-        APP_PATH="$APP_ROOT/$APP_NAME"
-        unzip $(Build.ArtifactStagingDirectory)/cli/*.zip -d $(Build.ArtifactStagingDirectory)/cli
-        CLI_APP_NAME=$(node -p "require(\"$APP_PATH/Contents/Resources/app/product.json\").tunnelApplicationName")
-        APP_NAME=$(node -p "require(\"$APP_PATH/Contents/Resources/app/product.json\").applicationName")
-        mv "$(Build.ArtifactStagingDirectory)/cli/$APP_NAME" "$APP_PATH/Contents/Resources/app/bin/$CLI_APP_NAME"
-        chmod +x "$APP_PATH/Contents/Resources/app/bin/$CLI_APP_NAME"
-      displayName: Make CLI executable
-
     - script: |
         set -e
         APP_ROOT="$(Agent.BuildDirectory)/VSCode-darwin-$(VSCODE_ARCH)"
@@ -241,7 +189,6 @@ steps:
         APP_ROOT="$(Agent.BuildDirectory)/VSCode-darwin-$(VSCODE_ARCH)"
         APP_NAME="`ls $APP_ROOT | head -n 1`"
         APP_PATH="$APP_ROOT/$APP_NAME" node build/darwin/verify-macho.ts $(VSCODE_ARCH)
-        APP_PATH="$(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)" node build/darwin/verify-macho.ts $(VSCODE_ARCH)
       displayName: Verify arch of Mach-O objects
 
     - script: |
@@ -288,13 +235,6 @@ steps:
 
     - script: |
         set -e
-        export CODESIGN_IDENTITY=$(security find-identity -v -p codesigning $(agent.tempdirectory)/buildagent.keychain | grep -oEi "([0-9A-F]{40})" | head -n 1)
-        node build/darwin/sign-server.ts $(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)
-        node build/darwin/sign-server.ts $(Agent.BuildDirectory)/vscode-server-darwin-$(VSCODE_ARCH)-web
-      displayName: Sign server binaries
-
-    - script: |
-        set -e
         DMG_OUT="$(Pipeline.Workspace)/vscode_client_darwin_$(VSCODE_ARCH)_dmg"
         mkdir -p $DMG_OUT
         node build/darwin/create-dmg.ts $(agent.builddirectory) $DMG_OUT
@@ -311,22 +251,6 @@ steps:
         echo "##vso[task.setvariable variable=CLIENT_PATH]$ARCHIVE_PATH"
       condition: eq(variables['BUILT_CLIENT'], 'true')
       displayName: Re-package client after entitlement
-
-    - script: |
-        set -e
-        ARCHIVE_PATH=".build/darwin/server/vscode-server-darwin-$(VSCODE_ARCH).zip"
-        mkdir -p $(dirname $ARCHIVE_PATH)
-        (cd .. && zip -Xry $(Build.SourcesDirectory)/$ARCHIVE_PATH vscode-server-darwin-$(VSCODE_ARCH))
-        echo "##vso[task.setvariable variable=SERVER_PATH]$ARCHIVE_PATH"
-      displayName: Package server
-
-    - script: |
-        set -e
-        ARCHIVE_PATH=".build/darwin/server/vscode-server-darwin-$(VSCODE_ARCH)-web.zip"
-        mkdir -p $(dirname $ARCHIVE_PATH)
-        (cd .. && zip -Xry $(Build.SourcesDirectory)/$ARCHIVE_PATH vscode-server-darwin-$(VSCODE_ARCH)-web)
-        echo "##vso[task.setvariable variable=WEB_PATH]$ARCHIVE_PATH"
-      displayName: Package server (web)
 
     - task: UseDotNet@2
       inputs:
@@ -359,12 +283,11 @@ steps:
         BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
       displayName: ✍️ Codesign & Notarize
 
-  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true), eq(parameters.VSCODE_RUN_REMOTE_TESTS, true)) }}:
+  - ${{ if or(eq(parameters.VSCODE_RUN_ELECTRON_TESTS, true), eq(parameters.VSCODE_RUN_BROWSER_TESTS, true)) }}:
     - template: product-build-darwin-test.yml@self
       parameters:
         VSCODE_RUN_ELECTRON_TESTS: ${{ parameters.VSCODE_RUN_ELECTRON_TESTS }}
         VSCODE_RUN_BROWSER_TESTS: ${{ parameters.VSCODE_RUN_BROWSER_TESTS }}
-        VSCODE_RUN_REMOTE_TESTS: ${{ parameters.VSCODE_RUN_REMOTE_TESTS }}
 
   - ${{ if ne(parameters.VSCODE_CIBUILD, true) }}:
     - script: npx deemon --attach node build/azure-pipelines/darwin/codesign.ts
@@ -412,10 +335,4 @@ steps:
 
         mkdir -p $(Build.ArtifactStagingDirectory)/out/vscode_client_darwin_$(VSCODE_ARCH)_dmg
         mv $(DMG_PATH) $(Build.ArtifactStagingDirectory)/out/vscode_client_darwin_$(VSCODE_ARCH)_dmg/VSCode-darwin-$(VSCODE_ARCH).dmg
-
-        mkdir -p $(Build.ArtifactStagingDirectory)/out/vscode_server_darwin_$(VSCODE_ARCH)_archive
-        mv $(SERVER_PATH) $(Build.ArtifactStagingDirectory)/out/vscode_server_darwin_$(VSCODE_ARCH)_archive/vscode-server-darwin-$(VSCODE_ARCH).zip
-
-        mkdir -p $(Build.ArtifactStagingDirectory)/out/vscode_web_darwin_$(VSCODE_ARCH)_archive
-        mv $(WEB_PATH) $(Build.ArtifactStagingDirectory)/out/vscode_web_darwin_$(VSCODE_ARCH)_archive/vscode-server-darwin-$(VSCODE_ARCH)-web.zip
       displayName: Move artifacts to out directory

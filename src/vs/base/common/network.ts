@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as errors from './errors.js';
 import * as platform from './platform.js';
 import { equalsIgnoreCase, startsWithIgnoreCase } from './strings.js';
 import { URI } from './uri.js';
@@ -50,12 +49,6 @@ export namespace Schemas {
 	export const data = 'data';
 
 	export const command = 'command';
-
-	export const vscodeRemote = 'vscode-remote';
-
-	export const vscodeRemoteResource = 'vscode-remote-resource';
-
-	export const vscodeManagedRemoteResource = 'vscode-managed-remote-resource';
 
 	export const vscodeUserData = 'vscode-userdata';
 
@@ -151,20 +144,12 @@ export function matchesSomeScheme(target: URI | string, ...schemes: string[]): b
 export const connectionTokenCookieName = 'vscode-tkn';
 export const connectionTokenQueryName = 'tkn';
 
-class RemoteAuthoritiesImpl {
-	private readonly _hosts: { [authority: string]: string | undefined } = Object.create(null);
-	private readonly _ports: { [authority: string]: number | undefined } = Object.create(null);
-	private readonly _connectionTokens: { [authority: string]: string | undefined } = Object.create(null);
+class WebResourceAccessImpl {
 	private _preferredWebSchema: 'http' | 'https' = 'http';
-	private _delegate: ((uri: URI) => URI) | null = null;
 	private _serverRootPath: string = '/';
 
 	setPreferredWebSchema(schema: 'http' | 'https') {
 		this._preferredWebSchema = schema;
-	}
-
-	setDelegate(delegate: (uri: URI) => URI): void {
-		this._delegate = delegate;
 	}
 
 	setServerRootPath(product: { quality?: string; commit?: string }, serverBasePath: string | undefined): void {
@@ -175,53 +160,12 @@ class RemoteAuthoritiesImpl {
 		return this._serverRootPath;
 	}
 
-	private get _remoteResourcesPath(): string {
-		return paths.posix.join(this._serverRootPath, Schemas.vscodeRemoteResource);
-	}
-
-	set(authority: string, host: string, port: number): void {
-		this._hosts[authority] = host;
-		this._ports[authority] = port;
-	}
-
-	setConnectionToken(authority: string, connectionToken: string): void {
-		this._connectionTokens[authority] = connectionToken;
-	}
-
 	getPreferredWebSchema(): 'http' | 'https' {
 		return this._preferredWebSchema;
 	}
-
-	rewrite(uri: URI): URI {
-		if (this._delegate) {
-			try {
-				return this._delegate(uri);
-			} catch (err) {
-				errors.onUnexpectedExternalError(err);
-				return uri;
-			}
-		}
-		const authority = uri.authority;
-		let host = this._hosts[authority];
-		if (host && host.indexOf(':') !== -1 && host.indexOf('[') === -1) {
-			host = `[${host}]`;
-		}
-		const port = this._ports[authority];
-		const connectionToken = this._connectionTokens[authority];
-		let query = `path=${encodeURIComponent(uri.path)}`;
-		if (typeof connectionToken === 'string') {
-			query += `&${connectionTokenQueryName}=${encodeURIComponent(connectionToken)}`;
-		}
-		return URI.from({
-			scheme: platform.isWeb ? this._preferredWebSchema : Schemas.vscodeRemoteResource,
-			authority: `${host}:${port}`,
-			path: this._remoteResourcesPath,
-			query
-		});
-	}
 }
 
-export const RemoteAuthorities = new RemoteAuthoritiesImpl();
+export const WebResourceAccess = new WebResourceAccessImpl();
 
 export function getServerProductSegment(product: { quality?: string; commit?: string }) {
 	return `${product.quality ?? 'oss'}-${product.commit ?? 'dev'}`;
@@ -267,11 +211,6 @@ class FileAccessImpl {
 	 * **Note:** use `dom.ts#asCSSUrl` whenever the URL is to be used in CSS context.
 	 */
 	uriToBrowserUri(uri: URI): URI {
-		// Handle remote URIs via `RemoteAuthorities`
-		if (uri.scheme === Schemas.vscodeRemote) {
-			return RemoteAuthorities.rewrite(uri);
-		}
-
 		// Convert to `vscode-file` resource..
 		if (
 			// ...only ever for `file` resources

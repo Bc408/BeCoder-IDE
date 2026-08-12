@@ -101,9 +101,6 @@ export class BrowserView extends Disposable {
 	private readonly _onDidClose = this._register(new Emitter<void>());
 	readonly onDidClose: Event<void> = this._onDidClose.event;
 
-	private readonly _onDidChangeRemoteStatus = this._register(new Emitter<boolean>());
-	readonly onDidChangeRemoteStatus: Event<boolean> = this._onDidChangeRemoteStatus.event;
-
 	private readonly _onDidRequestPermission = this._register(new Emitter<IBrowserViewPermissionRequestEvent>());
 	readonly onDidRequestPermission: Event<IBrowserViewPermissionRequestEvent> = this._onDidRequestPermission.event;
 
@@ -223,10 +220,6 @@ export class BrowserView extends Disposable {
 
 		this.debugger = new BrowserViewDebugger(this, this.logService);
 		this.emulator = this._register(new BrowserViewEmulator(this, this.logService));
-
-		const fireRemoteStatus = () => this._onDidChangeRemoteStatus.fire(this.session.remote.isRemote);
-		this._register(this.session.remote.onDidStart(fireRemoteStatus));
-		this._register(this.session.remote.onDidStop(fireRemoteStatus));
 
 		this._register(this.session.permissions.onDidRequestPermission(e => {
 			if (e.webContents === this.webContents && !this._isDisposed) {
@@ -379,18 +372,6 @@ export class BrowserView extends Disposable {
 		webContents.on('did-finish-load', () => fireLoadingEvent(false));
 
 		this.session.trust.installCertErrorHandler(webContents);
-
-		webContents.on('login', (event, _details, authInfo, callback) => {
-			// Automatically supply proxy auth credentials for the tunnel proxy.
-			if (this.session.remote.proxy) {
-				const { username, password } = this.session.remote.proxy.credentials;
-				const proxyPort = this.session.remote.proxy.port;
-				if (authInfo.isProxy && authInfo.host === '127.0.0.1' && authInfo.port === proxyPort) {
-					event.preventDefault();
-					callback(username, password);
-				}
-			}
-		});
 
 		webContents.on('render-process-gone', (_event, details) => {
 			this._lastError = {
@@ -600,7 +581,6 @@ export class BrowserView extends Disposable {
 			storageKeys: { ...this.session.history.storageKeys, ...this.session.permissions.storageKeys },
 			permissions: this.session.permissions.serialize(),
 			browserZoomIndex: this._browserZoomIndex,
-			isRemoteSession: this.session.remote.isRemote,
 			device: this.emulator.device
 		};
 	}
@@ -683,9 +663,6 @@ export class BrowserView extends Disposable {
 	 */
 	async loadURL(url: string): Promise<void> {
 		this._explicitNavigationPending = true;
-		// Wait for the tunnel proxy (if any) to be applied so the navigation
-		// and the requests it triggers flow through the proxy.
-		await this.session.remote.whenReady;
 		await this._view.webContents.loadURL(url);
 	}
 

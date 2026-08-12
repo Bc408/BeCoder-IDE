@@ -549,7 +549,7 @@ export abstract class AbstractTextFileService extends Disposable implements ITex
 		// path. This can happen if the file was created after the untitled file was opened.
 		// See https://github.com/microsoft/vscode/issues/67946
 		let write: boolean;
-		if (sourceModel instanceof UntitledTextEditorModel && sourceModel.hasAssociatedFilePath && targetExists && this.uriIdentityService.extUri.isEqual(target, toLocalResource(sourceModel.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme))) {
+		if (sourceModel instanceof UntitledTextEditorModel && sourceModel.hasAssociatedFilePath && targetExists && this.uriIdentityService.extUri.isEqual(target, toLocalResource(sourceModel.resource, undefined, this.pathService.defaultUriScheme))) {
 			write = await this.confirmOverwrite(target);
 		} else {
 			write = true;
@@ -654,7 +654,6 @@ export abstract class AbstractTextFileService extends Disposable implements ITex
 			return resource;
 		}
 
-		const remoteAuthority = this.environmentService.remoteAuthority;
 		const defaultFilePath = await this.fileDialogService.defaultFilePath();
 
 		// Otherwise try to suggest a path that can be saved
@@ -665,7 +664,7 @@ export abstract class AbstractTextFileService extends Disposable implements ITex
 
 				// Untitled with associated file path
 				if (model.hasAssociatedFilePath) {
-					return toLocalResource(resource, remoteAuthority, this.pathService.defaultUriScheme);
+					return toLocalResource(resource, undefined, this.pathService.defaultUriScheme);
 				}
 
 				// Untitled without associated file path: use name

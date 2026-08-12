@@ -40,7 +40,7 @@ export function getStdinFilePath(): string {
 
 async function createStdInFile(targetPath: string) {
 	await fs.promises.appendFile(targetPath, '');
-	await fs.promises.chmod(targetPath, 0o600); // Ensure the file is only read/writable by the user: https://github.com/microsoft/vscode-remote-release/issues/9048
+	await fs.promises.chmod(targetPath, 0o600); // Ensure the file is only read/writable by the user.
 }
 
 export async function readFromStdin(targetPath: string, verbose: boolean, onEnd?: Function): Promise<void> {

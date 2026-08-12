@@ -31,7 +31,6 @@ export interface IWorkbenchEnvironmentService extends IEnvironmentService {
 	readonly extensionEnabledProposedApi?: string[];
 
 	// --- Config
-	readonly remoteAuthority?: string;
 	readonly skipReleaseNotes: boolean;
 	readonly skipWelcome: boolean;
 	readonly disableWorkspaceTrust: boolean;

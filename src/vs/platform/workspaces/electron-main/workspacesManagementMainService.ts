@@ -42,7 +42,7 @@ export interface IWorkspacesManagementMainService {
 
 	enterWorkspace(intoWindow: ICodeWindow, openedWindows: ICodeWindow[], path: URI): Promise<IEnterWorkspaceResult | undefined>;
 
-	createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[], remoteAuthority?: string): Promise<IWorkspaceIdentifier>;
+	createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[]): Promise<IWorkspaceIdentifier>;
 
 	deleteUntitledWorkspace(workspace: IWorkspaceIdentifier): Promise<void>;
 
@@ -94,7 +94,7 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
 				if (!resolvedWorkspace) {
 					await this.deleteUntitledWorkspace(workspace);
 				} else {
-					this.untitledWorkspaces.push({ workspace, remoteAuthority: resolvedWorkspace.remoteAuthority });
+					this.untitledWorkspaces.push({ workspace });
 				}
 			}
 		} catch (error) {
@@ -143,7 +143,6 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
 				id: workspaceIdentifier.id,
 				configPath: workspaceIdentifier.configPath,
 				folders: toWorkspaceFolders(workspace.folders, workspaceIdentifier.configPath, extUriBiasedIgnorePathCase),
-				remoteAuthority: workspace.remoteAuthority,
 				transient: workspace.transient
 			};
 		} catch (error) {
@@ -168,19 +167,19 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
 		return storedWorkspace;
 	}
 
-	async createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[], remoteAuthority?: string): Promise<IWorkspaceIdentifier> {
-		const { workspace, storedWorkspace } = this.newUntitledWorkspace(folders, remoteAuthority);
+	async createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[]): Promise<IWorkspaceIdentifier> {
+		const { workspace, storedWorkspace } = this.newUntitledWorkspace(folders);
 		const configPath = workspace.configPath.fsPath;
 
 		await fs.promises.mkdir(dirname(configPath), { recursive: true });
 		await Promises.writeFile(configPath, JSON.stringify(storedWorkspace, null, '\t'));
 
-		this.untitledWorkspaces.push({ workspace, remoteAuthority });
+		this.untitledWorkspaces.push({ workspace });
 
 		return workspace;
 	}
 
-	private newUntitledWorkspace(folders: IWorkspaceFolderCreationData[] = [], remoteAuthority?: string): { workspace: IWorkspaceIdentifier; storedWorkspace: IStoredWorkspace } {
+	private newUntitledWorkspace(folders: IWorkspaceFolderCreationData[] = []): { workspace: IWorkspaceIdentifier; storedWorkspace: IStoredWorkspace } {
 		const randomId = (Date.now() + Math.round(Math.random() * 1000)).toString();
 		const untitledWorkspaceConfigFolder = joinPath(this.untitledWorkspacesHome, randomId);
 		const untitledWorkspaceConfigPath = joinPath(untitledWorkspaceConfigFolder, UNTITLED_WORKSPACE_NAME);
@@ -193,7 +192,7 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
 
 		return {
 			workspace: getWorkspaceIdentifier(untitledWorkspaceConfigPath),
-			storedWorkspace: { folders: storedWorkspaceFolder, remoteAuthority }
+			storedWorkspace: { folders: storedWorkspaceFolder }
 		};
 	}
 
@@ -300,9 +299,9 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
 		let backupPath: string | undefined;
 		if (!window.config.extensionDevelopmentPath) {
 			if (window.config.backupPath) {
-				backupPath = await this.backupMainService.registerWorkspaceBackup({ workspace, remoteAuthority: window.remoteAuthority }, window.config.backupPath);
+				backupPath = await this.backupMainService.registerWorkspaceBackup({ workspace }, window.config.backupPath);
 			} else {
-				backupPath = this.backupMainService.registerWorkspaceBackup({ workspace, remoteAuthority: window.remoteAuthority });
+				backupPath = this.backupMainService.registerWorkspaceBackup({ workspace });
 			}
 		}
 

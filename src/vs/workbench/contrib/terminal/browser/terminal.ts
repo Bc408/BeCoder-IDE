@@ -91,11 +91,10 @@ export interface ITerminalInstanceService {
 	createInstance(launchConfig: IShellLaunchConfig, target: TerminalLocation, editorOptions?: TerminalEditorLocation): ITerminalInstance;
 
 	/**
-	 * Gets the registered backend for a remote authority (undefined = local). This is a convenience
+	 * Gets the registered local backend. This is a convenience
 	 * method to avoid using the more verbose fetching from the registry.
-	 * @param remoteAuthority The remote authority of the backend.
 	 */
-	getBackend(remoteAuthority?: string): Promise<ITerminalBackend | undefined>;
+	getBackend(): Promise<ITerminalBackend | undefined>;
 
 	getRegisteredBackends(): IterableIterator<ITerminalBackend>;
 	didRegisterBackend(backend: ITerminalBackend): void;
@@ -747,16 +746,6 @@ export interface ITerminalInstance extends IBaseTerminalInstance {
 	 * Whether this terminal has been disposed of
 	 */
 	readonly isDisposed: boolean;
-
-	/**
-	 * Whether the terminal's pty is hosted on a remote.
-	 */
-	readonly hasRemoteAuthority: boolean;
-
-	/**
-	 * The remote authority of the terminal's pty.
-	 */
-	readonly remoteAuthority: string | undefined;
 
 	/**
 	 * Whether an element within this terminal is focused.

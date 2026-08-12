@@ -310,7 +310,6 @@ export default defineConfig(
 			'src/vs/platform/hover/browser/hoverService.ts',
 			'src/vs/platform/hover/browser/hoverWidget.ts',
 			'src/vs/platform/instantiation/common/instantiationService.ts',
-			'src/vs/platform/mcp/common/mcpManagementCli.ts',
 			'src/vs/workbench/api/browser/mainThreadChatSessions.ts',
 			'src/vs/workbench/api/browser/mainThreadDebugService.ts',
 			'src/vs/workbench/api/browser/mainThreadTesting.ts',
@@ -362,14 +361,6 @@ export default defineConfig(
 			'src/vs/workbench/contrib/issue/browser/issueFormService.ts',
 			'src/vs/workbench/contrib/issue/browser/issueQuickAccess.ts',
 			'src/vs/workbench/contrib/markers/browser/markersView.ts',
-			'src/vs/workbench/contrib/mcp/browser/mcpElicitationService.ts',
-			'src/vs/workbench/contrib/mcp/common/mcpLanguageModelToolContribution.ts',
-			'src/vs/workbench/contrib/mcp/common/mcpResourceFilesystem.ts',
-			'src/vs/workbench/contrib/mcp/common/mcpSamplingLog.ts',
-			'src/vs/workbench/contrib/mcp/common/mcpServer.ts',
-			'src/vs/workbench/contrib/mcp/common/mcpServerRequestHandler.ts',
-			'src/vs/workbench/contrib/mcp/test/common/mcpRegistryTypes.ts',
-			'src/vs/workbench/contrib/mcp/test/common/mcpServerRequestHandler.test.ts',
 			'src/vs/workbench/contrib/notebook/browser/controller/cellOutputActions.ts',
 			'src/vs/workbench/contrib/notebook/browser/controller/chat/notebook.chat.contribution.ts',
 			'src/vs/workbench/contrib/notebook/browser/controller/coreActions.ts',
@@ -377,7 +368,6 @@ export default defineConfig(
 			'src/vs/workbench/contrib/notebook/browser/viewParts/notebookKernelView.ts',
 			'src/vs/workbench/contrib/output/browser/outputView.ts',
 			'src/vs/workbench/contrib/preferences/browser/settingsTree.ts',
-			'src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts',
 			'src/vs/workbench/contrib/testing/browser/explorerProjections/listProjection.ts',
 			'src/vs/workbench/contrib/testing/browser/explorerProjections/treeProjection.ts',
 			'src/vs/workbench/contrib/testing/browser/testCoverageBars.ts',
@@ -394,10 +384,8 @@ export default defineConfig(
 			'src/vs/workbench/services/environment/electron-browser/environmentService.ts',
 			'src/vs/workbench/services/keybinding/common/keybindingIO.ts',
 			'src/vs/workbench/services/preferences/common/preferencesValidation.ts',
-			'src/vs/workbench/services/remote/common/tunnelModel.ts',
 			'src/vs/workbench/services/search/common/textSearchManager.ts',
 			'src/vs/workbench/test/browser/workbenchTestServices.ts',
-			'src/vs/platform/agentHost/common/state/protocol/**',
 			'test/automation/src/playwrightDriver.ts',
 			'.eslint-plugin-local/**/*',
 		],
@@ -406,30 +394,6 @@ export default defineConfig(
 		},
 		rules: {
 			'local/code-no-in-operator': 'warn',
-		}
-	},
-	// Guard the agent host protocol `_meta` bag: no untyped field access or casts.
-	{
-		files: [
-			'src/vs/platform/agentHost/**/*.ts',
-			'src/vs/workbench/contrib/chat/browser/agentSessions/**/*.ts',
-			'src/vs/workbench/services/agentHost/**/*.ts',
-			'src/vs/sessions/**/*.ts',
-		],
-		ignores: [
-			// Tests assert on the raw `_meta` wire shape on purpose (verifying
-			// producers); routing them through readers would weaken them.
-			'**/test/**',
-			'**/*.test.ts',
-			'**/*.integrationTest.ts',
-			// Codex's own generated app-server protocol (not AHP `_meta`).
-			'src/vs/platform/agentHost/node/codex/protocol/**',
-		],
-		plugins: {
-			'local': pluginLocal,
-		},
-		rules: {
-			'local/code-no-untyped-meta-access': 'warn',
 		}
 	},
 	// Strict no explicit `any`
@@ -553,13 +517,6 @@ export default defineConfig(
 			'src/vs/platform/quickinput/browser/quickInputActions.ts',
 			'src/vs/platform/quickinput/common/quickInput.ts',
 			'src/vs/platform/registry/common/platform.ts',
-			'src/vs/platform/remote/browser/browserSocketFactory.ts',
-			'src/vs/platform/remote/browser/remoteAuthorityResolverService.ts',
-			'src/vs/platform/remote/common/remoteAgentConnection.ts',
-			'src/vs/platform/remote/common/remoteAuthorityResolver.ts',
-			'src/vs/platform/remote/electron-browser/electronRemoteResourceLoader.ts',
-			'src/vs/platform/remote/electron-browser/remoteAuthorityResolverService.ts',
-			'src/vs/platform/remoteTunnel/node/remoteTunnelService.ts',
 			'src/vs/platform/request/common/request.ts',
 			'src/vs/platform/request/common/requestIpc.ts',
 			'src/vs/platform/request/electron-utility/requestService.ts',
@@ -771,7 +728,6 @@ export default defineConfig(
 			'src/vs/workbench/contrib/preferences/browser/settingsEditor2.ts',
 			'src/vs/workbench/contrib/preferences/browser/settingsTree.ts',
 			'src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts',
-			'src/vs/workbench/contrib/remote/browser/tunnelView.ts',
 			'src/vs/workbench/contrib/search/browser/AISearch/aiSearchModel.ts',
 			'src/vs/workbench/contrib/search/browser/AISearch/aiSearchModelBase.ts',
 			'src/vs/workbench/contrib/search/browser/notebookSearch/notebookSearchModel.ts',
@@ -835,7 +791,6 @@ export default defineConfig(
 			'src/vs/workbench/services/preferences/common/preferences.ts',
 			'src/vs/workbench/services/preferences/common/preferencesModels.ts',
 			'src/vs/workbench/services/preferences/common/preferencesValidation.ts',
-			'src/vs/workbench/services/remote/common/tunnelModel.ts',
 			'src/vs/workbench/services/search/common/replace.ts',
 			'src/vs/workbench/services/search/common/search.ts',
 			'src/vs/workbench/services/search/common/searchExtConversionTypes.ts',
@@ -1162,7 +1117,6 @@ export default defineConfig(
 			'local/code-no-static-node-module-import': [
 				'error',
 				// Files that run in separate processes, not on the electron-main startup path
-				'src/vs/platform/agentHost/node/**/*.ts',
 				'src/vs/platform/files/node/watcher/**/*.ts',
 				'src/vs/platform/terminal/node/**/*.ts',
 				// Files that use small, safe modules
@@ -1710,36 +1664,6 @@ export default defineConfig(
 					]
 				},
 				{
-					'target': 'src/vs/platform/agentHost/node/diffWorkerMain.ts',
-					'layer': 'node',
-					'restrictions': [
-						'vs/base/~',
-						'vs/base/parts/*/~',
-						'vs/platform/*/~',
-						'vs/editor/common/diff/**', // diffing logic used by the agent host
-					]
-				},
-				{
-					'target': 'src/vs/platform/agentHost/~',
-					'restrictions': [
-						'vs/base/~',
-						'vs/base/parts/*/~',
-						'vs/platform/*/~',
-						'tas-client', // node module allowed even in /common/
-						'@microsoft/1ds-core-js', // node module allowed even in /common/
-						'@microsoft/1ds-post-js', // node module allowed even in /common/
-						'@xterm/headless', // node module allowed even in /common/
-						'@vscode/fs-copyfile', // used by agentHost for file copying after worktree creation
-						'@vscode/tree-sitter-wasm', // used by agentHost for command auto-approval
-						'@vscode/copilot-api', // used by agentHost for Copilot API requests
-						'@anthropic-ai/sdk', // used by agentHost for Anthropic API requests
-						'@anthropic-ai/claude-agent-sdk', // used by agentHost for Claude Agent SDK session enumeration / queries
-						'@modelcontextprotocol/sdk/**/*', // used by agentHost for Claude client-tool MCP result types (Phase 10)
-						'@github/copilot-sdk',
-						'zod' // used by agentHost for Claude client-tool MCP input schemas
-					]
-				},
-				{
 					'target': 'src/vs/platform/*/~',
 					'restrictions': [
 						'vs/base/~',
@@ -1886,7 +1810,6 @@ export default defineConfig(
 						'vs/workbench/~',
 						'vs/workbench/services/*/~',
 						'vs/workbench/contrib/*/~',
-						'vs/sessions/~',
 						'vs/workbench/contrib/terminal/terminalContribChatExports*',
 						'vs/workbench/contrib/terminal/terminalContribExports*',
 						'vscode-notebook-renderer', // Type only import
@@ -1964,17 +1887,6 @@ export default defineConfig(
 					]
 				},
 				{
-					'target': 'src/vs/sessions/electron-browser/sessions.ts',
-					'layer': 'electron-browser',
-					'restrictions': [
-						'vs/base/~',
-						'vs/base/parts/*/~',
-						'vs/platform/*/~',
-						'vs/sessions/~',
-						'vs/sessions/sessions.desktop.main.js'
-					]
-				},
-				{
 					'target': 'src/vs/server/~',
 					'restrictions': [
 						'vs/base/~',
@@ -2023,9 +1935,7 @@ export default defineConfig(
 						'vs/workbench/api/~',
 						'vs/workbench/services/*/~',
 						'vs/workbench/contrib/*/~',
-						'vs/workbench/contrib/terminal/terminal.all.js',
-						'vs/sessions/common/theme.js', // side-effect import for color registry
-						'vs/sessions/common/sizes.js' // side-effect import for size registry
+						'vs/workbench/contrib/terminal/terminal.all.js'
 					]
 				},
 				{
@@ -2362,18 +2272,6 @@ export default defineConfig(
 						'@vscode/*',
 						'@parcel/*',
 						'@playwright/*',
-						'*' // node modules
-					]
-				},
-				{
-					'target': 'test/mcp/**',
-					'restrictions': [
-						'test/automation',
-						'test/mcp/**',
-						'@vscode/*',
-						'@parcel/*',
-						'@playwright/*',
-						'@modelcontextprotocol/sdk/**/*',
 						'*' // node modules
 					]
 				},

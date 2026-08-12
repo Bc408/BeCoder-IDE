@@ -7,7 +7,6 @@ import { VSBuffer } from '../../../../base/common/buffer.js';
 import { URI, UriComponents, UriDto } from '../../../../base/common/uri.js';
 import { ExtensionIdentifier, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { ILoggerResource, LogLevel } from '../../../../platform/log/common/log.js';
-import { IRemoteConnectionData } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
 
 export interface IExtensionDescriptionSnapshot {
 	readonly versionId: number;
@@ -46,13 +45,10 @@ export interface IExtensionHostInitData {
 		readonly firstSessionDate: string;
 		readonly msftInternal?: boolean;
 	};
-	remoteExtensionTips?: { readonly [remoteName: string]: unknown };
-	virtualWorkspaceExtensionTips?: { readonly [remoteName: string]: unknown };
 	logLevel: LogLevel;
 	loggers: UriDto<ILoggerResource>[];
 	logsLocation: URI;
 	autoStart: boolean;
-	remote: { isRemote: boolean; authority: string | undefined; connectionData: IRemoteConnectionData | null };
 	consoleForward: { includeStack: boolean; logNative: boolean };
 	uiKind: UIKind;
 	messagePorts?: ReadonlyMap<string, MessagePortLike>;

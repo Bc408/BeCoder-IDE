@@ -78,7 +78,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 		const extB = createExtension('publisher.extB', undefined, ['publisher.extA']);
 
 		const tracker = createTracker([extA, extB]);
-		const runningLocations = tracker.computeRunningLocation([extA, extB], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);
@@ -94,7 +94,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 		const extC = createExtension('publisher.extC', undefined, ['publisher.extB']);
 
 		const tracker = createTracker([extA, extB, extC]);
-		const runningLocations = tracker.computeRunningLocation([extA, extB, extC], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB, extC], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);
@@ -110,7 +110,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 		const extB = createExtension('publisher.extB');
 
 		const tracker = createTracker([extA, extB]);
-		const runningLocations = tracker.computeRunningLocation([extA, extB], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);
@@ -126,7 +126,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 		const extC = createExtension('publisher.extC', undefined, ['publisher.extA']);
 
 		const tracker = createTracker([extA, extB, extC]);
-		const runningLocations = tracker.computeRunningLocation([extA, extB, extC], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB, extC], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);
@@ -146,7 +146,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 			'publisher.extA': 1,
 			'publisher.extB': 2,
 		});
-		const runningLocations = tracker.computeRunningLocation([extA, extB], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);
@@ -163,7 +163,7 @@ suite('ExtensionRunningLocationTracker - extensionAffinity', () => {
 		const extB = createExtension('publisher.extB', undefined, ['publisher.extA']);
 
 		const tracker = createTracker([extA, extB]);
-		const runningLocations = tracker.computeRunningLocation([extA, extB], [], true);
+		const runningLocations = tracker.computeRunningLocation([extA, extB], true);
 
 		const locA = runningLocations.get(extA.identifier);
 		const locB = runningLocations.get(extB.identifier);

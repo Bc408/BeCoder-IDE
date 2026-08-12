@@ -641,7 +641,6 @@ export class StandaloneConfigurationService implements IConfigurationService {
 			ConfigurationModel.createEmptyModel(logService),
 			ConfigurationModel.createEmptyModel(logService),
 			ConfigurationModel.createEmptyModel(logService),
-			ConfigurationModel.createEmptyModel(logService),
 			new ResourceMap<ConfigurationModel>(),
 			ConfigurationModel.createEmptyModel(logService),
 			new ResourceMap<ConfigurationModel>(),
@@ -710,7 +709,6 @@ export class StandaloneConfigurationService implements IConfigurationService {
 			policy: emptyModel,
 			application: emptyModel,
 			userLocal: emptyModel,
-			userRemote: emptyModel,
 			workspace: emptyModel,
 			folders: []
 		};

@@ -16,7 +16,6 @@ import { TelemetryLogAppender } from '../../../../platform/telemetry/common/tele
 import { ITelemetryServiceConfig, TelemetryService as BaseTelemetryService } from '../../../../platform/telemetry/common/telemetryService.js';
 import { getTelemetryLevel, isInternalTelemetry, isLoggingOnly, ITelemetryAppender, NullTelemetryService, supportsTelemetry } from '../../../../platform/telemetry/common/telemetryUtils.js';
 import { IBrowserWorkbenchEnvironmentService } from '../../environment/browser/environmentService.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IMeteredConnectionService } from '../../../../platform/meteredConnection/common/meteredConnection.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { resolveWorkbenchCommonProperties } from './workbenchCommonProperties.js';
@@ -43,18 +42,17 @@ export class TelemetryService extends Disposable implements ITelemetryService {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IStorageService storageService: IStorageService,
 		@IProductService productService: IProductService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IMeteredConnectionService meteredConnectionService: IMeteredConnectionService,
 		@IRequestService requestService: IRequestService
 	) {
 		super();
 
-		this.impl = this.initializeService(environmentService, loggerService, configurationService, storageService, productService, remoteAgentService, meteredConnectionService);
+		this.impl = this.initializeService(environmentService, loggerService, configurationService, storageService, productService, meteredConnectionService);
 
 		// When the level changes it could change from off to on and we want to make sure telemetry is properly intialized
 		this._register(configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(TELEMETRY_SETTING_ID)) {
-				this.impl = this.initializeService(environmentService, loggerService, configurationService, storageService, productService, remoteAgentService, meteredConnectionService);
+				this.impl = this.initializeService(environmentService, loggerService, configurationService, storageService, productService, meteredConnectionService);
 			}
 		}));
 
@@ -93,24 +91,14 @@ export class TelemetryService extends Disposable implements ITelemetryService {
 		configurationService: IConfigurationService,
 		storageService: IStorageService,
 		productService: IProductService,
-		remoteAgentService: IRemoteAgentService,
 		meteredConnectionService: IMeteredConnectionService
 	) {
 		const telemetrySupported = supportsTelemetry(productService, environmentService) && productService.aiConfig?.ariaKey;
 		if (telemetrySupported && getTelemetryLevel(configurationService) !== TelemetryLevel.NONE && this.impl === NullTelemetryService) {
-			// If remote server is present send telemetry through that, else use the client side appender
 			const appenders: ITelemetryAppender[] = [];
 			const isInternal = isInternalTelemetry(productService, configurationService);
 			if (!isLoggingOnly(productService, environmentService)) {
-				if (remoteAgentService.getConnection() !== null) {
-					const remoteTelemetryProvider = {
-						log: remoteAgentService.logTelemetry.bind(remoteAgentService),
-						flush: remoteAgentService.flushTelemetry.bind(remoteAgentService)
-					};
-					appenders.push(remoteTelemetryProvider);
-				} else {
-					appenders.push(new OneDataSystemWebAppender(isInternal, 'monacoworkbench', null, productService.aiConfig?.ariaKey));
-				}
+				appenders.push(new OneDataSystemWebAppender(isInternal, 'monacoworkbench', null, productService.aiConfig?.ariaKey));
 			}
 			appenders.push(new TelemetryLogAppender('', false, loggerService, environmentService, productService));
 			const config: ITelemetryServiceConfig = {

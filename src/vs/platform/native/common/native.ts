@@ -294,8 +294,6 @@ export interface ICommonNativeHostService {
 
 	getOSColorScheme(): Promise<IColorScheme>;
 
-	hasWSLFeatureInstalled(): Promise<boolean>;
-
 	// Screenshots
 	getScreenshot(rect?: IRectangle): Promise<VSBuffer | undefined>;
 

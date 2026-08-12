@@ -19,11 +19,9 @@ import { getTerminalLinkType } from './terminalLocalLinkDetector.js';
 import { IUriIdentityService } from '../../../../../platform/uriIdentity/common/uriIdentity.js';
 import { ITerminalCapabilityStore, TerminalCapability } from '../../../../../platform/terminal/common/capabilities/capabilities.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { QueryBuilder } from '../../../../services/search/common/queryBuilder.js';
 import { ISearchService } from '../../../../services/search/common/search.js';
-import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { detectLinks, getLinkSuffix } from './terminalLinkParsing.js';
 import { ITerminalLogService } from '../../../../../platform/terminal/common/terminal.js';
 
@@ -92,7 +90,6 @@ export class TerminalSearchLinkOpener implements ITerminalLinkOpener {
 		@IQuickInputService private readonly _quickInputService: IQuickInputService,
 		@ISearchService private readonly _searchService: ISearchService,
 		@ITerminalLogService private readonly _logService: ITerminalLogService,
-		@IWorkbenchEnvironmentService private readonly _workbenchEnvironmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 	) {
 		this._fileQueryBuilder = instantiationService.createInstance(QueryBuilder);
@@ -197,16 +194,7 @@ export class TerminalSearchLinkOpener implements ITerminalLinkOpener {
 					normalizedAbsolutePath = `/${normalizedAbsolutePath}`;
 				}
 			}
-			let uri: URI;
-			if (this._workbenchEnvironmentService.remoteAuthority) {
-				uri = URI.from({
-					scheme: Schemas.vscodeRemote,
-					authority: this._workbenchEnvironmentService.remoteAuthority,
-					path: normalizedAbsolutePath
-				});
-			} else {
-				uri = URI.file(normalizedAbsolutePath);
-			}
+			const uri = URI.file(normalizedAbsolutePath);
 			try {
 				const fileStat = await this._fileService.stat(uri);
 				resourceMatch = { uri, isDirectory: fileStat.isDirectory };
@@ -282,12 +270,10 @@ interface IResourceMatch {
 
 export class TerminalUrlLinkOpener implements ITerminalLinkOpener {
 	constructor(
-		private readonly _isRemote: boolean,
 		private readonly _localFileOpener: TerminalLocalFileLinkOpener,
 		private readonly _localFolderInWorkspaceOpener: TerminalLocalFolderInWorkspaceLinkOpener,
 		private readonly _localFolderOutsideWorkspaceOpener: TerminalLocalFolderOutsideWorkspaceLinkOpener,
 		@IOpenerService private readonly _openerService: IOpenerService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IFileService private readonly _fileService: IFileService,
 		@IUriIdentityService private readonly _uriIdentityService: IUriIdentityService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
@@ -306,7 +292,6 @@ export class TerminalUrlLinkOpener implements ITerminalLinkOpener {
 		// It's important to use the raw string value here to avoid converting pre-encoded values
 		// from the URL like `%2B` -> `+`.
 		this._openerService.open(link.text, {
-			allowTunneling: this._isRemote && this._configurationService.getValue('remote.forwardOnOpen'),
 			allowContributedOpeners: true,
 			openExternal: true
 		});
@@ -346,7 +331,6 @@ export class TerminalUrlLinkOpener implements ITerminalLinkOpener {
 			this._logService.warn('Open file via native file explorer');
 		}
 		this._openerService.open(link.text, {
-			allowTunneling: this._isRemote && this._configurationService.getValue('remote.forwardOnOpen'),
 			allowContributedOpeners: true,
 			openExternal: true
 		});

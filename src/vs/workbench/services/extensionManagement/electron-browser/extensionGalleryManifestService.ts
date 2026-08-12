@@ -20,7 +20,6 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IHostService } from '../../host/browser/host.js';
 
@@ -43,7 +42,6 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 		@IFileService fileService: IFileService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IStorageService storageService: IStorageService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@ISharedProcessService sharedProcessService: ISharedProcessService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IRequestService private readonly requestService: IRequestService,
@@ -62,10 +60,6 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 			telemetryService);
 
 		const channels = [sharedProcessService.getChannel('extensionGalleryManifest')];
-		const remoteConnection = remoteAgentService.getConnection();
-		if (remoteConnection) {
-			channels.push(remoteConnection.getChannel('extensionGalleryManifest'));
-		}
 		const updateChannels = (manifest: IExtensionGalleryManifest | null) => {
 			this.logService.trace(`[Marketplace] Updating channels with manifest ${manifest ? 'available' : 'unavailable'}`);
 			channels.forEach(channel => channel.call('setExtensionGalleryManifest', [manifest]));

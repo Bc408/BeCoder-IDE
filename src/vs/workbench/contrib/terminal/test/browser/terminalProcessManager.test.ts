@@ -5,9 +5,7 @@
 
 import { deepStrictEqual, strictEqual } from 'assert';
 import { Emitter, Event } from '../../../../../base/common/event.js';
-import { Schemas } from '../../../../../base/common/network.js';
 import { OperatingSystem } from '../../../../../base/common/platform.js';
-import { URI } from '../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { IConfigurationService, type IConfigurationChangeEvent } from '../../../../../platform/configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
@@ -118,28 +116,6 @@ suite('Workbench - TerminalProcessManager', () => {
 			test('task terminal should not persist', async () => {
 				const p = await manager.createProcess({
 					isFeatureTerminal: true
-				}, 1, 1, false);
-				strictEqual(p, undefined);
-				strictEqual(manager.shouldPersist, false);
-			});
-		});
-		suite('remote', () => {
-			const remoteCwd = URI.from({
-				scheme: Schemas.vscodeRemote,
-				path: 'test/cwd'
-			});
-
-			test('regular terminal should persist', async () => {
-				const p = await manager.createProcess({
-					cwd: remoteCwd
-				}, 1, 1, false);
-				strictEqual(p, undefined);
-				strictEqual(manager.shouldPersist, true);
-			});
-			test('task terminal should not persist', async () => {
-				const p = await manager.createProcess({
-					isFeatureTerminal: true,
-					cwd: remoteCwd
 				}, 1, 1, false);
 				strictEqual(p, undefined);
 				strictEqual(manager.shouldPersist, false);

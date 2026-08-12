@@ -717,6 +717,10 @@ interface Asset {
 
 // Contains all of the logic for mapping details to our actual product names in CosmosDB
 function getPlatform(product: string, os: string, arch: string, type: string): string {
+	if (product !== 'client') {
+		throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
+	}
+
 	switch (os) {
 		case 'win32':
 			switch (product) {
@@ -732,23 +736,6 @@ function getPlatform(product: string, os: string, arch: string, type: string): s
 							throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
 					}
 				}
-				case 'server':
-					return `server-win32-${arch}`;
-				case 'web':
-					return `server-win32-${arch}-web`;
-				case 'cli':
-					return `cli-win32-${arch}`;
-				default:
-					throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
-			}
-		case 'alpine':
-			switch (product) {
-				case 'server':
-					return `server-alpine-${arch}`;
-				case 'web':
-					return `server-alpine-${arch}-web`;
-				case 'cli':
-					return `cli-alpine-${arch}`;
 				default:
 					throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
 			}
@@ -757,25 +744,14 @@ function getPlatform(product: string, os: string, arch: string, type: string): s
 				case 'snap':
 					return `linux-snap-${arch}`;
 				case 'archive-unsigned':
-					switch (product) {
-						case 'client':
-							return `linux-${arch}`;
-						case 'server':
-							return `server-linux-${arch}`;
-						case 'web':
-							if (arch === 'standalone') {
-								return 'web-standalone';
-							}
-							return `server-linux-${arch}-web`;
-						default:
-							throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
+					if (product === 'client') {
+						return `linux-${arch}`;
 					}
+					throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
 				case 'deb-package':
 					return `linux-deb-${arch}`;
 				case 'rpm-package':
 					return `linux-rpm-${arch}`;
-				case 'cli':
-					return `cli-linux-${arch}`;
 				default:
 					throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
 			}
@@ -792,18 +768,6 @@ function getPlatform(product: string, os: string, arch: string, type: string): s
 							}
 							return `darwin-${arch}`;
 					}
-				case 'server':
-					if (arch === 'x64') {
-						return 'server-darwin';
-					}
-					return `server-darwin-${arch}`;
-				case 'web':
-					if (arch === 'x64') {
-						return 'server-darwin-web';
-					}
-					return `server-darwin-${arch}-web`;
-				case 'cli':
-					return `cli-darwin-${arch}`;
 				default:
 					throw new Error(`Unrecognized: ${product} ${os} ${arch} ${type}`);
 			}
@@ -974,9 +938,7 @@ async function main() {
 
 	if (e('VSCODE_BUILD_STAGE_WINDOWS') === 'True') { stages.add('Windows'); }
 	if (e('VSCODE_BUILD_STAGE_LINUX') === 'True') { stages.add('Linux'); }
-	if (e('VSCODE_BUILD_STAGE_ALPINE') === 'True') { stages.add('Alpine'); }
 	if (e('VSCODE_BUILD_STAGE_MACOS') === 'True') { stages.add('macOS'); }
-	if (e('VSCODE_BUILD_STAGE_WEB') === 'True') { stages.add('Web'); }
 
 	let timeline: Timeline;
 	let artifacts: Artifact[];

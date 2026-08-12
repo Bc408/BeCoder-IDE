@@ -38,7 +38,6 @@ import { defaultBrowserWindowOptions, IWindowsMainService, OpenContext } from '.
 import { isWorkspaceIdentifier, toWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 import { IWorkspacesManagementMainService } from '../../workspaces/electron-main/workspacesManagementMainService.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
-import { hasWSLFeatureInstalled } from '../../remote/node/wsl.js';
 import { WindowProfiler } from '../../profiling/electron-main/windowProfiling.js';
 import { IV8Profile } from '../../profiling/common/profiling.js';
 import { IAuxiliaryWindowsMainService } from '../../auxiliaryWindow/electron-main/auxiliaryWindows.js';
@@ -292,7 +291,6 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 				gotoLineMode: options.gotoLineMode,
 				noRecentEntry: options.noRecentEntry,
 				waitMarkerFileURI: options.waitMarkerFileURI,
-				remoteAuthority: options.remoteAuthority || undefined,
 				forceProfile: options.forceProfile,
 				forceTempProfile: options.forceTempProfile,
 			});
@@ -612,7 +610,6 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 			cli: this.environmentMainService.args,
 			urisToOpen: openable,
 			forceNewWindow: options.forceNewWindow,
-			/* remoteAuthority will be determined based on openable */
 		});
 	}
 
@@ -858,11 +855,6 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		return this.themeMainService.getColorScheme();
 	}
 
-	// WSL
-	async hasWSLFeatureInstalled(): Promise<boolean> {
-		return isWindows && hasWSLFeatureInstalled();
-	}
-
 	//#endregion
 
 
@@ -1022,8 +1014,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 			context: OpenContext.API,
 			cli: this.environmentMainService.args,
 			forceNewTabbedWindow: true,
-			forceEmpty: true,
-			remoteAuthority: this.environmentMainService.args.remote || undefined
+			forceEmpty: true
 		});
 	}
 

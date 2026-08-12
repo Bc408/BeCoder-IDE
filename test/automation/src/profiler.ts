@@ -130,7 +130,7 @@ const getInstances = async (driver: PlaywrightDriver, classNames: string[]): Pro
 		prototypeObjectId: prototypeDescriptor.result.objectId!,
 		objectGroup,
 	});
-	const fnResult1 = await driver.callFunctionOn({
+	const fnResult1 = await driver.callFunctionOn<Record<string, number>>({
 		functionDeclaration: `function(){
 	const objects = this
 	const classNames = ${JSON.stringify(classNames)}
@@ -208,6 +208,9 @@ const getInstances = async (driver: PlaywrightDriver, classNames: string[]): Pro
 	});
 
 	const returnObject = fnResult1.result.value;
+	if (!returnObject) {
+		throw new Error('Memory profiling did not return instance counts');
+	}
 	await driver.releaseObjectGroup({ objectGroup: objectGroup });
 	return returnObject;
 };

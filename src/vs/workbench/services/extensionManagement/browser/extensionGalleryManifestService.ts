@@ -7,23 +7,13 @@ import { IExtensionGalleryManifestService } from '../../../../platform/extension
 import { ExtensionGalleryManifestService } from '../../../../platform/extensionManagement/common/extensionGalleryManifestService.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 
 class WebExtensionGalleryManifestService extends ExtensionGalleryManifestService implements IExtensionGalleryManifestService {
 
 	constructor(
 		@IProductService productService: IProductService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 	) {
 		super(productService);
-		const remoteConnection = remoteAgentService.getConnection();
-		if (remoteConnection) {
-			const channel = remoteConnection.getChannel('extensionGalleryManifest');
-			this.getExtensionGalleryManifest().then(manifest => {
-				channel.call('setExtensionGalleryManifest', [manifest]);
-				this._register(this.onDidChangeExtensionGalleryManifest(manifest => channel.call('setExtensionGalleryManifest', [manifest])));
-			});
-		}
 	}
 
 }

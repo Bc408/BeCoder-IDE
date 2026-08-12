@@ -128,10 +128,6 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		throw new Error('ESM modules are not supported in the web worker extension host');
 	}
 
-	async $setRemoteEnvironment(_env: { [key: string]: string | null }): Promise<void> {
-		return;
-	}
-
 }
 
 function ensureSuffix(path: string, suffix: string): string {

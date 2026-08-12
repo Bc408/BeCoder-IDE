@@ -25,8 +25,6 @@ import { URI } from '../../../../base/common/uri.js';
 import { WebRecommendations } from './webRecommendations.js';
 import { IExtensionsWorkbenchService } from '../common/extensions.js';
 import { areSameExtensions } from '../../../../platform/extensionManagement/common/extensionManagementUtil.js';
-import { RemoteRecommendations } from './remoteRecommendations.js';
-import { IRemoteExtensionsScannerService } from '../../../../platform/remote/common/remoteExtensionsScanner.js';
 import { IUserDataInitializationService } from '../../../services/userData/browser/userDataInit.js';
 import { isString } from '../../../../base/common/types.js';
 
@@ -42,7 +40,6 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 	private readonly keymapRecommendations: KeymapRecommendations;
 	private readonly webRecommendations: WebRecommendations;
 	private readonly languageRecommendations: LanguageRecommendations;
-	private readonly remoteRecommendations: RemoteRecommendations;
 
 	public readonly activationPromise: Promise<void>;
 	private sessionSeed: number;
@@ -60,7 +57,6 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 		@IExtensionIgnoredRecommendationsService private readonly extensionRecommendationsManagementService: IExtensionIgnoredRecommendationsService,
 		@IExtensionRecommendationNotificationService private readonly extensionRecommendationNotificationService: IExtensionRecommendationNotificationService,
 		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
-		@IRemoteExtensionsScannerService private readonly remoteExtensionsScannerService: IRemoteExtensionsScannerService,
 		@IUserDataInitializationService private readonly userDataInitializationService: IUserDataInitializationService,
 	) {
 		super();
@@ -72,7 +68,6 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 		this.keymapRecommendations = this._register(instantiationService.createInstance(KeymapRecommendations));
 		this.webRecommendations = this._register(instantiationService.createInstance(WebRecommendations));
 		this.languageRecommendations = this._register(instantiationService.createInstance(LanguageRecommendations));
-		this.remoteRecommendations = this._register(instantiationService.createInstance(RemoteRecommendations));
 
 		if (!this.isEnabled()) {
 			this.sessionSeed = 0;
@@ -91,7 +86,6 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 	private async activate(): Promise<void> {
 		try {
 			await Promise.allSettled([
-				this.remoteExtensionsScannerService.whenExtensionsReady(),
 				this.userDataInitializationService.whenInitializationFinished(),
 				this.lifecycleService.when(LifecyclePhase.Restored)]);
 		} catch (error) { /* ignore */ }
@@ -103,8 +97,7 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 			this.fileBasedRecommendations.activate(),
 			this.keymapRecommendations.activate(),
 			this.languageRecommendations.activate(),
-			this.webRecommendations.activate(),
-			this.remoteRecommendations.activate()
+			this.webRecommendations.activate()
 		]);
 
 		this._register(Event.any(this.workspaceRecommendations.onDidChangeRecommendations, this.configBasedRecommendations.onDidChangeRecommendations, this.extensionRecommendationsManagementService.onDidChangeIgnoredRecommendations)(() => this._onDidChangeRecommendations.fire()));
@@ -188,10 +181,6 @@ export class ExtensionRecommendationsService extends Disposable implements IExte
 
 	getLanguageRecommendations(): string[] {
 		return this.toExtensionIds(this.languageRecommendations.recommendations);
-	}
-
-	getRemoteRecommendations(): string[] {
-		return this.toExtensionIds(this.remoteRecommendations.recommendations);
 	}
 
 	async getWorkspaceRecommendations(): Promise<Array<string | URI>> {

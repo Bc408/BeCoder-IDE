@@ -766,7 +766,7 @@ export class SettingsEditor2 extends EditorPane {
 		headerControlsContainer.style.borderColor = asCssVariable(settingsHeaderBorder);
 
 		const targetWidgetContainer = DOM.append(headerControlsContainer, $('.settings-target-container'));
-		this.settingsTargetsWidget = this._register(this.instantiationService.createInstance(SettingsTargetsWidget, targetWidgetContainer, { enableRemoteSettings: true }));
+		this.settingsTargetsWidget = this._register(this.instantiationService.createInstance(SettingsTargetsWidget, targetWidgetContainer));
 		this.settingsTargetsWidget.settingsTarget = ConfigurationTarget.USER_LOCAL;
 		this._register(this.settingsTargetsWidget.onDidTargetChange(target => this.onDidSettingsTargetChange(target)));
 		this._register(DOM.addDisposableListener(targetWidgetContainer, DOM.EventType.KEY_DOWN, e => {
@@ -892,8 +892,6 @@ export class SettingsEditor2 extends EditorPane {
 				}
 			}
 			return this.preferencesService.openUserSettings(openOptions);
-		} else if (currentSettingsTarget === ConfigurationTarget.USER_REMOTE) {
-			return this.preferencesService.openRemoteSettings(openOptions);
 		} else if (currentSettingsTarget === ConfigurationTarget.WORKSPACE) {
 			return this.preferencesService.openWorkspaceSettings(openOptions);
 		} else if (URI.isUri(currentSettingsTarget)) {
@@ -1075,8 +1073,6 @@ export class SettingsEditor2 extends EditorPane {
 				this.settingsTargetsWidget.updateTarget(ConfigurationTarget.WORKSPACE);
 			} else if (element.scope === 'user') {
 				this.settingsTargetsWidget.updateTarget(ConfigurationTarget.USER_LOCAL);
-			} else if (element.scope === 'remote') {
-				this.settingsTargetsWidget.updateTarget(ConfigurationTarget.USER_REMOTE);
 			}
 			this.applyFilter(`@${ID_SETTING_TAG}${element.settingKey}`);
 		}));
@@ -1250,9 +1246,8 @@ export class SettingsEditor2 extends EditorPane {
 		}
 
 		const reportedTarget = props.settingsTarget === ConfigurationTarget.USER_LOCAL ? 'user' :
-			props.settingsTarget === ConfigurationTarget.USER_REMOTE ? 'user_remote' :
-				props.settingsTarget === ConfigurationTarget.WORKSPACE ? 'workspace' :
-					'folder';
+			props.settingsTarget === ConfigurationTarget.WORKSPACE ? 'workspace' :
+				'folder';
 
 		const data = {
 			key: props.key,

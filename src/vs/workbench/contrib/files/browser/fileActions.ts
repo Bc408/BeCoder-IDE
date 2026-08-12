@@ -51,7 +51,6 @@ import { ResourceFileEdit } from '../../../../editor/browser/services/bulkEditSe
 import { IExplorerService } from './files.js';
 import { BrowserFileUpload, FileDownload } from './fileImportExport.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { Action2 } from '../../../../platform/actions/common/actions.js';
 import { ActiveEditorCanToggleReadonlyContext, ActiveEditorContext, EmptyWorkspaceSupportContext } from '../../../common/contextkeys.js';
@@ -902,7 +901,6 @@ async function openExplorerAndCreate(accessor: ServicesAccessor, isFolder: boole
 	const editorService = accessor.get(IEditorService);
 	const viewsService = accessor.get(IViewsService);
 	const notificationService = accessor.get(INotificationService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
 	const commandService = accessor.get(ICommandService);
 	const pathService = accessor.get(IPathService);
 
@@ -962,10 +960,8 @@ async function openExplorerAndCreate(accessor: ServicesAccessor, isFolder: boole
 		}
 	};
 
-	const os = (await remoteAgentService.getEnvironment())?.os ?? OS;
-
 	await explorerService.setEditable(newStat, {
-		validationMessage: value => validateFileName(pathService, newStat, value, os),
+		validationMessage: value => validateFileName(pathService, newStat, value, OS),
 		onFinish: async (value, success) => {
 			folder.removeChild(newStat);
 			await explorerService.setEditable(newStat, null);
@@ -993,7 +989,6 @@ CommandsRegistry.registerCommand({
 export const renameHandler = async (accessor: ServicesAccessor) => {
 	const explorerService = accessor.get(IExplorerService);
 	const notificationService = accessor.get(INotificationService);
-	const remoteAgentService = accessor.get(IRemoteAgentService);
 	const pathService = accessor.get(IPathService);
 	const configurationService = accessor.get(IConfigurationService);
 
@@ -1003,10 +998,8 @@ export const renameHandler = async (accessor: ServicesAccessor) => {
 		return;
 	}
 
-	const os = (await remoteAgentService.getEnvironment())?.os ?? OS;
-
 	await explorerService.setEditable(stat, {
-		validationMessage: value => validateFileName(pathService, stat, value, os),
+		validationMessage: value => validateFileName(pathService, stat, value, OS),
 		onFinish: async (value, success) => {
 			if (success) {
 				const parentResource = stat.parent!.resource;

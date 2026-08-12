@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChildProcess, spawn, SpawnOptions, StdioOptions } from 'child_process';
+import { ChildProcess, spawn, SpawnOptions } from 'child_process';
 import { chmodSync, existsSync, readFileSync, statSync, truncateSync, unlinkSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { startProfiling, ProfilingSession, Target } from '../../base/node/profiling.js';
@@ -15,7 +15,7 @@ import { whenDeleted, writeFileSync } from '../../base/node/pfs.js';
 import { findFreePort } from '../../base/node/ports.js';
 import { watchFileContents } from '../../platform/files/node/watcher/nodejs/nodejsWatcherLib.js';
 import { NativeParsedArgs } from '../../platform/environment/common/argv.js';
-import { buildHelpMessage, buildStdinMessage, buildVersionMessage, NATIVE_CLI_COMMANDS, OPTIONS } from '../../platform/environment/node/argv.js';
+import { buildHelpMessage, buildStdinMessage, buildVersionMessage, OPTIONS } from '../../platform/environment/node/argv.js';
 import { addArg, parseCLIProcessArgv } from '../../platform/environment/node/argvHelper.js';
 import { combineUriFlags } from './cliArgs.js';
 import { getStdinFilePath, hasStdinWithoutTty, readFromStdin, stdinDataListener } from '../../platform/environment/node/stdin.js';
@@ -25,7 +25,6 @@ import { CancellationTokenSource } from '../../base/common/cancellation.js';
 import { isUNC, randomPath } from '../../base/common/extpath.js';
 import { Utils } from '../../platform/profiling/common/profiling.js';
 import { FileAccess } from '../../base/common/network.js';
-import { cwd } from '../../base/common/process.js';
 import { addUNCHostToAllowlist } from '../../base/node/unc.js';
 import { URI } from '../../base/common/uri.js';
 import { DeferredPromise } from '../../base/common/async.js';
@@ -48,44 +47,6 @@ export async function main(argv: string[]): Promise<void> {
 	} catch (err) {
 		console.error(err.message);
 		return;
-	}
-
-	for (const subcommand of NATIVE_CLI_COMMANDS) {
-		if (args[subcommand]) {
-			if (!product.tunnelApplicationName) {
-				console.error(`'${subcommand}' command not supported in ${product.applicationName}`);
-				return;
-			}
-			const env: IProcessEnvironment = {
-				...process.env
-			};
-			// bootstrap-esm.js determines the electron environment based
-			// on the following variable. For the server we need to unset
-			// it to prevent importing any electron specific modules.
-			// Refs https://github.com/microsoft/vscode/issues/221883
-			delete env['ELECTRON_RUN_AS_NODE'];
-
-			const tunnelArgs = argv.slice(argv.indexOf(subcommand) + 1); // all arguments behind `tunnel`
-			return new Promise((resolve, reject) => {
-				let tunnelProcess: ChildProcess;
-				const stdio: StdioOptions = ['ignore', 'pipe', 'pipe'];
-				if (process.env['VSCODE_DEV']) {
-					tunnelProcess = spawn('cargo', ['run', '--', subcommand, ...tunnelArgs], { cwd: join(getAppRoot(), 'cli'), stdio, env });
-				} else {
-					const appPath = process.platform === 'darwin'
-						// ./Contents/MacOS/Code => ./Contents/Resources/app/bin/code-tunnel-insiders
-						? join(dirname(dirname(process.execPath)), 'Resources', 'app')
-						: dirname(process.execPath);
-					const tunnelCommand = join(appPath, 'bin', `${product.tunnelApplicationName}${isWindows ? '.exe' : ''}`);
-					tunnelProcess = spawn(tunnelCommand, [subcommand, ...tunnelArgs], { cwd: cwd(), stdio, env });
-				}
-
-				tunnelProcess.stdout!.pipe(process.stdout);
-				tunnelProcess.stderr!.pipe(process.stderr);
-				tunnelProcess.on('exit', resolve);
-				tunnelProcess.on('error', reject);
-			});
-		}
 	}
 
 	// Help (general)

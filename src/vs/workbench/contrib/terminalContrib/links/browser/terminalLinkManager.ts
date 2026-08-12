@@ -11,7 +11,6 @@ import { URI } from '../../../../../base/common/uri.js';
 import * as nls from '../../../../../nls.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import { ITunnelService } from '../../../../../platform/tunnel/common/tunnel.js';
 import { ITerminalLinkDetector, ITerminalLinkOpener, ITerminalLinkResolver, ITerminalSimpleLink, OmitFirstArg, TerminalBuiltinLinkType, TerminalLinkType } from './links.js';
 import { TerminalExternalLinkDetector } from './terminalExternalLinkDetector.js';
 import { TerminalLink } from './terminalLink.js';
@@ -62,7 +61,6 @@ export class TerminalLinkManager extends DisposableStore {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ITerminalConfigurationService terminalConfigurationService: ITerminalConfigurationService,
 		@ITerminalLogService private readonly _logService: ITerminalLogService,
-		@ITunnelService private readonly _tunnelService: ITunnelService,
 	) {
 		super();
 
@@ -72,9 +70,6 @@ export class TerminalLinkManager extends DisposableStore {
 			case 'off':
 			case false: // legacy from v1.75
 				enableFileLinks = false;
-				break;
-			case 'notRemote':
-				enableFileLinks = !this._processInfo.remoteAuthority;
 				break;
 		}
 
@@ -94,7 +89,7 @@ export class TerminalLinkManager extends DisposableStore {
 		this._openers.set(TerminalBuiltinLinkType.LocalFolderInWorkspace, localFolderInWorkspaceOpener);
 		this._openers.set(TerminalBuiltinLinkType.LocalFolderOutsideWorkspace, localFolderOutsideWorkspaceOpener);
 		this._openers.set(TerminalBuiltinLinkType.Search, this._instantiationService.createInstance(TerminalSearchLinkOpener, capabilities, this._processInfo.initialCwd, localFileOpener, localFolderInWorkspaceOpener, () => this._processInfo.os || OS));
-		this._openers.set(TerminalBuiltinLinkType.Url, this._instantiationService.createInstance(TerminalUrlLinkOpener, !!this._processInfo.remoteAuthority, localFileOpener, localFolderInWorkspaceOpener, localFolderOutsideWorkspaceOpener));
+		this._openers.set(TerminalBuiltinLinkType.Url, this._instantiationService.createInstance(TerminalUrlLinkOpener, localFileOpener, localFolderInWorkspaceOpener, localFolderOutsideWorkspaceOpener));
 		this._registerStandardLinkProviders();
 
 		let activeHoverDisposable: IDisposable | undefined;
@@ -478,14 +473,7 @@ export class TerminalLinkManager extends DisposableStore {
 			}
 		}
 
-		let fallbackLabel = nls.localize('followLink', "Follow link");
-		try {
-			if (this._tunnelService.canTunnel(URI.parse(uri))) {
-				fallbackLabel = nls.localize('followForwardedLink', "Follow link using forwarded port");
-			}
-		} catch {
-			// No-op, already set to fallback
-		}
+		const fallbackLabel = nls.localize('followLink', "Follow link");
 
 		const markdown = new MarkdownString('', true);
 		// Escapes markdown in label & uri

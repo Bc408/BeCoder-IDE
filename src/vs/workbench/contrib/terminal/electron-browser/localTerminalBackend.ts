@@ -36,7 +36,6 @@ import { DeferredPromise } from '../../../../base/common/async.js';
 import { IStatusbarService } from '../../../services/statusbar/browser/statusbar.js';
 import { memoize } from '../../../../base/common/decorators.js';
 import { StopWatch } from '../../../../base/common/stopwatch.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { shouldUseEnvironmentVariableCollection } from '../../../../platform/terminal/common/terminalEnvironment.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 
@@ -55,8 +54,6 @@ export class LocalTerminalBackendContribution implements IWorkbenchContribution 
 }
 
 class LocalTerminalBackend extends BaseTerminalBackend implements ITerminalBackend {
-	readonly remoteAuthority = undefined;
-
 	private readonly _ptys: Map<number, LocalPty> = new Map();
 
 	private _directProxyClientEventually: DeferredPromise<MessagePortClient> | undefined;
@@ -94,7 +91,6 @@ class LocalTerminalBackend extends BaseTerminalBackend implements ITerminalBacke
 		@IHistoryService historyService: IHistoryService,
 		@INativeHostService private readonly _nativeHostService: INativeHostService,
 		@IStatusbarService statusBarService: IStatusbarService,
-		@IRemoteAgentService private readonly _remoteAgentService: IRemoteAgentService,
 	) {
 		super(_localPtyService, logService, historyService, _configurationResolverService, statusBarService, workspaceContextService);
 
@@ -122,11 +118,8 @@ class LocalTerminalBackend extends BaseTerminalBackend implements ITerminalBacke
 		this._directProxy = directProxy;
 		this._directProxyDisposables.clear();
 
-		// The pty host should not get launched until at least the window restored phase
-		// if remote auth exists, don't await
-		if (!this._remoteAgentService.getConnection()?.remoteAuthority) {
-			await this._lifecycleService.when(LifecyclePhase.Restored);
-		}
+		// The pty host should not get launched until at least the window restored phase.
+		await this._lifecycleService.when(LifecyclePhase.Restored);
 
 		mark('code/terminal/willConnectPtyHost');
 		this._logService.trace('Renderer->PtyHost#connect: before acquirePort');
@@ -327,7 +320,7 @@ class LocalTerminalBackend extends BaseTerminalBackend implements ITerminalBacke
 				// Create variable resolver
 				const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot();
 				const lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) ?? undefined : undefined;
-				const variableResolver = terminalEnvironment.createVariableResolver(lastActiveWorkspace, await this._terminalProfileResolverService.getEnvironment(this.remoteAuthority), this._configurationResolverService);
+				const variableResolver = terminalEnvironment.createVariableResolver(lastActiveWorkspace, await this._terminalProfileResolverService.getEnvironment(), this._configurationResolverService);
 
 				// Re-resolve the environments and replace it on the state so local terminals use a fresh
 				// environment

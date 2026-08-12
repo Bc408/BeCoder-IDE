@@ -3,13 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IntervalTimer } from '../../../../base/common/async.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import * as errors from '../../../../base/common/errors.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { StopWatch } from '../../../../base/common/stopwatch.js';
-import { URI } from '../../../../base/common/uri.js';
 import { IMessagePassingProtocol } from '../../../../base/parts/ipc/common/ipc.js';
 import * as nls from '../../../../nls.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
@@ -17,7 +15,6 @@ import { Action2, registerAction2 } from '../../../../platform/actions/common/ac
 import { ExtensionIdentifier, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { RemoteAuthorityResolverErrorCode, getRemoteAuthorityPrefix } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IEditorService } from '../../editor/common/editorService.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -25,7 +22,7 @@ import { ExtHostCustomersRegistry, IInternalExtHostContext } from './extHostCust
 import { ExtensionHostKind, extensionHostKindToString } from './extensionHostKind.js';
 import { IExtensionHostManager } from './extensionHostManagers.js';
 import { IExtensionDescriptionDelta } from './extensionHostProtocol.js';
-import { IExtensionHostProxy, IResolveAuthorityResult } from './extensionHostProxy.js';
+import { IExtensionHostProxy } from './extensionHostProxy.js';
 import { ExtensionRunningLocation } from './extensionRunningLocation.js';
 import { ActivationKind, ExtensionActivationReason, ExtensionHostStartup, IExtensionHost, IExtensionInspectInfo, IInternalExtensionService } from './extensions.js';
 import { Proxied, ProxyIdentifier } from './proxyIdentifier.js';
@@ -40,7 +37,7 @@ type ExtensionHostStartupClassification = {
 	comment: 'The startup state of the extension host';
 	time: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The time reported by Date.now().' };
 	action: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The action: starting, success or error.' };
-	kind: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The extension host kind: LocalProcess, LocalWebWorker or Remote.' };
+	kind: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The extension host kind: LocalProcess or LocalWebWorker.' };
 	errorName?: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The error name.' };
 	errorMessage?: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The error message.' };
 	errorStack?: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The error stack.' };
@@ -191,7 +188,6 @@ export class ExtensionHostManager extends Disposable implements IExtensionHostMa
 		const down = await this._measureDown(proxy);
 		const up = await this._measureUp(proxy);
 		return {
-			remoteAuthority: this._extensionHost.remoteAuthority,
 			latency,
 			down,
 			up
@@ -260,7 +256,6 @@ export class ExtensionHostManager extends Disposable implements IExtensionHostMa
 		let extensionHostProxy: IExtensionHostProxy | null = null as IExtensionHostProxy | null;
 		let mainProxyIdentifiers: ProxyIdentifier<any>[] = [];
 		const extHostContext: IInternalExtHostContext = {
-			remoteAuthority: this._extensionHost.remoteAuthority,
 			extensionHostKind: this.kind,
 			getProxy: <T>(identifier: ProxyIdentifier<T>): Proxied<T> => this._rpcProtocol!.getProxy(identifier),
 			set: <T, R extends T>(identifier: ProxyIdentifier<T>, instance: R): R => this._rpcProtocol!.set(identifier, instance),
@@ -369,59 +364,6 @@ export class ExtensionHostManager extends Disposable implements IExtensionHostMa
 		return undefined;
 	}
 
-	public async resolveAuthority(remoteAuthority: string, resolveAttempt: number): Promise<IResolveAuthorityResult> {
-		const sw = StopWatch.create(false);
-		const prefix = () => `[${extensionHostKindToString(this._extensionHost.runningLocation.kind)}${this._extensionHost.runningLocation.affinity}][resolveAuthority(${getRemoteAuthorityPrefix(remoteAuthority)},${resolveAttempt})][${sw.elapsed()}ms] `;
-		const logInfo = (msg: string) => this._logService.info(`${prefix()}${msg}`);
-		const logError = (msg: string, err: any = undefined) => this._logService.error(`${prefix()}${msg}`, err);
-
-		logInfo(`obtaining proxy...`);
-		const proxy = await this._proxy;
-		if (!proxy) {
-			logError(`no proxy`);
-			return {
-				type: 'error',
-				error: {
-					message: `Cannot resolve authority`,
-					code: RemoteAuthorityResolverErrorCode.Unknown,
-					detail: undefined
-				}
-			};
-		}
-		logInfo(`invoking...`);
-		const intervalLogger = new IntervalTimer();
-		try {
-			intervalLogger.cancelAndSet(() => logInfo('waiting...'), 1000);
-			const resolverResult = await proxy.resolveAuthority(remoteAuthority, resolveAttempt);
-			intervalLogger.dispose();
-			if (resolverResult.type === 'ok') {
-				logInfo(`returned ${resolverResult.value.authority.connectTo}`);
-			} else {
-				logError(`returned an error`, resolverResult.error);
-			}
-			return resolverResult;
-		} catch (err) {
-			intervalLogger.dispose();
-			logError(`returned an error`, err);
-			return {
-				type: 'error',
-				error: {
-					message: err.message,
-					code: RemoteAuthorityResolverErrorCode.Unknown,
-					detail: err
-				}
-			};
-		}
-	}
-
-	public async getCanonicalURI(remoteAuthority: string, uri: URI): Promise<URI | null> {
-		const proxy = await this._proxy;
-		if (!proxy) {
-			throw new Error(`Cannot resolve canonical URI`);
-		}
-		return proxy.getCanonicalURI(remoteAuthority, uri);
-	}
-
 	public async start(extensionRegistryVersionId: number, allExtensions: IExtensionDescription[], myExtensions: ExtensionIdentifier[]): Promise<void> {
 		const proxy = await this._proxy;
 		if (!proxy) {
@@ -460,14 +402,6 @@ export class ExtensionHostManager extends Disposable implements IExtensionHostMa
 		return this._extensionHost.extensions?.containsExtension(extensionId) ?? false;
 	}
 
-	public async setRemoteEnvironment(env: { [key: string]: string | null }): Promise<void> {
-		const proxy = await this._proxy;
-		if (!proxy) {
-			return;
-		}
-
-		return proxy.setRemoteEnvironment(env);
-	}
 }
 
 export function friendlyExtHostName(kind: ExtensionHostKind, pid: number | null) {
@@ -593,7 +527,6 @@ class TelemetryRPCLogger implements IRPCProtocolLogger {
 }
 
 interface ExtHostLatencyResult {
-	remoteAuthority: string | null;
 	up: number;
 	down: number;
 	latency: number;
@@ -645,7 +578,7 @@ registerAction2(class MeasureExtHostLatencyAction extends Action2 {
 		if (!m) {
 			return '';
 		}
-		return `${m.remoteAuthority ? `Authority: ${m.remoteAuthority}\n` : ``}Roundtrip latency: ${m.latency.toFixed(3)}ms\nUp: ${MeasureExtHostLatencyAction._printSpeed(m.up)}\nDown: ${MeasureExtHostLatencyAction._printSpeed(m.down)}\n`;
+		return `Roundtrip latency: ${m.latency.toFixed(3)}ms\nUp: ${MeasureExtHostLatencyAction._printSpeed(m.up)}\nDown: ${MeasureExtHostLatencyAction._printSpeed(m.down)}\n`;
 	}
 
 	private static _printSpeed(n: number): string {

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isLinux, isMacintosh, isWindows, OperatingSystem as OS } from '../../../../base/common/platform.js';
+import { isLinux, isMacintosh, isWindows } from '../../../../base/common/platform.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -18,7 +18,6 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { IEditorService, SIDE_GROUP } from '../../../services/editor/common/editorService.js';
 import { IExtensionManagementServerService } from '../../../services/extensionManagement/common/extensionManagement.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { GettingStartedInputSerializer, GettingStartedPage } from './gettingStarted.js';
 import { GettingStartedInput } from './gettingStartedInput.js';
 import { StartupPageEditorResolverContribution, StartupPageRunnerContribution } from './startupPage.js';
@@ -61,7 +60,7 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 export const WorkspacePlatform = new RawContextKey<'mac' | 'linux' | 'windows' | 'webworker' | undefined>(
 	'workspacePlatform',
 	undefined,
-	localize('workspacePlatform', "The platform of the current workspace, which in remote or serverless contexts may be different from the platform of the UI")
+	localize('workspacePlatform', "The platform of the current workspace")
 );
 
 class WorkspacePlatformContribution {
@@ -70,22 +69,14 @@ class WorkspacePlatformContribution {
 
 	constructor(
 		@IExtensionManagementServerService extensionManagementServerService: IExtensionManagementServerService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IContextKeyService contextService: IContextKeyService,
 	) {
-		remoteAgentService.getEnvironment().then(environment => {
-			const remotePlatform = environment?.os === OS.Macintosh ? 'mac'
-				: environment?.os === OS.Windows ? 'windows'
-					: environment?.os === OS.Linux ? 'linux'
-						: undefined;
-			const platform = remotePlatform
-				?? (extensionManagementServerService.localExtensionManagementServer
-					? isMacintosh ? 'mac' : isLinux ? 'linux' : isWindows ? 'windows' : undefined
-					: extensionManagementServerService.webExtensionManagementServer ? 'webworker' : undefined);
-			if (platform) {
-				WorkspacePlatform.bindTo(contextService).set(platform);
-			}
-		});
+		const platform = extensionManagementServerService.localExtensionManagementServer
+			? isMacintosh ? 'mac' : isLinux ? 'linux' : isWindows ? 'windows' : undefined
+			: extensionManagementServerService.webExtensionManagementServer ? 'webworker' : undefined;
+		if (platform) {
+			WorkspacePlatform.bindTo(contextService).set(platform);
+		}
 	}
 }
 

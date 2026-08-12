@@ -94,8 +94,6 @@ const defaultModalEditorAllowableCommands = new Set([
 	'workbench.action.openWorkspaceSettingsFile',
 	'workbench.action.openFolderSettings',
 	'workbench.action.openFolderSettingsFile',
-	'workbench.action.openRemoteSettings',
-	'workbench.action.openRemoteSettingsFile',
 	'workbench.action.openAccessibilitySettings',
 	'workbench.action.configureLanguageBasedSettings',
 

@@ -216,7 +216,6 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 	constructor(
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IExtensionService extensionService: IExtensionService,
-		@IHostService hostService: IHostService,
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 	) {
 		super();
@@ -226,9 +225,7 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 				return; // no restart when in tests: see https://github.com/microsoft/vscode/issues/66936
 			}
 
-			if (environmentService.remoteAuthority) {
-				hostService.reload(); // TODO@aeschli, workaround
-			} else if (isNative) {
+			if (isNative) {
 				const stopped = await extensionService.stopExtensionHosts(localize('restartExtensionHost.reason', "Changing workspace folders"));
 				if (stopped) {
 					extensionService.startExtensionHosts();

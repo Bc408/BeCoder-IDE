@@ -5,7 +5,6 @@
 
 import assert from 'assert';
 import { compareItemsByFuzzyScore, FuzzyScore, FuzzyScore2, FuzzyScorerCache, IItemAccessor, IItemScore, pieceToQuery, prepareQuery, scoreFuzzy, scoreFuzzy2, scoreItemFuzzy } from '../../common/fuzzyScorer.js';
-import { Schemas } from '../../common/network.js';
 import { basename, dirname, posix, sep, win32 } from '../../common/path.js';
 import { isWindows } from '../../common/platform.js';
 import { URI } from '../../common/uri.js';
@@ -391,11 +390,11 @@ suite('Fuzzy Scorer', () => {
 		assert.ok(!res.score);
 	});
 
-	test('scoreItem - match if using slash or backslash (local, remote resource)', function () {
+	test('scoreItem - match if using slash or backslash (file and custom resource)', function () {
 		const localResource = URI.file('abcde/super/duper');
-		const remoteResource = URI.from({ scheme: Schemas.vscodeRemote, path: 'abcde/super/duper' });
+		const customResource = URI.from({ scheme: 'test-resource', path: 'abcde/super/duper' });
 
-		for (const resource of [localResource, remoteResource]) {
+		for (const resource of [localResource, customResource]) {
 			let res = scoreItem(resource, 'abcde\\super\\duper', true, ResourceAccessor);
 			assert.ok(res.score);
 

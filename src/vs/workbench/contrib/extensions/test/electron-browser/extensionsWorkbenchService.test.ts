@@ -35,14 +35,12 @@ import { URI } from '../../../../../base/common/uri.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { ExtensionType, ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { ExtensionKind } from '../../../../../platform/environment/common/environment.js';
-import { IRemoteAgentService } from '../../../../services/remote/common/remoteAgentService.js';
-import { RemoteAgentService } from '../../../../services/remote/electron-browser/remoteAgentService.js';
 import { ISharedProcessService } from '../../../../../platform/ipc/electron-browser/services.js';
 import { TestContextService, TestProductService } from '../../../../test/common/workbenchTestServices.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { ILifecycleService } from '../../../../services/lifecycle/common/lifecycle.js';
 import { TestLifecycleService } from '../../../../test/browser/workbenchTestServices.js';
-import { Schemas } from '../../../../../base/common/network.js';
+import { Schemas as ProductSchemas } from '../../../../../base/common/network.js';
 import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { MockContextKeyService } from '../../../../../platform/keybinding/test/common/mockKeybindingService.js';
 import { platform } from '../../../../../base/common/platform.js';
@@ -60,6 +58,8 @@ import { toUserDataProfile } from '../../../../../platform/userDataProfile/commo
 import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { IMeteredConnectionService } from '../../../../../platform/meteredConnection/common/meteredConnection.js';
 import { ExtensionGalleryManifestStatus, IExtensionGalleryManifestService } from '../../../../../platform/extensionManagement/common/extensionGalleryManifest.js';
+
+const Schemas = { ...ProductSchemas, vscodeRemote: 'test-remote' };
 
 suite('ExtensionsWorkbenchServiceTest', () => {
 
@@ -100,7 +100,6 @@ suite('ExtensionsWorkbenchServiceTest', () => {
 		instantiationService.stub(IWorkspaceContextService, new TestContextService());
 		stubConfiguration();
 
-		instantiationService.stub(IRemoteAgentService, RemoteAgentService);
 		instantiationService.stub(IUserDataProfileService, disposableStore.add(new UserDataProfileService(toUserDataProfile('test', 'test', URI.file('foo'), URI.file('cache')))));
 
 		instantiationService.stub(IWorkbenchExtensionManagementService, {

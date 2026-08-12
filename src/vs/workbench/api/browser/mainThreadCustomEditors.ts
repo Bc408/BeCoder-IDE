@@ -37,7 +37,6 @@ import { IWebviewWorkbenchService } from '../../contrib/webviewPanel/browser/web
 import { EditorGroupColumn, editorGroupToColumn } from '../../services/editor/common/editorGroupColumn.js';
 import { IEditorGroupsService } from '../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { IExtensionService } from '../../services/extensions/common/extensions.js';
 import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 import { IPathService } from '../../services/path/common/pathService.js';
@@ -565,7 +564,6 @@ class MainThreadCustomEditorModel extends ResourceWorkingCopy implements ICustom
 		@IFileService fileService: IFileService,
 		@ILabelService private readonly _labelService: ILabelService,
 		@IUndoRedoService private readonly _undoService: IUndoRedoService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@IWorkingCopyService workingCopyService: IWorkingCopyService,
 		@IPathService private readonly _pathService: IPathService,
 		@IExtensionService extensionService: IExtensionService,
@@ -820,8 +818,7 @@ class MainThreadCustomEditorModel extends ResourceWorkingCopy implements ICustom
 			throw new Error('Resource is not untitled');
 		}
 
-		const remoteAuthority = this._environmentService.remoteAuthority;
-		const localResource = toLocalResource(this._editorResource, remoteAuthority, this._pathService.defaultUriScheme);
+		const localResource = toLocalResource(this._editorResource, undefined, this._pathService.defaultUriScheme);
 
 		return this._fileDialogService.pickFileToSave(localResource, options?.availableFileSystems);
 	}

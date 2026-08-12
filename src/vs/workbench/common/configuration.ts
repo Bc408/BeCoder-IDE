@@ -11,8 +11,7 @@ import { IWorkspaceContextService, IWorkspaceFolder, WorkbenchState } from '../.
 import { ConfigurationTarget, IConfigurationService, IConfigurationValue, IInspectValue } from '../../platform/configuration/common/configuration.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import { Emitter } from '../../base/common/event.js';
-import { IRemoteAgentService } from '../services/remote/common/remoteAgentService.js';
-import { OperatingSystem, isWindows } from '../../base/common/platform.js';
+import { isWindows } from '../../base/common/platform.js';
 import { URI } from '../../base/common/uri.js';
 import { equals } from '../../base/common/objects.js';
 import { DeferredPromise } from '../../base/common/async.js';
@@ -118,14 +117,10 @@ export class ConfigurationMigrationWorkbenchContribution extends Disposable impl
 
 		const targetPairs: [keyof IConfigurationValue<unknown>, ConfigurationTarget][] = this.workspaceService.getWorkbenchState() === WorkbenchState.WORKSPACE ? [
 			['user', ConfigurationTarget.USER],
-			['userLocal', ConfigurationTarget.USER_LOCAL],
-			['userRemote', ConfigurationTarget.USER_REMOTE],
 			['workspace', ConfigurationTarget.WORKSPACE],
 			['workspaceFolder', ConfigurationTarget.WORKSPACE_FOLDER],
 		] : [
 			['user', ConfigurationTarget.USER],
-			['userLocal', ConfigurationTarget.USER_LOCAL],
-			['userRemote', ConfigurationTarget.USER_REMOTE],
 			['workspace', ConfigurationTarget.WORKSPACE],
 		];
 		for (const [dataKey, target] of targetPairs) {
@@ -184,9 +179,7 @@ export class DynamicWorkbenchSecurityConfiguration extends Disposable implements
 	private readonly _ready = new DeferredPromise<void>();
 	readonly ready = this._ready.p;
 
-	constructor(
-		@IRemoteAgentService private readonly remoteAgentService: IRemoteAgentService
-	) {
+	constructor() {
 		super();
 
 		this.create();
@@ -202,10 +195,7 @@ export class DynamicWorkbenchSecurityConfiguration extends Disposable implements
 
 	private async doCreate(): Promise<void> {
 		if (!isWindows) {
-			const remoteEnvironment = await this.remoteAgentService.getEnvironment();
-			if (remoteEnvironment?.os !== OperatingSystem.Windows) {
-				return;
-			}
+			return;
 		}
 
 		// Windows: UNC allow list security configuration

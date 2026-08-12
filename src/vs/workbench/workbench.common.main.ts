@@ -93,9 +93,6 @@ import './services/notification/common/notificationService.js';
 import './services/userDataSync/common/userDataSyncUtil.js';
 import './services/userDataProfile/browser/userDataProfileImportExportService.js';
 import './services/userDataProfile/browser/userDataProfileManagement.js';
-import './services/userDataProfile/common/remoteUserDataProfiles.js';
-import './services/remote/common/remoteExplorerService.js';
-import './services/remote/common/remoteExtensionsScanner.js';
 import './services/terminal/common/embedderTerminalService.js';
 import './services/workingCopy/common/workingCopyService.js';
 import './services/workingCopy/common/workingCopyFileService.js';
@@ -281,10 +278,6 @@ import './contrib/styleOverrides/browser/styleOverrides.contribution.js';
 // Tasks
 import './contrib/tasks/browser/task.contribution.js';
 
-// Remote
-import './contrib/remote/common/remote.contribution.js';
-import './contrib/remote/browser/remote.contribution.js';
-
 // Emmet
 import './contrib/emmet/browser/emmet.contribution.js';
 
@@ -363,7 +356,6 @@ import './contrib/userDataProfile/browser/userDataProfile.contribution.js';
 import './contrib/codeActions/browser/codeActions.contribution.js';
 
 // Timeline
-import './contrib/timeline/browser/timeline.contribution.js';
 import './contrib/timeline/browser/timeline.service.contribution.js';
 
 // Local History

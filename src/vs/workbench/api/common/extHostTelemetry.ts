@@ -12,7 +12,7 @@ import { ILogger, ILoggerService } from '../../../platform/log/common/log.js';
 import { IExtHostInitDataService } from './extHostInitDataService.js';
 import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { UIKind } from '../../services/extensions/common/extensionHostProtocol.js';
-import { cleanData, cleanRemoteAuthority, TelemetryLogGroup } from '../../../platform/telemetry/common/telemetryUtils.js';
+import { cleanData, TelemetryLogGroup } from '../../../platform/telemetry/common/telemetryUtils.js';
 import { mixin } from '../../../base/common/objects.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { localize } from '../../../nls.js';
@@ -46,7 +46,7 @@ export class ExtHostTelemetry extends Disposable implements ExtHostTelemetryShap
 	) {
 		super();
 		this._inLoggingOnlyMode = this.initData.environment.isExtensionTelemetryLoggingOnly;
-		const id = initData.remote.isRemote ? 'remoteExtHostTelemetry' : isWorker ? 'workerExtHostTelemetry' : 'extHostTelemetry';
+		const id = isWorker ? 'workerExtHostTelemetry' : 'extHostTelemetry';
 		this._outputLogger = this._register(loggerService.createLogger(id,
 			{
 				name: localize('extensionTelemetryLog', "Extension Telemetry{0}", this._inLoggingOnlyMode ? ' (Not Sent)' : ''),
@@ -114,8 +114,6 @@ export class ExtHostTelemetry extends Disposable implements ExtHostTelemetryShap
 			default:
 				commonProperties['common.uikind'] = 'unknown';
 		}
-
-		commonProperties['common.remotename'] = cleanRemoteAuthority(this.initData.remote.authority, this.initData);
 
 		return commonProperties;
 	}

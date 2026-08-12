@@ -13,7 +13,6 @@ import { IDisposable, DisposableStore, Disposable, MutableDisposable } from '../
 import { Disposable as VSCodeDisposable, EnvironmentVariableMutatorType, TerminalExitReason } from './extHostTypes.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { localize } from '../../../nls.js';
-import { NotSupportedError } from '../../../base/common/errors.js';
 import { serializeEnvironmentDescriptionMap, serializeEnvironmentVariableCollection } from '../../../platform/terminal/common/environmentVariableShared.js';
 import { CancellationTokenSource } from '../../../base/common/cancellation.js';
 import { generateUuid } from '../../../base/common/uuid.js';
@@ -25,7 +24,6 @@ import { Promises } from '../../../base/common/async.js';
 import { EditorGroupColumn } from '../../services/editor/common/editorGroupColumn.js';
 import { TerminalQuickFix, ViewColumn } from './extHostTypeConverters.js';
 import { IExtHostCommands } from './extHostCommands.js';
-import { IExtHostInitDataService } from './extHostInitDataService.js';
 import { MarshalledId } from '../../../base/common/marshallingIds.js';
 import { ISerializedTerminalInstanceContext } from '../../contrib/terminal/common/terminal.js';
 import { hasKey } from '../../../base/common/types.js';
@@ -1248,28 +1246,18 @@ class ScopedEnvironmentVariableCollection implements IEnvironmentVariableCollect
 
 export class WorkerExtHostTerminalService extends BaseExtHostTerminalService {
 
-	private readonly _hasRemoteAuthority: boolean;
-
 	constructor(
 		@IExtHostCommands extHostCommands: IExtHostCommands,
-		@IExtHostRpcService extHostRpc: IExtHostRpcService,
-		@IExtHostInitDataService initData: IExtHostInitDataService
+		@IExtHostRpcService extHostRpc: IExtHostRpcService
 	) {
 		super(false, extHostCommands, extHostRpc);
-		this._hasRemoteAuthority = !!initData.remote.authority;
 	}
 
 	public createTerminal(name?: string, shellPath?: string, shellArgs?: string[] | string): vscode.Terminal {
-		if (!this._hasRemoteAuthority) {
-			throw new NotSupportedError();
-		}
 		return this.createTerminalFromOptions({ name, shellPath, shellArgs });
 	}
 
 	public createTerminalFromOptions(options: vscode.TerminalOptions, internalOptions?: ITerminalInternalOptions): vscode.Terminal {
-		if (!this._hasRemoteAuthority) {
-			throw new NotSupportedError();
-		}
 		const terminal = new ExtHostTerminal(this._proxy, generateUuid(), options, options.name);
 		this._terminals.push(terminal);
 		terminal.create(options, this._serializeParentTerminal(options, internalOptions));

@@ -77,12 +77,10 @@ import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from 
 import { VirtualWorkspaceContext } from '../../../common/contextkeys.js';
 import { EditorResourceAccessor, SaveReason } from '../../../common/editor.js';
 import { IViewDescriptorService } from '../../../common/views.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { ILifecycleService, ShutdownReason, StartupKind } from '../../../services/lifecycle/common/lifecycle.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { configureTaskIcon, isWorkspaceFolder, ITaskQuickPickEntry, QUICKOPEN_DETAIL_CONFIG, QUICKOPEN_SKIP_CONFIG, TaskQuickPick } from './taskQuickPick.js';
 import { IHostService } from '../../../services/host/browser/host.js';
@@ -279,7 +277,6 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		@IDialogService protected readonly _dialogService: IDialogService,
 		@INotificationService private readonly _notificationService: INotificationService,
 		@IContextKeyService protected readonly _contextKeyService: IContextKeyService,
-		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
 		@ITerminalProfileResolverService private readonly _terminalProfileResolverService: ITerminalProfileResolverService,
 		@IPathService private readonly _pathService: IPathService,
 		@ITextModelService private readonly _textModelResolverService: ITextModelService,
@@ -290,7 +287,6 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		@ILogService private readonly _logService: ILogService,
 		@IThemeService private readonly _themeService: IThemeService,
 		@ILifecycleService private readonly _lifecycleService: ILifecycleService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IHostService private readonly _hostService: IHostService
 	) {
@@ -354,7 +350,7 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		this._tasksAvailableState = TasksAvailableContext.bindTo(_contextKeyService);
 		this._onDidStateChange = this._register(new Emitter());
 		this._registerCommands().then(() => TaskCommandsRegistered.bindTo(this._contextKeyService).set(true));
-		ServerlessWebContext.bindTo(this._contextKeyService).set(Platform.isWeb && !remoteAgentService.getConnection()?.remoteAuthority);
+		ServerlessWebContext.bindTo(this._contextKeyService).set(Platform.isWeb);
 		this._configurationResolverService.contributeVariable('defaultBuildTask', async (): Promise<string | undefined> => {
 			// delay provider activation, we might find a single default build task in the tasks.json file
 			let tasks = await this._getTasksForGroup(TaskGroup.Build, true);
@@ -826,11 +822,6 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 
 	get hasTaskSystemInfo(): boolean {
 		const infosCount = Array.from(this._taskSystemInfos.values()).flat().length;
-		// If there's a remoteAuthority, then we end up with 2 taskSystemInfos,
-		// one for each extension host.
-		if (this._environmentService.remoteAuthority) {
-			return infosCount > 1;
-		}
 		return infosCount > 0;
 	}
 
@@ -2214,7 +2205,7 @@ export abstract class AbstractTaskService extends Disposable implements ITaskSer
 		return new TerminalTaskSystem(
 			this._terminalService, this._terminalGroupService, this._outputService, this._paneCompositeService, this._viewsService, this._markerService,
 			this._modelService, this._configurationResolverService,
-			this._contextService, this._environmentService,
+			this._contextService,
 			AbstractTaskService.OutputChannelId, this._fileService, this._terminalProfileResolverService,
 			this._pathService, this._viewDescriptorService, this._logService, this._notificationService,
 			this._contextKeyService, this._instantiationService,

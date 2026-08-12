@@ -35,7 +35,6 @@ import { IOutputService } from '../../../services/output/common/output.js';
 import { ITerminalGroupService, ITerminalService } from '../../terminal/browser/terminal.js';
 import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
@@ -46,7 +45,6 @@ import { ITerminalProfileResolverService } from '../../terminal/common/terminal.
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { IAccessibilitySignalService } from '../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 
@@ -81,7 +79,6 @@ export class TaskService extends AbstractTaskService {
 		@IDialogService dialogService: IDialogService,
 		@INotificationService notificationService: INotificationService,
 		@IContextKeyService contextKeyService: IContextKeyService,
-		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@ITerminalProfileResolverService terminalProfileResolverService: ITerminalProfileResolverService,
 		@IPathService pathService: IPathService,
 		@ITextModelService textModelResolverService: ITextModelService,
@@ -92,7 +89,6 @@ export class TaskService extends AbstractTaskService {
 		@ILogService logService: ILogService,
 		@IThemeService themeService: IThemeService,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 		@IAccessibilitySignalService accessibilitySignalService: IAccessibilitySignalService,
 		@IHostService _hostService: IHostService
 	) {
@@ -119,7 +115,6 @@ export class TaskService extends AbstractTaskService {
 			dialogService,
 			notificationService,
 			contextKeyService,
-			environmentService,
 			terminalProfileResolverService,
 			pathService,
 			textModelResolverService,
@@ -130,7 +125,6 @@ export class TaskService extends AbstractTaskService {
 			logService,
 			themeService,
 			lifecycleService,
-			remoteAgentService,
 			instantiationService,
 			_hostService
 		);

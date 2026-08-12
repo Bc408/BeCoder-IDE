@@ -16,17 +16,15 @@ import { ILocalExtension } from '../../../platform/extensionManagement/common/ex
 import { areSameExtensions } from '../../../platform/extensionManagement/common/extensionManagementUtil.js';
 import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { INotificationService } from '../../../platform/notification/common/notification.js';
-import { IRemoteConnectionData, ManagedRemoteConnection, RemoteConnection, RemoteConnectionType, ResolvedAuthority, WebSocketRemoteConnection } from '../../../platform/remote/common/remoteAuthorityResolver.js';
 import { ExtHostContext, ExtHostExtensionServiceShape, MainContext, MainThreadExtensionServiceShape } from '../common/extHost.protocol.js';
 import { IExtension, IExtensionsWorkbenchService } from '../../contrib/extensions/common/extensions.js';
 import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
 import { EnablementState, IWorkbenchExtensionEnablementService } from '../../services/extensionManagement/common/extensionManagement.js';
 import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
 import { IExtensionDescriptionDelta } from '../../services/extensions/common/extensionHostProtocol.js';
-import { IExtensionHostProxy, IResolveAuthorityResult } from '../../services/extensions/common/extensionHostProxy.js';
+import { IExtensionHostProxy } from '../../services/extensions/common/extensionHostProxy.js';
 import { ActivationKind, ExtensionActivationReason, IExtensionService, IInternalExtensionService, MissingExtensionDependency } from '../../services/extensions/common/extensions.js';
 import { extHostNamedCustomer, IExtHostContext, IInternalExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
-import { Dto } from '../../services/extensions/common/proxyIdentifier.js';
 import { IHostService } from '../../services/host/browser/host.js';
 import { ITimerService } from '../../services/timer/browser/timerService.js';
 
@@ -199,14 +197,6 @@ class ExtensionHostProxy implements IExtensionHostProxy {
 		private readonly _actual: ExtHostExtensionServiceShape
 	) { }
 
-	async resolveAuthority(remoteAuthority: string, resolveAttempt: number): Promise<IResolveAuthorityResult> {
-		const resolved = reviveResolveAuthorityResult(await this._actual.$resolveAuthority(remoteAuthority, resolveAttempt));
-		return resolved;
-	}
-	async getCanonicalURI(remoteAuthority: string, uri: URI): Promise<URI | null> {
-		const uriComponents = await this._actual.$getCanonicalURI(remoteAuthority, uri);
-		return (uriComponents ? URI.revive(uriComponents) : uriComponents);
-	}
 	startExtensionHost(extensionsDelta: IExtensionDescriptionDelta): Promise<void> {
 		return this._actual.$startExtensionHost(extensionsDelta);
 	}
@@ -218,12 +208,6 @@ class ExtensionHostProxy implements IExtensionHostProxy {
 	}
 	activate(extensionId: ExtensionIdentifier, reason: ExtensionActivationReason): Promise<boolean> {
 		return this._actual.$activate(extensionId, reason);
-	}
-	setRemoteEnvironment(env: { [key: string]: string | null }): Promise<void> {
-		return this._actual.$setRemoteEnvironment(env);
-	}
-	updateRemoteConnectionData(connectionData: IRemoteConnectionData): Promise<void> {
-		return this._actual.$updateRemoteConnectionData(connectionData);
 	}
 	deltaExtensions(extensionsDelta: IExtensionDescriptionDelta): Promise<void> {
 		return this._actual.$deltaExtensions(extensionsDelta);
@@ -237,32 +221,4 @@ class ExtensionHostProxy implements IExtensionHostProxy {
 	test_down(size: number): Promise<VSBuffer> {
 		return this._actual.$test_down(size);
 	}
-}
-
-function reviveResolveAuthorityResult(result: Dto<IResolveAuthorityResult>): IResolveAuthorityResult {
-	if (result.type === 'ok') {
-		return {
-			type: 'ok',
-			value: {
-				...result.value,
-				authority: reviveResolvedAuthority(result.value.authority),
-			}
-		};
-	} else {
-		return result;
-	}
-}
-
-function reviveResolvedAuthority(resolvedAuthority: Dto<ResolvedAuthority>): ResolvedAuthority {
-	return {
-		...resolvedAuthority,
-		connectTo: reviveConnection(resolvedAuthority.connectTo),
-	};
-}
-
-function reviveConnection(connection: Dto<RemoteConnection>): RemoteConnection {
-	if (connection.type === RemoteConnectionType.WebSocket) {
-		return new WebSocketRemoteConnection(connection.host, connection.port);
-	}
-	return new ManagedRemoteConnection(connection.id);
 }

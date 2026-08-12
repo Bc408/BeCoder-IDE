@@ -11,7 +11,6 @@ import { VSBuffer } from '../../../base/common/buffer.js';
 import { PendingMigrationError, isCancellationError, isSigPipeError, onUnexpectedError, onUnexpectedExternalError } from '../../../base/common/errors.js';
 import { Event } from '../../../base/common/event.js';
 import * as performance from '../../../base/common/performance.js';
-import { IURITransformer } from '../../../base/common/uriIpc.js';
 import { Promises } from '../../../base/node/pfs.js';
 import { IMessagePassingProtocol } from '../../../base/parts/ipc/common/ipc.js';
 import { BufferedEmitter, PersistentProtocol, ProtocolConstants } from '../../../base/parts/ipc/common/ipc.net.js';
@@ -21,7 +20,6 @@ import { boolean } from '../../../editor/common/config/editorOptions.js';
 import product from '../../../platform/product/common/product.js';
 import { ExtensionHostMain, IExitFn } from '../common/extensionHostMain.js';
 import { IHostUtils } from '../common/extHostExtensionService.js';
-import { createURITransformer } from '../../../base/common/uriTransformer.js';
 import { ExtHostConnectionType, readExtHostConnection } from '../../services/extensions/common/extensionHostEnv.js';
 import { ExtensionHostExitCode, IExtHostReadyMessage, IExtHostReduceGraceTimeMessage, IExtHostSocketMessage, IExtensionHostInitData, MessageType, createMessageOfType, isMessageOfType } from '../../services/extensions/common/extensionHostProtocol.js';
 import { IDisposable } from '../../../base/common/lifecycle.js';
@@ -31,7 +29,6 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
 interface ParsedExtHostArgs {
-	transformURIs?: boolean;
 	skipWorkspaceStorageLock?: boolean;
 	supportGlobalNavigator?: boolean; // enable global navigator object in nodejs
 	useHostProxy?: 'true' | 'false'; // use a string, as undefined is also a valid value
@@ -64,7 +61,6 @@ if (process.env.VSCODE_DEV) {
 
 const args = minimist(process.argv.slice(2), {
 	boolean: [
-		'transformURIs',
 		'skipWorkspaceStorageLock',
 		'supportGlobalNavigator',
 	],
@@ -455,17 +451,11 @@ async function startExtensionHostProcess(): Promise<void> {
 		fsRealpath(path: string) { return Promises.realpath(path); }
 	};
 
-	// Attempt to load uri transformer
-	let uriTransformer: IURITransformer | null = null;
-	if (initData.remote.authority && args.transformURIs) {
-		uriTransformer = createURITransformer(initData.remote.authority);
-	}
-
 	const extensionHostMain = new ExtensionHostMain(
 		renderer.protocol,
 		initData,
 		hostUtils,
-		uriTransformer
+		null
 	);
 
 	// rewrite onTerminate-function to be a proper shutdown

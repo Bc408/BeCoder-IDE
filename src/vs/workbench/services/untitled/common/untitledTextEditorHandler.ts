@@ -12,7 +12,6 @@ import { ITextEditorService } from '../../textfile/common/textEditorService.js';
 import { isEqual, toLocalResource } from '../../../../base/common/resources.js';
 import { PLAINTEXT_LANGUAGE_ID } from '../../../../editor/common/languages/modesRegistry.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { IFilesConfigurationService } from '../../filesConfiguration/common/filesConfigurationService.js';
 import { IPathService } from '../../path/common/pathService.js';
 import { UntitledTextEditorInput } from './untitledTextEditorInput.js';
@@ -31,7 +30,6 @@ export class UntitledTextEditorInputSerializer implements IEditorSerializer {
 
 	constructor(
 		@IFilesConfigurationService private readonly filesConfigurationService: IFilesConfigurationService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IPathService private readonly pathService: IPathService
 	) { }
 
@@ -48,7 +46,7 @@ export class UntitledTextEditorInputSerializer implements IEditorSerializer {
 
 		let resource = untitledTextEditorInput.resource;
 		if (untitledTextEditorInput.hasAssociatedFilePath) {
-			resource = toLocalResource(resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme); // untitled with associated file path use the local schema
+			resource = toLocalResource(resource, undefined, this.pathService.defaultUriScheme); // untitled with associated file path use the local schema
 		}
 
 		// Language: only remember language if it is either specific (not text)
@@ -90,7 +88,6 @@ export class UntitledTextEditorWorkingCopyEditorHandler extends Disposable imple
 
 	constructor(
 		@IWorkingCopyEditorService workingCopyEditorService: IWorkingCopyEditorService,
-		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IPathService private readonly pathService: IPathService,
 		@ITextEditorService private readonly textEditorService: ITextEditorService,
 		@IUntitledTextEditorService private readonly untitledTextEditorService: IUntitledTextEditorService
@@ -122,7 +119,7 @@ export class UntitledTextEditorWorkingCopyEditorHandler extends Disposable imple
 		// If the untitled has an associated resource,
 		// ensure to restore the local resource it had
 		if (this.untitledTextEditorService.isUntitledWithAssociatedResource(workingCopy.resource)) {
-			editorInputResource = toLocalResource(workingCopy.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme);
+			editorInputResource = toLocalResource(workingCopy.resource, undefined, this.pathService.defaultUriScheme);
 		} else {
 			editorInputResource = workingCopy.resource;
 		}

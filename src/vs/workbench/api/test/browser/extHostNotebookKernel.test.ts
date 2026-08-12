@@ -13,7 +13,6 @@ import { ICellExecuteUpdateDto, ICellExecutionCompleteDto, INotebookKernelDto2, 
 import { ExtHostCommands } from '../../common/extHostCommands.js';
 import { ExtHostDocuments } from '../../common/extHostDocuments.js';
 import { ExtHostDocumentsAndEditors } from '../../common/extHostDocumentsAndEditors.js';
-import { IExtHostInitDataService } from '../../common/extHostInitDataService.js';
 import { ExtHostNotebookController } from '../../common/extHostNotebook.js';
 import { ExtHostNotebookDocument } from '../../common/extHostNotebookDocument.js';
 import { ExtHostNotebookDocuments } from '../../common/extHostNotebookDocuments.js';
@@ -150,7 +149,6 @@ suite('NotebookKernel', function () {
 
 		extHostNotebookKernels = new ExtHostNotebookKernels(
 			rpcProtocol,
-			new class extends mock<IExtHostInitDataService>() { },
 			extHostNotebooks,
 			extHostCommands,
 			new NullLogService()

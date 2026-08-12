@@ -22,7 +22,6 @@ export interface IWindowState {
 	workspace?: IWorkspaceIdentifier;
 	folderUri?: URI;
 	backupPath?: string;
-	remoteAuthority?: string;
 	uiState: IWindowUIState;
 }
 
@@ -46,7 +45,6 @@ interface ISerializedWindowState {
 	readonly workspaceIdentifier?: { id: string; configURIPath: string };
 	readonly folder?: string;
 	readonly backupPath?: string;
-	readonly remoteAuthority?: string;
 	readonly uiState: IWindowUIState;
 }
 
@@ -262,7 +260,6 @@ export class WindowsStateHandler extends Disposable {
 			workspace: isWorkspaceIdentifier(window.openedWorkspace) ? window.openedWorkspace : undefined,
 			folderUri: isSingleFolderWorkspaceIdentifier(window.openedWorkspace) ? window.openedWorkspace.uri : undefined,
 			backupPath: window.backupPath,
-			remoteAuthority: window.remoteAuthority,
 			uiState: window.serializeWindowState()
 		};
 	}
@@ -453,10 +450,6 @@ function restoreWindowState(windowState: ISerializedWindowState): IWindowState {
 		result.backupPath = windowState.backupPath;
 	}
 
-	if (windowState.remoteAuthority) {
-		result.remoteAuthority = windowState.remoteAuthority;
-	}
-
 	if (windowState.folder) {
 		result.folderUri = URI.parse(windowState.folder);
 	}
@@ -481,7 +474,6 @@ function serializeWindowState(windowState: IWindowState): ISerializedWindowState
 		workspaceIdentifier: windowState.workspace && { id: windowState.workspace.id, configURIPath: windowState.workspace.configPath.toString() },
 		folder: windowState.folderUri?.toString(),
 		backupPath: windowState.backupPath,
-		remoteAuthority: windowState.remoteAuthority,
 		uiState: windowState.uiState
 	};
 }

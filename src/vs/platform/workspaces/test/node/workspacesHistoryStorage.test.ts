@@ -38,7 +38,6 @@ suite('History Storage', () => {
 		for (let i = 0; i < actual.files.length; i++) {
 			assertEqualURI(actual.files[i].fileUri, expected.files[i].fileUri, message);
 			assert.strictEqual(actual.files[i].label, expected.files[i].label);
-			assert.strictEqual(actual.files[i].remoteAuthority, expected.files[i].remoteAuthority);
 		}
 		assert.strictEqual(actual.workspaces.length, expected.workspaces.length, message);
 		for (let i = 0; i < actual.workspaces.length; i++) {
@@ -50,7 +49,6 @@ suite('History Storage', () => {
 				assertEqualWorkspace(actualRecent.workspace, (<IRecentWorkspace>expectedRecent).workspace, message);
 			}
 			assert.strictEqual(actualRecent.label, expectedRecent.label);
-			assert.strictEqual(actualRecent.remoteAuthority, actualRecent.remoteAuthority);
 		}
 	}
 
@@ -102,8 +100,8 @@ suite('History Storage', () => {
 		};
 		assertRestoring(ro, 'labels');
 		ro = {
-			files: [{ label: 'abc', remoteAuthority: 'test', fileUri: testRemoteFileURI }],
-			workspaces: [{ label: 'def', remoteAuthority: 'test', workspace: toWorkspace(testWSPath) }, { folderUri: testRemoteFolderURI, remoteAuthority: 'test' }]
+			files: [{ label: 'abc', fileUri: testRemoteFileURI }],
+			workspaces: [{ label: 'def', workspace: toWorkspace(testWSPath) }, { folderUri: testRemoteFolderURI }]
 		};
 		assertRestoring(ro, 'authority');
 	});
@@ -136,7 +134,7 @@ suite('History Storage', () => {
 		const expected: IRecentlyOpened = {
 			files: [{ label: 'def', fileUri: URI.parse('file:///home/user/.config/code-oss-dev/storage.json') }],
 			workspaces: [
-				{ folderUri: URI.parse('foo://bar/23/43'), remoteAuthority: 'test+test' },
+				{ folderUri: URI.parse('foo://bar/23/43') },
 				{ workspace: { id: '53b714b46ef1a2d4346568b4f591028c', configPath: URI.parse('file:///home/user/workspaces/testing/custom.code-workspace') } },
 				{ label: 'abc', folderUri: URI.parse('file:///home/user/workspaces/testing/folding') }
 			]
@@ -150,15 +148,13 @@ suite('History Storage', () => {
 			workspaces: [],
 			files: [{
 				fileUri: URI.parse('file:///foo/bar/test.txt'),
-				label: '/foo/bar/test.txt',
-				remoteAuthority: undefined
+				label: '/foo/bar/test.txt'
 			}]
 		});
 		assert.deepStrictEqual(actual, {
 			entries: [{
 				fileUri: 'file:///foo/bar/test.txt',
-				label: undefined,
-				remoteAuthority: undefined
+				label: undefined
 			}]
 		});
 	});

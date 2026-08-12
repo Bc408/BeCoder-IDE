@@ -5,9 +5,8 @@
 
 import { deepStrictEqual, strictEqual, ok } from 'assert';
 import { VSBuffer } from '../../../../../../base/common/buffer.js';
-import { Schemas } from '../../../../../../base/common/network.js';
 import { join } from '../../../../../../base/common/path.js';
-import { isWindows, OperatingSystem } from '../../../../../../base/common/platform.js';
+import { isWindows } from '../../../../../../base/common/platform.js';
 import { env } from '../../../../../../base/common/process.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
@@ -15,9 +14,7 @@ import { IConfigurationService } from '../../../../../../platform/configuration/
 import { TestConfigurationService } from '../../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
 import { TestInstantiationService } from '../../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
-import { IRemoteAgentEnvironment } from '../../../../../../platform/remote/common/remoteAgentEnvironment.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
-import { IRemoteAgentConnection, IRemoteAgentService } from '../../../../../services/remote/common/remoteAgentService.js';
 import { TestStorageService } from '../../../../../test/common/workbenchTestServices.js';
 import { fetchBashHistory, fetchFishHistory, fetchPwshHistory, fetchZshHistory, sanitizeFishHistoryCmd, TerminalPersistedHistory, type ITerminalPersistedHistory } from '../../common/history.js';
 
@@ -124,7 +121,6 @@ suite('Terminal history', () => {
 		});
 	});
 	suite('fetchBashHistory', () => {
-		let fileScheme: string;
 		let filePath: string;
 		const fileContent: string = [
 			'single line command',
@@ -139,23 +135,15 @@ suite('Terminal history', () => {
 		].join('\n');
 
 		let instantiationService: TestInstantiationService;
-		let remoteConnection: Pick<IRemoteAgentConnection, 'remoteAuthority'> | null = null;
-		let remoteEnvironment: Pick<IRemoteAgentEnvironment, 'os'> | null = null;
 
 		setup(() => {
 			instantiationService = new TestInstantiationService();
 			instantiationService.stub(IFileService, {
 				async readFile(resource: URI) {
-					const expected = URI.from({ scheme: fileScheme, path: filePath });
-					strictEqual(resource.scheme, expected.scheme);
-					strictEqual(resource.path, expected.path);
+					strictEqual(resource.toString(), URI.file(filePath).toString());
 					return { value: VSBuffer.fromString(fileContent) };
 				}
 			} as Pick<IFileService, 'readFile'>);
-			instantiationService.stub(IRemoteAgentService, {
-				async getEnvironment() { return remoteEnvironment; },
-				getConnection() { return remoteConnection; }
-			} as Pick<IRemoteAgentService, 'getConnection' | 'getEnvironment'>);
 		});
 
 		teardown(() => {
@@ -168,8 +156,6 @@ suite('Terminal history', () => {
 				setup(() => {
 					originalEnvValues = { HOME: env['HOME'] };
 					env['HOME'] = '/home/user';
-					remoteConnection = { remoteAuthority: 'some-remote' };
-					fileScheme = Schemas.vscodeRemote;
 					filePath = '/home/user/.bash_history';
 				});
 				teardown(() => {
@@ -185,38 +171,8 @@ suite('Terminal history', () => {
 				});
 			});
 		}
-		suite('remote', () => {
-			let originalEnvValues: { HOME: string | undefined };
-			setup(() => {
-				originalEnvValues = { HOME: env['HOME'] };
-				env['HOME'] = '/home/user';
-				remoteConnection = { remoteAuthority: 'some-remote' };
-				fileScheme = Schemas.vscodeRemote;
-				filePath = '/home/user/.bash_history';
-			});
-			teardown(() => {
-				if (originalEnvValues['HOME'] === undefined) {
-					delete env['HOME'];
-				} else {
-					env['HOME'] = originalEnvValues['HOME'];
-				}
-			});
-			test('Windows', async () => {
-				remoteEnvironment = { os: OperatingSystem.Windows };
-				strictEqual(await instantiationService.invokeFunction(fetchBashHistory), undefined);
-			});
-			test('macOS', async () => {
-				remoteEnvironment = { os: OperatingSystem.Macintosh };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchBashHistory))!.commands, expectedCommands);
-			});
-			test('Linux', async () => {
-				remoteEnvironment = { os: OperatingSystem.Linux };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchBashHistory))!.commands, expectedCommands);
-			});
-		});
 	});
 	suite('fetchZshHistory', () => {
-		let fileScheme: string;
 		let filePath: string;
 		const fileContentType = [
 			{
@@ -250,8 +206,6 @@ suite('Terminal history', () => {
 		];
 
 		let instantiationService: TestInstantiationService;
-		let remoteConnection: Pick<IRemoteAgentConnection, 'remoteAuthority'> | null = null;
-		let remoteEnvironment: Pick<IRemoteAgentEnvironment, 'os'> | null = null;
 
 		for (const { type, content } of fileContentType) {
 			suite(type, () => {
@@ -259,16 +213,10 @@ suite('Terminal history', () => {
 					instantiationService = new TestInstantiationService();
 					instantiationService.stub(IFileService, {
 						async readFile(resource: URI) {
-							const expected = URI.from({ scheme: fileScheme, path: filePath });
-							strictEqual(resource.scheme, expected.scheme);
-							strictEqual(resource.path, expected.path);
+							strictEqual(resource.toString(), URI.file(filePath).toString());
 							return { value: VSBuffer.fromString(content) };
 						}
 					} as Pick<IFileService, 'readFile'>);
-					instantiationService.stub(IRemoteAgentService, {
-						async getEnvironment() { return remoteEnvironment; },
-						getConnection() { return remoteConnection; }
-					} as Pick<IRemoteAgentService, 'getConnection' | 'getEnvironment'>);
 				});
 
 				teardown(() => {
@@ -281,8 +229,6 @@ suite('Terminal history', () => {
 						setup(() => {
 							originalEnvValues = { HOME: env['HOME'] };
 							env['HOME'] = '/home/user';
-							remoteConnection = { remoteAuthority: 'some-remote' };
-							fileScheme = Schemas.vscodeRemote;
 							filePath = '/home/user/.bash_history';
 						});
 						teardown(() => {
@@ -298,40 +244,10 @@ suite('Terminal history', () => {
 						});
 					});
 				}
-				suite('remote', () => {
-					let originalEnvValues: { HOME: string | undefined };
-					setup(() => {
-						originalEnvValues = { HOME: env['HOME'] };
-						env['HOME'] = '/home/user';
-						remoteConnection = { remoteAuthority: 'some-remote' };
-						fileScheme = Schemas.vscodeRemote;
-						filePath = '/home/user/.zsh_history';
-					});
-					teardown(() => {
-						if (originalEnvValues['HOME'] === undefined) {
-							delete env['HOME'];
-						} else {
-							env['HOME'] = originalEnvValues['HOME'];
-						}
-					});
-					test('Windows', async () => {
-						remoteEnvironment = { os: OperatingSystem.Windows };
-						strictEqual(await instantiationService.invokeFunction(fetchZshHistory), undefined);
-					});
-					test('macOS', async () => {
-						remoteEnvironment = { os: OperatingSystem.Macintosh };
-						deepStrictEqual((await instantiationService.invokeFunction(fetchZshHistory))!.commands, expectedCommands);
-					});
-					test('Linux', async () => {
-						remoteEnvironment = { os: OperatingSystem.Linux };
-						deepStrictEqual((await instantiationService.invokeFunction(fetchZshHistory))!.commands, expectedCommands);
-					});
-				});
 			});
 		}
 	});
 	suite('fetchPwshHistory', () => {
-		let fileScheme: string;
 		let filePath: string;
 		const fileContent: string = [
 			'single line command',
@@ -346,27 +262,17 @@ suite('Terminal history', () => {
 		].join('\n');
 
 		let instantiationService: TestInstantiationService;
-		let remoteConnection: Pick<IRemoteAgentConnection, 'remoteAuthority'> | null = null;
-		let remoteEnvironment: Pick<IRemoteAgentEnvironment, 'os'> | null = null;
 
 		setup(() => {
 			instantiationService = new TestInstantiationService();
 			instantiationService.stub(IFileService, {
 				async readFile(resource: URI) {
-					const expected = URI.from({
-						scheme: fileScheme,
-						authority: remoteConnection?.remoteAuthority,
-						path: URI.file(filePath).path
-					});
+					const expected = URI.file(filePath);
 					// Sanitize the encoded `/` chars as they don't impact behavior
 					strictEqual(resource.toString().replaceAll('%5C', '/'), expected.toString().replaceAll('%5C', '/'));
 					return { value: VSBuffer.fromString(fileContent) };
 				}
 			} as Pick<IFileService, 'readFile'>);
-			instantiationService.stub(IRemoteAgentService, {
-				async getEnvironment() { return remoteEnvironment; },
-				getConnection() { return remoteConnection; }
-			} as Pick<IRemoteAgentService, 'getConnection' | 'getEnvironment'>);
 		});
 
 		teardown(() => {
@@ -379,10 +285,7 @@ suite('Terminal history', () => {
 				originalEnvValues = { HOME: env['HOME'], APPDATA: env['APPDATA'] };
 				env['HOME'] = '/home/user';
 				env['APPDATA'] = 'C:\\AppData';
-				remoteConnection = { remoteAuthority: 'some-remote' };
-				fileScheme = Schemas.vscodeRemote;
 				filePath = '/home/user/.zsh_history';
-				originalEnvValues = { HOME: env['HOME'], APPDATA: env['APPDATA'] };
 			});
 			teardown(() => {
 				if (originalEnvValues['HOME'] === undefined) {
@@ -405,47 +308,8 @@ suite('Terminal history', () => {
 				deepStrictEqual((await instantiationService.invokeFunction(fetchPwshHistory))!.commands, expectedCommands);
 			});
 		});
-		suite('remote', () => {
-			let originalEnvValues: { HOME: string | undefined; APPDATA: string | undefined };
-			setup(() => {
-				remoteConnection = { remoteAuthority: 'some-remote' };
-				fileScheme = Schemas.vscodeRemote;
-				originalEnvValues = { HOME: env['HOME'], APPDATA: env['APPDATA'] };
-			});
-			teardown(() => {
-				if (originalEnvValues['HOME'] === undefined) {
-					delete env['HOME'];
-				} else {
-					env['HOME'] = originalEnvValues['HOME'];
-				}
-				if (originalEnvValues['APPDATA'] === undefined) {
-					delete env['APPDATA'];
-				} else {
-					env['APPDATA'] = originalEnvValues['APPDATA'];
-				}
-			});
-			test('Windows', async () => {
-				remoteEnvironment = { os: OperatingSystem.Windows };
-				env['APPDATA'] = 'C:\\AppData';
-				filePath = 'C:\\AppData\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt';
-				deepStrictEqual((await instantiationService.invokeFunction(fetchPwshHistory))!.commands, expectedCommands);
-			});
-			test('macOS', async () => {
-				remoteEnvironment = { os: OperatingSystem.Macintosh };
-				env['HOME'] = '/home/user';
-				filePath = '/home/user/.local/share/powershell/PSReadline/ConsoleHost_history.txt';
-				deepStrictEqual((await instantiationService.invokeFunction(fetchPwshHistory))!.commands, expectedCommands);
-			});
-			test('Linux', async () => {
-				remoteEnvironment = { os: OperatingSystem.Linux };
-				env['HOME'] = '/home/user';
-				filePath = '/home/user/.local/share/powershell/PSReadline/ConsoleHost_history.txt';
-				deepStrictEqual((await instantiationService.invokeFunction(fetchPwshHistory))!.commands, expectedCommands);
-			});
-		});
 	});
 	suite('fetchFishHistory', () => {
-		let fileScheme: string;
 		let filePath: string;
 		const fileContent: string = [
 			'- cmd: single line command',
@@ -459,23 +323,15 @@ suite('Terminal history', () => {
 		].join('\n');
 
 		let instantiationService: TestInstantiationService;
-		let remoteConnection: Pick<IRemoteAgentConnection, 'remoteAuthority'> | null = null;
-		let remoteEnvironment: Pick<IRemoteAgentEnvironment, 'os'> | null = null;
 
 		setup(() => {
 			instantiationService = new TestInstantiationService();
 			instantiationService.stub(IFileService, {
 				async readFile(resource: URI) {
-					const expected = URI.from({ scheme: fileScheme, path: filePath });
-					strictEqual(resource.scheme, expected.scheme);
-					strictEqual(resource.path, expected.path);
+					strictEqual(resource.toString(), URI.file(filePath).toString());
 					return { value: VSBuffer.fromString(fileContent) };
 				}
 			} as Pick<IFileService, 'readFile'>);
-			instantiationService.stub(IRemoteAgentService, {
-				async getEnvironment() { return remoteEnvironment; },
-				getConnection() { return remoteConnection; }
-			} as Pick<IRemoteAgentService, 'getConnection' | 'getEnvironment'>);
 		});
 
 		teardown(() => {
@@ -489,8 +345,6 @@ suite('Terminal history', () => {
 					originalEnvValues = { HOME: env['HOME'], XDG_DATA_HOME: env['XDG_DATA_HOME'] };
 					env['HOME'] = '/home/user';
 					delete env['XDG_DATA_HOME'];
-					remoteConnection = { remoteAuthority: 'some-remote' };
-					fileScheme = Schemas.vscodeRemote;
 					filePath = '/home/user/.local/share/fish/fish_history';
 				});
 				teardown(() => {
@@ -516,8 +370,6 @@ suite('Terminal history', () => {
 				setup(() => {
 					originalEnvValues = { XDG_DATA_HOME: env['XDG_DATA_HOME'] };
 					env['XDG_DATA_HOME'] = '/home/user/data-home';
-					remoteConnection = { remoteAuthority: 'some-remote' };
-					fileScheme = Schemas.vscodeRemote;
 					filePath = '/home/user/data-home/fish/fish_history';
 				});
 				teardown(() => {
@@ -533,71 +385,6 @@ suite('Terminal history', () => {
 				});
 			});
 		}
-		suite('remote', () => {
-			let originalEnvValues: { HOME: string | undefined; XDG_DATA_HOME: string | undefined };
-			setup(() => {
-				originalEnvValues = { HOME: env['HOME'], XDG_DATA_HOME: env['XDG_DATA_HOME'] };
-				env['HOME'] = '/home/user';
-				delete env['XDG_DATA_HOME'];
-				remoteConnection = { remoteAuthority: 'some-remote' };
-				fileScheme = Schemas.vscodeRemote;
-				filePath = '/home/user/.local/share/fish/fish_history';
-			});
-			teardown(() => {
-				if (originalEnvValues['HOME'] === undefined) {
-					delete env['HOME'];
-				} else {
-					env['HOME'] = originalEnvValues['HOME'];
-				}
-				if (originalEnvValues['XDG_DATA_HOME'] === undefined) {
-					delete env['XDG_DATA_HOME'];
-				} else {
-					env['XDG_DATA_HOME'] = originalEnvValues['XDG_DATA_HOME'];
-				}
-			});
-			test('Windows', async () => {
-				remoteEnvironment = { os: OperatingSystem.Windows };
-				strictEqual(await instantiationService.invokeFunction(fetchFishHistory), undefined);
-			});
-			test('macOS', async () => {
-				remoteEnvironment = { os: OperatingSystem.Macintosh };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchFishHistory))!.commands, expectedCommands);
-			});
-			test('Linux', async () => {
-				remoteEnvironment = { os: OperatingSystem.Linux };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchFishHistory))!.commands, expectedCommands);
-			});
-		});
-
-		suite('remote (overriden path)', () => {
-			let originalEnvValues: { XDG_DATA_HOME: string | undefined };
-			setup(() => {
-				originalEnvValues = { XDG_DATA_HOME: env['XDG_DATA_HOME'] };
-				env['XDG_DATA_HOME'] = '/home/user/data-home';
-				remoteConnection = { remoteAuthority: 'some-remote' };
-				fileScheme = Schemas.vscodeRemote;
-				filePath = '/home/user/data-home/fish/fish_history';
-			});
-			teardown(() => {
-				if (originalEnvValues['XDG_DATA_HOME'] === undefined) {
-					delete env['XDG_DATA_HOME'];
-				} else {
-					env['XDG_DATA_HOME'] = originalEnvValues['XDG_DATA_HOME'];
-				}
-			});
-			test('Windows', async () => {
-				remoteEnvironment = { os: OperatingSystem.Windows };
-				strictEqual(await instantiationService.invokeFunction(fetchFishHistory), undefined);
-			});
-			test('macOS', async () => {
-				remoteEnvironment = { os: OperatingSystem.Macintosh };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchFishHistory))!.commands, expectedCommands);
-			});
-			test('Linux', async () => {
-				remoteEnvironment = { os: OperatingSystem.Linux };
-				deepStrictEqual((await instantiationService.invokeFunction(fetchFishHistory))!.commands, expectedCommands);
-			});
-		});
 
 		suite('sanitizeFishHistoryCmd', () => {
 			test('valid new-lines', () => {

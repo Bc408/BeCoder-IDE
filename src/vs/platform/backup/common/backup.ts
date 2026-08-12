@@ -6,15 +6,11 @@
 import { URI } from '../../../base/common/uri.js';
 import { IWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 
-export interface IBaseBackupInfo {
-	remoteAuthority?: string;
-}
-
-export interface IWorkspaceBackupInfo extends IBaseBackupInfo {
+export interface IWorkspaceBackupInfo {
 	readonly workspace: IWorkspaceIdentifier;
 }
 
-export interface IFolderBackupInfo extends IBaseBackupInfo {
+export interface IFolderBackupInfo {
 	readonly folderUri: URI;
 }
 

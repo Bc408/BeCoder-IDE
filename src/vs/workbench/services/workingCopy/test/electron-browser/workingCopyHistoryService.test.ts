@@ -14,7 +14,7 @@ import { IWorkingCopyHistoryEntry, IWorkingCopyHistoryEntryDescriptor, IWorkingC
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { UriIdentityService } from '../../../../../platform/uriIdentity/common/uriIdentityService.js';
 import { LabelService } from '../../../label/common/labelService.js';
-import { TestEnvironmentService, TestLifecycleService, TestPathService, TestRemoteAgentService, TestWillShutdownEvent } from '../../../../test/browser/workbenchTestServices.js';
+import { TestEnvironmentService, TestLifecycleService, TestPathService, TestWillShutdownEvent } from '../../../../test/browser/workbenchTestServices.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { NativeWorkingCopyHistoryService } from '../../common/workingCopyHistoryService.js';
 import { joinPath, dirname, basename } from '../../../../../base/common/resources.js';
@@ -41,13 +41,12 @@ export class TestWorkingCopyHistoryService extends NativeWorkingCopyHistoryServi
 			disposables.add(fileService.registerProvider(Schemas.vscodeUserData, disposables.add(new InMemoryFileSystemProvider())));
 		}
 
-		const remoteAgentService = new TestRemoteAgentService();
 		const uriIdentityService = disposables.add(new UriIdentityService(fileService));
 		const lifecycleService = disposables.add(new TestLifecycleService());
-		const labelService = disposables.add(new LabelService(environmentService, new TestContextService(), new TestPathService(), new TestRemoteAgentService(), disposables.add(new TestStorageService()), lifecycleService));
+		const labelService = disposables.add(new LabelService(environmentService, new TestContextService(), new TestPathService(), disposables.add(new TestStorageService()), lifecycleService));
 		const configurationService = new TestConfigurationService();
 
-		super(fileService, remoteAgentService, environmentService, uriIdentityService, labelService, lifecycleService, logService, configurationService);
+		super(fileService, environmentService, uriIdentityService, labelService, lifecycleService, logService, configurationService);
 
 		this._fileService = fileService;
 		this._configurationService = configurationService;

@@ -129,7 +129,6 @@ export class MenuId {
 	static readonly SearchContext = new MenuId('SearchContext');
 	static readonly SearchActionMenu = new MenuId('SearchActionContext');
 	static readonly StatusBarWindowIndicatorMenu = new MenuId('StatusBarWindowIndicatorMenu');
-	static readonly StatusBarRemoteIndicatorMenu = new MenuId('StatusBarRemoteIndicatorMenu');
 	static readonly StickyScrollContext = new MenuId('StickyScrollContext');
 	static readonly TestItem = new MenuId('TestItem');
 	static readonly TestItemGutter = new MenuId('TestItemGutter');
@@ -145,13 +144,6 @@ export class MenuId {
 	static readonly TitleBarAdjacentCenter = new MenuId('TitleBarAdjacentCenter');
 	static readonly TitleBarContext = new MenuId('TitleBarContext');
 	static readonly TitleBarTitleContext = new MenuId('TitleBarTitleContext');
-	static readonly TunnelContext = new MenuId('TunnelContext');
-	static readonly TunnelPrivacy = new MenuId('TunnelPrivacy');
-	static readonly TunnelProtocol = new MenuId('TunnelProtocol');
-	static readonly TunnelPortInline = new MenuId('TunnelInline');
-	static readonly TunnelTitle = new MenuId('TunnelTitle');
-	static readonly TunnelLocalAddressInline = new MenuId('TunnelLocalAddressInline');
-	static readonly TunnelOriginInline = new MenuId('TunnelOriginInline');
 	static readonly ViewItemContext = new MenuId('ViewItemContext');
 	static readonly ViewContainerTitle = new MenuId('ViewContainerTitle');
 	static readonly ViewContainerTitleContext = new MenuId('ViewContainerTitleContext');

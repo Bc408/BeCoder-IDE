@@ -14,7 +14,6 @@ import { generateUuid } from '../../../base/common/uuid.js';
 import { TextEditorSelectionSource } from '../../../platform/editor/common/editor.js';
 import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { FileSystemProviderErrorCode, markAsFileSystemProviderError } from '../../../platform/files/common/files.js';
-import { RemoteAuthorityResolverErrorCode } from '../../../platform/remote/common/remoteAuthorityResolver.js';
 import { IRelativePatternDto } from './extHost.protocol.js';
 import { CodeActionKind } from './extHostTypes/codeActionKind.js';
 import { Diagnostic } from './extHostTypes/diagnostic.js';
@@ -84,86 +83,6 @@ export class Disposable {
 			this.#callOnDispose();
 			this.#callOnDispose = undefined;
 		}
-	}
-}
-
-const validateConnectionToken = (connectionToken: string) => {
-	if (typeof connectionToken !== 'string' || connectionToken.length === 0 || !/^[0-9A-Za-z_\-]+$/.test(connectionToken)) {
-		throw illegalArgument('connectionToken');
-	}
-};
-
-
-export class ResolvedAuthority {
-	public static isResolvedAuthority(resolvedAuthority: any): resolvedAuthority is ResolvedAuthority {
-		return resolvedAuthority
-			&& typeof resolvedAuthority === 'object'
-			&& typeof resolvedAuthority.host === 'string'
-			&& typeof resolvedAuthority.port === 'number'
-			&& (resolvedAuthority.connectionToken === undefined || typeof resolvedAuthority.connectionToken === 'string');
-	}
-
-	readonly host: string;
-	readonly port: number;
-	readonly connectionToken: string | undefined;
-
-	constructor(host: string, port: number, connectionToken?: string) {
-		if (typeof host !== 'string' || host.length === 0) {
-			throw illegalArgument('host');
-		}
-		if (typeof port !== 'number' || port === 0 || Math.round(port) !== port) {
-			throw illegalArgument('port');
-		}
-		if (typeof connectionToken !== 'undefined') {
-			validateConnectionToken(connectionToken);
-		}
-		this.host = host;
-		this.port = Math.round(port);
-		this.connectionToken = connectionToken;
-	}
-}
-
-
-export class ManagedResolvedAuthority {
-
-	public static isManagedResolvedAuthority(resolvedAuthority: any): resolvedAuthority is ManagedResolvedAuthority {
-		return resolvedAuthority
-			&& typeof resolvedAuthority === 'object'
-			&& typeof resolvedAuthority.makeConnection === 'function'
-			&& (resolvedAuthority.connectionToken === undefined || typeof resolvedAuthority.connectionToken === 'string');
-	}
-
-	constructor(public readonly makeConnection: () => Thenable<vscode.ManagedMessagePassing>, public readonly connectionToken?: string) {
-		if (typeof connectionToken !== 'undefined') {
-			validateConnectionToken(connectionToken);
-		}
-	}
-}
-
-export class RemoteAuthorityResolverError extends Error {
-
-	static NotAvailable(message?: string, handled?: boolean): RemoteAuthorityResolverError {
-		return new RemoteAuthorityResolverError(message, RemoteAuthorityResolverErrorCode.NotAvailable, handled);
-	}
-
-	static TemporarilyNotAvailable(message?: string): RemoteAuthorityResolverError {
-		return new RemoteAuthorityResolverError(message, RemoteAuthorityResolverErrorCode.TemporarilyNotAvailable);
-	}
-
-	public readonly _message: string | undefined;
-	public readonly _code: RemoteAuthorityResolverErrorCode;
-	public readonly _detail: unknown;
-
-	constructor(message?: string, code: RemoteAuthorityResolverErrorCode = RemoteAuthorityResolverErrorCode.Unknown, detail?: unknown) {
-		super(message);
-
-		this._message = message;
-		this._code = code;
-		this._detail = detail;
-
-		// workaround when extending builtin objects and when compiling to ES5, see:
-		// https://github.com/microsoft/TypeScript-wiki/blob/master/Breaking-Changes.md#extending-built-ins-like-error-array-and-map-may-no-longer-work
-		Object.setPrototypeOf(this, RemoteAuthorityResolverError.prototype);
 	}
 }
 

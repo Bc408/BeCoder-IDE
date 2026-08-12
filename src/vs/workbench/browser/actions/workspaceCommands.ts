@@ -157,7 +157,6 @@ interface IOpenFolderAPICommandOptions {
 	forceNewWindow?: boolean;
 	forceReuseWindow?: boolean;
 	noRecentEntry?: boolean;
-	forceLocalWindow?: boolean;
 	forceProfile?: string;
 	forceTempProfile?: boolean;
 	filesToOpen?: UriComponents[];
@@ -179,11 +178,6 @@ CommandsRegistry.registerCommand({
 				forceNewWindow: arg?.forceNewWindow
 			};
 
-			if (arg?.forceLocalWindow) {
-				options.remoteAuthority = null;
-				options.availableFileSystems = ['file'];
-			}
-
 			return commandService.executeCommand('_files.pickFolderAndOpen', options);
 		}
 
@@ -193,7 +187,6 @@ CommandsRegistry.registerCommand({
 			forceNewWindow: arg?.forceNewWindow,
 			forceReuseWindow: arg?.forceReuseWindow,
 			noRecentEntry: arg?.noRecentEntry,
-			remoteAuthority: arg?.forceLocalWindow ? null : undefined,
 			forceProfile: arg?.forceProfile,
 			forceTempProfile: arg?.forceTempProfile,
 		};
@@ -215,7 +208,6 @@ CommandsRegistry.registerCommand({
 					'`forceNewWindow`: Whether to open the folder/workspace in a new window or the same. Defaults to opening in the same window. ' +
 					'`forceReuseWindow`: Whether to force opening the folder/workspace in the same window.  Defaults to false. ' +
 					'`noRecentEntry`: Whether the opened URI will appear in the \'Open Recent\' list. Defaults to false. ' +
-					'`forceLocalWindow`: Whether to force opening the folder/workspace in a local window. Defaults to false. ' +
 					'`forceProfile`: The profile to use when opening the folder/workspace. Defaults to the current profile. ' +
 					'`forceTempProfile`: Whether to use a temporary profile when opening the folder/workspace. Defaults to false. ' +
 					'`filesToOpen`: An array of files to open in the new window. Defaults to an empty array. ' +
@@ -228,11 +220,6 @@ CommandsRegistry.registerCommand({
 
 interface INewWindowAPICommandOptions {
 	reuseWindow?: boolean;
-	/**
-	 * If set, defines the remoteAuthority of the new window. `null` will open a local window.
-	 * If not set, defaults to remoteAuthority of the current window.
-	 */
-	remoteAuthority?: string | null;
 }
 
 CommandsRegistry.registerCommand({
@@ -241,8 +228,7 @@ CommandsRegistry.registerCommand({
 		const commandService = accessor.get(ICommandService);
 
 		const commandOptions: IOpenEmptyWindowOptions = {
-			forceReuseWindow: options?.reuseWindow,
-			remoteAuthority: options?.remoteAuthority
+			forceReuseWindow: options?.reuseWindow
 		};
 
 		return commandService.executeCommand('_files.newWindow', commandOptions);
@@ -292,23 +278,20 @@ interface RecentEntry {
 	uri: URI;
 	type: 'workspace' | 'folder' | 'file';
 	label?: string;
-	remoteAuthority?: string;
 }
 
 CommandsRegistry.registerCommand('_workbench.addToRecentlyOpened', async function (accessor: ServicesAccessor, recentEntry: RecentEntry) {
 	const workspacesService = accessor.get(IWorkspacesService);
 	const uri = recentEntry.uri;
 	const label = recentEntry.label;
-	const remoteAuthority = recentEntry.remoteAuthority;
-
-	let recent: IRecent | undefined = undefined;
+	let recent: IRecent;
 	if (recentEntry.type === 'workspace') {
 		const workspace = await workspacesService.getWorkspaceIdentifier(uri);
-		recent = { workspace, label, remoteAuthority };
+		recent = { workspace, label };
 	} else if (recentEntry.type === 'folder') {
-		recent = { folderUri: uri, label, remoteAuthority };
+		recent = { folderUri: uri, label };
 	} else {
-		recent = { fileUri: uri, label, remoteAuthority };
+		recent = { fileUri: uri, label };
 	}
 
 	return workspacesService.addRecentlyOpened([recent]);

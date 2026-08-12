@@ -11,7 +11,6 @@ import { referenceGeneratedDepsByArch as debianGeneratedDeps } from './debian/de
 import { referenceGeneratedDepsByArch as rpmGeneratedDeps } from './rpm/dep-lists.ts';
 import { type DebianArchString, isDebianArchString } from './debian/types.ts';
 import { isRpmArchString, type RpmArchString } from './rpm/types.ts';
-import product from '../../product.json' with { type: 'json' };
 
 // A flag that can easily be toggled.
 // Make sure to compile the build directory after toggling the value.
@@ -57,8 +56,6 @@ export async function getDependencies(packageType: 'deb' | 'rpm', buildDir: stri
 	const appPath = path.join(buildDir, applicationName);
 	// Add the native modules
 	const files = findResult.stdout.toString().trimEnd().split('\n');
-	// Add the tunnel binary.
-	files.push(path.join(buildDir, 'bin', product.tunnelApplicationName));
 	// Add the main executable.
 	files.push(appPath);
 	// Add chrome sandbox and crashpad handler.

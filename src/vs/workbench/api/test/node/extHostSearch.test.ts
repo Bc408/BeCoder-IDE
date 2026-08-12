@@ -17,7 +17,6 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/c
 import { NullLogService } from '../../../../platform/log/common/log.js';
 import { MainContext, MainThreadSearchShape } from '../../common/extHost.protocol.js';
 import { ExtHostConfigProvider, IExtHostConfiguration } from '../../common/extHostConfiguration.js';
-import { IExtHostInitDataService } from '../../common/extHostInitDataService.js';
 import { Range } from '../../common/extHostTypes.js';
 import { URITransformerService } from '../../common/extHostUriTransformerService.js';
 import { NativeExtHostSearch } from '../../node/extHostSearch.js';
@@ -139,7 +138,6 @@ suite('ExtHostSearch', () => {
 			constructor() {
 				super(
 					rpcProtocol,
-					new class extends mock<IExtHostInitDataService>() { override remote = { isRemote: false, authority: undefined, connectionData: null }; },
 					new URITransformerService(null),
 					new class extends mock<IExtHostConfiguration>() {
 						override async getConfigProvider(): Promise<ExtHostConfigProvider> {

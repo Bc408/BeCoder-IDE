@@ -3,11 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, BrowserWindow, Event as IpcEvent } from 'electron';
-import { validatedIpcMain } from '../../../base/parts/ipc/electron-main/ipcMain.js';
-import { CancellationToken } from '../../../base/common/cancellation.js';
+import { app, BrowserWindow } from 'electron';
 import { URI } from '../../../base/common/uri.js';
-import { IDiagnosticInfo, IDiagnosticInfoOptions, IGPULogMessage, IMainProcessDiagnostics, IProcessDiagnostics, IRemoteDiagnosticError, IRemoteDiagnosticInfo, IWindowDiagnostics } from '../common/diagnostics.js';
+import { IGPULogMessage, IMainProcessDiagnostics, IProcessDiagnostics, IWindowDiagnostics } from '../common/diagnostics.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 import { ICodeWindow } from '../../window/electron-main/window.js';
 import { getAllWindowsExcludingOffscreen, IWindowsMainService } from '../../windows/electron-main/windows.js';
@@ -20,14 +18,8 @@ import { UtilityProcess } from '../../utilityProcess/electron-main/utilityProces
 export const ID = 'diagnosticsMainService';
 export const IDiagnosticsMainService = createDecorator<IDiagnosticsMainService>(ID);
 
-export interface IRemoteDiagnosticOptions {
-	includeProcesses?: boolean;
-	includeWorkspaceMetadata?: boolean;
-}
-
 export interface IDiagnosticsMainService {
 	readonly _serviceBrand: undefined;
-	getRemoteDiagnostics(options: IRemoteDiagnosticOptions): Promise<(IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]>;
 	getMainDiagnostics(): Promise<IMainProcessDiagnostics>;
 }
 
@@ -40,41 +32,6 @@ export class DiagnosticsMainService implements IDiagnosticsMainService {
 		@IWorkspacesManagementMainService private readonly workspacesManagementMainService: IWorkspacesManagementMainService,
 		@ILogService private readonly logService: ILogService
 	) { }
-
-	async getRemoteDiagnostics(options: IRemoteDiagnosticOptions): Promise<(IRemoteDiagnosticInfo | IRemoteDiagnosticError)[]> {
-		const windows = this.windowsMainService.getWindows();
-		const diagnostics: Array<IDiagnosticInfo | IRemoteDiagnosticError | undefined> = await Promise.all(windows.map(async window => {
-			const remoteAuthority = window.remoteAuthority;
-			if (!remoteAuthority) {
-				return undefined;
-			}
-
-			const replyChannel = `vscode:getDiagnosticInfoResponse${window.id}`;
-			const args: IDiagnosticInfoOptions = {
-				includeProcesses: options.includeProcesses,
-				folders: options.includeWorkspaceMetadata ? await this.getFolderURIs(window) : undefined
-			};
-
-			return new Promise<IDiagnosticInfo | IRemoteDiagnosticError>(resolve => {
-				window.sendWhenReady('vscode:getDiagnosticInfo', CancellationToken.None, { replyChannel, args });
-
-				validatedIpcMain.once(replyChannel, (_: IpcEvent, data: IRemoteDiagnosticInfo) => {
-					// No data is returned if getting the connection fails.
-					if (!data) {
-						resolve({ hostName: remoteAuthority, errorMessage: `Unable to resolve connection to '${remoteAuthority}'.` });
-					}
-
-					resolve(data);
-				});
-
-				setTimeout(() => {
-					resolve({ hostName: remoteAuthority, errorMessage: `Connection to '${remoteAuthority}' could not be established` });
-				}, 5000);
-			});
-		}));
-
-		return diagnostics.filter((x): x is IRemoteDiagnosticInfo | IRemoteDiagnosticError => !!x);
-	}
 
 	async getMainDiagnostics(): Promise<IMainProcessDiagnostics> {
 		this.logService.trace('Received request for main process info from other instance.');
@@ -119,16 +76,15 @@ export class DiagnosticsMainService implements IDiagnosticsMainService {
 		const folderURIs = await this.getFolderURIs(window);
 		const win = assertReturnsDefined(window.win);
 
-		return this.browserWindowToInfo(win, folderURIs, window.remoteAuthority);
+		return this.browserWindowToInfo(win, folderURIs);
 	}
 
-	private browserWindowToInfo(window: BrowserWindow, folderURIs: URI[] = [], remoteAuthority?: string): IWindowDiagnostics {
+	private browserWindowToInfo(window: BrowserWindow, folderURIs: URI[] = []): IWindowDiagnostics {
 		return {
 			id: window.id,
 			pid: window.webContents.getOSProcessId(),
 			title: window.getTitle(),
-			folderURIs,
-			remoteAuthority
+			folderURIs
 		};
 	}
 

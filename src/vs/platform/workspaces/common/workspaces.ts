@@ -12,12 +12,11 @@ import { normalizeDriveLetter } from '../../../base/common/labels.js';
 import { Schemas } from '../../../base/common/network.js';
 import { isAbsolute, posix } from '../../../base/common/path.js';
 import { isLinux, isMacintosh, isWindows } from '../../../base/common/platform.js';
-import { IExtUri, isEqualAuthority } from '../../../base/common/resources.js';
+import { IExtUri } from '../../../base/common/resources.js';
 import { URI } from '../../../base/common/uri.js';
 import { IWorkspaceBackupInfo, IFolderBackupInfo } from '../../backup/common/backup.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 import { ILogService } from '../../log/common/log.js';
-import { getRemoteAuthority } from '../../remote/common/remoteHosts.js';
 import { IBaseWorkspace, IRawFileWorkspaceFolder, IRawUriWorkspaceFolder, IWorkspaceIdentifier, WorkspaceFolder } from '../../workspace/common/workspace.js';
 
 export const IWorkspacesService = createDecorator<IWorkspacesService>('workspacesService');
@@ -28,7 +27,7 @@ export interface IWorkspacesService {
 
 	// Workspaces Management
 	enterWorkspace(workspaceUri: URI): Promise<IEnterWorkspaceResult | undefined>;
-	createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[], remoteAuthority?: string): Promise<IWorkspaceIdentifier>;
+	createUntitledWorkspace(folders?: IWorkspaceFolderCreationData[]): Promise<IWorkspaceIdentifier>;
 	deleteUntitledWorkspace(workspace: IWorkspaceIdentifier): Promise<void>;
 	getWorkspaceIdentifier(workspaceUri: URI): Promise<IWorkspaceIdentifier>;
 
@@ -55,19 +54,16 @@ export type IRecent = IRecentWorkspace | IRecentFolder | IRecentFile;
 export interface IRecentWorkspace {
 	readonly workspace: IWorkspaceIdentifier;
 	label?: string;
-	readonly remoteAuthority?: string;
 }
 
 export interface IRecentFolder {
 	readonly folderUri: URI;
 	label?: string;
-	readonly remoteAuthority?: string;
 }
 
 export interface IRecentFile {
 	readonly fileUri: URI;
 	label?: string;
-	readonly remoteAuthority?: string;
 }
 
 export function isRecentWorkspace(curr: IRecent): curr is IRecentWorkspace {
@@ -115,7 +111,6 @@ export interface IWorkspaceFolderCreationData {
 
 export interface IUntitledWorkspaceInfo {
 	readonly workspace: IWorkspaceIdentifier;
-	readonly remoteAuthority?: string;
 }
 
 export interface IEnterWorkspaceResult {
@@ -260,14 +255,7 @@ export function rewriteWorkspaceFileForNewLocation(rawWorkspaceContents: string,
 	// and only changing the folders portion.
 	const formattingOptions: FormattingOptions = { insertSpaces: false, tabSize: 4, eol: (isLinux || isMacintosh) ? '\n' : '\r\n' };
 	const edits = jsonEdit.setProperty(rawWorkspaceContents, ['folders'], rewrittenFolders, formattingOptions);
-	let newContent = jsonEdit.applyEdits(rawWorkspaceContents, edits);
-
-	if (isEqualAuthority(storedWorkspace.remoteAuthority, getRemoteAuthority(targetConfigPathURI))) {
-		// unsaved remote workspaces have the remoteAuthority set. Remove it when no longer nexessary.
-		newContent = jsonEdit.applyEdits(newContent, jsonEdit.removeProperty(newContent, ['remoteAuthority'], formattingOptions));
-	}
-
-	return newContent;
+	return jsonEdit.applyEdits(rawWorkspaceContents, edits);
 }
 
 function doParseStoredWorkspace(path: URI, contents: string): IStoredWorkspace {
@@ -295,19 +283,16 @@ interface ISerializedRecentWorkspace {
 		configPath: string;
 	};
 	readonly label?: string;
-	readonly remoteAuthority?: string;
 }
 
 interface ISerializedRecentFolder {
 	readonly folderUri: string;
 	readonly label?: string;
-	readonly remoteAuthority?: string;
 }
 
 interface ISerializedRecentFile {
 	readonly fileUri: string;
 	readonly label?: string;
-	readonly remoteAuthority?: string;
 }
 
 interface ISerializedRecentlyOpened {
@@ -351,14 +336,12 @@ export function restoreRecentlyOpened(data: RecentlyOpenedStorageData | undefine
 		if (Array.isArray(storedRecents.entries)) {
 			restoreGracefully(storedRecents.entries, entry => {
 				const label = entry.label;
-				const remoteAuthority = entry.remoteAuthority;
-
 				if (isSerializedRecentWorkspace(entry)) {
-					result.workspaces.push({ label, remoteAuthority, workspace: { id: entry.workspace.id, configPath: URI.parse(entry.workspace.configPath) } });
+					result.workspaces.push({ label, workspace: { id: entry.workspace.id, configPath: URI.parse(entry.workspace.configPath) } });
 				} else if (isSerializedRecentFolder(entry)) {
-					result.workspaces.push({ label, remoteAuthority, folderUri: URI.parse(entry.folderUri) });
+					result.workspaces.push({ label, folderUri: URI.parse(entry.folderUri) });
 				} else if (isSerializedRecentFile(entry)) {
-					result.files.push({ label, remoteAuthority, fileUri: URI.parse(entry.fileUri) });
+					result.files.push({ label, fileUri: URI.parse(entry.fileUri) });
 				}
 			});
 		}
@@ -382,8 +365,7 @@ export function toStoreData(recents: IRecentlyOpened): RecentlyOpenedStorageData
 		if (isRecentFolder(recent)) {
 			serialized.entries.push({
 				folderUri: recent.folderUri.toString(),
-				label: storeLabel(recent.label, recent.folderUri) ? recent.label : undefined,
-				remoteAuthority: recent.remoteAuthority
+				label: storeLabel(recent.label, recent.folderUri) ? recent.label : undefined
 			});
 		} else {
 			serialized.entries.push({
@@ -391,8 +373,7 @@ export function toStoreData(recents: IRecentlyOpened): RecentlyOpenedStorageData
 					id: recent.workspace.id,
 					configPath: recent.workspace.configPath.toString()
 				},
-				label: storeLabel(recent.label, recent.workspace.configPath) ? recent.label : undefined,
-				remoteAuthority: recent.remoteAuthority
+				label: storeLabel(recent.label, recent.workspace.configPath) ? recent.label : undefined
 			});
 		}
 	}
@@ -400,8 +381,7 @@ export function toStoreData(recents: IRecentlyOpened): RecentlyOpenedStorageData
 	for (const recent of recents.files) {
 		serialized.entries.push({
 			fileUri: recent.fileUri.toString(),
-			label: storeLabel(recent.label, recent.fileUri) ? recent.label : undefined,
-			remoteAuthority: recent.remoteAuthority
+			label: storeLabel(recent.label, recent.fileUri) ? recent.label : undefined
 		});
 	}
 

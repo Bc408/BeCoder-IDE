@@ -11,7 +11,7 @@ import { isLinux } from '../../../base/common/platform.js';
 import { extUriBiasedIgnorePathCase } from '../../../base/common/resources.js';
 import { Promises, RimRafMode } from '../../../base/node/pfs.js';
 import { IBackupMainService } from './backup.js';
-import { ISerializedBackupWorkspaces, IEmptyWindowBackupInfo, isEmptyWindowBackupInfo, deserializeWorkspaceInfos, deserializeFolderInfos, ISerializedWorkspaceBackupInfo, ISerializedFolderBackupInfo, ISerializedEmptyWindowBackupInfo } from '../node/backup.js';
+import { ISerializedBackupWorkspaces, IEmptyWindowBackupInfo, isEmptyWindowBackupInfo, deserializeWorkspaceInfos, deserializeFolderInfos } from '../node/backup.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { IStateService } from '../../state/node/state.js';
@@ -361,40 +361,21 @@ export class BackupMainService implements IBackupMainService {
 
 	private storeWorkspacesMetadata(): void {
 		const serializedBackupWorkspaces: ISerializedBackupWorkspaces = {
-			workspaces: this.workspaces.map(({ workspace, remoteAuthority }) => {
-				const serializedWorkspaceBackupInfo: ISerializedWorkspaceBackupInfo = {
+			workspaces: this.workspaces.map(({ workspace }) => {
+				return {
 					id: workspace.id,
 					configURIPath: workspace.configPath.toString()
 				};
-
-				if (remoteAuthority) {
-					serializedWorkspaceBackupInfo.remoteAuthority = remoteAuthority;
-				}
-
-				return serializedWorkspaceBackupInfo;
 			}),
-			folders: this.folders.map(({ folderUri, remoteAuthority }) => {
-				const serializedFolderBackupInfo: ISerializedFolderBackupInfo =
-				{
+			folders: this.folders.map(({ folderUri }) => {
+				return {
 					folderUri: folderUri.toString()
 				};
-
-				if (remoteAuthority) {
-					serializedFolderBackupInfo.remoteAuthority = remoteAuthority;
-				}
-
-				return serializedFolderBackupInfo;
 			}),
-			emptyWindows: this.emptyWindows.map(({ backupFolder, remoteAuthority }) => {
-				const serializedEmptyWindowBackupInfo: ISerializedEmptyWindowBackupInfo = {
+			emptyWindows: this.emptyWindows.map(({ backupFolder }) => {
+				return {
 					backupFolder
 				};
-
-				if (remoteAuthority) {
-					serializedEmptyWindowBackupInfo.remoteAuthority = remoteAuthority;
-				}
-
-				return serializedEmptyWindowBackupInfo;
 			})
 		};
 

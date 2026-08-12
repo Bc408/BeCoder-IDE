@@ -5,14 +5,12 @@
 
 import type { PerformanceMark } from '../../base/common/performance.js';
 import type { UriComponents, URI } from '../../base/common/uri.js';
-import type { IWebSocketFactory } from '../../platform/remote/browser/browserSocketFactory.js';
 import type { IURLCallbackProvider } from '../services/url/browser/urlService.js';
 import type { LogLevel } from '../../platform/log/common/log.js';
 import type { IUpdateProvider } from '../services/update/browser/updateService.js';
 import type { Event } from '../../base/common/event.js';
 import type { IProductConfiguration } from '../../base/common/product.js';
 import type { ISecretStorageProvider } from '../../platform/secrets/common/secrets.js';
-import type { TunnelProviderFeatures } from '../../platform/tunnel/common/tunnel.js';
 import type { IProgress, IProgressCompositeOptions, IProgressDialogOptions, IProgressNotificationOptions, IProgressOptions, IProgressStep, IProgressWindowOptions } from '../../platform/progress/common/progress.js';
 import type { ITextEditorOptions } from '../../platform/editor/common/editor.js';
 import type { IFolderToOpen, IWorkspaceToOpen } from '../../platform/window/common/window.js';
@@ -115,23 +113,6 @@ export interface IWorkbench {
 		showInformationMessage<T extends string>(message: string, ...items: T[]): Promise<T | undefined>;
 	};
 
-	workspace: {
-		/**
-		 * Resolves once the remote authority has been resolved.
-		 */
-		didResolveRemoteAuthority(): Promise<void>;
-
-		/**
-		 * Forwards a port. If the current embedder implements a tunnelFactory then that will be used to make the tunnel.
-		 * By default, openTunnel only support localhost; however, a tunnelFactory can be used to support other ips.
-		 *
-		 * @throws When run in an environment without a remote.
-		 *
-		 * @param tunnelOptions The `localPort` is a suggestion only. If that port is not available another will be chosen.
-		 */
-		openTunnel(tunnelOptions: ITunnelOptions): Promise<ITunnel>;
-	};
-
 	/**
 	 * Triggers shutdown of the workbench programmatically. After this method is
 	 * called, the workbench is not usable anymore and the page needs to reload
@@ -148,26 +129,6 @@ export interface IWorkbench {
 
 export interface IWorkbenchConstructionOptions {
 
-	//#region Connection related configuration
-
-	/**
-	 * The remote authority is the IP:PORT from where the workbench is served
-	 * from. It is for example being used for the websocket connections as address.
-	 */
-	readonly remoteAuthority?: string;
-
-	/**
-	 * The server base path is the path where the workbench is served from.
-	 * The path must be absolute (start with a slash).
-	 * Corresponds to option `server-base-path` on the server side.
-	 */
-	readonly serverBasePath?: string;
-
-	/**
-	 * The connection token to send to the server.
-	 */
-	readonly connectionToken?: string | Promise<string>;
-
 	/**
 	 * An endpoint to serve iframe content ("webview") from. This is required
 	 * to provide full security isolation from the workbench host.
@@ -175,36 +136,9 @@ export interface IWorkbenchConstructionOptions {
 	readonly webviewEndpoint?: string;
 
 	/**
-	 * A factory for web sockets.
-	 */
-	readonly webSocketFactory?: IWebSocketFactory;
-
-	/**
-	 * A provider for resource URIs.
-	 *
-	 * *Note*: This will only be invoked after the `connectionToken` is resolved.
-	 */
-	readonly resourceUriProvider?: IResourceUriProvider;
-
-	/**
 	 * Resolves an external uri before it is opened.
 	 */
 	readonly resolveExternalUri?: IExternalUriResolver;
-
-	/**
-	 * A provider for supplying tunneling functionality,
-	 * such as creating tunnels and showing candidate ports to forward.
-	 */
-	readonly tunnelProvider?: ITunnelProvider;
-
-	/**
-	 * A provider for discovering and connecting to dev tunnel agent hosts.
-	 *
-	 * The embedder (e.g. vscode.dev) implements this to handle tunnel listing
-	 * and relay WebSocket proxying. If not provided, the sessions workbench
-	 * will not be able to discover tunnel-based agent hosts.
-	 */
-	readonly tunnelDiscoveryProvider?: ITunnelDiscoveryProvider;
 
 	/**
 	 * Endpoints to be used for proxying authentication code exchange calls in the browser.
@@ -215,18 +149,6 @@ export interface IWorkbenchConstructionOptions {
 	 * The identifier of an edit session associated with the current workspace.
 	 */
 	readonly editSessionId?: string;
-
-	/**
-	 * Resource delegation handler that allows for loading of resources when
-	 * using remote resolvers.
-	 *
-	 * This is exclusive with {@link resourceUriProvider}. `resourceUriProvider`
-	 * should be used if a {@link webSocketFactory} is used, and will be preferred.
-	 */
-	readonly remoteResourceProvider?: IRemoteResourceProvider;
-
-	//#endregion
-
 
 	//#region Workbench configuration
 
@@ -434,10 +356,6 @@ export interface IWorkspaceProvider {
 	open(workspace: IWorkspace, options?: { reuse?: boolean; payload?: object }): Promise<boolean>;
 }
 
-export interface IResourceUriProvider {
-	(uri: URI): URI;
-}
-
 /**
  * The identifier of an extension in the format: `PUBLISHER.NAME`. For example: `vscode.csharp`
  */
@@ -463,149 +381,6 @@ export interface IExternalURLOpener {
 	 * @returns true if URL was handled, false otherwise.
 	 */
 	openExternal(href: string): boolean | Promise<boolean>;
-}
-
-export interface ITunnelProvider {
-
-	/**
-	 * Support for creating tunnels.
-	 */
-	tunnelFactory?: ITunnelFactory;
-
-	/**
-	 * Support for filtering candidate ports.
-	 */
-	showPortCandidate?: IShowPortCandidate;
-
-	/**
-	 * The features that the tunnel provider supports.
-	 */
-	features?: TunnelProviderFeatures;
-}
-
-/**
- * Enables the embedder to provide tunnel discovery and connection for agent
- * host sessions.
- */
-export interface ITunnelDiscoveryProvider {
-
-	/**
-	 * List dev tunnels that have agent hosts available.
-	 *
-	 * The embedder is responsible for acquiring and managing authentication
-	 * tokens internally.
-	 *
-	 * @returns An array of discovered tunnels with their metadata.
-	 */
-	listTunnels(): Promise<IDiscoveredTunnel[]>;
-
-	/**
-	 * Connect to a tunnel's agent host port and return a message-passing
-	 * interface. The embedder handles all connection details including
-	 * authentication (e.g. using the Dev Tunnels SDK browser WebSocket
-	 * relay + SSH port forwarding).
-	 *
-	 * The returned {@link ITunnelConnection} carries JSON text messages
-	 * for the Agent Host Protocol.
-	 *
-	 * @param tunnelId The tunnel to connect to.
-	 * @param clusterId The cluster region of the tunnel.
-	 */
-	connect(tunnelId: string, clusterId: string): Promise<ITunnelConnection>;
-}
-
-/**
- * A bidirectional message-passing connection to a tunnel's agent host.
- * Returned by {@link ITunnelDiscoveryProvider.connect}.
- */
-export interface ITunnelConnection {
-	/**
-	 * Send a text message to the agent host.
-	 */
-	send(data: string): void;
-
-	/**
-	 * Fires when a text message is received from the agent host.
-	 */
-	readonly onMessage: Event<string>;
-
-	/**
-	 * Fires when the connection is closed.
-	 */
-	readonly onClose: Event<void>;
-
-	/**
-	 * Close the connection and release resources.
-	 */
-	close(): void;
-}
-
-/**
- * A tunnel discovered by {@link ITunnelDiscoveryProvider}.
- */
-export interface IDiscoveredTunnel {
-	readonly tunnelId: string;
-	readonly clusterId: string;
-	readonly name: string;
-	readonly tags: readonly string[];
-	/** Number of hosts currently accepting connections (0 = offline). */
-	readonly hostConnectionCount: number;
-}
-
-export interface ITunnelFactory {
-	(tunnelOptions: ITunnelOptions, tunnelCreationOptions: TunnelCreationOptions): Promise<ITunnel> | undefined;
-}
-
-export interface ITunnelOptions {
-
-	remoteAddress: { port: number; host: string };
-
-	/**
-	 * The desired local port. If this port can't be used, then another will be chosen.
-	 */
-	localAddressPort?: number;
-
-	label?: string;
-
-	privacy?: string;
-
-	protocol?: string;
-}
-
-export interface TunnelCreationOptions {
-
-	/**
-	 * True when the local operating system will require elevation to use the requested local port.
-	 */
-	elevationRequired?: boolean;
-}
-
-export interface ITunnel {
-
-	remoteAddress: { port: number; host: string };
-
-	/**
-	 * The complete local address(ex. localhost:1234)
-	 */
-	localAddress: string;
-
-	privacy?: string;
-
-	/**
-	 * If protocol is not provided, it is assumed to be http, regardless of the localAddress
-	 */
-	protocol?: string;
-
-	/**
-	 * Implementers of Tunnel should fire onDidDispose when dispose is called.
-	 */
-	readonly onDidDispose: Event<void>;
-
-	dispose(): Promise<void> | void;
-}
-
-export interface IShowPortCandidate {
-	(host: string, port: number, detail: string): Promise<boolean>;
 }
 
 export enum Menu {
@@ -873,41 +648,4 @@ export interface IDevelopmentOptions {
 	 * Whether to enable the smoke test driver.
 	 */
 	readonly enableSmokeTestDriver?: boolean;
-}
-
-/**
- * Utility provided in the {@link WorkbenchOptions} which allows loading resources
- * when remote resolvers are used in the web.
- */
-export interface IRemoteResourceProvider {
-
-	/**
-	 * Path the workbench should delegate requests to. The embedder should
-	 * install a service worker on this path and emit {@link onDidReceiveRequest}
-	 * events when requests come in for that path.
-	 */
-	readonly path: string;
-
-	/**
-	 * Event that should fire when requests are made on the {@link pathPrefix}.
-	 */
-	readonly onDidReceiveRequest: Event<IRemoteResourceRequest>;
-}
-
-/**
- * todo@connor4312: this may eventually gain more properties like method and
- * headers, but for now we only deal with GET requests.
- */
-export interface IRemoteResourceRequest {
-
-	/**
-	 * Request URI. Generally will begin with the current
-	 * origin and {@link IRemoteResourceProvider.pathPrefix}.
-	 */
-	uri: URI;
-
-	/**
-	 * A method called by the editor to issue a response to the request.
-	 */
-	respondWith(statusCode: number, body: Uint8Array, headers: Record<string, string>): void;
 }

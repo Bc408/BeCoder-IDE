@@ -208,7 +208,7 @@ registerTerminalAction({
 		// Restart only unresponsive backends if there are any
 		const restartCandidates = unresponsiveBackends.length > 0 ? unresponsiveBackends : backends;
 		for (const backend of restartCandidates) {
-			logService.warn(`Restarting pty host for authority "${backend.remoteAuthority}"`);
+			logService.warn('Restarting local pty host');
 			backend.restartPtyHost();
 		}
 	}

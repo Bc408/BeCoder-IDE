@@ -11,7 +11,6 @@ import { joinPath } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
-import { isRemoteDiagnosticError } from '../../../../platform/diagnostics/common/diagnostics.js';
 import { IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { INativeHostService } from '../../../../platform/native/common/native.js';
@@ -309,47 +308,6 @@ export class IssueReporter extends BaseIssueReporterService {
 				)
 			);
 			reset(target, renderedDataTable);
-
-			systemInfo.remoteData.forEach(remote => {
-				target.appendChild($<HTMLHRElement>('hr'));
-				if (isRemoteDiagnosticError(remote)) {
-					const remoteDataTable = $('table', undefined,
-						$('tr', undefined,
-							$('td', undefined, 'Remote'),
-							$('td', undefined, remote.hostName)
-						),
-						$('tr', undefined,
-							$('td', undefined, ''),
-							$('td', undefined, remote.errorMessage)
-						)
-					);
-					target.appendChild(remoteDataTable);
-				} else {
-					const remoteDataTable = $('table', undefined,
-						$('tr', undefined,
-							$('td', undefined, 'Remote'),
-							$('td', undefined, remote.latency ? `${remote.hostName} (latency: ${remote.latency.current.toFixed(2)}ms last, ${remote.latency.average.toFixed(2)}ms average)` : remote.hostName)
-						),
-						$('tr', undefined,
-							$('td', undefined, 'OS'),
-							$('td', undefined, remote.machineInfo.os)
-						),
-						$('tr', undefined,
-							$('td', undefined, 'CPUs'),
-							$('td', undefined, remote.machineInfo.cpus || '')
-						),
-						$('tr', undefined,
-							$('td', undefined, 'Memory (System)' as string),
-							$('td', undefined, remote.machineInfo.memory)
-						),
-						$('tr', undefined,
-							$('td', undefined, 'VM'),
-							$('td', undefined, remote.machineInfo.vmHint)
-						)
-					);
-					target.appendChild(remoteDataTable);
-				}
-			});
 		}
 	}
 

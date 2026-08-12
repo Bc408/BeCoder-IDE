@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ProcessItem } from '../../../base/common/processes.js';
-import { IRemoteDiagnosticError, PerformanceInfo, SystemInfo } from '../../diagnostics/common/diagnostics.js';
+import { PerformanceInfo, SystemInfo } from '../../diagnostics/common/diagnostics.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 
 // Since data sent through the service is serialized to JSON, functions will be lost, so Color objects
@@ -35,7 +35,7 @@ export interface IResolvedProcessInformation {
 	readonly pidToNames: [number, string][];
 	readonly processes: {
 		readonly name: string;
-		readonly rootProcess: ProcessItem | IRemoteDiagnosticError;
+		readonly rootProcess: ProcessItem;
 	}[];
 }
 

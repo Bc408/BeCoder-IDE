@@ -29,8 +29,6 @@ suite('UntitledFileWorkingCopyManager', () => {
 		accessor = instantiationService.createInstance(TestServiceAccessor);
 
 		disposables.add(accessor.fileService.registerProvider(Schemas.file, disposables.add(new TestInMemoryFileSystemProvider())));
-		disposables.add(accessor.fileService.registerProvider(Schemas.vscodeRemote, disposables.add(new TestInMemoryFileSystemProvider())));
-
 		manager = disposables.add(new FileWorkingCopyManager(
 			'testUntitledFileWorkingCopyType',
 			new TestStoredFileWorkingCopyModelFactory(),
@@ -39,7 +37,7 @@ suite('UntitledFileWorkingCopyManager', () => {
 			accessor.workingCopyFileService, accessor.workingCopyBackupService, accessor.uriIdentityService, accessor.fileDialogService,
 			accessor.filesConfigurationService, accessor.workingCopyService, accessor.notificationService,
 			accessor.workingCopyEditorService, accessor.editorService, accessor.elevatedFileService, accessor.pathService,
-			accessor.environmentService, accessor.dialogService, accessor.decorationsService, accessor.progressService
+			accessor.dialogService, accessor.decorationsService, accessor.progressService
 		));
 	});
 
@@ -332,7 +330,7 @@ suite('UntitledFileWorkingCopyManager', () => {
 				accessor.workingCopyFileService, accessor.workingCopyBackupService, accessor.uriIdentityService, accessor.fileDialogService,
 				accessor.filesConfigurationService, accessor.workingCopyService, accessor.notificationService,
 				accessor.workingCopyEditorService, accessor.editorService, accessor.elevatedFileService, accessor.pathService,
-				accessor.environmentService, accessor.dialogService, accessor.decorationsService, accessor.progressService
+				accessor.dialogService, accessor.decorationsService, accessor.progressService
 			));
 
 			const untitled1OriginalType = disposables.add(await manager.untitled.resolve());
@@ -354,7 +352,7 @@ suite('UntitledFileWorkingCopyManager', () => {
 				accessor.workingCopyFileService, accessor.workingCopyBackupService, accessor.uriIdentityService, accessor.fileDialogService,
 				accessor.filesConfigurationService, accessor.workingCopyService, accessor.notificationService,
 				accessor.workingCopyEditorService, accessor.editorService, accessor.elevatedFileService, accessor.pathService,
-				accessor.environmentService, accessor.dialogService, accessor.decorationsService, accessor.progressService
+				accessor.dialogService, accessor.decorationsService, accessor.progressService
 			));
 
 			const result = disposables.add(await manager.untitled.resolve());

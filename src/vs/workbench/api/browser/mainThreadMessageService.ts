@@ -45,7 +45,7 @@ export class MainThreadMessageService implements MainThreadMessageServiceShape {
 
 	$showMessage(severity: Severity, message: string, options: MainThreadMessageOptions, commands: { title: string; isCloseAffordance: boolean; handle: number }[]): Promise<number | undefined> {
 		if (options.modal) {
-			return this._showModalMessage(severity, message, options.detail, commands, options.useCustom);
+			return this._showModalMessage(severity, message, options.detail, commands);
 		} else {
 			return this._showMessage(severity, message, commands, options);
 		}
@@ -107,7 +107,7 @@ export class MainThreadMessageService implements MainThreadMessageServiceShape {
 		});
 	}
 
-	private async _showModalMessage(severity: Severity, message: string, detail: string | undefined, commands: { title: string; isCloseAffordance: boolean; handle: number }[], useCustom?: boolean): Promise<number | undefined> {
+	private async _showModalMessage(severity: Severity, message: string, detail: string | undefined, commands: { title: string; isCloseAffordance: boolean; handle: number }[]): Promise<number | undefined> {
 		const buttons: IPromptButton<number>[] = [];
 		let cancelButton: IPromptButton<number | undefined> | undefined = undefined;
 
@@ -143,8 +143,7 @@ export class MainThreadMessageService implements MainThreadMessageServiceShape {
 			message,
 			detail,
 			buttons,
-			cancelButton,
-			custom: useCustom
+			cancelButton
 		});
 
 		return result;

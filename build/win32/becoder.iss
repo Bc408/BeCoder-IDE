@@ -24,6 +24,7 @@ ChangesAssociations=no
 ChangesEnvironment=no
 WizardStyle=modern
 UsePreviousAppDir=no
+DisableProgramGroupPage=yes
 UsePreviousGroup=no
 UsePreviousLanguage=no
 UsePreviousPrivileges=no

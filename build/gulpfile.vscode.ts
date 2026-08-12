@@ -268,6 +268,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const extensions = gulp.src(['.build/extensions/**', ...platformSpecificBuiltInExtensionsExclusions], { base: '.build', dot: true });
 		const beCoderOnboarding = gulp.src([
 			'resources/oi-defaults/**',
+			'!resources/oi-defaults/onboarding/**',
 			'!resources/oi-defaults/portable-data/**',
 			'!resources/oi-defaults/toolchains/becoder-ucrt64.zip',
 			'!resources/oi-defaults/toolchains/clangd-windows-22.1.6.zip'
@@ -545,7 +546,9 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 
 		const beCoderPortableData = gulp.src('resources/oi-defaults/portable-data/**', { base: 'resources/oi-defaults/portable-data', dot: true })
 			.pipe(rename(file => file.dirname = path.join('data', file.dirname ?? '')));
-		result = es.merge(result, beCoderPortableData);
+		const beCoderOnboardingWorkspace = gulp.src('resources/oi-defaults/onboarding/**', { base: 'resources/oi-defaults/onboarding', dot: true })
+			.pipe(rename(file => file.dirname = path.join('coding', file.dirname ?? '')));
+		result = es.merge(result, beCoderPortableData, beCoderOnboardingWorkspace);
 
 		result = inlineMeta(result, {
 			targetPaths: bootstrapEntryPoints,

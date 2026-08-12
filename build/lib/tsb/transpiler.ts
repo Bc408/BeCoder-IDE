@@ -12,6 +12,7 @@ import { cpus } from 'node:os';
 import { getTargetStringFromTsConfig } from '../tsconfigUtils.ts';
 
 interface TranspileReq {
+	readonly fileNames: string[];
 	readonly tsSrcs: string[];
 	readonly options: ts.TranspileOptions;
 }
@@ -21,14 +22,14 @@ interface TranspileRes {
 	readonly diagnostics: ts.Diagnostic[][];
 }
 
-function transpile(tsSrc: string, options: ts.TranspileOptions): { jsSrc: string; diag: ts.Diagnostic[] } {
+function transpile(fileName: string, tsSrc: string, options: ts.TranspileOptions): { jsSrc: string; diag: ts.Diagnostic[] } {
 
 	const isAmd = /\n(import|export)/m.test(tsSrc);
 	if (!isAmd && options.compilerOptions?.module === ts.ModuleKind.AMD) {
 		// enforce NONE module-system for not-amd cases
 		options = { ...options, ...{ compilerOptions: { ...options.compilerOptions, module: ts.ModuleKind.None } } };
 	}
-	const out = ts.transpileModule(tsSrc, options);
+	const out = ts.transpileModule(tsSrc, { ...options, fileName });
 	return {
 		jsSrc: out.outputText,
 		diag: out.diagnostics ?? []
@@ -42,8 +43,8 @@ if (!threads.isMainThread) {
 			jsSrcs: [],
 			diagnostics: []
 		};
-		for (const tsSrc of req.tsSrcs) {
-			const out = transpile(tsSrc, req.options);
+		for (let index = 0; index < req.tsSrcs.length; index++) {
+			const out = transpile(req.fileNames[index], req.tsSrcs[index], req.options);
 			res.jsSrcs.push(out.jsSrc);
 			res.diagnostics.push(out.diag);
 		}
@@ -178,6 +179,7 @@ class TranspileWorker {
 			this._pending = [resolve, reject, files, options, Date.now()];
 			const req: TranspileReq = {
 				options,
+				fileNames: files.map(file => file.path),
 				tsSrcs: files.map(file => String(file.contents))
 			};
 			this._worker.postMessage(req);

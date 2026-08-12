@@ -6,6 +6,8 @@
 	"configuration.displayLanguage.en": "English",
 	"configuration.newFileDefaultLanguage.title": "New File: Default Language",
 	"configuration.newFileDefaultLanguage": "Default language for files created from the New Tab page.",
+	"configuration.inlayHints.title": "C/C++ Inlay Hints",
+	"configuration.inlayHints.description": "Shows inferred types, parameter names, and other inlay hints provided by clangd.",
 	"displayName": "BeCoder IDE Features",
 	"description": "Competitive programming features, settings, and private toolchain management for BeCoder IDE.",
 	"command.openSettings": "BeCoder IDE: Settings",

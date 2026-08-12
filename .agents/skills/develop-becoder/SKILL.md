@@ -11,16 +11,11 @@ Use the repository's authoritative documents to reconstruct product context befo
 
 1. Locate the repository root containing `AGENTS.md`.
 2. Read `AGENTS.md` completely.
-3. Read `BECODER_HANDOFF.md` completely.
-4. Read `BECODER_PHILOSOPHY.md` completely.
-5. Read `BECODER_CURRENT.md` completely.
-6. Read `docs/contracts/README.md` and every contract related to the request.
-7. Read archive records only when historical evidence is needed.
-8. Inspect the current branch, baseline, worktree, and relevant source before relying on a recorded snapshot.
+3. Read `BECODER_PHILOSOPHY.md` completely.
+4. Inspect the current branch, baseline, worktree, and relevant source before relying on a recorded snapshot.
 
 After changing the documentation architecture, run `scripts/validate-project-docs.ps1` from this skill and perform a semantic read-only review. The script checks structure only.
 
-Do not infer current behavior from archive text, an old package, a reference project, or this skill. Use the authority order in `BECODER_HANDOFF.md`.
 
 ## Prove Understanding
 
@@ -97,7 +92,7 @@ An invocation, dependency, shell, or input-enumeration failure is an orchestrati
 
 ## Validate in Layers
 
-Run the smallest owning checks first and broaden in proportion to risk. Follow exact commands, timeouts, and stop rules in `AGENTS.md` and `BECODER_CURRENT.md`.
+Run the smallest owning checks first and broaden in proportion to risk. Follow exact commands, timeouts, and stop rules in `AGENTS.md`.
 
 Typical order:
 
@@ -142,11 +137,9 @@ After the specifically requested build succeeds, stop by default. Do not automat
 
 Archive only after project-owner acceptance.
 
-1. Update `BECODER_CURRENT.md` with final status, evidence, remaining risks, and next action.
-2. Add or update the appropriate `docs/archive/` record without changing historical truth.
-3. Confirm current contracts reflect the accepted behavior.
-4. Re-read the documentation for contradictions.
-5. Commit and push only after explicit authorization.
+1. Confirm current contracts reflect the accepted behavior.
+2. Re-read the documentation for contradictions.
+3. Commit and push only after explicit authorization.
 
 For a plain cloud backup, create only the scoped commit and requested branch push. Do not add a PR, release, or unrelated publishing workflow.
 
@@ -156,7 +149,5 @@ Before transferring to a new conversation:
 
 - remove only explicitly authorized, unquestionably generated junk;
 - preserve dependencies, release assets, user changes, and current artifacts unless told otherwise;
-- ensure `BECODER_CURRENT.md` contains the exact branch, baseline, worktree state, completed checks, pending checks, blockers, and next action;
-- ensure `BECODER_HANDOFF.md` still points to the correct reading order;
 - distinguish implementation evidence, current candidate evidence, and project-owner acceptance;
 - report any unresolved contradiction rather than asking the next agent to guess.

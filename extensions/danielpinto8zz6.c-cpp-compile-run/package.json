@@ -18,7 +18,8 @@
 	},
 	"contributes": {
 		"configurationDefaults": {
-			"terminal.integrated.defaultProfile.windows": "BeCoder Runner"
+			"terminal.integrated.defaultProfile.windows": "BeCoder Runner",
+			"terminal.integrated.enablePersistentSessions": false
 		},
 		"terminal": {
 			"profiles": [
@@ -42,7 +43,6 @@
 			]
 		},
 		"keybindings": [
-			{ "key": "ctrl+`", "command": "becoder.runner.openPanel" },
 			{ "key": "f6", "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp" },
 			{ "key": "shift+f6", "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp" }
 		],

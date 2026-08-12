@@ -8,11 +8,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$verificationRoot = Join-Path $repositoryRoot '.build\si'
+$verificationBaseRoot = Join-Path $repositoryRoot '.build\si'
 $resolvedBuildRoot = (Resolve-Path (Join-Path $repositoryRoot '.build')).Path
-$verificationParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($verificationRoot))
+$verificationParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($verificationBaseRoot))
 if ($verificationParent -ne $resolvedBuildRoot) {
-	throw "Unsafe Setup verification root: $verificationRoot"
+	throw "Unsafe Setup verification root: $verificationBaseRoot"
 }
 if (-not (Test-Path -LiteralPath $SetupPath -PathType Leaf)) {
 	throw "BeCoder Setup was not found: $SetupPath"
@@ -50,7 +50,14 @@ foreach ($forbiddenPattern in @(
 	}
 }
 
-Remove-Item -LiteralPath $verificationRoot -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $verificationBaseRoot) {
+	Remove-Item -LiteralPath $verificationBaseRoot -Recurse -Force
+}
+if (Test-Path -LiteralPath $verificationBaseRoot) {
+	throw "Unable to remove the previous Setup verification directory: $verificationBaseRoot"
+}
+New-Item -ItemType Directory -Path $verificationBaseRoot | Out-Null
+$verificationRoot = Join-Path $verificationBaseRoot ('r' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
 New-Item -ItemType Directory -Path $verificationRoot | Out-Null
 $installRoot = Join-Path $verificationRoot 'BeCoder A'
 $secondInstallRoot = Join-Path $verificationRoot 'BeCoder B'
@@ -191,6 +198,19 @@ if ((Invoke-Setup -Target $secondInstallRoot -LogName 'second-install.log') -ne 
 Assert-SetupLogHasNoRegistryWrites -LogName 'install.log'
 Assert-SetupLogHasNoRegistryWrites -LogName 'second-install.log'
 
+$onboardingRelativePaths = @('coding\helloCoder.cpp', 'data\.becoder-open-hello-coder')
+foreach ($root in @($installRoot, $secondInstallRoot)) {
+	foreach ($relativePath in $onboardingRelativePaths) {
+		if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath) -PathType Leaf)) {
+			throw "BeCoder Setup omitted onboarding content: $relativePath"
+		}
+	}
+}
+$onboardingHash = (Get-FileHash -LiteralPath (Join-Path $installRoot 'coding\helloCoder.cpp') -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($onboardingHash -ne '0d47c180bbb64866f3a805b958306c268597c64f21d10458dc919740714cf1d9') {
+	throw 'BeCoder Setup installed an unexpected helloCoder.cpp.'
+}
+
 if ((Invoke-Setup -Target $unicodeRoot -LogName 'unicode-path.log') -eq 0 -or (Test-Path -LiteralPath $unicodeRoot)) {
 	throw 'BeCoder Setup accepted a non-ASCII installation path.'
 }
@@ -249,6 +269,11 @@ if ((Invoke-Setup -Target $installRoot -LogName 'reinstall.log' -AllowDataLoss) 
 	throw 'BeCoder Setup did not completely replace the previous owned installation.'
 }
 Assert-SetupLogHasNoRegistryWrites -LogName 'reinstall.log'
+foreach ($relativePath in $onboardingRelativePaths) {
+	if (-not (Test-Path -LiteralPath (Join-Path $installRoot $relativePath) -PathType Leaf)) {
+		throw "BeCoder Setup did not restore onboarding content during replacement: $relativePath"
+	}
+}
 $replacementOwnership = Get-Content -LiteralPath $ownershipMarker -Raw | ConvertFrom-Json
 if ($replacementOwnership.installationId -ne $originalInstallationId -or -not (Test-Path -LiteralPath $secondSentinel -PathType Leaf)) {
 	throw 'BeCoder Setup did not preserve same-directory identity or modified another installation.'
@@ -301,6 +326,15 @@ if ((Test-Path -LiteralPath $movedInstallRoot) -or (Test-Path -LiteralPath $seco
 	-not (Test-Path -LiteralPath $externalProject -PathType Leaf) -or
 	-not (Test-Path -LiteralPath (Join-Path $foreignRoot 'user-file.txt') -PathType Leaf)) {
 	throw 'Manual installation-directory deletion did not remain isolated from external files.'
+}
+
+Remove-Item -LiteralPath $verificationRoot -Recurse -Force
+if (Test-Path -LiteralPath $verificationRoot) {
+	throw "Unable to remove the completed Setup verification run: $verificationRoot"
+}
+Remove-Item -LiteralPath $verificationBaseRoot -Force
+if (Test-Path -LiteralPath $verificationBaseRoot) {
+	throw "Setup verification left unexpected files in its owned directory: $verificationBaseRoot"
 }
 
 Write-Host "Verified BeCoder Setup at $SetupPath"

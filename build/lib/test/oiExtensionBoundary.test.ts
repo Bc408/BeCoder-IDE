@@ -613,6 +613,9 @@ suite('OI extension boundary', () => {
 		const commonMain = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
 		const desktopMain = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.desktop.main.ts'), 'utf8');
 		const extensionContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'extensions', 'browser', 'extensions.contribution.ts'), 'utf8');
+		const processExplorer = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'processExplorer', 'browser', 'processExplorerControl.ts'), 'utf8');
+		const browserFileDialog = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'dialogs', 'browser', 'fileDialogService.ts'), 'utf8');
+		const gettingStartedContent = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'common', 'gettingStartedContent.ts'), 'utf8');
 		assert.match(commonMain, /services\/authentication\/browser\/authenticationService\.js/);
 		assert.match(commonMain, /contrib\/tasks\/browser\/task\.contribution\.js/);
 		assert.match(desktopMain, /contrib\/browserView\/electron-browser\/browserView\.contribution\.js/);
@@ -620,6 +623,13 @@ suite('OI extension boundary', () => {
 		assert.match(extensionContribution, /id: SELECT_INSTALL_VSIX_EXTENSION_COMMAND_ID/);
 		assert.match(extensionContribution, /id: INSTALL_EXTENSION_FROM_VSIX_COMMAND_ID/);
 		assert.match(extensionContribution, /when: CONTEXT_HAS_LOCAL_SERVER/);
+		assert.match(processExplorer, /id: 'killProcess'/);
+		assert.match(processExplorer, /id: 'copyAll'/);
+		assert.doesNotMatch(processExplorer, /debug\.startFromConfig|id: 'debug'|isDebuggable|attachTo/);
+		assert.match(browserFileDialog, /triggerDownload/);
+		assert.match(browserFileDialog, /triggerUpload/);
+		assert.doesNotMatch(browserFileDialog, /Open Remote|workbench\.action\.remote\.showMenu/);
+		assert.doesNotMatch(gettingStartedContent, /topLevelRemoteOpen|topLevelOpenTunnel|workbench\.action\.remote\.show(?:Menu|WebStartEntryActions)/);
 	});
 
 	test('owns the Stage 4.6 dependency, terminal, SCM, and workspace boundary', () => {
@@ -767,7 +777,10 @@ suite('OI extension boundary', () => {
 		const excludedExtensions = /export const excludedForOIDistribution = new Set\(\[([\s\S]*?)\n\]\);/.exec(extensionBuildSource)?.[1] ?? '';
 		assert.doesNotMatch(excludedExtensions, /'mermaid-markdown-features'/);
 		const packageBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
-		assert.match(packageBuildSource, /const beCoderOnboarding = gulp\.src\(\[[\s\S]*'resources\/oi-defaults\/\*\*',[\s\S]*'!resources\/oi-defaults\/portable-data\/\*\*'[\s\S]*\], \{ base: '\.' \}\);/);
+		assert.match(packageBuildSource, /const beCoderOnboarding = gulp\.src\(\[[\s\S]*'resources\/oi-defaults\/\*\*',[\s\S]*'!resources\/oi-defaults\/onboarding\/\*\*',[\s\S]*'!resources\/oi-defaults\/portable-data\/\*\*'[\s\S]*\], \{ base: '\.' \}\);/);
+		assert.match(packageBuildSource, /const beCoderOnboardingWorkspace = gulp\.src\('resources\/oi-defaults\/onboarding\/\*\*', \{ base: 'resources\/oi-defaults\/onboarding', dot: true \}\)[\s\S]*path\.join\('coding'/);
+		assert.ok(fs.existsSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'onboarding', 'helloCoder.cpp')));
+		assert.ok(fs.existsSync(path.join(repositoryRoot, 'resources', 'oi-defaults', 'portable-data', '.becoder-open-hello-coder')));
 		assert.match(packageBuildSource, /const beCoderRecipeDotfiles = gulp\.src\('resources\/oi-defaults\/toolchains\/ucrt64-sources\/recipes\/\*\*\/\.gitignore', \{ base: '\.', dot: true \}\);/);
 
 		const gallerySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'extensionManagement', 'common', 'extensionGalleryService.ts'), 'utf8');
@@ -1339,6 +1352,8 @@ suite('OI extension boundary', () => {
 			contributes?: {
 				commands?: readonly { command?: string }[];
 				menus?: Record<string, readonly { command?: string }[]>;
+				keybindings?: readonly { key?: string; command?: string }[];
+				configurationDefaults?: Record<string, unknown>;
 			};
 		}>(path.join(extensionPath, 'package.json'));
 		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.runner');
@@ -1353,6 +1368,11 @@ suite('OI extension boundary', () => {
 			'becoder.runner.run',
 			'becoder.runner.runWithInput'
 		]);
+		assert.strictEqual(manifest.contributes?.configurationDefaults?.['terminal.integrated.defaultProfile.windows'], 'BeCoder Runner');
+		assert.strictEqual(manifest.contributes?.configurationDefaults?.['terminal.integrated.enablePersistentSessions'], false);
+		assert.ok(!manifest.contributes?.keybindings?.some(keybinding => keybinding.key === 'ctrl+`'));
+		const terminalContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'terminal', 'browser', 'terminal.contribution.ts'), 'utf8');
+		assert.match(terminalContribution, /id: TerminalCommandId\.Toggle,[\s\S]*primary: KeyMod\.CtrlCmd \| KeyCode\.Backquote/);
 
 		const menuItemSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'actions', 'browser', 'menuEntryActionViewItem.ts'), 'utf8');
 		assert.match(menuItemSource, /container\.dataset\.commandId = this\._menuItemAction\.id/);
@@ -1527,6 +1547,9 @@ suite('OI extension boundary', () => {
 		const installationIdentitySource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'node', 'beCoderInstallation.ts'), 'utf8');
 		assert.match(installationIdentitySource, /schemaVersion !== 2/);
 		assert.match(installationIdentitySource, /resolveBeCoderAppUserModelId/);
+		assert.match(installationIdentitySource, /resolveBeCoderOnboarding/);
+		assert.match(installationIdentitySource, /onboardingFileSha256 = '0d47c180bbb64866f3a805b958306c268597c64f21d10458dc919740714cf1d9'/);
+		assert.match(installationIdentitySource, /folderStat\.isSymbolicLink\(\)[\s\S]*fileStat\.isSymbolicLink\(\)[\s\S]*markerStat\.isSymbolicLink\(\)/);
 		assert.doesNotMatch(installationIdentitySource, /resolveBeCoderImportRecovery|\.becoder-import-transaction\.json|userDataImportHelper/);
 		const startupSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main.ts'), 'utf8');
 		const packagedDataBinding = startupSource.indexOf('configureBeCoderPackagedDataRoot({');
@@ -1537,6 +1560,8 @@ suite('OI extension boundary', () => {
 		assert.match(installationIdentitySource, /mkdirSync\(dataRoot, \{ recursive: true \}\)[\s\S]*environment\['VSCODE_PORTABLE'\] = dataRoot[\s\S]*delete options\.environment\['VSCODE_APPDATA'\]/);
 		const applicationSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'code', 'electron-main', 'app.ts'), 'utf8');
 		assert.match(applicationSource, /app\.setAppUserModelId\(resolveBeCoderAppUserModelId\(win32AppUserModelId, process\.execPath\)\)/);
+		assert.match(applicationSource, /delete args\['becoder-trust-workspace'\]/);
+		assert.match(applicationSource, /resolveBeCoderOnboarding\(process\.execPath\)[\s\S]*folderUri: URI\.file\(onboarding\.folderPath\)[\s\S]*fileUri: URI\.file\(onboarding\.filePath\)[\s\S]*consumeBeCoderOnboarding/);
 		assert.ok(!Object.hasOwn(setupManifest.contributes?.configuration?.properties ?? {}, 'becoder.executableCleanupDelaySeconds'));
 
 		for (const removedUserDataTransferFile of [
@@ -1563,11 +1588,17 @@ suite('OI extension boundary', () => {
 		assert.match(packageVerifierSource, /removed BeCoder user-data transfer module/);
 		assert.match(packageVerifierSource, /removed BeCoder user-data transfer command/);
 		assert.match(packageVerifierSource, /removed BeCoder user-data import recovery boundary/);
+		assert.match(packageVerifierSource, /licenseUrl -ne 'https:\/\/github\.com\/Bc408\/BeCoder\/blob\/main\/LICENSE'/);
+		assert.match(packageVerifierSource, /\$null -ne \$product\.PSObject\.Properties\['reportIssueUrl'\]/);
 		const setupVerifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-setup.ps1'), 'utf8');
 		assert.match(setupVerifierSource, /New-Item -ItemType Junction/);
 		assert.match(setupVerifierSource, /unicode-junction\.log/);
 		assert.match(setupVerifierSource, /long-junction\.log/);
 		assert.match(setupVerifierSource, /junction target must survive/);
+		assert.match(setupVerifierSource, /\$verificationBaseRoot = Join-Path \$repositoryRoot '\.build\\si'/);
+		assert.match(setupVerifierSource, /\[Guid\]::NewGuid\(\)\.ToString\('N'\)\.Substring\(0, 6\)/);
+		assert.match(setupVerifierSource, /Unable to remove the previous Setup verification directory/);
+		assert.match(setupVerifierSource, /Unable to remove the completed Setup verification run/);
 
 		const checkerBoundary = readJson<{ extends?: string; exclude?: readonly string[] }>(path.join(repositoryRoot, 'build', 'checker', 'tsconfig.becoder.json'));
 		assert.strictEqual(checkerBoundary.extends, '../../src/tsconfig.base.json');

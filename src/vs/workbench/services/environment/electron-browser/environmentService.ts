@@ -15,6 +15,9 @@ import { Schemas } from '../../../../base/common/network.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
+import { isEqual } from '../../../../base/common/extpath.js';
+import { dirname, join } from '../../../../base/common/path.js';
+import { isWindows } from '../../../../base/common/platform.js';
 
 export const INativeWorkbenchEnvironmentService = refineServiceDecorator<IEnvironmentService, INativeWorkbenchEnvironmentService>(IEnvironmentService);
 
@@ -74,7 +77,11 @@ export class NativeWorkbenchEnvironmentService extends AbstractNativeEnvironment
 	get isPortable() { return this.configuration.isPortable; }
 
 	@memoize
-	get beCoderTrustWorkspace() { return this.args['becoder-trust-workspace']; }
+	get beCoderTrustWorkspace() {
+		const requestedWorkspace = this.args['becoder-trust-workspace'];
+		const onboardingWorkspace = join(dirname(this.configuration.execPath), 'coding');
+		return requestedWorkspace && isEqual(requestedWorkspace, onboardingWorkspace, isWindows) ? onboardingWorkspace : undefined;
+	}
 
 	@memoize
 	get execPath() { return this.configuration.execPath; }

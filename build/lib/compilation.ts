@@ -109,7 +109,10 @@ export function transpileTask(src: string, out: string, esbuild?: boolean): task
 	const task = () => {
 
 		const transpile = createCompile(src, { build: false, emitError: true, transpileOnly: { esbuild: !!esbuild }, preserveEnglish: false });
-		const srcPipe = gulp.src(`${src}/**`, { base: `${src}` });
+		const srcPipe = es.merge(
+			transpile.tsProjectSrc(),
+			gulp.src([`${src}/**`, `!${src}/**/*.ts`], { base: `${src}` })
+		);
 
 		return srcPipe
 			.pipe(transpile())

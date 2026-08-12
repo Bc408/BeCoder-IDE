@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { INativeHostService } from '../../../../platform/native/common/native.js';
@@ -20,11 +19,10 @@ export class NativeProcessExplorerControl extends ProcessExplorerControl {
 		@IProductService productService: IProductService,
 		@IContextMenuService contextMenuService: IContextMenuService,
 		@INativeHostService private readonly nativeHostService: INativeHostService,
-		@ICommandService commandService: ICommandService,
 		@IProcessService private readonly processService: IProcessService,
 		@IClipboardService clipboardService: IClipboardService
 	) {
-		super(instantiationService, productService, contextMenuService, commandService, clipboardService);
+		super(instantiationService, productService, contextMenuService, clipboardService);
 
 		this.create(container);
 	}

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual } from 'assert';
+import { DeferredPromise } from '../../../../../base/common/async.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { Emitter } from '../../../../../base/common/event.js';
@@ -89,6 +90,13 @@ class TestTerminalProfileQuickpick extends TerminalProfileQuickpick {
 
 class TestTerminalExtensionService extends TestExtensionService {
 	readonly _onDidChangeExtensions = new Emitter<void>();
+	private _installedExtensionsRegistered: Promise<boolean> = Promise.resolve(true);
+	override whenInstalledExtensionsRegistered(): Promise<boolean> {
+		return this._installedExtensionsRegistered;
+	}
+	setInstalledExtensionsRegistered(promise: Promise<boolean>): void {
+		this._installedExtensionsRegistered = promise;
+	}
 }
 
 class TestTerminalContributionService implements ITerminalContributionService {
@@ -145,6 +153,7 @@ suite('TerminalProfileService', () => {
 	let terminalInstanceService: TestTerminalInstanceService;
 	let terminalProfileService: TestTerminalProfileService;
 	let extensionService: TestTerminalExtensionService;
+	let terminalContributionService: TestTerminalContributionService;
 	let instantiationService: TestInstantiationService;
 
 	setup(async () => {
@@ -161,7 +170,7 @@ suite('TerminalProfileService', () => {
 		extensionService = new TestTerminalExtensionService();
 
 		const themeService = new TestThemeService();
-		const terminalContributionService = new TestTerminalContributionService();
+		terminalContributionService = new TestTerminalContributionService();
 
 		instantiationService.stub(IExtensionService, extensionService);
 		instantiationService.stub(IConfigurationService, configurationService);
@@ -293,6 +302,24 @@ suite('TerminalProfileService', () => {
 		]);
 		deepStrictEqual(terminalProfileService.availableProfiles, [powershellProfile]);
 		deepStrictEqual(terminalProfileService.contributedProfiles, [jsdebugProfile]);
+	});
+
+	test('should wait for installed extension profiles before profiles are ready', async () => {
+		const extensionsRegistered = new DeferredPromise<boolean>();
+		extensionService.setInstalledExtensionsRegistered(extensionsRegistered.p);
+		terminalContributionService.setProfiles([]);
+
+		const waitingProfileService = store.add(instantiationService.createInstance(TestTerminalProfileService));
+		await waitingProfileService.hasRefreshedProfiles;
+		let profilesReady = false;
+		void waitingProfileService.profilesReady.then(() => profilesReady = true);
+		await Promise.resolve();
+		deepStrictEqual(profilesReady, false);
+
+		terminalContributionService.setProfiles([jsdebugProfile]);
+		extensionsRegistered.complete(true);
+		await waitingProfileService.profilesReady;
+		deepStrictEqual(waitingProfileService.contributedProfiles, [jsdebugProfile]);
 	});
 	suite('Profiles Quickpick', () => {
 		let quickInputService: MockQuickInputService;

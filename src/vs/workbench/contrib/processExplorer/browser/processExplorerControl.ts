@@ -20,7 +20,6 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { IAction, Separator, toAction } from '../../../../base/common/actions.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { coalesce } from '../../../../base/common/arrays.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { RenderIndentGuides } from '../../../../base/browser/ui/tree/abstractTree.js';
 import { Delayer } from '../../../../base/common/async.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
@@ -28,10 +27,6 @@ import { IManagedHover } from '../../../../base/browser/ui/hover/hover.js';
 import { getDefaultHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { IResolvedProcessInformation } from '../../../../platform/process/common/process.js';
-import { isWeb } from '../../../../base/common/platform.js';
-
-const DEBUG_FLAGS_PATTERN = /\s--inspect(?:-brk|port)?=(?<port>\d+)?/;
-const DEBUG_PORT_PATTERN = /\s--inspect-port=(?<port>\d+)/;
 
 //#region --- process explorer tree
 
@@ -299,7 +294,6 @@ export abstract class ProcessExplorerControl extends Disposable {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IProductService private readonly productService: IProductService,
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
-		@ICommandService private readonly commandService: ICommandService,
 		@IClipboardService private readonly clipboardService: IClipboardService
 	) {
 		super();
@@ -404,48 +398,10 @@ export abstract class ProcessExplorerControl extends Disposable {
 			}
 		}));
 
-		if (this.isDebuggable(item.cmd)) {
-			actions.push(new Separator());
-			actions.push(toAction({ id: 'debug', label: localize('debug', "Debug"), run: () => this.attachTo(item) }));
-		}
-
 		this.contextMenuService.showContextMenu({
 			getAnchor: () => e.anchor,
 			getActions: () => actions
 		});
-	}
-
-	private isDebuggable(cmd: string): boolean {
-		if (isWeb) {
-			return false;
-		}
-
-		const matches = DEBUG_FLAGS_PATTERN.exec(cmd);
-
-		return (matches && matches.groups!.port !== '0') || cmd.indexOf('node ') >= 0 || cmd.indexOf('node.exe') >= 0;
-	}
-
-	private attachTo(item: ProcessItem): void {
-		const config: { type: string; request: string; name: string; port?: number; processId?: string } = {
-			type: 'node',
-			request: 'attach',
-			name: `process ${item.pid}`
-		};
-
-		let matches = DEBUG_FLAGS_PATTERN.exec(item.cmd);
-		if (matches) {
-			config.port = Number(matches.groups!.port);
-		} else {
-			config.processId = String(item.pid); // no port -> try to attach via pid (send SIGUSR1)
-		}
-
-		// a debug-port=n or inspect-port=n overrides the port
-		matches = DEBUG_PORT_PATTERN.exec(item.cmd);
-		if (matches) {
-			config.port = Number(matches.groups!.port); // override port
-		}
-
-		this.commandService.executeCommand('debug.startFromConfig', config);
 	}
 
 	private getSelectedPids(): number[] {

@@ -10,7 +10,21 @@ import { join } from '../../../base/common/path.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
 import { OPTIONS, parseArgs } from '../../../platform/environment/node/argv.js';
 import { getUserDataPath } from '../../../platform/environment/node/userDataPath.js';
-import { configureBeCoderPackagedDataRoot, readBeCoderInstallationId, resolveBeCoderAppUserModelId } from '../../node/beCoderInstallation.js';
+import { configureBeCoderPackagedDataRoot, consumeBeCoderOnboarding, readBeCoderInstallationId, resolveBeCoderAppUserModelId, resolveBeCoderOnboarding } from '../../node/beCoderInstallation.js';
+
+const onboardingSource = `#include <bits/stdc++.h>
+
+void BeCoder(std::string please_click_run_button_in_the_right_side) {
+  std::cout << "Hello coder." << '\\n';
+}
+
+int main() { /*
+
+  This is how you begin */BeCoder ("initially");
+
+  return 0;
+}
+`;
 
 suite('BeCoder installation identity', () => {
 
@@ -126,6 +140,54 @@ suite('BeCoder installation identity', () => {
 			} else {
 				process.env['VSCODE_APPDATA'] = originalAppData;
 			}
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test('opens and consumes only the authenticated bundled onboarding sample', () => {
+		const root = fs.mkdtempSync(join(os.tmpdir(), 'becoder-onboarding-'));
+		try {
+			const executablePath = join(root, 'BeCoder.exe');
+			const folderPath = join(root, 'coding');
+			const filePath = join(folderPath, 'helloCoder.cpp');
+			const markerPath = join(root, 'data', '.becoder-open-hello-coder');
+			fs.mkdirSync(folderPath);
+			fs.mkdirSync(join(root, 'data'));
+			fs.writeFileSync(join(root, '.becoder-installation.json'), JSON.stringify({ schemaVersion: 2, product: 'BeCoder', installationId: '12345678-1234-4abc-8def-1234567890ab' }));
+			fs.writeFileSync(filePath, onboardingSource);
+			fs.writeFileSync(markerPath, 'BeCoder onboarding v1\n');
+
+			const onboarding = resolveBeCoderOnboarding(executablePath);
+			assert.deepStrictEqual(onboarding, { folderPath, filePath, markerPath });
+			assert.strictEqual(consumeBeCoderOnboarding(onboarding!), true);
+			assert.strictEqual(fs.existsSync(markerPath), false);
+			assert.strictEqual(resolveBeCoderOnboarding(executablePath), undefined);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test('rejects modified or structurally unexpected onboarding content without overwriting it', () => {
+		const root = fs.mkdtempSync(join(os.tmpdir(), 'becoder-onboarding-invalid-'));
+		try {
+			const executablePath = join(root, 'BeCoder.exe');
+			const folderPath = join(root, 'coding');
+			const filePath = join(folderPath, 'helloCoder.cpp');
+			const markerPath = join(root, 'data', '.becoder-open-hello-coder');
+			fs.mkdirSync(folderPath);
+			fs.mkdirSync(join(root, 'data'));
+			fs.writeFileSync(join(root, '.becoder-installation.json'), JSON.stringify({ schemaVersion: 2, product: 'BeCoder', installationId: '12345678-1234-4abc-8def-1234567890ab' }));
+			fs.writeFileSync(filePath, `${onboardingSource}// user edit\n`);
+			fs.writeFileSync(markerPath, 'BeCoder onboarding v1\n');
+
+			assert.strictEqual(resolveBeCoderOnboarding(executablePath), undefined);
+			assert.strictEqual(fs.readFileSync(filePath, 'utf8'), `${onboardingSource}// user edit\n`);
+			assert.strictEqual(fs.existsSync(markerPath), true);
+
+			fs.writeFileSync(filePath, onboardingSource);
+			fs.writeFileSync(join(folderPath, 'extra.txt'), 'unexpected');
+			assert.strictEqual(resolveBeCoderOnboarding(executablePath), undefined);
+		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}
 	});

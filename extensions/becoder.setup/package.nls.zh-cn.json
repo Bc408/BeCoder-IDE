@@ -6,6 +6,8 @@
 	"configuration.displayLanguage.en": "English",
 	"configuration.newFileDefaultLanguage.title": "新建文件：默认语言",
 	"configuration.newFileDefaultLanguage": "从新建标签页创建文件时使用的默认语言。",
+	"configuration.inlayHints.title": "C/C++ 内嵌提示",
+	"configuration.inlayHints.description": "显示 clangd 提供的推断类型、参数名称等内嵌提示。",
 	"displayName": "BeCoder IDE 功能",
 	"description": "为 BeCoder IDE 提供竞赛编程功能、设置和私有工具链管理。",
 	"command.openSettings": "BeCoder IDE：设置",

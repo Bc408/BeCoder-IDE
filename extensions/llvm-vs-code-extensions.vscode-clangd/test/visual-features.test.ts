@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import * as assert from 'assert';
 import * as vscodelc from 'vscode-languageclient/node';
 
@@ -20,6 +25,7 @@ suite('BeCoder clangd capability boundary', () => {
       vscodelc.DefinitionRequest.method,
       vscodelc.ReferencesRequest.method,
       vscodelc.RenameRequest.method,
+      vscodelc.InlayHintRequest.method,
       vscodelc.SemanticTokensRegistrationType.method,
       vscodelc.DocumentFormattingRequest.method,
       vscodelc.DocumentRangeFormattingRequest.method
@@ -44,7 +50,6 @@ suite('BeCoder clangd capability boundary', () => {
       vscodelc.LinkedEditingRangeRequest.method,
       vscodelc.TypeHierarchyPrepareRequest.method,
       vscodelc.InlineValueRequest.method,
-      vscodelc.InlayHintRequest.method,
       vscodelc.DocumentDiagnosticRequest.method,
       vscodelc.ExecuteCommandRequest.method
     ]) {

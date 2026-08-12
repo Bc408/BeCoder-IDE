@@ -78,7 +78,14 @@ export class TerminalProfileService extends Disposable implements ITerminalProfi
 		// default terminal before launching the first terminal. This isn't expected to ever take
 		// this long.
 		this._profilesReadyBarrier = new AutoOpenBarrier(20000);
-		this._profilesReadyPromise = this._profilesReadyBarrier.wait().then(() => { });
+		this._profilesReadyPromise = Promise.all([
+			this._profilesReadyBarrier.wait(),
+			this._extensionService.whenInstalledExtensionsRegistered()
+		]).then(async () => {
+			// Extension registration can add contributed profiles and configuration defaults after
+			// native profile detection. Refresh once more before allowing the first terminal to launch.
+			await this._refreshAvailableProfilesNow();
+		});
 		this.refreshAvailableProfiles();
 		this._setupConfigListener();
 	}

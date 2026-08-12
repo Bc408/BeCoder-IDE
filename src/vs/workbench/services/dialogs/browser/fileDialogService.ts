@@ -232,10 +232,6 @@ export class FileDialogService extends AbstractFileDialogService implements IFil
 
 		const buttons: IPromptButton<void>[] = [
 			{
-				label: localize({ key: 'openRemote', comment: ['&& denotes a mnemonic'] }, "&&Open Remote..."),
-				run: async () => { await this.commandService.executeCommand('workbench.action.remote.showMenu'); }
-			},
-			{
 				label: localize({ key: 'learnMore', comment: ['&& denotes a mnemonic'] }, "&&Learn More"),
 				run: async () => { await this.openerService.open('https://aka.ms/VSCodeWebLocalFileSystemAccess'); }
 			}

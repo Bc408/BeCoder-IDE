@@ -12,7 +12,7 @@ The target audience includes beginning competitive programmers. A fresh installa
 
 ## 2. Highest Principle
 
-> 在 BeCoder 中，只有原生终端主动接纳用户电脑的运行环境。其余核心功能都应尽可能隔离系统配置，只使用 BeCoder 自己准备的路径、配置和资源。BeCoder 应当开箱即用，首次打开就是项目准备好的最佳默认状态；用户可以自行配置，但产品不主动要求用户先完成配置。
+> In BeCoder, only the native terminal actively accommodates the user’s computer runtime environment. All other core functions should isolate system configurations as much as possible, using only the paths, configurations, and resources prepared by BeCoder itself. BeCoder should be all set after intalling BeCoderSetup-x64.exe, with the first launch already in the best default state prepared for user to use; users can configure it themselves, but the product does not proactively require users to complete configuration first.
 
 This produces four permanent principles:
 
@@ -115,9 +115,9 @@ User-installed extensions remain third-party content under their own licenses an
 
 BeCoder's Windows Setup places one complete BeCoder directory at a user-selected location. The installed directory remains movable, including to a removable drive. Setup is not permission to integrate BeCoder into Windows.
 
-BeCoder does not need registry state, shortcuts, an uninstaller, file associations, PATH changes, App Paths, protocols, services, background tasks, or startup entries. Closing BeCoder and deleting its directory is the complete uninstall model.
+BeCoder does not need registry state, an uninstaller, file associations, PATH changes, App Paths, protocols, services, background tasks, or startup entries. Closing BeCoder and deleting its directory is the complete uninstall model.
 
-Reinstalling the same authenticated directory is a complete replacement. Any data-preservation mechanism must be explicit and user-invoked rather than hidden installer behavior. Whether such a mechanism is currently delivered belongs only in `BECODER_CURRENT.md`.
+Reinstalling the same authenticated directory is a complete replacement. Any data-preservation mechanism must be explicit and user-invoked rather than hidden installer behavior. 
 
 ## 13. Truthful Artifact Lifecycle
 

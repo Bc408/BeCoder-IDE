@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 if (-not (Test-Path -LiteralPath $PackagePath -PathType Container)) {
 	throw "Packaged application was not found at $PackagePath."
@@ -15,6 +16,8 @@ if (-not (Test-Path -LiteralPath $PackagePath -PathType Container)) {
 $requiredFiles = @(
 	'BeCoder.exe',
 	'data\.becoder-data-root',
+	'data\.becoder-open-hello-coder',
+	'coding\helloCoder.cpp',
 	'data\toolchains\becoder-toolchain-manifest.json',
 	'data\toolchains\becoder-ucrt64\bin\g++.exe',
 	'data\toolchains\becoder-ucrt64\bin\gcc.exe',
@@ -85,6 +88,16 @@ foreach ($relativePath in $requiredFiles) {
 	if ((Get-Item -LiteralPath $path).Length -eq 0) {
 		throw "Required Windows package file is empty: $relativePath"
 	}
+}
+
+$onboardingSourceHash = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'resources\oi-defaults\onboarding\helloCoder.cpp') -Algorithm SHA256).Hash
+$onboardingPackageHash = (Get-FileHash -LiteralPath (Join-Path $PackagePath 'coding\helloCoder.cpp') -Algorithm SHA256).Hash
+if ($onboardingPackageHash -ne $onboardingSourceHash -or $onboardingPackageHash.ToLowerInvariant() -ne '0d47c180bbb64866f3a805b958306c268597c64f21d10458dc919740714cf1d9') {
+	throw 'The packaged helloCoder.cpp does not match the approved onboarding sample.'
+}
+$onboardingMarker = Get-Content -LiteralPath (Join-Path $PackagePath 'data\.becoder-open-hello-coder') -Raw -Encoding utf8
+if ($onboardingMarker -ne "BeCoder onboarding v1`n") {
+	throw 'The packaged one-time onboarding marker is invalid.'
 }
 
 foreach ($removedUserDataTransferFile in @(
@@ -344,8 +357,8 @@ if ($grammarOwners.Count -ne 1 -or
 
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
 if ($product.licenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
-	$product.reportIssueUrl -ne 'https://github.com/Bc408/BeCoder/issues/new') {
-	throw 'The packaged product contains stale BeCoder license or issue URLs.'
+	$null -ne $product.PSObject.Properties['reportIssueUrl']) {
+	throw 'The packaged product contains stale BeCoder license or issue metadata.'
 }
 foreach ($removedProductProperty in @(
 	'serverLicenseUrl',
@@ -663,6 +676,7 @@ $componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi
 $expectedComponentIds = @(
 	'code-oss',
 	'becoder.runner',
+	'vscode.vscode-theme-seti',
 	'becoder.becoder-setup',
 	'becoder.gcc-diagnostics',
 	'llvm-vs-code-extensions.vscode-clangd',
@@ -706,8 +720,8 @@ if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne '003524d3dd4b4c9ddf294f47aa3456394758d5f61daeed589b60d77e272b3d72' -or
-	$languagePackComponent.packagedContentSha256 -ne '6c84cf72ad88a4e65b6a91fd87fb0005adaf414ce34388390927d4c8bd02634c') {
+	$languagePackComponent.contentSha256 -ne 'f261c558b3577143f7500dcffdd4042a6e5fd8acb051c01484c5757a075860d5' -or
+	$languagePackComponent.packagedContentSha256 -ne '19f143c47abfc1a4446b0be78650a3fadec5f66f038be8f7e8b53cf89ab52559') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

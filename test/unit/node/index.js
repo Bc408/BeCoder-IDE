@@ -69,8 +69,8 @@ const out = args.build ? 'out-build' : 'out';
 const src = path.join(REPO_ROOT, out);
 const baseUrl = pathToFileURL(src);
 
-//@ts-ignore
-const requiredNodeVersion = semver.parse(/^target="(.*)"$/m.exec(fs.readFileSync(path.join(REPO_ROOT, 'remote', '.npmrc'), 'utf8'))[1]);
+const packageJson = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+const requiredNodeVersion = semver.coerce(packageJson.devDependencies['@types/node']);
 const currentNodeVersion = semver.parse(process.version);
 //@ts-ignore
 if (currentNodeVersion?.major < requiredNodeVersion?.major) {

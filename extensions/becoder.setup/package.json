@@ -64,6 +64,14 @@
 					"scope": "window",
 					"title": "%configuration.newFileDefaultLanguage.title%",
 					"description": "%configuration.newFileDefaultLanguage%"
+				},
+				"becoder.inlayHints.enabled": {
+					"type": "boolean",
+					"default": false,
+					"scope": "window",
+					"order": 2,
+					"title": "%configuration.inlayHints.title%",
+					"description": "%configuration.inlayHints.description%"
 				}
 			}
 		},

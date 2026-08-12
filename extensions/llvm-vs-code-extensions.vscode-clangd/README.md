@@ -9,6 +9,7 @@ The exposed language features are limited to:
 - completion and signature help;
 - hover, definition, and references;
 - prepare rename and rename;
+- standard inlay hints when explicitly enabled in BeCoder IDE Features;
 - Format Document and Format Selection.
 
 BeCoder supplies C17 and C++20 compile commands directly over LSP. Workspace
@@ -16,9 +17,9 @@ BeCoder supplies C17 and C++20 compile commands directly over LSP. Workspace
 include directives.
 
 Visible C/C++ diagnostics belong to BeCoder's bundled GCC diagnostic service,
-not clangd. TextMate is the only syntax-coloring authority, so this extension
-does not provide semantic tokens, inlay hints, inactive-region decoration,
-clang-tidy actions, background workspace indexing, or code actions.
+not clangd. TextMate owns immediate syntax coloring, followed by one standard
+semantic-token refinement. This extension does not provide clang-tidy actions,
+background workspace indexing, or code actions.
 
 Formatting uses clangd's embedded ClangFormat engine with Google as the
 fallback style. A physical `.clang-format` inside the opened workspace may

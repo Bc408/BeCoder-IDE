@@ -8,13 +8,8 @@ BeCoder is a Code - OSS fork for OI/ICPC workflows. Core TypeScript lives in `sr
 
 After reading this file completely, and before analyzing a new stage or making a nontrivial change, read these files completely in order:
 
-1. `BECODER_HANDOFF.md`
-2. `BECODER_PHILOSOPHY.md`
-3. `BECODER_CURRENT.md`
-4. `docs/contracts/README.md`
-5. every product contract related to the task
-
-Read archive documents only for historical evidence. They do not override current philosophy, current state, or a current product contract.
+1. `BECODER_PHILOSOPHY.md`
+2. every product contract related to the task
 
 Before proposing or starting implementation for a new stage or nontrivial change, provide an understanding proof covering the product purpose, relevant ownership boundaries, current repository/stage facts, requested change, protected/out-of-scope behavior, and validation/project-owner acceptance boundary. This requirement also applies when the user directly authorizes implementation. Wait for explicit plan approval before editing unless the user directly requested implementation.
 
@@ -31,7 +26,7 @@ Run commands from the repository root:
 - `npm run test-browser-no-install` runs browser tests.
 - `npm run gulp vscode-win32-x64-min` creates the staged Windows application used to build the BeCoder Setup.
 
-Before tests, use the build watch task when available; otherwise run the owning typecheck or extension Gulp task. Do not use `npm run compile` for TypeScript validation. `.github/copilot-instructions.md` is a short BeCoder entry point and must not override this file, `BECODER_PHILOSOPHY.md`, `BECODER_CURRENT.md`, or current product contracts.
+Before tests, use the build watch task when available; otherwise run the owning typecheck or extension Gulp task. Do not use `npm run compile` for TypeScript validation. `.github/copilot-instructions.md` is a short BeCoder entry point and must not override this file, `BECODER_PHILOSOPHY.md` or current product contracts.
 
 ### BeCoder Build Workflow
 
@@ -47,7 +42,7 @@ Before tests, use the build watch task when available; otherwise run the owning 
 
 ### Atomic Visual Fast Path
 
-For project-owner-authorized Stage 4.9.x atomic visual tasks, default to the lightweight delivery path: inspect only the owning UI/resource route, make the smallest requested change, run only checks required to keep the build valid, build the staged Windows application once, and hand it to the project owner for visual acceptance. Do not expand into unrelated tests, broad review, package or Setup work, documentation updates beyond an explicitly requested workflow/status note, cleanup, or Git operations. If the task proves difficult or crosses its frozen boundary, report that before continuing and wait for explicit authorization.
+For project-owner-authorized atomic visual tasks, default to the lightweight delivery path: inspect only the owning UI/resource route, make the smallest requested change, run only checks required to keep the build valid, build the staged Windows application once, and hand it to the project owner for visual acceptance. Do not expand into unrelated tests, broad review, package or Setup work, documentation updates beyond an explicitly requested workflow/status note, cleanup, or Git operations. If the task proves difficult or crosses its frozen boundary, report that before continuing and wait for explicit authorization.
 
 ### Validation Command Preflight
 

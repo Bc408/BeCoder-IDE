@@ -209,6 +209,7 @@ export async function stageBeCoderWindowsToolchain(repositoryRoot: string, packa
 	await fs.promises.mkdir(path.join(toolchainRoot, 'clangd'), { recursive: true });
 	await stageSlimCompiler(compilerArchive, toolchainRoot);
 	await extract(clangdArchive, { dir: path.join(toolchainRoot, 'clangd') });
+	await fs.promises.rm(path.join(toolchainRoot, 'clangd', 'clangd_22.1.6', 'lib', 'clang', '22', 'lib', 'windows'), { recursive: true, force: true });
 
 	const manifest = await createManifest(toolchainRoot);
 	await fs.promises.writeFile(path.join(toolchainRoot, beCoderToolchainManifestName), `${JSON.stringify(manifest, undefined, '\t')}\n`, 'utf8');

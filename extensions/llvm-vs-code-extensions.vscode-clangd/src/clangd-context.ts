@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -35,6 +40,7 @@ export const approvedTextDocumentFeatureMethods = new Set([
   'textDocument/definition',
   'textDocument/references',
   'textDocument/rename',
+  'textDocument/inlayHint',
   'textDocument/semanticTokens',
   'textDocument/formatting',
   'textDocument/rangeFormatting'
@@ -240,6 +246,13 @@ export class ClangdContext implements vscode.Disposable {
                 configuration),
             () => next(document)),
         handleDiagnostics: (uri, _diagnostics, next) => next(uri, []),
+        provideInlayHints: (document, range, token, next) => {
+          const enabled = vscode.workspace
+                              .getConfiguration(
+                                  'becoder.inlayHints', document.uri)
+                              .get<boolean>('enabled', false);
+          return enabled ? next(document, range, token) : [];
+        },
         provideCompletionItem: async (document, position, context, token,
                                       next) => {
           const provided = await next(document, position, context, token);
@@ -284,9 +297,19 @@ export class ClangdContext implements vscode.Disposable {
   }
 
   private stopping = false;
+  private readonly disposables: vscode.Disposable[] = [];
 
   private constructor(readonly client: ClangdLanguageClient) {
     inactiveRegions.activate(this);
+    this.disposables.push(vscode.workspace.onDidChangeConfiguration(event => {
+      if (!event.affectsConfiguration('becoder.inlayHints.enabled')) {
+        return;
+      }
+      const feature = this.client.getFeature(vscodelc.InlayHintRequest.method);
+      for (const editor of vscode.window.visibleTextEditors) {
+        feature.getProvider(editor.document)?.onDidChangeInlayHints.fire();
+      }
+    }));
     stopHandlers.set(this, async () => {
       if (this.stopping) {
         return;
@@ -297,6 +320,9 @@ export class ClangdContext implements vscode.Disposable {
   }
 
   dispose(): void {
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
     void stopClangdContext(this);
   }
 }

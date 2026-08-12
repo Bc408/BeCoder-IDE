@@ -97,7 +97,7 @@ import { ActiveWindowManager } from '../../platform/windows/node/windowTracker.j
 import { hasWorkspaceFileExtension } from '../../platform/workspace/common/workspace.js';
 import { IWorkspacesService } from '../../platform/workspaces/common/workspaces.js';
 import { IWorkspacesHistoryMainService, WorkspacesHistoryMainService } from '../../platform/workspaces/electron-main/workspacesHistoryMainService.js';
-import { resolveBeCoderAppUserModelId } from '../node/beCoderInstallation.js';
+import { consumeBeCoderOnboarding, resolveBeCoderAppUserModelId, resolveBeCoderOnboarding } from '../node/beCoderInstallation.js';
 import { WorkspacesMainService } from '../../platform/workspaces/electron-main/workspacesMainService.js';
 import { IWorkspacesManagementMainService, WorkspacesManagementMainService } from '../../platform/workspaces/electron-main/workspacesManagementMainService.js';
 import { IPolicyService } from '../../platform/policy/common/policy.js';
@@ -1282,6 +1282,7 @@ export class CodeApplication extends Disposable {
 
 		const context = isLaunchedFromCli(process.env) ? OpenContext.CLI : OpenContext.DESKTOP;
 		const args = this.environmentMainService.args;
+		delete args['becoder-trust-workspace'];
 
 		// Then check for windows from protocol links to open
 		if (initialProtocolUrls) {
@@ -1338,6 +1339,39 @@ export class CodeApplication extends Disposable {
 		const waitMarkerFileURI = args.wait && args.waitMarkerFilePath ? URI.file(args.waitMarkerFilePath) : undefined;
 		const forceProfile = args.profile;
 		const forceTempProfile = args['profile-temp'];
+		const hasProtocolUrls = !!initialProtocolUrls && (initialProtocolUrls.openables.length > 0 || initialProtocolUrls.urls.length > 0);
+
+		if (
+			isWindows
+			&& this.environmentMainService.isBuilt
+			&& context === OpenContext.DESKTOP
+			&& !hasProtocolUrls
+			&& !hasCliArgs
+			&& !hasFolderURIs
+			&& !hasFileURIs
+			&& !args['new-window']
+			&& !forceProfile
+			&& !forceTempProfile
+		) {
+			const onboarding = resolveBeCoderOnboarding(process.execPath);
+			if (onboarding) {
+				args['becoder-trust-workspace'] = onboarding.folderPath;
+				const windows = await windowsMainService.open({
+					context,
+					cli: args,
+					urisToOpen: [
+						{ folderUri: URI.file(onboarding.folderPath) },
+						{ fileUri: URI.file(onboarding.filePath) }
+					],
+					noRecentEntry,
+					initialStartup: true
+				});
+				if (windows.length > 0) {
+					consumeBeCoderOnboarding(onboarding);
+				}
+				return windows;
+			}
+		}
 
 		// Started without file/folder arguments
 		if (!hasCliArgs && !hasFolderURIs && !hasFileURIs) {

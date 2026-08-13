@@ -349,6 +349,83 @@ suite('OI extension boundary', () => {
 		}
 	});
 
+	test('keeps Jupyter notebook APIs compatible without restoring Debug or Remote capabilities', () => {
+		const apiFactory = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHost.api.impl.ts'), 'utf8');
+		assert.match(apiFactory, /const debug = \{/);
+		assert.match(apiFactory, /onDidTerminateDebugSession: Event\.None/);
+		assert.match(apiFactory, /async startDebugging\(\) \{\s*return false;/);
+		assert.match(apiFactory, /registerDebugAdapterDescriptorFactory\(\) \{\s*return Disposable\.None;/);
+		assert.match(apiFactory, /\bdebug,\s*\r?\n\s*env,/);
+		assert.match(apiFactory, /registerPortAttributesProvider: \(\) => \{\s*checkProposedApiEnabled\(extension, 'portsAttributes'\);\s*return Disposable\.None;/);
+		assert.doesNotMatch(apiFactory, /extHostTunnelService|registerPortsAttributesProvider/);
+		assert.match(apiFactory, /const lm = \{/);
+		assert.match(apiFactory, /async selectChatModels\(\) \{\s*return \[\];/);
+		assert.match(apiFactory, /onDidChangeChatModels: Event\.None/);
+		assert.match(apiFactory, /registerTool\(\) \{\s*return Disposable\.None;/);
+		assert.match(apiFactory, /async invokeTool\(\) \{\s*throw new Error\('Language model tools are not available in BeCoder\.'\);/);
+		assert.match(apiFactory, /tools: \[\]/);
+		assert.match(apiFactory, /\blm,\s*\r?\n\s*notebooks,/);
+		assert.doesNotMatch(apiFactory, /ExtHostLanguageModels|ExtHostLanguageModelTools|registerLanguageModelTool/);
+
+		const ipynbManifest = readJson<{
+			contributes?: {
+				commands?: { command?: string }[];
+				menus?: Record<string, { command?: string }[]>;
+				notebooks?: { type?: string; selector?: { filenamePattern?: string }[] }[];
+			};
+		}>(path.join(extensionsRoot, 'ipynb', 'package.json'));
+		assert.ok(ipynbManifest.contributes?.notebooks?.some(notebook =>
+			notebook.type === 'jupyter-notebook' && notebook.selector?.some(selector => selector.filenamePattern === '*.ipynb')));
+		assert.ok(!ipynbManifest.contributes?.commands?.some(command => command.command === 'notebook.cellOutput.addToChat'));
+		assert.ok(!Object.values(ipynbManifest.contributes?.menus ?? {}).flat().some(menu => menu.command === 'notebook.cellOutput.addToChat'));
+
+		const rendererManifest = readJson<{
+			contributes?: { notebookRenderer?: { id?: string }[] };
+		}>(path.join(extensionsRoot, 'notebook-renderers', 'package.json'));
+		assert.ok(rendererManifest.contributes?.notebookRenderer?.some(renderer => renderer.id === 'vscode.builtin-renderer'));
+
+		const notebookContribution = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'notebook', 'browser', 'notebook.contribution.ts'), 'utf8');
+		assert.doesNotMatch(notebookContribution, /notebookService\.getContributedNotebookTypes\(\);|notebookService\.getEditorTypes\(\);/);
+		assert.doesNotMatch(notebookContribution, /controller\/chat|contrib\/debug|NotebookVariables/);
+
+		const runtimeScanner = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'services', 'extensions', 'electron-browser', 'cachedExtensionScanner.ts'), 'utf8');
+		const runtimeExcludedExtensions = /const excludedOIDistributionExtensions = new Set\(\[([\s\S]*?)\n\]\);/.exec(runtimeScanner)?.[1] ?? '';
+		assert.doesNotMatch(runtimeExcludedExtensions, /'ipynb'|'notebook-renderers'/);
+
+		const product = readJson<{
+			extensionEnabledApiProposals?: Record<string, string[]>;
+		}>(path.join(repositoryRoot, 'product.json'));
+		assert.deepStrictEqual(product.extensionEnabledApiProposals?.['ms-toolsai.jupyter'], [
+			'notebookDeprecated',
+			'notebookMessaging',
+			'notebookMime',
+			'contribNotebookStaticPreloads',
+			'portsAttributes',
+			'quickPickSortByLabel',
+			'notebookKernelSource',
+			'interactiveWindow',
+			'quickPickItemTooltip',
+			'notebookExecution',
+			'notebookCellExecution',
+			'notebookVariableProvider',
+			'notebookReplDocument'
+		]);
+		assert.deepStrictEqual(product.extensionEnabledApiProposals?.['ms-toolsai.jupyter-renderers'], [
+			'contribNotebookStaticPreloads'
+		]);
+		assert.deepStrictEqual(product.extensionEnabledApiProposals?.['ms-python.python'], [
+			'contribEditorContentMenu',
+			'quickPickSortByLabel',
+			'testObserver',
+			'quickPickItemTooltip',
+			'terminalDataWriteEvent',
+			'terminalExecuteCommandEvent',
+			'notebookReplDocument',
+			'notebookVariableProvider'
+		]);
+		assert.ok(!product.extensionEnabledApiProposals?.['ms-python.python']?.includes('codeActionAI'));
+	});
+
 	test('keeps generic authentication without AI or MCP account policy', () => {
 		const commonWorkbench = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'workbench.common.main.ts'), 'utf8');
 		assert.match(commonWorkbench, /contrib\/authentication\/browser\/authentication\.contribution\.js/);
@@ -776,6 +853,7 @@ suite('OI extension boundary', () => {
 		const extensionBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'extensions.ts'), 'utf8');
 		const excludedExtensions = /export const excludedForOIDistribution = new Set\(\[([\s\S]*?)\n\]\);/.exec(extensionBuildSource)?.[1] ?? '';
 		assert.doesNotMatch(excludedExtensions, /'mermaid-markdown-features'/);
+		assert.doesNotMatch(excludedExtensions, /'ipynb'|'notebook-renderers'/);
 		const packageBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
 		assert.match(packageBuildSource, /const beCoderOnboarding = gulp\.src\(\[[\s\S]*'resources\/oi-defaults\/\*\*',[\s\S]*'!resources\/oi-defaults\/onboarding\/\*\*',[\s\S]*'!resources\/oi-defaults\/portable-data\/\*\*'[\s\S]*\], \{ base: '\.' \}\);/);
 		assert.match(packageBuildSource, /const beCoderOnboardingWorkspace = gulp\.src\('resources\/oi-defaults\/onboarding\/\*\*', \{ base: 'resources\/oi-defaults\/onboarding', dot: true \}\)[\s\S]*path\.join\('coding'/);

@@ -182,7 +182,7 @@ import './contrib/preferences/browser/preferencesSearch.js';
 // Performance
 import './contrib/performance/browser/performance.contribution.js';
 
-// Notebook services are retained for shared workbench APIs; no notebook extension is shipped.
+// Notebook services and the built-in notebook format support remain available.
 import './contrib/notebook/browser/notebook.contribution.js';
 
 // Speech

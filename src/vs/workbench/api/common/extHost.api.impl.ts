@@ -8,7 +8,7 @@ import { CancellationTokenSource } from '../../../base/common/cancellation.js';
 import { AsyncIterableObject, raceCancellationError } from '../../../base/common/async.js';
 import * as errors from '../../../base/common/errors.js';
 import { Emitter, Event } from '../../../base/common/event.js';
-import { combinedDisposable } from '../../../base/common/lifecycle.js';
+import { combinedDisposable, Disposable } from '../../../base/common/lifecycle.js';
 import { Schemas, matchesScheme } from '../../../base/common/network.js';
 import Severity from '../../../base/common/severity.js';
 import { URI } from '../../../base/common/uri.js';
@@ -946,7 +946,9 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 
 		// namespace: workspace
 
-		const workspace: typeof vscode.workspace = {
+		const workspace: typeof vscode.workspace & {
+			registerPortAttributesProvider(selector: unknown, provider: unknown): vscode.Disposable;
+		} = {
 			get rootPath() {
 				extHostApiDeprecation.report('workspace.rootPath', extension,
 					`Please use 'workspace.workspaceFolders' instead. More details: https://aka.ms/vscode-eliminating-rootpath`);
@@ -1228,6 +1230,10 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 				checkProposedApiEnabled(extension, 'timeline');
 				return extHostTimeline.registerTimelineProvider(scheme, provider, extension.identifier, extHostCommands.converter);
 			},
+			registerPortAttributesProvider: () => {
+				checkProposedApiEnabled(extension, 'portsAttributes');
+				return Disposable.None;
+			},
 			get isTrusted() {
 				return extHostWorkspace.trusted;
 			},
@@ -1279,6 +1285,51 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 			createCommentController(id: string, label: string) {
 				return extHostComment.createCommentController(extension, id, label);
 			}
+		};
+
+		// Keep the stable extension API shape without restoring the Debug product capability.
+		const debug = {
+			activeDebugSession: undefined,
+			activeDebugConsole: {
+				append() { },
+				appendLine() { }
+			},
+			breakpoints: [],
+			onDidChangeActiveDebugSession: Event.None,
+			onDidStartDebugSession: Event.None,
+			onDidReceiveDebugSessionCustomEvent: Event.None,
+			onDidTerminateDebugSession: Event.None,
+			onDidChangeBreakpoints: Event.None,
+			registerDebugConfigurationProvider() {
+				return Disposable.None;
+			},
+			registerDebugAdapterDescriptorFactory() {
+				return Disposable.None;
+			},
+			registerDebugAdapterTrackerFactory() {
+				return Disposable.None;
+			},
+			async startDebugging() {
+				return false;
+			},
+			async stopDebugging() { },
+			addBreakpoints() { },
+			removeBreakpoints() { }
+		};
+
+		// Keep the extension API shape required by Python tooling without exposing language models or tools.
+		const lm = {
+			async selectChatModels() {
+				return [];
+			},
+			onDidChangeChatModels: Event.None,
+			registerTool() {
+				return Disposable.None;
+			},
+			async invokeTool() {
+				throw new Error('Language model tools are not available in BeCoder.');
+			},
+			tools: []
 		};
 
 		const tasks: typeof vscode.tasks = {
@@ -1386,10 +1437,12 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 			authentication,
 			commands,
 			comments,
+			debug,
 			env,
 			extensions,
 			l10n,
 			languages,
+			lm,
 			notebooks,
 			speech,
 			tasks,

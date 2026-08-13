@@ -41,12 +41,12 @@ BeCoder creates no registry-based uninstaller, Start-menu entry, PATH change, fi
 
 Open VSX is the only configured online extension registry. Local VSIX installation is available. BeCoder's protected built-in components cannot be replaced through the gallery, and incompatible Microsoft C/C++ extension packages are blocked.
 
-Application updates and their settings are currently disabled. BeCoder does not perform in-app update checks. New versions can be obtained from [GitHub Releases](https://github.com/Bc408/BeCoder/releases) and installed as an explicit replacement.
+Application updates and their settings are currently disabled. BeCoder does not perform in-app update checks. New versions can be obtained from [GitHub Releases](https://github.com/Bc408/BeCoder-IDE/releases) and installed as an explicit replacement.
 
 ## License and Source
 
-BeCoder source is available at [github.com/Bc408/BeCoder](https://github.com/Bc408/BeCoder).
+BeCoder source is available at [github.com/Bc408/BeCoder-IDE](https://github.com/Bc408/BeCoder-IDE).
 
 BeCoder modifications are distributed under [GPL-3.0-or-later](LICENSE). Code - OSS 1.130 remains under the MIT License, and bundled third-party components retain their own licenses and notices. See [ThirdPartyNotices.txt](ThirdPartyNotices.txt) and the [bundled component inventory](resources/oi-defaults/BUNDLED-COMPONENTS.json) for provenance and license details.
 
-Report product or security problems through [GitHub Issues](https://github.com/Bc408/BeCoder/issues).
+Report product or security problems through [GitHub Issues](https://github.com/Bc408/BeCoder-IDE/issues).

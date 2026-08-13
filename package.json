@@ -1,6 +1,6 @@
 {
   "name": "becoder-ide-dev",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A lightweight C++ competitive programming editor.",
   "distro": "ac355fb4d039edb8cc28e1f8e45c6d5d8c437fe2",
   "author": {
@@ -247,10 +247,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Bc408/BeCoder.git"
+    "url": "https://github.com/Bc408/BeCoder-IDE.git"
   },
   "bugs": {
-    "url": "https://github.com/Bc408/BeCoder/issues"
+    "url": "https://github.com/Bc408/BeCoder-IDE/issues"
   },
   "optionalDependencies": {
     "windows-foreground-love": "0.6.1"

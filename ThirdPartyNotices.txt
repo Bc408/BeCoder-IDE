@@ -21,7 +21,7 @@ BeCoder Runner 0.3.0 (based on C/C++ Compile Run)
 https://github.com/danielpinto8zz6/c-cpp-compile-run
 
 GNU General Public License v3.0
-Modified source: https://github.com/Bc408/BeCoder
+Modified source: https://github.com/Bc408/BeCoder-IDE
 Source path: extensions/danielpinto8zz6.c-cpp-compile-run
 License text: extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE
 
@@ -47,7 +47,7 @@ License text: extensions/aadityanarayan.code-snap/LICENSE
 ---------------------------------------------------------
 
 BeCoder Setup 0.1.0 and BeCoder GCC Diagnostics 0.1.0
-https://github.com/Bc408/BeCoder
+https://github.com/Bc408/BeCoder-IDE
 
 MIT License
 Copyright (c) 2026 BeCoder contributors

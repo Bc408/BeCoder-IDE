@@ -6,7 +6,7 @@
 	"dataFolderName": ".becoder",
 	"sharedDataFolderName": ".becoder-shared",
 	"licenseName": "GPL-3.0-or-later",
-	"licenseUrl": "https://github.com/Bc408/BeCoder/blob/main/LICENSE",
+	"licenseUrl": "https://github.com/Bc408/BeCoder-IDE/blob/main/LICENSE",
 	"win32DirName": "BeCoder",
 	"win32NameVersion": "BeCoder",
 	"win32RegValueName": "BeCoder",

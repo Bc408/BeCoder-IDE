@@ -357,7 +357,7 @@ if ($grammarOwners.Count -ne 1 -or
 }
 
 $product = Get-Content -LiteralPath (Join-Path $appPath 'product.json') -Raw | ConvertFrom-Json
-if ($product.licenseUrl -ne 'https://github.com/Bc408/BeCoder/blob/main/LICENSE' -or
+if ($product.licenseUrl -ne 'https://github.com/Bc408/BeCoder-IDE/blob/main/LICENSE' -or
 	$null -ne $product.PSObject.Properties['reportIssueUrl']) {
 	throw 'The packaged product contains stale BeCoder license or issue metadata.'
 }
@@ -377,8 +377,8 @@ foreach ($removedProductProperty in @(
 	}
 }
 $packageManifest = Get-Content -LiteralPath (Join-Path $appPath 'package.json') -Raw | ConvertFrom-Json
-if ($packageManifest.repository.url -ne 'https://github.com/Bc408/BeCoder.git' -or
-	$packageManifest.bugs.url -ne 'https://github.com/Bc408/BeCoder/issues') {
+if ($packageManifest.repository.url -ne 'https://github.com/Bc408/BeCoder-IDE.git' -or
+	$packageManifest.bugs.url -ne 'https://github.com/Bc408/BeCoder-IDE/issues') {
 	throw 'The packaged root manifest contains stale repository metadata.'
 }
 if (-not (@($product.onboardingThemes) | Where-Object { $_.id -eq 'becoder-one-monokai' -and $_.themeId -eq 'BeCoder One Monokai' })) {

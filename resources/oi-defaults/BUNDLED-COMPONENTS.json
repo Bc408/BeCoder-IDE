@@ -24,14 +24,14 @@
 		{
 			"id": "becoder.runner",
 			"version": "0.3.0",
-			"source": "https://github.com/Bc408/BeCoder",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
 			"upstream": "https://github.com/danielpinto8zz6/c-cpp-compile-run",
 			"modificationStatus": "Substantially modified for the shell-free BeCoder Runner and BC panel.",
 			"license": "GPL-3.0",
 			"spdxIdentifier": "GPL-3.0-only",
 			"copyrightNotice": "Copyright holders include the upstream C/C++ Compile Run and BeCoder contributors; Microsoft-attributed derived files retain their source headers.",
 			"licensePath": "extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE",
-			"correspondingSource": "https://github.com/Bc408/BeCoder",
+			"correspondingSource": "https://github.com/Bc408/BeCoder-IDE",
 			"correspondingSourcePath": "extensions/danielpinto8zz6.c-cpp-compile-run"
 		},
 		{
@@ -49,7 +49,7 @@
 		{
 			"id": "becoder.becoder-setup",
 			"version": "0.1.0",
-			"source": "https://github.com/Bc408/BeCoder",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
 			"modificationStatus": "BeCoder-authored bundled extension.",
 			"license": "MIT",
 			"spdxIdentifier": "MIT",
@@ -59,7 +59,7 @@
 		{
 			"id": "becoder.gcc-diagnostics",
 			"version": "0.1.0",
-			"source": "https://github.com/Bc408/BeCoder",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
 			"modificationStatus": "BeCoder-authored bundled extension.",
 			"license": "MIT",
 			"spdxIdentifier": "MIT",
@@ -89,7 +89,7 @@
 		{
 			"id": "becoder.one-monokai",
 			"version": "1.0.0",
-			"source": "https://github.com/Bc408/BeCoder",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
 			"upstream": "https://github.com/azemoh/vscode-one-monokai",
 			"modificationStatus": "Modified and integrated as BeCoder's built-in visual theme.",
 			"license": "MIT",

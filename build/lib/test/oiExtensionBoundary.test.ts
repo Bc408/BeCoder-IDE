@@ -1735,11 +1735,11 @@ suite('OI extension boundary', () => {
 		}
 
 		const product = readJson<{ licenseUrl?: string; reportIssueUrl?: string }>(path.join(repositoryRoot, 'product.json'));
-		assert.strictEqual(product.licenseUrl, 'https://github.com/Bc408/BeCoder/blob/main/LICENSE');
+		assert.strictEqual(product.licenseUrl, 'https://github.com/Bc408/BeCoder-IDE/blob/main/LICENSE');
 		assert.strictEqual(product.reportIssueUrl, undefined);
 		const packageManifest = readJson<{ repository?: { url?: string }; bugs?: { url?: string } }>(path.join(repositoryRoot, 'package.json'));
-		assert.strictEqual(packageManifest.repository?.url, 'https://github.com/Bc408/BeCoder.git');
-		assert.strictEqual(packageManifest.bugs?.url, 'https://github.com/Bc408/BeCoder/issues');
+		assert.strictEqual(packageManifest.repository?.url, 'https://github.com/Bc408/BeCoder-IDE.git');
+		assert.strictEqual(packageManifest.bugs?.url, 'https://github.com/Bc408/BeCoder-IDE/issues');
 	});
 
 	test('enumerates only real Windows shortcut files in Setup snapshots', { skip: process.platform !== 'win32' }, () => {

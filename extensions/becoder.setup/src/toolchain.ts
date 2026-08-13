@@ -11,7 +11,7 @@ import { selectDisplayText } from './localize';
 import { IToolchainManifest, maximumToolchainManifestBytes, validateToolchainManifest } from './toolchainManifest';
 
 const manifestName = 'becoder-toolchain-manifest.json';
-const setupUrl = vscode.Uri.parse('https://github.com/Bc408/BeCoder/releases/latest');
+const setupUrl = vscode.Uri.parse('https://github.com/Bc408/BeCoder-IDE/releases/latest');
 const requiredPaths = new Set([
 	'becoder-ucrt64/bin/g++.exe',
 	'becoder-ucrt64/bin/gcc.exe',

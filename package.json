@@ -1,6 +1,6 @@
 {
   "name": "becoder-ide-dev",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "A lightweight C++ competitive programming editor.",
   "distro": "ac355fb4d039edb8cc28e1f8e45c6d5d8c437fe2",
   "author": {

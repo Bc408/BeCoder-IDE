@@ -1280,7 +1280,11 @@ suite('OI extension boundary', () => {
 			path.join(extensionPath, 'themes', 'OneMonokai-color-theme.json'));
 		assert.strictEqual(theme.semanticHighlighting, true);
 		assert.strictEqual(theme.semanticTokenColors?.['function:cpp'], '#98c379');
+		assert.strictEqual(theme.semanticTokenColors?.['operator.userDefined:cpp'], '#98c379');
 		assert.strictEqual(theme.semanticTokenColors?.['type:cpp'], '#61afef');
+		for (const deducedType of ['type', 'class', 'interface', 'struct', 'enum', 'typeParameter', 'concept']) {
+			assert.strictEqual(theme.semanticTokenColors?.[`${deducedType}.deduced:cpp`], '#56b6c2');
+		}
 		assert.deepStrictEqual(theme.semanticTokenColors?.['parameter:cpp'], {
 			foreground: '#d19a66',
 			fontStyle: 'italic'

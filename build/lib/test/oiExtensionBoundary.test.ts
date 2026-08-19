@@ -1491,6 +1491,9 @@ suite('OI extension boundary', () => {
 		assert.match(managerSource, /createTerminal\(\{[\s\S]*pty: pseudoterminal/);
 		assert.match(managerSource, /panelReadyMs = await pseudoterminal\.waitForOpen\(panelStartedAt\)/);
 		assert.match(managerSource, /request\.exitCode = 1;[\s\S]*await this\.executor\.cancel\(\)/);
+		assert.match(managerSource, /pendingPseudoterminals = new Set<BcTerminal>\(\)/);
+		assert.match(managerSource, /terminals = new Map<BcTerminal, vscode\.Terminal>\(\)/);
+		assert.doesNotMatch(managerSource, /previousTerminal[\s\S]*previousTerminal\.dispose\(\)/);
 		assert.doesNotMatch(managerSource, /sendText|createTerminal\([^\{]/);
 		const processSource = fs.readFileSync(path.join(extensionPath, 'src', 'runnerProcess.ts'), 'utf8');
 		assert.match(processSource, /shell: false/);
@@ -1686,7 +1689,7 @@ suite('OI extension boundary', () => {
 		assert.match(packageVerifierSource, /removed BeCoder user-data transfer module/);
 		assert.match(packageVerifierSource, /removed BeCoder user-data transfer command/);
 		assert.match(packageVerifierSource, /removed BeCoder user-data import recovery boundary/);
-		assert.match(packageVerifierSource, /licenseUrl -ne 'https:\/\/github\.com\/Bc408\/BeCoder\/blob\/main\/LICENSE'/);
+		assert.match(packageVerifierSource, /licenseUrl -ne 'https:\/\/github\.com\/Bc408\/BeCoder-IDE\/blob\/main\/LICENSE'/);
 		assert.match(packageVerifierSource, /\$null -ne \$product\.PSObject\.Properties\['reportIssueUrl'\]/);
 		const setupVerifierSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-setup.ps1'), 'utf8');
 		assert.match(setupVerifierSource, /New-Item -ItemType Junction/);
@@ -1770,19 +1773,22 @@ suite('OI extension boundary', () => {
 			const functionBase64 = Buffer.from(shortcutFunction, 'utf8').toString('base64');
 			const pathsBase64 = Buffer.from(JSON.stringify([desktopRoot, startMenuRoot]), 'utf8').toString('base64');
 			const command = [
+				"$ErrorActionPreference = 'Stop'",
 				"$functionSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_FUNCTION))",
 				'Invoke-Expression $functionSource',
 				"$paths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_PATHS)) | ConvertFrom-Json",
 				'$snapshot = @(Get-ShortcutSnapshot -Paths $paths)',
 				'ConvertTo-Json -InputObject $snapshot -Compress'
 			].join('; ');
+			const environment = {
+				...process.env,
+				BECODER_SHORTCUT_FUNCTION: functionBase64,
+				BECODER_SHORTCUT_PATHS: pathsBase64
+			};
+			delete environment.PSModulePath;
 			const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {
 				encoding: 'utf8',
-				env: {
-					...process.env,
-					BECODER_SHORTCUT_FUNCTION: functionBase64,
-					BECODER_SHORTCUT_PATHS: pathsBase64
-				}
+				env: environment
 			});
 			assert.ifError(result.error);
 			assert.strictEqual(result.status, 0, result.stderr || result.stdout);

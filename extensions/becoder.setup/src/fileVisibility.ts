@@ -47,6 +47,11 @@ export function hideBeCoderFiles(excludes: FileExcludes, state: FileVisibilitySt
 export function showBeCoderFiles(excludes: FileExcludes, state: FileVisibilityState | undefined): FileExcludes {
 	const updatedExcludes = { ...excludes };
 	if (state?.version !== 1) {
+		if (Object.keys(beCoderHiddenFiles).every(pattern => updatedExcludes[pattern] === true)) {
+			for (const pattern of Object.keys(beCoderHiddenFiles)) {
+				delete updatedExcludes[pattern];
+			}
+		}
 		return updatedExcludes;
 	}
 	for (const [pattern, previous] of Object.entries(state.previous)) {
@@ -62,12 +67,12 @@ export function showBeCoderFiles(excludes: FileExcludes, state: FileVisibilitySt
 	return updatedExcludes;
 }
 
-export function isBeCoderHideActive(excludes: FileExcludes, state: FileVisibilityState | undefined, effectiveExcludes: FileExcludes = excludes): boolean {
-	return state?.version === 1 && Object.keys(beCoderHiddenFiles).every(pattern => excludes[pattern] === true && effectiveExcludes[pattern] === true);
+export function isBeCoderHideActive(excludes: FileExcludes, effectiveExcludes: FileExcludes = excludes): boolean {
+	return Object.keys(beCoderHiddenFiles).every(pattern => excludes[pattern] === true && effectiveExcludes[pattern] === true);
 }
 
-export function isBeCoderHideActiveInAllScopes(excludes: FileExcludes, state: FileVisibilityState | undefined, effectiveExcludes: readonly FileExcludes[]): boolean {
-	return effectiveExcludes.length > 0 && effectiveExcludes.every(effective => isBeCoderHideActive(excludes, state, effective));
+export function isBeCoderHideActiveInAllScopes(excludes: FileExcludes, effectiveExcludes: readonly FileExcludes[]): boolean {
+	return effectiveExcludes.length > 0 && effectiveExcludes.every(effective => isBeCoderHideActive(excludes, effective));
 }
 
 export function migrateLegacyBeCoderExcludes(excludes: FileExcludes, legacyDefaultsWereApplied: boolean): FileExcludes {

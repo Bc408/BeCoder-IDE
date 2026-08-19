@@ -192,7 +192,8 @@ export class BcTerminal implements vscode.Pseudoterminal {
 	}
 
 	clearScreen(): void {
-		this.writeRaw('\x1b[2J\x1b[H');
+		// ED 2 clears the visible screen; ED 3 also removes scrollback lines.
+		this.writeRaw('\x1b[2J\x1b[3J\x1b[H');
 		this.promptVisible = false;
 		this.outputEndsOnLineBoundary = true;
 	}

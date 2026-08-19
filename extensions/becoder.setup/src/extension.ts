@@ -37,7 +37,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			'becoder.filesHiddenByBeCoder',
 			isBeCoderHideActiveInAllScopes(
 				getGlobalFileExcludes(),
-				context.globalState.get<FileVisibilityState>(FILE_VISIBILITY_STATE),
 				effectiveExcludes
 			)
 		);
@@ -100,17 +99,16 @@ async function removeLegacyClangdSettings(): Promise<void> {
 
 async function hideSetupFiles(context: vscode.ExtensionContext): Promise<void> {
 	const previousExcludes = getGlobalFileExcludes();
-	const hidden = hideBeCoderFiles(previousExcludes, context.globalState.get<FileVisibilityState>(FILE_VISIBILITY_STATE));
-	await vscode.workspace.getConfiguration('files', null).update('exclude', hidden.excludes, vscode.ConfigurationTarget.Global);
+	const previousState = context.globalState.get<FileVisibilityState>(FILE_VISIBILITY_STATE);
+	const hidden = hideBeCoderFiles(previousExcludes, previousState);
+	await context.globalState.update(FILE_VISIBILITY_STATE, hidden.state);
 	try {
-		await context.globalState.update(FILE_VISIBILITY_STATE, hidden.state);
+		await vscode.workspace.getConfiguration('files', null).update('exclude', hidden.excludes, vscode.ConfigurationTarget.Global);
 	} catch (error) {
-		if (isDeepStrictEqual(getGlobalFileExcludes(), hidden.excludes)) {
-			try {
-				await vscode.workspace.getConfiguration('files', null).update('exclude', previousExcludes, vscode.ConfigurationTarget.Global);
-			} catch {
-				// Preserve the original global-state failure when conservative rollback also fails.
-			}
+		try {
+			await context.globalState.update(FILE_VISIBILITY_STATE, previousState);
+		} catch {
+			// Preserve the original configuration failure when conservative rollback also fails.
 		}
 		throw error;
 	}

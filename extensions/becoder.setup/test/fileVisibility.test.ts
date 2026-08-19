@@ -11,7 +11,7 @@ import { beCoderHiddenFiles, hideBeCoderFiles, isBeCoderHideActive, isBeCoderHid
 suite('BeCoder file visibility', () => {
 	test('keeps a clean profile unchanged until hide is requested', () => {
 		assert.deepStrictEqual(migrateLegacyBeCoderExcludes({}, false), {});
-		assert.strictEqual(isBeCoderHideActive({}, undefined), false);
+		assert.strictEqual(isBeCoderHideActive({}), false);
 	});
 
 	test('hides the complete managed set and restores only changed values', () => {
@@ -22,7 +22,7 @@ suite('BeCoder file visibility', () => {
 		};
 		const hidden = hideBeCoderFiles(initial, undefined);
 		assert.deepStrictEqual(hidden.excludes, { ...initial, ...beCoderHiddenFiles });
-		assert.strictEqual(isBeCoderHideActive(hidden.excludes, hidden.state), true);
+		assert.strictEqual(isBeCoderHideActive(hidden.excludes), true);
 		assert.deepStrictEqual(showBeCoderFiles(hidden.excludes, hidden.state), initial);
 	});
 
@@ -34,7 +34,7 @@ suite('BeCoder file visibility', () => {
 			'**/*.bin': { when: '$(basename).cpp' },
 			'**/keep': false
 		};
-		assert.strictEqual(isBeCoderHideActive(userEdited, hidden.state), false);
+		assert.strictEqual(isBeCoderHideActive(userEdited), false);
 		assert.deepStrictEqual(showBeCoderFiles(userEdited, hidden.state), {
 			'**/*.exe': false,
 			'**/*.bin': { when: '$(basename).cpp' },
@@ -42,14 +42,20 @@ suite('BeCoder file visibility', () => {
 		});
 	});
 
-	test('does not claim ownership of manually hidden patterns', () => {
-		assert.strictEqual(isBeCoderHideActive({ ...beCoderHiddenFiles }, undefined), false);
-		assert.deepStrictEqual(showBeCoderFiles({ ...beCoderHiddenFiles }, undefined), beCoderHiddenFiles);
+	test('recovers a complete hidden set when its restoration state was lost', () => {
+		assert.strictEqual(isBeCoderHideActive({ ...beCoderHiddenFiles }), true);
+		assert.deepStrictEqual(showBeCoderFiles({ ...beCoderHiddenFiles, '**/keep': true }, undefined), { '**/keep': true });
+	});
+
+	test('does not remove a partial hidden set when restoration state is absent', () => {
+		const partial = { ...beCoderHiddenFiles, '**/*.exe': false, '**/keep': true };
+		assert.strictEqual(isBeCoderHideActive(partial), false);
+		assert.deepStrictEqual(showBeCoderFiles(partial, undefined), partial);
 	});
 
 	test('reports an effective workspace override as not fully hidden', () => {
 		const hidden = hideBeCoderFiles({}, undefined);
-		assert.strictEqual(isBeCoderHideActive(hidden.excludes, hidden.state, {
+		assert.strictEqual(isBeCoderHideActive(hidden.excludes, {
 			...hidden.excludes,
 			'**/*.exe': false
 		}), false);
@@ -57,11 +63,11 @@ suite('BeCoder file visibility', () => {
 
 	test('requires every multi-root folder scope to be fully hidden', () => {
 		const hidden = hideBeCoderFiles({}, undefined);
-		assert.strictEqual(isBeCoderHideActiveInAllScopes(hidden.excludes, hidden.state, [
+		assert.strictEqual(isBeCoderHideActiveInAllScopes(hidden.excludes, [
 			hidden.excludes,
 			{ ...hidden.excludes, '**/*.exe': false }
 		]), false);
-		assert.strictEqual(isBeCoderHideActiveInAllScopes(hidden.excludes, hidden.state, [hidden.excludes, hidden.excludes]), true);
+		assert.strictEqual(isBeCoderHideActiveInAllScopes(hidden.excludes, [hidden.excludes, hidden.excludes]), true);
 	});
 
 	test('rehiding after a user edit makes the edit the new restoration value', () => {

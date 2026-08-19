@@ -89,6 +89,27 @@ suite('BC pseudoterminal protocol', () => {
 		terminal.close();
 	});
 
+	test('clears the visible screen and scrollback before showing the next prompt', () => {
+		let output = '';
+		const terminal = new BcTerminal('D:\\c++', new CommandHistory(), {
+			phase: () => 'ready',
+			submit: () => undefined,
+			cancel: () => undefined,
+			programInput: () => false,
+			busyAttempt: () => undefined,
+			close: () => undefined
+		});
+		terminal.onDidWrite(value => output += value);
+		terminal.open();
+		terminal.echoCommand('clear');
+		terminal.clearScreen();
+		terminal.finishCommand(0);
+
+		assert.ok(output.includes('\x1b[2J\x1b[3J\x1b[H'));
+		assert.ok(output.indexOf('\x1b[2J\x1b[3J\x1b[H') < output.lastIndexOf('BC D:\\c++> '));
+		terminal.close();
+	});
+
 	test('runs a final presentation transaction only while the terminal is open', () => {
 		let operationCount = 0;
 		const terminal = new BcTerminal('D:\\c++', new CommandHistory(), {

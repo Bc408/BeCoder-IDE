@@ -15,6 +15,10 @@ import {
   managedClangdFallbackFlags
 } from './becoder-toolchain';
 import {
+  reclassifyCallableVariables,
+  type SemanticTokenLegend
+} from './callable-semantic-tokens';
+import {
   provideDocumentFormattingEdits,
   provideDocumentRangeFormattingEdits
 } from './formatting';
@@ -232,7 +236,18 @@ export class ClangdContext implements vscode.Disposable {
         ? managedClangdFallbackFlags(compilerPath)
         : ['-Wall', '-Wextra', '-Wno-deprecated-declarations'];
 
-    let client: ClangdLanguageClient;
+    const reclassifySemanticTokens = (
+        document: vscode.TextDocument,
+        tokens: vscode.SemanticTokens): vscode.SemanticTokens => {
+      const provider = client.initializeResult?.capabilities.semanticTokensProvider;
+      if (!provider || typeof provider === 'boolean') {
+        return tokens;
+      }
+      const data = reclassifyCallableVariables(
+          document.getText(), tokens.data, provider.legend as SemanticTokenLegend);
+      return data === tokens.data ? tokens :
+                                    new vscode.SemanticTokens(data, tokens.resultId);
+    };
     const clientOptions: vscodelc.LanguageClientOptions = {
       documentSelector: clangdDocumentSelector,
       initializationOptions: {fallbackFlags},
@@ -252,6 +267,22 @@ export class ClangdContext implements vscode.Disposable {
                                   'becoder.inlayHints', document.uri)
                               .get<boolean>('enabled', false);
           return enabled ? next(document, range, token) : [];
+        },
+        provideDocumentSemanticTokens: async (document, token, next) => {
+          const tokens = await next(document, token);
+          return tokens ? reclassifySemanticTokens(document, tokens) : tokens;
+        },
+        provideDocumentSemanticTokensEdits: async (
+            document, _previousResultId, token, _next) => {
+          const result = await client.sendRequest(
+              vscodelc.SemanticTokensRequest.type, {
+                textDocument:
+                    client.code2ProtocolConverter.asTextDocumentIdentifier(
+                        document)
+              }, token);
+          const tokens = await client.protocol2CodeConverter.asSemanticTokens(
+              result, token);
+          return tokens ? reclassifySemanticTokens(document, tokens) : tokens;
         },
         provideCompletionItem: async (document, position, context, token,
                                       next) => {
@@ -289,7 +320,7 @@ export class ClangdContext implements vscode.Disposable {
       }
     };
 
-    client = new ClangdLanguageClient(
+    const client = new ClangdLanguageClient(
         'BeCoder C/C++ Intelligence', serverOptions, clientOptions);
     client.clientOptions.errorHandler = client.createDefaultErrorHandler(4);
     client.registerFeature(new EnableEditsNearCursorFeature);

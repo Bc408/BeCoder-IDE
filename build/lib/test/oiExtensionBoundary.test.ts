@@ -991,7 +991,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
 		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
 		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
-		assert.strictEqual(ucrt64?.sha256, '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2');
+		assert.strictEqual(ucrt64?.sha256, '8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4');
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
 		assert.ok(ucrt64?.correspondingSource);
 		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
@@ -1346,7 +1346,17 @@ suite('OI extension boundary', () => {
 		assert.match(contextSource, /compilationDatabaseChanges/);
 		assert.match(contextSource, /configureManagedDocumentBeforeOpen/);
 		assert.match(contextSource, /handleDiagnostics: \(uri, _diagnostics, next\) => next\(uri, \[\]\)/);
-		assert.doesNotMatch(contextSource, /provideDocumentSemanticTokens/);
+		assert.match(contextSource, /provideDocumentSemanticTokens/);
+		assert.doesNotMatch(contextSource, /provideDocumentRangeSemanticTokens/);
+		assert.match(contextSource, /reclassifyCallableVariables/);
+		const callableTokensSource = fs.readFileSync(
+			path.join(extensionPath, 'src', 'callable-semantic-tokens.ts'), 'utf8');
+		assert.match(callableTokensSource, /hasLambdaInitializer/);
+		assert.match(callableTokensSource, /hasFunctionType/);
+		assert.doesNotMatch(callableTokensSource, /writeFile|mkdir|workspaceState|globalState|onDidChangeSemanticTokens/);
+		assert.match(contextSource, /provideDocumentSemanticTokensEdits/);
+		assert.match(contextSource, /SemanticTokensRequest\.type/);
+		assert.doesNotMatch(contextSource, /new vscode\.SemanticTokensEdits|asSemanticTokensEdits|semanticTokensCache/);
 		const inactiveRegionsSource = fs.readFileSync(path.join(extensionPath, 'src', 'inactive-regions.ts'), 'utf8');
 		assert.match(inactiveRegionsSource, /'textDocument\/inactiveRegions'/);
 		assert.match(inactiveRegionsSource, /opacity: '0\.55'/);

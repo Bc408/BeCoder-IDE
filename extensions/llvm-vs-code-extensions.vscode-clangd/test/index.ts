@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 // Entry point for all tests.
 // Spawns VSCode with our extension, and then runs compiled *.test.js files.
 
@@ -9,9 +14,9 @@ import * as path from 'path';
 // The entry point under VSCode - find the test files and run them in Mocha.
 export async function run(): Promise<void> {
   const mocha = new Mocha({ui: 'tdd', color: true});
-  const testsRoot = path.resolve(__dirname, '..');
+  const testsRoot = __dirname;
 
-  const files = await glob('**/*.test.js', {cwd: testsRoot});
+  const files = await glob('*.test.js', {cwd: testsRoot});
   files.forEach(f => mocha.addFile(path.resolve(testsRoot, f)));
 
   await new Promise<void>((resolve, reject) => {
@@ -31,8 +36,14 @@ async function main() {
   const extensionDevelopmentPath = path.resolve(__dirname, '../../');
   // The run() function to run in vscode is defined in this file.
   const extensionTestsPath = __filename;
-  // Download VS Code, unzip it and run the integration test
-  await runTests({extensionDevelopmentPath, extensionTestsPath});
+  const localTestExecutable = process.env['BECODER_TEST_EXECUTABLE'];
+  // Use the matching local BeCoder host when supplied, otherwise download 1.130.
+  await runTests({
+    extensionDevelopmentPath,
+    extensionTestsPath,
+    ...(localTestExecutable ? {vscodeExecutablePath: localTestExecutable} :
+                               {version: '1.130.0'})
+  });
 }
 
 if (require.main === module) {

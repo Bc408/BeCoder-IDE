@@ -573,7 +573,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
-$expectedCompilerHash = '730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2'
+$expectedCompilerHash = '8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4'
 if (-not $IncludeCompiler) {
 	throw 'Stage 4.7 Setup-only packages must always include the expanded BeCoder toolchain.'
 }

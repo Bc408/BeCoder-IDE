@@ -11,7 +11,7 @@ Use the repository's authoritative documents and the project owner's latest requ
 
 1. Locate the repository root containing `AGENTS.md`.
 2. Read `AGENTS.md` completely.
-3. Read `BECODER_PHILOSOPHY.md` completely.
+3. Read `VISION.md` completely.
 4. Inspect the current branch, baseline, worktree, and relevant source before relying on a recorded snapshot.
 
 After changing the documentation architecture, run `scripts/validate-project-docs.ps1` from this skill and perform a semantic read-only review. The script checks structure only.

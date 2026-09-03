@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"archive": "becoder-ucrt64.zip",
-	"archiveSha256": "730e8169f9984dbe0f1c952a110b16616350a26bdc693e7b7ff9e5f59fba70b2",
+	"archiveSha256": "8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4",
 	"licenseFieldSemantics": "Verbatim MSYS2 package metadata; legacy values such as custom, GPL3, LGPL, and BSD are intentionally not rewritten as guessed SPDX expressions.",
 	"licenseFilesRoot": "resources/oi-defaults/toolchains/ucrt64-licenses",
 	"recipeFilesRoot": "resources/oi-defaults/toolchains/ucrt64-sources/recipes",

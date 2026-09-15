@@ -38,10 +38,9 @@ steps:
     displayName: Check version
 
   - bash: |
-      git config --global user.email "vscode@microsoft.com"
-      git config --global user.name "VSCode"
-
       git clone https://$(GITHUB_TOKEN)@github.com/DefinitelyTyped/DefinitelyTyped.git --depth=1
+      git -C DefinitelyTyped config user.email "vscode@microsoft.com"
+      git -C DefinitelyTyped config user.name "VSCode"
       node build/azure-pipelines/publish-types/update-types.ts
 
       TAG_VERSION=$(git describe --tags `git rev-list --tags --max-count=1`)

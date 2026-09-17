@@ -1925,4 +1925,20 @@ suite('OI extension boundary', () => {
 			fs.rmSync(testRoot, { recursive: true, force: true });
 		}
 	});
+
+	test('keeps cloud Release publication explicitly dispatched and stable-only', () => {
+		const releaseWorkflow = fs.readFileSync(path.join(repositoryRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+		assert.match(releaseWorkflow, /^\s{2}workflow_dispatch:\s*$/m);
+		assert.match(releaseWorkflow, /^\s{6}version:\s*$/m);
+		assert.match(releaseWorkflow, /^\s{6}commit:\s*$/m);
+		assert.doesNotMatch(releaseWorkflow, /^\s{2}(?:push|pull_request|schedule):\s*$/m);
+		assert.doesNotMatch(releaseWorkflow, /Release-v|Beta-v|alpha|beta|nightly|--prerelease|--draft/);
+		assert.match(releaseWorkflow, /\^\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$/);
+		assert.match(releaseWorkflow, /RELEASE_TAG: v\$\{\{ inputs\.version \}\}/);
+		assert.match(releaseWorkflow, /main_sha=.*git ls-remote origin refs\/heads\/main/);
+		assert.match(releaseWorkflow, /gh release create "\$RELEASE_TAG" "\$setup"[\s\S]*--target "\$RELEASE_COMMIT"/);
+		assert.ok(releaseWorkflow.indexOf('needs: build') < releaseWorkflow.indexOf('gh release create'));
+		assert.match(releaseWorkflow, /^permissions:\s*\n\s{2}contents: read\s*$/m);
+		assert.match(releaseWorkflow, /^\s{4}permissions:\s*\n\s{6}contents: write\s*$/m);
+	});
 });

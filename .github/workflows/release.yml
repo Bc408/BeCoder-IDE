@@ -1,13 +1,28 @@
 name: Release BeCoder Setup
 
 on:
-  push:
-    tags:
-      - 'Release-v*'
-      - 'Beta-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without the v prefix, for example 1.1.0'
+        required: true
+        type: string
+      commit:
+        description: 'Full main commit SHA to build and publish'
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_COMMIT: ${{ inputs.commit }}
+  RELEASE_TAG: v${{ inputs.version }}
 
 jobs:
   build:
@@ -17,23 +32,44 @@ jobs:
     env:
       VSCODE_ARCH: x64
       npm_config_arch: x64
-      npm_config_foreground_scripts: "true"
+      npm_config_foreground_scripts: 'true'
       ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          fetch-depth: 0
           lfs: true
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Verify release version
+      - name: Verify release metadata
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          tag_version="${GITHUB_REF_NAME#Release-v}"
-          tag_version="${tag_version#Beta-v}"
-          test "$(node -p "require('./package.json').version")" = "$tag_version"
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must use X.Y.Z without a prefix: $RELEASE_VERSION"
+            exit 1
+          fi
+          if [[ ! "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Release commit must be a full lowercase commit SHA: $RELEASE_COMMIT"
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          test "$(node -p "require('./package.json').version")" = "$RELEASE_VERSION"
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$main_sha" = "$RELEASE_COMMIT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release tag already exists: $RELEASE_TAG"
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists: $RELEASE_TAG"
+            exit 1
+          fi
       - name: Locate Visual Studio C++ toolchain
         shell: pwsh
         run: |
@@ -76,20 +112,25 @@ jobs:
           $packageRoot = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64'
           & .\build\azure-pipelines\win32\verify-becoder-package.ps1 -PackagePath $packageRoot -IncludeCompiler $true
           npm run gulp -- vscode-win32-x64-becoder-setup
-          $version = node -p "require('./package.json').version"
-          $setup = ".build\win32-x64\becoder-setup\BeCoderSetup-x64-$version.exe"
+          $setup = ".build\win32-x64\becoder-setup\BeCoderSetup-x64-$env:RELEASE_VERSION.exe"
           & .\build\azure-pipelines\win32\verify-becoder-setup.ps1 -SetupPath $setup -StagedPackagePath $packageRoot
       - uses: actions/upload-artifact@v7
         with:
           name: BeCoderSetup-x64
-          path: .build/win32-x64/becoder-setup/BeCoderSetup-x64-*.exe
+          path: .build/win32-x64/becoder-setup/BeCoderSetup-x64-${{ inputs.version }}.exe
           if-no-files-found: error
 
   publish:
     name: Publish GitHub release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           name: BeCoderSetup-x64
@@ -99,11 +140,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          tag='${{ github.ref_name }}'
-          prerelease=()
-          if [[ "$tag" == Beta-v* ]]; then prerelease=(--prerelease); fi
-          if gh release view "$tag" --repo '${{ github.repository }}' >/dev/null 2>&1; then
-            gh release upload "$tag" release/* --repo '${{ github.repository }}' --clobber
-          else
-            gh release create "$tag" release/* --repo '${{ github.repository }}' --generate-notes "${prerelease[@]}"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$main_sha" = "$RELEASE_COMMIT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release tag already exists: $RELEASE_TAG"
+            exit 1
           fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists: $RELEASE_TAG"
+            exit 1
+          fi
+          setup="release/BeCoderSetup-x64-$RELEASE_VERSION.exe"
+          test -f "$setup"
+          gh release create "$RELEASE_TAG" "$setup" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_COMMIT" \
+            --title "BeCoder $RELEASE_TAG" \
+            --generate-notes

@@ -145,13 +145,15 @@ For a plain cloud backup, create only the scoped commit and requested branch pus
 
 ## Publish a Release
 
-Treat the `Release BeCoder Setup` GitHub Actions workflow as an optional release path, not a default consequence of updating `main`.
+Treat the `Release BeCoder Setup` GitHub Actions workflow as an optional, manually dispatched release path. It is not a default consequence of updating `main`, creating a tag, or publishing a Release.
 
-- Keep the workflow limited to its release-tag triggers; do not add a `main` push trigger.
-- Do not create, move, or push a release tag unless the project owner explicitly authorizes both publishing the accepted changes to `main` and publishing a Release.
-- An ordinary commit, backup, branch push, or `main` update must not run the release workflow.
-- When explicitly authorized, use the version-matched release tag expected by the current workflow, wait for the clean Windows runner to install dependencies, validate, build and verify Setup, and publish the Release, then verify the final Release and its Setup asset.
-- A failed workflow attempt is not a published release. Diagnose and fix the failure under the validation stop rule, rerun only with the existing release authorization, and report earlier failed attempts separately from the successful final run.
+- Do not add a `main` push or tag push trigger to the release workflow.
+- Run the cloud release workflow only when the project owner explicitly authorizes all three actions: publish the accepted changes to `main`, publish a Release, and rebuild and verify the executable project closure on a clean cloud Windows runner. Do not infer the third authorization from general release or validation language.
+- When the project owner authorizes `main` and Release publication without the cloud-build authorization, publish the locally built and verified Setup directly. Do not dispatch the cloud release workflow.
+- Use only stable `vX.Y.Z` release tags. Do not create alpha, beta, nightly, or legacy `Release-v*` tags unless the project owner establishes a new policy.
+- For the cloud path, dispatch the workflow with the exact version and full accepted `main` commit. The workflow creates the tag and Release only after its source, package, and Setup checks pass.
+- For every authorized Release path, complete the release end to end: write a detailed user-facing release statement organized by applicable Conventional Commit categories, create the tag and Release, upload Setup, and verify the final remote state. Do not stop for a separate wording approval unless the project owner explicitly requests that checkpoint; the project owner may fine-tune the published wording afterward.
+- A failed workflow attempt is not a published release. Diagnose and fix the failure under the validation stop rule, rerun only with the existing cloud-release authorization, and report earlier failed attempts separately from the successful final run.
 
 ## Hand Off
 

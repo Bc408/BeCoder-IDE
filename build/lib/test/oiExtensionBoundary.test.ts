@@ -636,6 +636,9 @@ suite('OI extension boundary', () => {
 		assert.match(publisher, /product !== 'client'/);
 		assert.doesNotMatch(publisher, /server-(?:win32|linux|darwin|alpine)|cli-(?:win32|linux|darwin|alpine)|web-standalone/);
 
+		const preinstall = fs.readFileSync(path.join(repositoryRoot, 'build', 'npm', 'preinstall.ts'), 'utf8');
+		assert.match(preinstall, /if \(!fs\.existsSync\(rcFile\)\) \{\s*return undefined;\s*\}/);
+
 		const launchConfiguration = fs.readFileSync(path.join(repositoryRoot, '.vscode', 'launch.json'), 'utf8');
 		for (const removedLaunchName of [
 			'Attach to Agent Host Process',

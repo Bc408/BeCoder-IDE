@@ -46,6 +46,17 @@ License text: extensions/aadityanarayan.code-snap/LICENSE
 
 ---------------------------------------------------------
 
+Mathematic PDF Viewer 0.2.5 with Mozilla PDF.js 6.2.108
+https://github.com/mathematic-inc/vscode-pdf
+
+Apache License 2.0 and bundled third-party resource licenses
+Copyright 2021 Mathematic Inc and the contributors identified by the retained licenses
+Source snapshot: https://github.com/mathematic-inc/vscode-pdf/tree/768efbaf615b39813d08df68217994f9b5495f0e
+License text: extensions/mathematic.vscode-pdf/LICENSE
+Dependency notices: extensions/mathematic.vscode-pdf/ThirdPartyNotices.txt
+
+---------------------------------------------------------
+
 BeCoder Setup 0.1.0 and BeCoder GCC Diagnostics 0.1.0
 https://github.com/Bc408/BeCoder-IDE
 
@@ -92,10 +103,10 @@ Provenance and SHA-256: resources/oi-defaults/BUNDLED-COMPONENTS.json
 
 ---------------------------------------------------------
 
-BeCoder UCRT64 GCC 14.1.0 bundle
+BeCoder UCRT64 GCC 16.2.0 bundle
 https://www.msys2.org/
 
-This archive is assembled from pinned MSYS2 UCRT64 packages plus BeCoder's
+This archive is assembled from pinned, signed MSYS2 UCRT64 packages plus BeCoder's
 debugger header and precompiled standard header. Exact package versions,
 licenses, PKGBUILD commits and hashes are recorded in
 resources/oi-defaults/toolchains/ucrt64-packages.json. Archive provenance and

@@ -8,10 +8,11 @@ BeCoder 源自 **Code - OSS 1.130**，并保留 **1.130.0** 扩展 API 兼容版
 
 ## 主要功能
 
-- 内置 GCC 工具链，默认使用 C17 和 C++20。
+- 内置 GCC 16.2.0 工具链，默认使用 C17 和 C++20。
 - 由 BeCoder Runner 提供的“运行”和“使用输入运行”。“使用输入运行”读取源文件同目录下名称严格为 `input` 的普通文件。
 - 专用于 BeCoder 编译和运行流程的 BC 面板，同时完整保留可执行普通系统命令的原生 PowerShell 终端。
 - GCC 编辑器诊断；内置 clangd 提供补全、悬停、定义、引用、重命名、格式化、语义高亮和可选内嵌提示。
+- 受保护、离线且只读的 PDF 竞赛题面阅读器，支持搜索、缩放、缩略图和目录。
 - BeCoder One Monokai、Better C++ Syntax 和 Seti 文件图标主题。
 - Explorer、搜索、Tasks、Markdown、Mermaid、Notebook、内置浏览器、身份验证，以及普通编辑器和终端工作流。
 - 简体中文和英文界面。

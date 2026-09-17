@@ -203,7 +203,7 @@ suite('BeCoder clangd capability boundary', () => {
          }
 
          assert.deepStrictEqual(events, [
-           'configure:C:\\BeCoder\\toolchains\\bin\\g++.exe -Wall -xc++ -std=c++20 C:\\workspace\\main.cpp',
+           'configure:C:\\BeCoder\\toolchains\\bin\\g++.exe -Wall -include bits/debugger.h -xc++ -std=c++20 C:\\workspace\\main.cpp',
            'open:cpp',
            'configure:C:\\BeCoder\\toolchains\\bin\\gcc.exe -Wall -xc -std=c17 C:\\workspace\\main.c',
            'open:c'

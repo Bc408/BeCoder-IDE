@@ -1,0 +1,15 @@
+{
+	"becoder.displayName": "BeCoder PDF 阅读器",
+	"becoder.description": "BeCoder 内置的只读 PDF 竞赛题面阅读器。",
+	"becoder.configurationTitle": "PDF 阅读器",
+	"becoder.defaultZoom": "打开 PDF 时使用的默认缩放级别。",
+	"becoder.zoom.auto": "自动",
+	"becoder.zoom.actual": "实际大小",
+	"becoder.zoom.page": "适合页面",
+	"becoder.zoom.width": "适合宽度",
+	"becoder.sidebarView": "打开 PDF 时显示的侧栏。",
+	"becoder.sidebar.none": "无",
+	"becoder.sidebar.thumbnails": "缩略图",
+	"becoder.sidebar.outline": "目录",
+	"becoder.editorName": "PDF 阅读"
+}

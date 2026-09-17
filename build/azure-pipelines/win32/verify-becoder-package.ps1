@@ -19,8 +19,8 @@ $requiredFiles = @(
 	'data\.becoder-open-hello-coder',
 	'coding\helloCoder.cpp',
 	'data\toolchains\becoder-toolchain-manifest.json',
-	'data\toolchains\becoder-ucrt64\bin\g++.exe',
-	'data\toolchains\becoder-ucrt64\bin\gcc.exe',
+	'data\toolchains\ucrt64\bin\g++.exe',
+	'data\toolchains\ucrt64\bin\gcc.exe',
 	'data\toolchains\clangd\clangd_22.1.6\bin\clangd.exe',
 	'resources\app\ThirdPartyNotices.txt',
 	'resources\app\licenses\MIT-VSCode.txt',
@@ -29,6 +29,30 @@ $requiredFiles = @(
 	'resources\app\product.json',
 	'resources\app\extensions\aadityanarayan.code-snap\package.json',
 	'resources\app\extensions\aadityanarayan.code-snap\LICENSE',
+	'resources\app\extensions\mathematic.vscode-pdf\package.json',
+	'resources\app\extensions\mathematic.vscode-pdf\package.nls.json',
+	'resources\app\extensions\mathematic.vscode-pdf\package.nls.zh-cn.json',
+	'resources\app\extensions\mathematic.vscode-pdf\LICENSE',
+	'resources\app\extensions\mathematic.vscode-pdf\ThirdPartyNotices.txt',
+	'resources\app\extensions\mathematic.vscode-pdf\src\extension.js',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\main.mjs',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\main.css',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\LICENSE',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\build\pdf.mjs',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\build\pdf.worker.mjs',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\viewer.html',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\viewer.mjs',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\locale\zh-CN\viewer.ftl',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\cmaps\LICENSE',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\iccs\LICENSE',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\standard_fonts\LICENSE_LIBERATION',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\standard_fonts\LICENSE_FOXIT',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_QCMS',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_PDFJS_QCMS',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_OPENJPEG',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_PDFJS_OPENJPEG',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_JBIG2',
+	'resources\app\extensions\mathematic.vscode-pdf\assets\pdf.js\web\wasm\LICENSE_PDFJS_JBIG2',
 	'resources\app\extensions\becoder.setup\LICENSE',
 	'resources\app\extensions\becoder.setup\package.json',
 	'resources\app\extensions\becoder.setup\package.nls.json',
@@ -65,12 +89,8 @@ $requiredFiles = @(
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\gmp\COPYING.LESSERv3',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\isl\LICENSE',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpc\COPYING.LESSER',
-	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpdecimal\COPYRIGHT.txt',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpfr\COPYING.LESSER',
-	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python\LICENSE.txt',
-	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python-fonttools\LICENSE',
-	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\python-pip\LICENSE.txt',
-	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\tk\license.terms',
+	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\zstd\LICENSE',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty_console_list.node',
@@ -118,13 +138,75 @@ $packagedNotices = Get-Content -LiteralPath (Join-Path $appPath 'ThirdPartyNotic
 foreach ($requiredNotice in @(
 	'BeCoder Runner 0.3.0',
 	'CodeSnap 1.3.4',
+	'Mathematic PDF Viewer 0.2.5 with Mozilla PDF.js 6.2.108',
 	'clangd 22.1.6 Windows binary bundle',
-	'BeCoder UCRT64 GCC 14.1.0 bundle',
+	'BeCoder UCRT64 GCC 16.2.0 bundle',
 	'jsonc-parser 3.3.1'
 )) {
 	if (-not $packagedNotices.Contains($requiredNotice)) {
 		throw "The packaged third-party notices are missing the required entry: $requiredNotice"
 	}
+}
+$pdfViewerPath = Join-Path $appPath 'extensions\mathematic.vscode-pdf'
+$pdfViewerManifest = Get-Content -LiteralPath (Join-Path $pdfViewerPath 'package.json') -Raw | ConvertFrom-Json
+$pdfCustomEditor = @($pdfViewerManifest.contributes.customEditors)[0]
+if ("$($pdfViewerManifest.publisher).$($pdfViewerManifest.name)" -ne 'mathematic.vscode-pdf' -or
+	$pdfViewerManifest.version -ne '0.2.5' -or
+	$pdfViewerManifest.main -ne './src/extension.js' -or
+	$pdfViewerManifest.engines.vscode -ne '^1.130.0' -or
+	(@($pdfViewerManifest.activationEvents) -join ',') -ne 'onCustomEditor:pdf.view' -or
+	$pdfViewerManifest.contributes.configurationDefaults.'workbench.editorAssociations'.'*.pdf' -ne 'pdf.view' -or
+	$pdfCustomEditor.viewType -ne 'pdf.view' -or
+	$pdfCustomEditor.priority -ne 'default' -or
+	(@($pdfCustomEditor.selector.filenamePattern) -join ',') -ne '*.pdf' -or
+	(@($pdfViewerManifest.contributes.configuration.properties.'pdf.sidebarViewOnLoad'.enum) -join ',') -ne '0,1,2') {
+	throw 'The packaged PDF viewer does not retain the approved identity, compatibility, or read-only editor contribution.'
+}
+$pdfExtensionSource = Get-Content -LiteralPath (Join-Path $pdfViewerPath 'src\extension.js') -Raw
+foreach ($requiredBoundary in @('registerCustomEditorProvider', 'localResourceRoots: [resourceRoot, this.extensionRoot]', "path.extname(relativePath).toLowerCase() !== '.pdf'")) {
+	if (-not $pdfExtensionSource.Contains($requiredBoundary)) {
+		throw "The packaged PDF viewer is missing its local read-only boundary: $requiredBoundary"
+	}
+}
+foreach ($forbiddenBoundary in @('globalState', 'showInformationMessage', 'openExternal', 'writeFile', 'createWriteStream')) {
+	if ($pdfExtensionSource.Contains($forbiddenBoundary)) {
+		throw "The packaged PDF viewer contains a forbidden prompt, external-link, or write boundary: $forbiddenBoundary"
+	}
+}
+$pdfWebviewSource = Get-Content -LiteralPath (Join-Path $pdfViewerPath 'assets\main.mjs') -Raw
+foreach ($requiredBoundary in @(
+	"supportsDownloading', false",
+	"supportsPrinting', false",
+	"annotationEditorMode', -1",
+	"annotationMode', 1",
+	"enableScripting', false",
+	"enableXfa', false",
+	"enableSignatureEditor', false",
+	'event.preventDefault()'
+)) {
+	if (-not $pdfWebviewSource.Contains($requiredBoundary)) {
+		throw "The packaged PDF viewer does not enforce its read-only webview boundary: $requiredBoundary"
+	}
+}
+foreach ($forbiddenBoundary in @('sandboxBundleSrc', 'openExternal', 'fetch(')) {
+	if ($pdfWebviewSource.Contains($forbiddenBoundary)) {
+		throw "The packaged PDF viewer restores a forbidden scripting, external-link, or network boundary: $forbiddenBoundary"
+	}
+}
+foreach ($forbiddenPayload in @(
+	'assets\pdf.js\build\pdf.sandbox.mjs',
+	'assets\pdf.js\web\wasm\quickjs-eval.wasm',
+	'assets\pdf.js\web\wasm\quickjs-eval.js',
+	'assets\pdf.js\web\compressed.tracemonkey-pldi-09.pdf',
+	'assets\pdf.js\web\debugger.mjs',
+	'assets\pdf.js\web\debugger.css'
+)) {
+	if (Test-Path -LiteralPath (Join-Path $pdfViewerPath $forbiddenPayload)) {
+		throw "The packaged PDF viewer contains forbidden non-reading payload: $forbiddenPayload"
+	}
+}
+if ((Get-Content -LiteralPath (Join-Path $pdfViewerPath 'assets\pdf.js\build\pdf.mjs') -Raw) -notmatch 'Version = "6\.2\.108"') {
+	throw 'The packaged PDF viewer does not contain the approved PDF.js 6.2.108 snapshot.'
 }
 $gccDiagnosticsPath = Join-Path $appPath 'extensions\becoder.gcc-diagnostics'
 $gccDiagnosticsManifest = Get-Content -LiteralPath (Join-Path $gccDiagnosticsPath 'package.json') -Raw | ConvertFrom-Json
@@ -407,6 +489,7 @@ $expectedProtectedExtensions = @(
 	'becoder.one-monokai',
 	'llvm-vs-code-extensions.vscode-clangd',
 	'adpyke.codesnap',
+	'mathematic.vscode-pdf',
 	'vscode.cpp',
 	'ms-ceintl.vscode-language-pack-zh-hans'
 )
@@ -573,7 +656,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
-$expectedCompilerHash = '8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4'
+$expectedCompilerHash = '21d04b7cda3889a7946e9049ef039c001373d966e53ebe59493e5b28cbe3c6a2'
 if (-not $IncludeCompiler) {
 	throw 'Stage 4.7 Setup-only packages must always include the expanded BeCoder toolchain.'
 }
@@ -589,36 +672,36 @@ foreach ($obsoleteArchive in @(
 $toolchainRoot = Join-Path $PackagePath 'data\toolchains'
 $toolchainManifestPath = Join-Path $toolchainRoot 'becoder-toolchain-manifest.json'
 $toolchainManifest = Get-Content -LiteralPath $toolchainManifestPath -Raw | ConvertFrom-Json
-if ($toolchainManifest.schemaVersion -ne 2 -or $toolchainManifest.toolchainVersion -ne 'gcc-14.1.0-clangd-22.1.6') {
+if ($toolchainManifest.schemaVersion -ne 2 -or $toolchainManifest.toolchainVersion -ne 'gcc-16.2.0-clangd-22.1.6') {
 	throw 'The staged toolchain manifest has an unsupported format or version.'
 }
 $requiredToolchainFiles = @(
-	'becoder-ucrt64/bin/g++.exe',
-	'becoder-ucrt64/bin/gcc.exe',
-	'becoder-ucrt64/bin/libgcc_s_seh-1.dll',
-	'becoder-ucrt64/bin/libstdc++-6.dll',
-	'becoder-ucrt64/bin/libwinpthread-1.dll',
-	'becoder-ucrt64/bin/libgmp-10.dll',
-	'becoder-ucrt64/bin/libisl-23.dll',
-	'becoder-ucrt64/bin/libmpc-3.dll',
-	'becoder-ucrt64/bin/libmpfr-6.dll',
-	'becoder-ucrt64/bin/zlib1.dll',
-	'becoder-ucrt64/bin/libzstd.dll',
-	'becoder-ucrt64/bin/libintl-8.dll',
-	'becoder-ucrt64/bin/libiconv-2.dll',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/debugger.h',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1.exe',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1plus.exe',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/as.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/ld.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/zlib1.dll',
+	'ucrt64/bin/g++.exe',
+	'ucrt64/bin/gcc.exe',
+	'ucrt64/bin/libgcc_s_seh-1.dll',
+	'ucrt64/bin/libstdc++-6.dll',
+	'ucrt64/bin/libwinpthread-1.dll',
+	'ucrt64/bin/libgmp-10.dll',
+	'ucrt64/bin/libisl-23.dll',
+	'ucrt64/bin/libmpc-3.dll',
+	'ucrt64/bin/libmpfr-6.dll',
+	'ucrt64/bin/zlib1.dll',
+	'ucrt64/bin/libzstd.dll',
+	'ucrt64/bin/libintl-8.dll',
+	'ucrt64/bin/libiconv-2.dll',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1.exe',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1plus.exe',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/collect2.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/as.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/ld.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/zlib1.dll',
 	'clangd/clangd_22.1.6/bin/clangd.exe',
 	'clangd/clangd_22.1.6/LICENSE.TXT'
 )
@@ -628,7 +711,7 @@ foreach ($requiredToolchainFile in $requiredToolchainFiles) {
 		throw "The staged toolchain manifest is missing a critical component: $requiredToolchainFile"
 	}
 }
-if ($manifestPaths.Count -lt 3500 -or (@($manifestPaths | Sort-Object -Unique)).Count -ne $manifestPaths.Count -or
+if ($manifestPaths.Count -lt 3233 -or (@($manifestPaths | Sort-Object -Unique)).Count -ne $manifestPaths.Count -or
 	(@($manifestPaths | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)).Count -ne $manifestPaths.Count) {
 	throw 'The staged toolchain manifest is incomplete or contains duplicate paths.'
 }
@@ -656,19 +739,29 @@ if (($actualToolchainPaths -join "`n") -ne ($sortedManifestPaths -join "`n")) {
 	throw 'The staged toolchain tree does not exactly match its full integrity manifest.'
 }
 
-$compilerRoot = Join-Path $toolchainRoot 'becoder-ucrt64'
+$compilerRoot = Join-Path $toolchainRoot 'ucrt64'
 foreach ($forbiddenCompilerEntry in @(
 	'bin\python.exe',
 	'bin\objdump.exe',
-	'lib\gcc\x86_64-w64-mingw32\14.1.0\plugin',
-	'lib\gcc\x86_64-w64-mingw32\14.1.0\lto1.exe',
-	'lib\gcc\x86_64-w64-mingw32\14.1.0\lto-wrapper.exe'
+	'bin\gdb.exe',
+	'bin\make.exe',
+	'bin\pkg-config.exe',
+	'etc',
+	'share',
+	'x86_64-w64-mingw32\bin\windres.exe',
+	'lib\gcc\x86_64-w64-mingw32\16.2.0\plugin',
+	'lib\gcc\x86_64-w64-mingw32\16.2.0\lto1.exe',
+	'lib\gcc\x86_64-w64-mingw32\16.2.0\lto-wrapper.exe'
 )) {
 	if (Test-Path -LiteralPath (Join-Path $compilerRoot $forbiddenCompilerEntry)) {
 		throw "The staged compiler contains a forbidden non-runtime payload: $forbiddenCompilerEntry"
 	}
 }
 $compilerSize = (Get-ChildItem -LiteralPath $compilerRoot -File -Recurse | Measure-Object Length -Sum).Sum
+$compilerFileCount = @(Get-ChildItem -LiteralPath $compilerRoot -File -Recurse).Count
+if ($compilerFileCount -ne 3233) {
+	throw "The staged compiler does not match the audited 3233-file closure: $compilerFileCount files"
+}
 if ($compilerSize -gt 400MB) {
 	throw "The staged compiler exceeds the audited 400 MiB boundary: $compilerSize bytes"
 }
@@ -683,6 +776,7 @@ $expectedComponentIds = @(
 	'becoder.gcc-diagnostics',
 	'llvm-vs-code-extensions.vscode-clangd',
 	'adpyke.codesnap',
+	'mathematic.vscode-pdf',
 	'becoder.one-monokai',
 	'vscode.cpp',
 	'vscode.mermaid-markdown-features',
@@ -718,6 +812,7 @@ $electronComponent = @($componentInventory.components) | Where-Object { $_.id -e
 $ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 'becoder-ucrt64' }
 $languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
 $mermaidComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'vscode.mermaid-markdown-features' }
+$pdfViewerComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'mathematic.vscode-pdf' }
 if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne $expectedCompilerHash) {
 	throw 'The bundled component inventory does not pin the audited source toolchain archives.'
 }
@@ -738,22 +833,29 @@ if ($mermaidComponent.version -ne '10.0.0' -or
 	$mermaidComponent.thirdPartyNoticesPath -ne 'extensions/mermaid-markdown-features/ThirdPartyNotices.txt') {
 	throw 'The bundled component inventory does not preserve the Mermaid Markdown license boundary.'
 }
+if ($pdfViewerComponent.version -ne '0.2.5' -or
+	$pdfViewerComponent.source -ne 'https://github.com/mathematic-inc/vscode-pdf/tree/768efbaf615b39813d08df68217994f9b5495f0e' -or
+	$pdfViewerComponent.spdxIdentifier -ne 'Apache-2.0' -or
+	$pdfViewerComponent.licensePath -ne 'extensions/mathematic.vscode-pdf/LICENSE' -or
+	$pdfViewerComponent.thirdPartyNoticesPath -ne 'extensions/mathematic.vscode-pdf/ThirdPartyNotices.txt') {
+	throw 'The bundled component inventory does not preserve the PDF viewer provenance and license boundary.'
+}
 $ucrt64Inventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\toolchains\ucrt64-packages.json') -Raw | ConvertFrom-Json
-if (@($ucrt64Inventory.packages).Count -ne 36 -or @($ucrt64Inventory.auxiliaryPackageSources).Count -ne 2) {
+if (@($ucrt64Inventory.packages).Count -ne 17 -or @($ucrt64Inventory.auxiliaryPackageSources).Count -ne 0) {
 	throw 'The UCRT64 package inventory is incomplete.'
 }
 $ucrt64LicenseRoot = Join-Path $appPath $ucrt64Inventory.licenseFilesRoot
 $retainedLicenseFiles = @(Get-ChildItem -LiteralPath $ucrt64LicenseRoot -Recurse -File)
 if ($ucrt64Inventory.licenseFilesRoot -ne 'resources/oi-defaults/toolchains/ucrt64-licenses' -or
 	$retainedLicenseFiles.Count -ne $ucrt64Inventory.evidence.retainedLicenseFileCount -or
-	$retainedLicenseFiles.Count -lt 63) {
+	$retainedLicenseFiles.Count -ne 41) {
 	throw 'The packaged UCRT64 license bundle is incomplete.'
 }
 $ucrt64RecipeRoot = Join-Path $appPath $ucrt64Inventory.recipeFilesRoot
 $retainedRecipeFiles = @(Get-ChildItem -LiteralPath $ucrt64RecipeRoot -Recurse -File)
 if ($ucrt64Inventory.recipeFilesRoot -ne 'resources/oi-defaults/toolchains/ucrt64-sources/recipes' -or
 	$retainedRecipeFiles.Count -ne $ucrt64Inventory.evidence.retainedRecipeFileCount -or
-	$retainedRecipeFiles.Count -lt 290) {
+	$retainedRecipeFiles.Count -ne 64) {
 	throw 'The packaged UCRT64 source recipe bundle is incomplete.'
 }
 
@@ -802,6 +904,7 @@ foreach ($recipeName in $inventoryRecipeNames) {
 foreach ($package in @($ucrt64Inventory.packages) + @($ucrt64Inventory.auxiliaryPackageSources)) {
 	$recipe = $ucrt64Inventory.recipes.($package.recipe)
 	if (-not $package.name -or -not $package.version -or -not $package.license -or
+		-not $package.archiveFile -or $package.archiveSha256 -notmatch '^[0-9a-f]{64}$' -or
 		$recipe.commit -notmatch '^[0-9a-f]{40}$' -or $recipe.pkgbuildSha256 -notmatch '^[0-9a-f]{64}$') {
 		throw "The UCRT64 package inventory contains incomplete provenance for $($package.name)."
 	}

@@ -87,6 +87,17 @@
 			"licensePath": "extensions/aadityanarayan.code-snap/LICENSE"
 		},
 		{
+			"id": "mathematic.vscode-pdf",
+			"version": "0.2.5",
+			"source": "https://github.com/mathematic-inc/vscode-pdf/tree/768efbaf615b39813d08df68217994f9b5495f0e",
+			"modificationStatus": "Modified and integrated as BeCoder's protected, offline, read-only competitive-programming PDF viewer; support prompts, printing, downloading, annotations, attachments, layers, external links, and embedded PDF scripting are disabled.",
+			"license": "Apache-2.0",
+			"spdxIdentifier": "Apache-2.0",
+			"copyrightNotice": "Copyright 2021 Mathematic Inc; PDF.js and bundled resource copyrights belong to their identified contributors; BeCoder modifications copyright their contributors.",
+			"licensePath": "extensions/mathematic.vscode-pdf/LICENSE",
+			"thirdPartyNoticesPath": "extensions/mathematic.vscode-pdf/ThirdPartyNotices.txt"
+		},
+		{
 			"id": "becoder.one-monokai",
 			"version": "1.0.0",
 			"source": "https://github.com/Bc408/BeCoder-IDE",
@@ -146,11 +157,11 @@
 		},
 		{
 			"id": "becoder-ucrt64",
-			"version": "gcc-14.1.0-3",
+			"version": "gcc-16.2.0-3",
 			"archive": "resources/oi-defaults/toolchains/becoder-ucrt64.zip",
-			"sha256": "8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4",
+			"sha256": "21d04b7cda3889a7946e9049ef039c001373d966e53ebe59493e5b28cbe3c6a2",
 			"source": "https://www.msys2.org/",
-			"modificationStatus": "Assembled from pinned MSYS2 UCRT64 packages with BeCoder PCH, debugger header, helper scripts, and runtime DLL copies.",
+			"modificationStatus": "Assembled from 17 pinned, signed MSYS2 UCRT64 packages with the BeCoder PCH, debugger header, and required target runtime DLL copies.",
 			"license": "Multiple licenses; see package inventory.",
 			"spdxIdentifier": "NOASSERTION",
 			"copyrightNotice": "Copyright belongs to the package authors identified by the pinned upstream sources and retained license files.",

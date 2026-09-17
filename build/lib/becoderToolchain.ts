@@ -40,34 +40,50 @@ const compilerGccFiles = [
 ] as const;
 
 const compilerGccDirectories = ['include', 'include-fixed'] as const;
+const compilerTargetBinFiles = [
+	'ar.exe', 'as.exe', 'dlltool.exe', 'ld.bfd.exe', 'ld.exe',
+	'libiconv-2.dll', 'libintl-8.dll', 'libwinpthread-1.dll', 'libzstd.dll',
+	'nm.exe', 'objcopy.exe', 'ranlib.exe', 'readelf.exe', 'strip.exe', 'zlib1.dll'
+] as const;
+const compilerRootLibraryFiles = [
+	'crt2.o', 'crt2u.o', 'default-manifest.o', 'libadvapi32.a', 'libgcc_s.a',
+	'libkernel32.a', 'libmingw32.a', 'libmingwex.a', 'libmsvcrt.a', 'libpthread.a',
+	'libshell32.a', 'libstdc++.a', 'libstdc++.dll.a', 'libuser32.a'
+] as const;
+const compilerIncludeDirectories = [
+	'c++', 'ddk', 'gdiplus', 'GL', 'KHR', 'isl', 'libiberty', 'lzma',
+	'psdk_inc', 'sys', 'wrl'
+] as const;
+const gccVersion = '16.2.0' as const;
+const compilerVersion = 'gcc-16.2.0-clangd-22.1.6' as const;
 
 const requiredToolchainFiles = [
-	'becoder-ucrt64/bin/g++.exe',
-	'becoder-ucrt64/bin/gcc.exe',
-	'becoder-ucrt64/bin/libgcc_s_seh-1.dll',
-	'becoder-ucrt64/bin/libstdc++-6.dll',
-	'becoder-ucrt64/bin/libwinpthread-1.dll',
-	'becoder-ucrt64/bin/libgmp-10.dll',
-	'becoder-ucrt64/bin/libisl-23.dll',
-	'becoder-ucrt64/bin/libmpc-3.dll',
-	'becoder-ucrt64/bin/libmpfr-6.dll',
-	'becoder-ucrt64/bin/zlib1.dll',
-	'becoder-ucrt64/bin/libzstd.dll',
-	'becoder-ucrt64/bin/libintl-8.dll',
-	'becoder-ucrt64/bin/libiconv-2.dll',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
-	'becoder-ucrt64/include/c++/14.1.0/x86_64-w64-mingw32/bits/debugger.h',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1.exe',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/cc1plus.exe',
-	'becoder-ucrt64/lib/gcc/x86_64-w64-mingw32/14.1.0/collect2.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/as.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/ld.exe',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
-	'becoder-ucrt64/x86_64-w64-mingw32/bin/zlib1.dll',
+	'ucrt64/bin/g++.exe',
+	'ucrt64/bin/gcc.exe',
+	'ucrt64/bin/libgcc_s_seh-1.dll',
+	'ucrt64/bin/libstdc++-6.dll',
+	'ucrt64/bin/libwinpthread-1.dll',
+	'ucrt64/bin/libgmp-10.dll',
+	'ucrt64/bin/libisl-23.dll',
+	'ucrt64/bin/libmpc-3.dll',
+	'ucrt64/bin/libmpfr-6.dll',
+	'ucrt64/bin/zlib1.dll',
+	'ucrt64/bin/libzstd.dll',
+	'ucrt64/bin/libintl-8.dll',
+	'ucrt64/bin/libiconv-2.dll',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
+	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1.exe',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1plus.exe',
+	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/collect2.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/as.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/ld.exe',
+	'ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
+	'ucrt64/x86_64-w64-mingw32/bin/zlib1.dll',
 	'clangd/clangd_22.1.6/bin/clangd.exe',
 	'clangd/clangd_22.1.6/LICENSE.TXT'
 ] as const;
@@ -80,7 +96,7 @@ interface IBeCoderToolchainManifestFile {
 
 interface IBeCoderToolchainManifest {
 	readonly schemaVersion: 2;
-	readonly toolchainVersion: 'gcc-14.1.0-clangd-22.1.6';
+	readonly toolchainVersion: typeof compilerVersion;
 	readonly files: readonly IBeCoderToolchainManifestFile[];
 }
 
@@ -130,7 +146,7 @@ async function createManifest(toolchainRoot: string): Promise<IBeCoderToolchainM
 		const stat = await fs.promises.stat(filePath);
 		files.push({ path: relativePath, size: stat.size, sha256: await sha256(filePath) });
 	}
-	return { schemaVersion: 2, toolchainVersion: 'gcc-14.1.0-clangd-22.1.6', files };
+	return { schemaVersion: 2, toolchainVersion: compilerVersion, files };
 }
 
 async function copyFile(source: string, destination: string): Promise<void> {
@@ -153,32 +169,40 @@ async function copyDirectory(source: string, destination: string): Promise<void>
 async function stageSlimCompiler(compilerArchive: string, toolchainRoot: string): Promise<void> {
 	const expandedRoot = path.join(toolchainRoot, '.becoder-ucrt64-expanded');
 	const stagedRoot = path.join(toolchainRoot, '.becoder-ucrt64-staged');
-	const compilerRoot = path.join(toolchainRoot, 'becoder-ucrt64');
+	const compilerRoot = path.join(toolchainRoot, 'ucrt64');
+	const sourceRoot = path.join(expandedRoot, 'ucrt64');
 	await fs.promises.mkdir(expandedRoot, { recursive: true });
 	try {
 		await extract(compilerArchive, { dir: expandedRoot });
 		await fs.promises.mkdir(stagedRoot, { recursive: true });
 
 		for (const name of compilerBinFiles) {
-			await copyFile(path.join(expandedRoot, 'bin', name), path.join(stagedRoot, 'bin', name));
+			await copyFile(path.join(sourceRoot, 'bin', name), path.join(stagedRoot, 'bin', name));
 		}
 
-		await copyDirectory(path.join(expandedRoot, 'include'), path.join(stagedRoot, 'include'));
-		await copyDirectory(path.join(expandedRoot, 'x86_64-w64-mingw32'), path.join(stagedRoot, 'x86_64-w64-mingw32'));
-
-		const sourceLibRoot = path.join(expandedRoot, 'lib');
-		for (const entry of await fs.promises.readdir(sourceLibRoot, { withFileTypes: true })) {
+		for (const name of compilerIncludeDirectories) {
+			await copyDirectory(path.join(sourceRoot, 'include', name), path.join(stagedRoot, 'include', name));
+		}
+		for (const entry of await fs.promises.readdir(path.join(sourceRoot, 'include'), { withFileTypes: true })) {
 			if (entry.isFile()) {
-				await copyFile(path.join(sourceLibRoot, entry.name), path.join(stagedRoot, 'lib', entry.name));
+				await copyFile(path.join(sourceRoot, 'include', entry.name), path.join(stagedRoot, 'include', entry.name));
 			}
 		}
+		for (const name of compilerTargetBinFiles) {
+			await copyFile(path.join(sourceRoot, 'x86_64-w64-mingw32', 'bin', name), path.join(stagedRoot, 'x86_64-w64-mingw32', 'bin', name));
+		}
+		await copyDirectory(path.join(sourceRoot, 'x86_64-w64-mingw32', 'lib', 'ldscripts'), path.join(stagedRoot, 'x86_64-w64-mingw32', 'lib', 'ldscripts'));
 
-		const gccRelativeRoot = path.join('lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0');
+		for (const name of compilerRootLibraryFiles) {
+			await copyFile(path.join(sourceRoot, 'lib', name), path.join(stagedRoot, 'lib', name));
+		}
+
+		const gccRelativeRoot = path.join('lib', 'gcc', 'x86_64-w64-mingw32', gccVersion);
 		for (const name of compilerGccFiles) {
-			await copyFile(path.join(expandedRoot, gccRelativeRoot, name), path.join(stagedRoot, gccRelativeRoot, name));
+			await copyFile(path.join(sourceRoot, gccRelativeRoot, name), path.join(stagedRoot, gccRelativeRoot, name));
 		}
 		for (const name of compilerGccDirectories) {
-			await copyDirectory(path.join(expandedRoot, gccRelativeRoot, name), path.join(stagedRoot, gccRelativeRoot, name));
+			await copyDirectory(path.join(sourceRoot, gccRelativeRoot, name), path.join(stagedRoot, gccRelativeRoot, name));
 		}
 
 		await fs.promises.rename(stagedRoot, compilerRoot);

@@ -50,7 +50,7 @@ async function collectDiagnostics(context: vscode.ExtensionContext): Promise<Dia
 				: validation.issues.join('\n'),
 			path: validation.root
 		},
-		await executableDiagnostic('BeCoder g++ 14.1.0', paths.compiler, ['--version']),
+		await executableDiagnostic('BeCoder g++ 16.2.0', paths.compiler, ['--version']),
 		await executableDiagnostic('BeCoder clangd 22.1.6', paths.clangd, ['--version']),
 		// allow-any-unicode-next-line
 		{ label: selectDisplayText('C++ semantic service', 'C++ 语义服务'), status: 'ok', detail: selectDisplayText('BeCoder clangd is the only bundled C++ semantic service.', 'BeCoder clangd 是唯一内置的 C++ 语义服务。') },

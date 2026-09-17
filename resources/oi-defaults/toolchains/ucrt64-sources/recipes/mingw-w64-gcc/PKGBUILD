@@ -4,17 +4,24 @@
 # Contributor: Renato Silva <br.renatosilva@gmail.com>
 # Contributor: wirx6 <wirx654@gmail.com>
 # Contributor: Kirill Müller <krlmlr@mailbox.org>
+# Contributor: dragon-archer <dragon-archer@outlook.com>
 
 if [[ ${CARCH} != i686 ]]; then
   _enable_ada=yes
-  _enable_objc=yes
-  _enable_rust=yes
+  _enable_fortran=yes
   _enable_jit=yes
+  _enable_lto=yes
+  _enable_objc=yes
+  _enable_plugin=yes
+  _enable_rust=no
 else
   _enable_ada=no
-  _enable_objc=no
-  _enable_rust=no
+  _enable_fortran=no
   _enable_jit=no
+  _enable_lto=yes
+  _enable_objc=no
+  _enable_plugin=no
+  _enable_rust=no
 fi
 
 _threads="posix"
@@ -22,37 +29,40 @@ _threads="posix"
 _realname=gcc
 pkgbase=mingw-w64-${_realname}
 pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}"
-         "${MINGW_PACKAGE_PREFIX}-${_realname}-libs"
-         "${MINGW_PACKAGE_PREFIX}-${_realname}-libgfortran"
-         "${MINGW_PACKAGE_PREFIX}-${_realname}-fortran"
-         "${MINGW_PACKAGE_PREFIX}-${_realname}-lto-dump"
          $([[ "$_enable_ada" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-ada")
+         $([[ "$_enable_fortran" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-fortran")
+         "${MINGW_PACKAGE_PREFIX}-${_realname}-libs"
          $([[ "$_enable_objc" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-objc")
+         $([[ "$_enable_plugin" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-plugin")
          $([[ "$_enable_rust" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-rust")
          $([[ "$_enable_jit" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-libgccjit")
+         $([[ "$_enable_fortran" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-libgfortran")
+         $([[ "$_enable_lto" == "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-lto-dump")
         )
-pkgver=14.1.0
+_pkgver=16.2.0
 _rc=""
 _snapshot=
-if [[ -z ${_rc} ]]; then
-  _version=${pkgver%%.*}
-  _libdir=lib/gcc/${CHOST}/${pkgver%%+*}
-else
-  _version=${pkgver}-${_rc}
-  _libdir=lib/gcc/${CHOST}/${pkgver%%.*}.0.1
-fi
-if [[ -z ${_snapshot} ]]; then
+if [[ -z ${_rc} && -z ${_snapshot} ]]; then
+  pkgver=${_pkgver}
   _sourcedir=${_realname}-${pkgver}
-  _url=https://ftp.gnu.org/gnu/gcc/${_realname}-${pkgver%%+*}
+  _url=https://ftp.gnu.org/gnu/gcc/${_realname}-${pkgver}
 else
+  pkgver=${_pkgver%%.*}.0.1
+  if [[ -z ${_rc} ]]; then
+    _version=${_pkgver%%.*}
+  else
+    _version=${_pkgver}-${_rc}
+  fi
   _sourcedir=${_realname}-${_version}-${_snapshot}
   _url=https://gcc.gnu.org/pub/gcc/snapshots/${_version}-${_snapshot}
 fi
+_libdir=lib/gcc/${CHOST}/${pkgver}
 pkgrel=3
-pkgdesc="GCC for the MinGW-w64"
+pkgdesc="The GNU Compiler Collection (mingw-w64)"
 arch=('any')
 mingw_arch=('mingw32' 'mingw64' 'ucrt64')
 url="https://gcc.gnu.org"
+msys2_repository_url='https://gcc.gnu.org/git/gitweb.cgi?p=gcc.git'
 msys2_references=(
   "cpe: cpe:/a:gnu:gcc"
 )
@@ -71,6 +81,7 @@ makedepends=("${MINGW_PACKAGE_PREFIX}-${_realname}"
              "${MINGW_PACKAGE_PREFIX}-mpc"
              "${MINGW_PACKAGE_PREFIX}-mpfr"
              "${MINGW_PACKAGE_PREFIX}-python"
+             "${MINGW_PACKAGE_PREFIX}-texinfo"
              "${MINGW_PACKAGE_PREFIX}-windows-default-manifest"
              "${MINGW_PACKAGE_PREFIX}-winpthreads"
              "${MINGW_PACKAGE_PREFIX}-zlib"
@@ -78,37 +89,43 @@ makedepends=("${MINGW_PACKAGE_PREFIX}-${_realname}"
 options=('!emptydirs') # '!strip' 'debug')
 source=(${_url}/${_sourcedir}.tar.xz{,.sig}
         "gdbinit"
-        0001-missing-__thiscall-attribute-on-builtin-declaration-of-__cxa_thread_atexit.patch
+        0002-i386-Keep-SEH-enabled-for-Win64-sysv_abi-functions.patch
         0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch
-        0005-Windows-Don-t-ignore-native-system-header-dir.patch
         0007-Build-EXTRA_GNATTOOLS-for-Ada.patch
         0008-Prettify-linking-no-undefined.patch
         0011-Enable-shared-gnat-implib.patch
         0012-Handle-spaces-in-path-for-default-manifest.patch
         0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch
         0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch
-        0021-PR14940-Allow-a-PCH-to-be-mapped-to-a-different-addr.patch
+        0021-bootstrap-gnattools-Pass-target-sysroot-flags-to-boo.patch
+        0022-mingw-Remove-outdated-mingw-stuff.patch
+        0023-Ada-Don-t-export-gnat1-s-symbols-on-PE-hosts.patch
+        0024-libgfortran-Guard-locale-restoration-for-formatted-I0.patch
+        0025-libgfortran-Copy-LC_NUMERIC-string-for-formatted-IO.patch
         0140-gcc-diagnostic-color.patch
         0200-add-m-no-align-vector-insn-option-for-i386.patch
         2001-fix-building-rust-on-mingw-w64.patch
-        3001-fix-ice.patch)
-sha256sums=('e283c654987afe3de9d8080bc0bd79534b5ca0d681a73a11ff2b5d3767426840'
+        3001-fix-codeview-crashes.patch)
+sha256sums=('e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e'
             'SKIP'
             'bce81824fc89e5e62cca350de4c17a27e27a18a1a1ad5ca3492aec1fc5af3234'
-            '7cb64cb9dc7117d4d5d32bd7910ced7c170718f92bc0576594506edb3aeabb42'
+            'fdf4e90a56fc195a8f9a969af39335f158a29f29d42d33c00d908fc47cf5ad24'
             '3fc35067823f87e48dd3bfd265e7593000dc110fa9ad5f16c81b896765fc897a'
-            '57f0081655ba9a94ed7cc3d8b67a79aee8442a56613bd17f9809a7b0e68e43cd'
             '90d5cb570083f9dea4ac0f0f87e3e8d2230f5052e6f9b946061a20a224a9d195'
-            '8a40ea004a803b7e6aabd6c58d859502a57c87755dbcfedbdfed161f2fb7eb62'
+            '8d2d53ae26b777d90189240494de1b895c5efa1ebdcdfbf5774f29fc742499d9'
             '5ef4148acc4a2b7ed648d4fe75fab5545e84b4b93a12d6ba4e4ea6061dd635fa'
             'e98805ead7d78ee2a92f237894c4b2b7ddc1688e1b517d8c04f28d440202e40f'
             'fd9bdecb2bbc4796bbc9f00b708dac42ef9e3464a06d6d27e5475cee117de5be'
             'ad1f7b5e7afaaec008b7cbd14feea13a10989fa91bda7003af72d457619bb199'
-            '6c272078340a27b3f147e497115b0a6e9fc0da720a2602f12b086524522caa59'
-            'e0a5b470f49a29f20215cc9f9d04c1cb9969dff6f0e546542799d3a693ef1c84'
-            'c34f9e71b5a092be1987ad4c65891742c74c9eb8ef6560100e751cd31375f579'
-            'ddc1538c2b9132bce5b3b2cad2a382762d58b46b31d2ae291f6e4d963b88dfd4'
-            '38a5dff6ebfffce24763fca4221554ab5a2a6416a14594c4b87e08c94b63e273')
+            '76455c46eec4df95a80bbf7e5bcd2d165f300976c79c1baf0bf7ed20f000cdd4'
+            'ec05f8f26698dae4e0e0b58189cbf509185ad6d40b4950b33e28b638bf70c7ae'
+            '395dd4df29c295f917aa4a136a0aa72af34eee6320ecc2d92ee717397578398d'
+            '976d14f803a211b19d9bf0169c08d4fde05af5cc18073f2fc8efc9a3cb17890a'
+            'f591efc820a2c72aefb83179f7cbd3f4654231b68700486bd04ee32e2db61de5'
+            'c94004dab1685a6fa9124de86aae742df4136a2e9ff5d5e1ad87ecdc35fbcef4'
+            '1484911163634f30324827619c873a6267b377abba0df8bbedfd128163c53ea4'
+            'a411f59953553a3d01dd64c79b1acbb91eca092c4cb01bfd26b1c51c3eb798e8'
+            'f21f9ab731e9cab8fd4ca8c289497f859ef7004e6fa0507877dc2559ac2071c3')
 validpgpkeys=(F3691687D867B81B51CE07D9BBE43771487328A9  # bpiotrowski@archlinux.org
               86CFFCA918CF3AF47147588051E8B148A9999C34  # evangelos@foutrelis.com
               13975A70E63C361C73AE69EF6EEB81F8981C74C7  # richard.guenther@gmail.com
@@ -136,20 +153,26 @@ del_file_exists() {
 prepare() {
   cd "${srcdir}"/${_sourcedir}
 
-  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=114968
+  # 0002: https://gcc.gnu.org/git/?p=gcc.git;a=patch;h=b0f09b72d9e1783e8ccaf2d8c1c72b03e3973f0b;hp=e88f8d7bfc811f6d152c42ba009255506f5beba1
   apply_patch_with_msg \
-    0001-missing-__thiscall-attribute-on-builtin-declaration-of-__cxa_thread_atexit.patch
-
-  apply_patch_with_msg \
+    0002-i386-Keep-SEH-enabled-for-Win64-sysv_abi-functions.patch \
     0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch \
-    0005-Windows-Don-t-ignore-native-system-header-dir.patch \
     0007-Build-EXTRA_GNATTOOLS-for-Ada.patch \
     0008-Prettify-linking-no-undefined.patch \
     0011-Enable-shared-gnat-implib.patch \
     0012-Handle-spaces-in-path-for-default-manifest.patch \
     0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch \
     0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch \
-    0021-PR14940-Allow-a-PCH-to-be-mapped-to-a-different-addr.patch
+    0023-Ada-Don-t-export-gnat1-s-symbols-on-PE-hosts.patch \
+    0024-libgfortran-Guard-locale-restoration-for-formatted-I0.patch \
+    0025-libgfortran-Copy-LC_NUMERIC-string-for-formatted-IO.patch
+
+  # Avoid hardcoding /mingw or D:/M/${MINGW_PREFIX} in the final installation.
+  # Make GCC fully relocatable.
+  # See https://github.com/msys2/MINGW-packages/pull/29280 for details.
+  apply_patch_with_msg \
+    0021-bootstrap-gnattools-Pass-target-sysroot-flags-to-boo.patch \
+    0022-mingw-Remove-outdated-mingw-stuff.patch
 
   # Enable diagnostic color under mintty
   # based on https://github.com/BurntSushi/ripgrep/issues/94#issuecomment-261761687
@@ -168,18 +191,11 @@ prepare() {
   apply_patch_with_msg \
     2001-fix-building-rust-on-mingw-w64.patch
 
-  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=115038
+  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=120051
   apply_patch_with_msg \
-    3001-fix-ice.patch
+    3001-fix-codeview-crashes.patch
 
-  # do not expect ${prefix}/mingw symlink - this should be superceded by
-  # 0005-Windows-Don-t-ignore-native-system-header-dir.patch .. but isn't!
-  sed -i 's/${prefix}\/mingw\//${prefix}\//g' configure
-
-  # change hardcoded /mingw prefix to the real prefix .. isn't this rubbish?
-  # it might work at build time and could be important there but beyond that?!
-  local MINGW_NATIVE_PREFIX=$(cygpath -am ${MINGW_PREFIX})
-  sed -i "s#\\/mingw\\/#${MINGW_NATIVE_PREFIX//\//\\/}\\/#g" gcc/config/i386/mingw32.h
+  autoreconf -fiv
 }
 
 build() {
@@ -200,16 +216,27 @@ build() {
     LDFLAGS+=" -Wl,--large-address-aware"
     local _arch=pentium4
   else
-    _extra_config+=("--enable-plugin")
     local _arch=nocona
   fi
 
-  local _languages="c,lto,c++,fortran"
+  local _languages="c,c++"
   if [ "$_enable_ada" == "yes" ]; then
     _languages+=",ada"
   fi
+  if [ "$_enable_fortran" == "yes" ]; then
+    _languages+=",fortran"
+  fi
+  if [ "$_enable_lto" == "yes" ]; then
+    _languages+=",lto"
+    _extra_config+=("--enable-lto")
+  else
+    _extra_config+=("--disable-lto")
+  fi
   if [ "$_enable_objc" == "yes" ]; then
     _languages+=",objc,obj-c++"
+  fi
+  if [ "$_enable_plugin" == "yes" ]; then
+    _extra_config+=("--enable-plugin")
   fi
   if [ "$_enable_rust" == "yes" ]; then
     _languages+=",rust"
@@ -220,6 +247,13 @@ build() {
 
   # so libgomp DLL gets built despide static libdl
   export lt_cv_deplibs_check_method='pass_all'
+
+  # This configure check fails with msvcrt due to
+  # https://github.com/mingw-w64/mingw-w64/issues/163
+  export gcc_cv_have_tls=yes
+
+  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=125312
+  export glibcxx_cv_atomic_word=yes
 
   # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105507#c3
   # At least with mingw32 + dwarf-2 exceptions there can only be one libgcc in
@@ -237,29 +271,33 @@ build() {
   # In addition adaint.c does `#include <accctrl.h>` which pulls in msxml.h, hacky hack:
   CPPFLAGS+=" -DCOM_NO_WINDOWS_H"
 
+  # local-prefix and native-system-header-dir will be prefixed with sysroot, so don't add ${MINGW_PREFIX} here.
+  # --with-build-sysroot has to be an Windows path because it's used by gnatlink.exe, which launch xgcc.exe
+  # with `System.OS_Lib.Spawn` which doesn't convert paths.
   ../${_sourcedir}/configure \
     --prefix=${MINGW_PREFIX} \
-    --with-local-prefix=${MINGW_PREFIX}/local \
-    --build=${MINGW_CHOST} \
-    --host=${MINGW_CHOST} \
-    --target=${MINGW_CHOST} \
-    --with-native-system-header-dir=${MINGW_PREFIX}/include \
+    --with-sysroot=${MINGW_PREFIX} \
+    --with-build-sysroot=$(cygpath -m ${MINGW_PREFIX}) \
+    --with-local-prefix=/local \
+    --with-native-system-header-dir=/include \
     --libexecdir=${MINGW_PREFIX}/lib \
     --enable-bootstrap \
     --enable-checking=release \
     --with-arch=${_arch} \
     --with-tune=generic \
+    --enable-mingw-wildcard \
     --enable-languages=${_languages} \
     --enable-shared \
     --enable-static \
     --enable-libatomic \
     --enable-threads=${_threads} \
+    --enable-tls \
     --enable-graphite \
     --enable-fully-dynamic-string \
+    --enable-libstdcxx-backtrace=yes \
     --enable-libstdcxx-filesystem-ts \
     --enable-libstdcxx-time \
     --disable-libstdcxx-pch \
-    --enable-lto \
     --enable-libgomp \
     --disable-libssp \
     --disable-multilib \
@@ -275,6 +313,7 @@ build() {
     --with-bugurl="https://github.com/msys2/MINGW-packages/issues" \
     --with-gnu-as \
     --with-gnu-ld \
+    --with-libstdcxx-zoneinfo="yes" \
     "${_extra_config[@]}"
 
   # While we're debugging -fopenmp problems at least.
@@ -285,14 +324,17 @@ build() {
   fi
 
   # https://gcc.gnu.org/onlinedocs/gccint/Makefile.html
-  make -O STAGE1_CFLAGS="-O2" \
-          profiledbootstrap
+  # Avoid all paths passed with -DXXX_DIR to be converted and hardcoded in binaries.
+  # See https://github.com/msys2/MINGW-packages/pull/29280 for details.
+  MSYS2_ARG_CONV_EXCL='-D' \
+    make -O STAGE1_CFLAGS="-O2" \
+            profiledbootstrap
 }
 
 package_gcc-libs() {
   pkgdesc="GNU Compiler Collection (libraries) for MinGW-w64"
-  depends=("${MINGW_PACKAGE_PREFIX}-libwinpthread")
-  provides=("${MINGW_PACKAGE_PREFIX}-omp")
+  depends=("${MINGW_PACKAGE_PREFIX}-libwinpthread" "${MINGW_PACKAGE_PREFIX}-tzdata")
+  provides=("${MINGW_PACKAGE_PREFIX}-omp" "${MINGW_PACKAGE_PREFIX}-cc-libs")
 
   # Licensing information
 
@@ -348,23 +390,27 @@ package_gcc() {
   provides=("${MINGW_PACKAGE_PREFIX}-${_realname}-base"
             "${MINGW_PACKAGE_PREFIX}-cc")
   conflicts=("${MINGW_PACKAGE_PREFIX}-${_realname}-base"
-             $([[ "$_enable_objc" != "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-objc" || true)
-             $([[ "$_enable_ada" != "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-ada" || true)
-             $([[ "$_enable_rust" != "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-${_realname}-rust" || true)
-             $([[ "$_enable_jit" != "yes" ]] && echo "${MINGW_PACKAGE_PREFIX}-libgccjit" || true)
+             $([[ "$_enable_objc" == "yes" ]] || echo "${MINGW_PACKAGE_PREFIX}-${_realname}-objc")
+             $([[ "$_enable_ada" == "yes" ]] || echo "${MINGW_PACKAGE_PREFIX}-${_realname}-ada")
+             $([[ "$_enable_rust" == "yes" ]] || echo "${MINGW_PACKAGE_PREFIX}-${_realname}-rust")
+             $([[ "$_enable_plugin" == "yes" ]] || echo "${MINGW_PACKAGE_PREFIX}-${_realname}-plugin")
+             $([[ "$_enable_jit" == "yes" ]] || echo "${MINGW_PACKAGE_PREFIX}-libgccjit")
+             $([[ "$_enable_fortran" == "yes" ]] || echo \
+               "${MINGW_PACKAGE_PREFIX}-gcc-libgfortran" \
+               "${MINGW_PACKAGE_PREFIX}-gcc-fortran")
   )
   groups=("${MINGW_PACKAGE_PREFIX}-toolchain")
 
   cd "${srcdir}"/build-${MSYSTEM}
 
   make -C gcc DESTDIR="${pkgdir}" install-driver install-cpp install-gcc-ar \
-    c++.install-common install-headers install-plugin install-lto-wrapper
+    c++.install-common install-headers install-lto-wrapper
 
   make -C c++tools DESTDIR="${pkgdir}" install
 
   install -m755 -t "${pkgdir}"${MINGW_PREFIX}/bin/ gcc/gcov{,-tool}.exe
   install -m755 -t "${pkgdir}"${MINGW_PREFIX}/${_libdir}/ \
-    gcc/{cc1,cc1plus,collect2,lto1}.exe
+    gcc/{cc1,cc1plus,collect2}.exe
 
   make -C $CHOST/libgcc DESTDIR="${pkgdir}" install
   rm "${pkgdir}"/libgcc_*.dll
@@ -381,8 +427,6 @@ package_gcc() {
     rm "${pkgdir}"${MINGW_PREFIX}/bin/${lib}*.dll
   done
 
-  rm -r "${pkgdir}"${MINGW_PREFIX}/${_libdir}/finclude
-
   # install -d "${pkgdir}"${MINGW_PREFIX}/share/gdb/auto-load/usr/lib
   # mv "${pkgdir}"${MINGW_PREFIX}/lib/libstdc++.dll.a-gdb.py \
   #   "${pkgdir}"${MINGW_PREFIX}/share/gdb/auto-load/usr/lib/
@@ -390,21 +434,28 @@ package_gcc() {
   make DESTDIR="${pkgdir}" install-fixincludes
   make -C gcc DESTDIR="${pkgdir}" install-mkheaders
 
-  make -C lto-plugin DESTDIR="${pkgdir}" install
-  install -dm755 "${pkgdir}"${MINGW_PREFIX}/lib/bfd-plugins/
-  cp "${pkgdir}"${MINGW_PREFIX}/${_libdir}/liblto_plugin.dll "${pkgdir}"${MINGW_PREFIX}/lib/bfd-plugins/
-
   make -C $CHOST/libgomp DESTDIR="${pkgdir}" install-nodist_{libsubinclude,toolexeclib}HEADERS
   make -C $CHOST/libquadmath DESTDIR="${pkgdir}" install-nodist_libsubincludeHEADERS
 
   make -C gcc DESTDIR="${pkgdir}" install-man install-info
-  rm "${pkgdir}"${MINGW_PREFIX}/share/man/man1/{gfortran,lto-dump}.1
-  rm "${pkgdir}"${MINGW_PREFIX}/share/info/gfortran.info
   if [ "$_enable_ada" == "yes" ]; then
     rm "${pkgdir}"${MINGW_PREFIX}/share/info/{gnat-style,gnat_rm,gnat_ugn}.info
   fi
+  if [[ "$_enable_fortran" == yes ]]; then
+    rm -r "${pkgdir}"${MINGW_PREFIX}/${_libdir}/finclude
+    rm "${pkgdir}"${MINGW_PREFIX}/share/man/man1/gfortran.1
+    rm "${pkgdir}"${MINGW_PREFIX}/share/info/gfortran.info
+  fi
   if [ "$_enable_jit" == "yes" ]; then
     rm "${pkgdir}"${MINGW_PREFIX}/share/info/libgccjit.info
+  fi
+  if [[ "$_enable_lto" == yes ]]; then
+    make -C gcc DESTDIR="${pkgdir}" install-lto-wrapper
+    install -m755 -t "${pkgdir}"${MINGW_PREFIX}/${_libdir}/ gcc/lto1.exe
+    make -C lto-plugin DESTDIR="${pkgdir}" install
+    install -dm755 "${pkgdir}"${MINGW_PREFIX}/lib/bfd-plugins/
+    cp "${pkgdir}"${MINGW_PREFIX}/${_libdir}/liblto_plugin.dll "${pkgdir}"${MINGW_PREFIX}/lib/bfd-plugins/
+    rm "${pkgdir}"${MINGW_PREFIX}/share/man/man1/lto-dump.1
   fi
 
   make -C libcpp DESTDIR="${pkgdir}" install
@@ -417,10 +468,10 @@ package_gcc() {
 
   # install "custom" system gdbinit
   install -D -m644 "${srcdir}"/gdbinit "${pkgdir}"${MINGW_PREFIX}/etc/gdbinit
-  sed -i 's|%GCC_NAME%|gcc-'${pkgver%%+*}'|g' "${pkgdir}"${MINGW_PREFIX}/etc/gdbinit
+  sed -i 's|%GCC_NAME%|gcc-'${pkgver}'|g' "${pkgdir}"${MINGW_PREFIX}/etc/gdbinit
 
   # byte-compile python libraries
-  ${MINGW_PREFIX}/bin/python -m compileall -o 0 -o 1 "${pkgdir}"${MINGW_PREFIX}/share/gcc-${pkgver%%+*}/
+  ${MINGW_PREFIX}/bin/python -m compileall -o 0 -o 1 "${pkgdir}"${MINGW_PREFIX}/share/gcc-${pkgver}/
 }
 
 package_gcc-libgfortran() {
@@ -433,7 +484,8 @@ package_gcc-libgfortran() {
   make -C $CHOST/libgfortran DESTDIR="${pkgdir}" install-toolexeclibLTLIBRARIES
   rm -r "${pkgdir}"${MINGW_PREFIX}/lib
 
-  install -Dm644 "${srcdir}"/${_sourcedir}/COPYING.RUNTIME "${pkgdir}"${MINGW_PREFIX}/share/licenses/${_realname}-libgfortran/COPYING.RUNTIME
+  install -Dm644 "${srcdir}"/${_sourcedir}/COPYING.RUNTIME \
+    "${pkgdir}"${MINGW_PREFIX}/share/licenses/${_realname}-libgfortran/COPYING.RUNTIME
 }
 
 package_gcc-fortran() {
@@ -497,7 +549,18 @@ package_gcc-objc() {
   install -dm755 "${pkgdir}"${MINGW_PREFIX}/${_libdir}
   install -m755 gcc/cc1obj{,plus}.exe "${pkgdir}"${MINGW_PREFIX}/${_libdir}/
 
-  install -Dm644 "${srcdir}/${_sourcedir}/COPYING.RUNTIME" "${pkgdir}"${MINGW_PREFIX}/share/licenses/${_realname}-objc/COPYING.RUNTIME
+  install -Dm644 "${srcdir}/${_sourcedir}/COPYING.RUNTIME" \
+    "${pkgdir}"${MINGW_PREFIX}/share/licenses/${_realname}-objc/COPYING.RUNTIME
+}
+
+package_gcc-plugin() {
+  pkgdesc="GNU Compiler Collection (plugin) for MinGW-w64"
+  depends=("${MINGW_PACKAGE_PREFIX}-${_realname}=${pkgver}-${pkgrel}")
+  conflicts=("${MINGW_PACKAGE_PREFIX}-${_realname}<16.1.0-7")
+
+  cd "${srcdir}"/build-${MSYSTEM}
+
+  make -C gcc DESTDIR="${pkgdir}" install-plugin
 }
 
 package_gcc-rust() {

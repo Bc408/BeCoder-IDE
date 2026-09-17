@@ -841,6 +841,7 @@ suite('OI extension boundary', () => {
 			'becoder.one-monokai',
 			'llvm-vs-code-extensions.vscode-clangd',
 			'adpyke.codesnap',
+			'mathematic.vscode-pdf',
 			'vscode.cpp',
 			'ms-ceintl.vscode-language-pack-zh-hans'
 		]);
@@ -966,6 +967,7 @@ suite('OI extension boundary', () => {
 			'becoder.gcc-diagnostics',
 			'llvm-vs-code-extensions.vscode-clangd',
 			'adpyke.codesnap',
+			'mathematic.vscode-pdf',
 			'becoder.one-monokai',
 			'vscode.cpp',
 			'vscode.mermaid-markdown-features',
@@ -991,7 +993,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
 		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
 		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
-		assert.strictEqual(ucrt64?.sha256, '8c07ee11610e399e133b9174ced1c78fe157abf1cc57421e1ea9aee79c8a0fc4');
+		assert.strictEqual(ucrt64?.sha256, '21d04b7cda3889a7946e9049ef039c001373d966e53ebe59493e5b28cbe3c6a2');
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
 		assert.ok(ucrt64?.correspondingSource);
 		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
@@ -1136,14 +1138,14 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(packages.licenseFilesRoot, 'resources/oi-defaults/toolchains/ucrt64-licenses');
 		const retainedLicenseFiles = fs.readdirSync(path.join(repositoryRoot, packages.licenseFilesRoot), { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
 		assert.strictEqual(retainedLicenseFiles.length, packages.evidence?.retainedLicenseFileCount);
-		assert.ok(retainedLicenseFiles.length >= 63);
+		assert.strictEqual(retainedLicenseFiles.length, 41);
 		assert.strictEqual(packages.recipeFilesRoot, 'resources/oi-defaults/toolchains/ucrt64-sources/recipes');
 		const retainedRecipeFiles = fs.readdirSync(path.join(repositoryRoot, packages.recipeFilesRoot), { recursive: true, withFileTypes: true }).filter(entry => entry.isFile());
 		assert.strictEqual(retainedRecipeFiles.length, packages.evidence?.retainedRecipeFileCount);
-		assert.ok(retainedRecipeFiles.length >= 290);
-		assert.strictEqual(packages.packages?.length, 36);
-		assert.strictEqual(packages.auxiliaryPackageSources?.length, 2);
-		assert.strictEqual(new Set(packages.packages?.map(pkg => pkg.name)).size, 36);
+		assert.strictEqual(retainedRecipeFiles.length, 64);
+		assert.strictEqual(packages.packages?.length, 17);
+		assert.strictEqual(packages.auxiliaryPackageSources?.length, 0);
+		assert.strictEqual(new Set(packages.packages?.map(pkg => pkg.name)).size, 17);
 		const recipeRoot = path.join(repositoryRoot, packages.recipeFilesRoot);
 		const recipeDirectoryNames = fs.readdirSync(recipeRoot, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
 		assert.deepStrictEqual(recipeDirectoryNames, Object.keys(packages.recipes ?? {}).sort());
@@ -1164,15 +1166,23 @@ suite('OI extension boundary', () => {
 				assert.ok(fs.statSync(path.join(repositoryRoot, packages.licenseFilesRoot, relativeLicensePath)).size > 0, `Missing mapped license for ${pkg.name}: ${relativeLicensePath}`);
 			}
 		}
-		assert.ok(packages.unownedArchiveEntries?.includes('include/c++/14.1.0/x86_64-w64-mingw32/bits/debugger.h'));
-		assert.ok(packages.unownedArchiveEntries?.includes('include/c++/14.1.0/x86_64-w64-mingw32/bits/stdc++.h.gch'));
+		assert.deepStrictEqual(packages.unownedArchiveEntries, [
+			'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
+			'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
+			'ucrt64/x86_64-w64-mingw32/bin/libiconv-2.dll',
+			'ucrt64/x86_64-w64-mingw32/bin/libintl-8.dll',
+			'ucrt64/x86_64-w64-mingw32/bin/libwinpthread-1.dll',
+			'ucrt64/x86_64-w64-mingw32/bin/libzstd.dll',
+			'ucrt64/x86_64-w64-mingw32/bin/zlib1.dll'
+		]);
 
 		const notices = fs.readFileSync(path.join(repositoryRoot, 'ThirdPartyNotices.txt'), 'utf8');
 		assert.match(notices, /BeCoder Runner 0\.3\.0/);
 		assert.match(notices, /CodeSnap 1\.3\.4[\s\S]*Copyright \(c\) 2019 Adrien Pyke/);
+		assert.match(notices, /Mathematic PDF Viewer 0\.2\.5 with Mozilla PDF\.js 6\.2\.108[\s\S]*extensions\/mathematic\.vscode-pdf\/ThirdPartyNotices\.txt/);
 		assert.match(notices, /Mermaid Markdown Features 10\.0\.0[\s\S]*extensions\/mermaid-markdown-features\/ThirdPartyNotices\.txt/);
 		assert.match(notices, /clangd 22\.1\.6 Windows binary bundle/);
-		assert.match(notices, /BeCoder UCRT64 GCC 14\.1\.0 bundle/);
+		assert.match(notices, /BeCoder UCRT64 GCC 16\.2\.0 bundle/);
 	});
 
 	test('bundles protected Simplified Chinese and keeps BeCoder UI bilingual', () => {
@@ -1219,6 +1229,85 @@ suite('OI extension boundary', () => {
 		assert.match(updateConfigurationSource, /new BeCoder versions in the background/);
 		assert.match(updateConfigurationSource, /BeCoder update service/);
 		assert.doesNotMatch(updateConfigurationSource, /new VS Code versions|Microsoft online service|Code will check for updates/);
+	});
+
+	test('owns a protected offline read-only PDF problem statement viewer', () => {
+		const extensionPath = path.join(extensionsRoot, 'mathematic.vscode-pdf');
+		const manifest = readJson<{
+			name?: string;
+			publisher?: string;
+			version?: string;
+			main?: string;
+			engines?: { vscode?: string };
+			activationEvents?: readonly string[];
+			contributes?: {
+				configurationDefaults?: Record<string, unknown>;
+				customEditors?: readonly { viewType?: string; selector?: readonly { filenamePattern?: string }[] }[];
+				configuration?: { properties?: Record<string, { enum?: readonly number[] }> };
+			};
+		}>(path.join(extensionPath, 'package.json'));
+		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'mathematic.vscode-pdf');
+		assert.strictEqual(manifest.version, '0.2.5');
+		assert.strictEqual(manifest.main, './src/extension.js');
+		assert.strictEqual(manifest.engines?.vscode, '^1.130.0');
+		assert.deepStrictEqual(manifest.activationEvents, ['onCustomEditor:pdf.view']);
+		assert.deepStrictEqual(manifest.contributes?.configurationDefaults, {
+			'workbench.editorAssociations': { '*.pdf': 'pdf.view' }
+		});
+		assert.deepStrictEqual(manifest.contributes?.customEditors, [{
+			viewType: 'pdf.view',
+			displayName: '%becoder.editorName%',
+			priority: 'default',
+			selector: [{ filenamePattern: '*.pdf' }]
+		}]);
+		assert.deepStrictEqual(manifest.contributes?.configuration?.properties?.['pdf.sidebarViewOnLoad'].enum, [0, 1, 2]);
+		assertSameLocalizationKeys('mathematic.vscode-pdf');
+
+		const extensionSource = fs.readFileSync(path.join(extensionPath, 'src', 'extension.js'), 'utf8');
+		assert.match(extensionSource, /registerCustomEditorProvider/);
+		assert.match(extensionSource, /localResourceRoots: \[resourceRoot, this\.extensionRoot\]/);
+		assert.match(extensionSource, /path\.extname\(relativePath\)\.toLowerCase\(\) !== '\.pdf'/);
+		assert.doesNotMatch(extensionSource, /globalState|showInformationMessage|openExternal|writeFile|createWriteStream/);
+
+		const viewerSource = fs.readFileSync(path.join(extensionPath, 'assets', 'main.mjs'), 'utf8');
+		for (const disabledOption of [
+			"supportsDownloading', false",
+			"supportsPrinting', false",
+			"annotationEditorMode', -1",
+			"annotationMode', 1",
+			"enableScripting', false",
+			"enableXfa', false",
+			"enableSignatureEditor', false"
+		]) {
+			assert.ok(viewerSource.includes(disabledOption), `PDF viewer does not enforce ${disabledOption}`);
+		}
+		assert.doesNotMatch(viewerSource, /sandboxBundleSrc|openExternal|fetch\(/);
+		assert.match(viewerSource, /event\.preventDefault\(\)/);
+
+		for (const forbiddenPayload of [
+			'assets/pdf.js/build/pdf.sandbox.mjs',
+			'assets/pdf.js/web/wasm/quickjs-eval.wasm',
+			'assets/pdf.js/web/wasm/quickjs-eval.js',
+			'assets/pdf.js/web/compressed.tracemonkey-pldi-09.pdf',
+			'assets/pdf.js/web/debugger.mjs',
+			'assets/pdf.js/web/debugger.css'
+		]) {
+			assert.ok(!fs.existsSync(path.join(extensionPath, ...forbiddenPayload.split('/'))), `PDF viewer retains ${forbiddenPayload}`);
+		}
+		for (const requiredLicense of [
+			'LICENSE',
+			'ThirdPartyNotices.txt',
+			'assets/pdf.js/LICENSE',
+			'assets/pdf.js/web/cmaps/LICENSE',
+			'assets/pdf.js/web/iccs/LICENSE',
+			'assets/pdf.js/web/standard_fonts/LICENSE_LIBERATION',
+			'assets/pdf.js/web/standard_fonts/LICENSE_FOXIT',
+			'assets/pdf.js/web/wasm/LICENSE_OPENJPEG',
+			'assets/pdf.js/web/wasm/LICENSE_JBIG2',
+			'assets/pdf.js/web/wasm/LICENSE_QCMS'
+		]) {
+			assert.ok(fs.statSync(path.join(extensionPath, ...requiredLicense.split('/'))).size > 0, `PDF viewer is missing ${requiredLicense}`);
+		}
 	});
 
 	test('keeps a single C++ TextMate grammar owner', () => {

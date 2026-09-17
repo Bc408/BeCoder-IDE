@@ -12,7 +12,7 @@ suite('BeCoder toolchain manifest', () => {
 		for (const file of [null, {}, { path: 7 }, { path: '../g++.exe', size: 1, sha256: '0'.repeat(64) }]) {
 			const result = validateToolchainManifest({
 				schemaVersion: 2,
-				toolchainVersion: 'gcc-14.1.0-clangd-22.1.6',
+				toolchainVersion: 'gcc-16.2.0-clangd-22.1.6',
 				files: [file]
 			});
 			assert.strictEqual(result.manifest, undefined);
@@ -23,17 +23,17 @@ suite('BeCoder toolchain manifest', () => {
 	test('accepts a complete entry shape', () => {
 		const manifest = {
 			schemaVersion: 2,
-			toolchainVersion: 'gcc-14.1.0-clangd-22.1.6',
-			files: [{ path: 'becoder-ucrt64/bin/g++.exe', size: 1, sha256: '0'.repeat(64) }]
+			toolchainVersion: 'gcc-16.2.0-clangd-22.1.6',
+			files: [{ path: 'ucrt64/bin/g++.exe', size: 1, sha256: '0'.repeat(64) }]
 		};
 		assert.deepStrictEqual(validateToolchainManifest(manifest).manifest, manifest);
 	});
 
 	test('rejects an independently oversized file list', () => {
-		const file = { path: 'becoder-ucrt64/bin/g++.exe', size: 1, sha256: '0'.repeat(64) };
+		const file = { path: 'ucrt64/bin/g++.exe', size: 1, sha256: '0'.repeat(64) };
 		const result = validateToolchainManifest({
 			schemaVersion: 2,
-			toolchainVersion: 'gcc-14.1.0-clangd-22.1.6',
+			toolchainVersion: 'gcc-16.2.0-clangd-22.1.6',
 			files: Array.from({ length: maximumToolchainManifestFiles + 1 }, () => file)
 		});
 		assert.strictEqual(result.manifest, undefined);

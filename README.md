@@ -8,10 +8,11 @@ BeCoder is derived from **Code - OSS 1.130** and retains extension API compatibi
 
 ## Main Features
 
-- A bundled GCC toolchain with C17 and C++20 defaults.
+- A bundled GCC 16.2.0 toolchain with C17 and C++20 defaults.
 - **Run** and **Run With Input** actions backed by BeCoder Runner. Run With Input reads an ordinary same-directory file named exactly `input`.
 - The dedicated BC panel for BeCoder-owned compile and run operations, alongside the complete native PowerShell terminal for normal system commands.
 - GCC-based editor diagnostics and bundled clangd for completion, hover, definitions, references, rename, formatting, semantic highlighting, and optional inlay hints.
+- A protected, offline, read-only PDF viewer for contest problem statements, with search, zoom, thumbnails, and outlines.
 - BeCoder One Monokai, Better C++ Syntax, and the Seti file icon theme.
 - Explorer, search, Tasks, Markdown, Mermaid, notebooks, the built-in browser, authentication, and normal editor and terminal workflows.
 - Simplified Chinese and English interfaces.

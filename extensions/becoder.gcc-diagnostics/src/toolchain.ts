@@ -34,7 +34,7 @@ export function bundledCompiler(
 		context.globalStorageUri.fsPath,
 		process.env['VSCODE_PORTABLE']
 	);
-	return path.join(root, 'becoder-ucrt64', 'bin', language === 'c' ? 'gcc.exe' : 'g++.exe');
+	return path.join(root, 'ucrt64', 'bin', language === 'c' ? 'gcc.exe' : 'g++.exe');
 }
 
 export function privateCompilerEnvironment(sessionRoot: string, compilerPath: string): Record<string, string> {

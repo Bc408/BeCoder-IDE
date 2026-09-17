@@ -1,0 +1,24 @@
+Mathematic PDF Viewer 0.2.5
+Copyright 2021 Mathematic Inc
+Apache License 2.0
+License: LICENSE
+Source: https://github.com/mathematic-inc/vscode-pdf/tree/768efbaf615b39813d08df68217994f9b5495f0e
+
+Mozilla PDF.js 6.2.108
+Apache License 2.0
+License: assets/pdf.js/LICENSE
+Source: https://github.com/mozilla/pdf.js/tree/7d9b2e0095e602ad274f05bb02fbb4125b30d93f
+
+The PDF.js distribution includes additional retained license texts for CMaps,
+ICC profiles, QCMS, OpenJPEG, JBIG2, Liberation fonts, and Foxit fonts under:
+
+assets/pdf.js/web/cmaps/LICENSE
+assets/pdf.js/web/iccs/LICENSE
+assets/pdf.js/web/wasm/LICENSE_QCMS
+assets/pdf.js/web/wasm/LICENSE_PDFJS_QCMS
+assets/pdf.js/web/wasm/LICENSE_OPENJPEG
+assets/pdf.js/web/wasm/LICENSE_PDFJS_OPENJPEG
+assets/pdf.js/web/wasm/LICENSE_JBIG2
+assets/pdf.js/web/wasm/LICENSE_PDFJS_JBIG2
+assets/pdf.js/web/standard_fonts/LICENSE_LIBERATION
+assets/pdf.js/web/standard_fonts/LICENSE_FOXIT

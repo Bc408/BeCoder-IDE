@@ -96,7 +96,7 @@ export async function exactInputPath(source: BeCoderSource): Promise<string> {
 }
 
 export function bundledCompiler(context: vscode.ExtensionContext, language: BeCoderSource['language']): string {
-	return path.join(toolchainRoot(context), 'becoder-ucrt64', 'bin', language === 'c' ? 'gcc.exe' : 'g++.exe');
+	return path.join(toolchainRoot(context), 'ucrt64', 'bin', language === 'c' ? 'gcc.exe' : 'g++.exe');
 }
 
 export function toolchainRoot(context: vscode.ExtensionContext): string {

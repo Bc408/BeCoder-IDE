@@ -77,7 +77,7 @@ suite('bundled GCC boundary', () => {
 	});
 
 	test('builds a private allowlisted compiler environment', () => {
-		const compiler = 'C:\\BeCoder\\toolchains\\becoder-ucrt64\\bin\\g++.exe';
+		const compiler = 'C:\\BeCoder\\toolchains\\ucrt64\\bin\\g++.exe';
 		const environment = privateCompilerEnvironment('C:\\BeCoder\\diagnostics', compiler);
 		assert.strictEqual(environment['HOME'], 'C:\\BeCoder\\diagnostics\\user');
 		assert.strictEqual(environment['TEMP'], 'C:\\BeCoder\\diagnostics\\tmp');

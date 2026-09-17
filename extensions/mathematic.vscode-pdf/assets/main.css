@@ -1,0 +1,33 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright 2021 Mathematic Inc
+ *  Modified by BeCoder contributors for the built-in read-only PDF viewer.
+ *  Licensed under the Apache License, Version 2.0. See ../LICENSE.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	padding: 0;
+}
+
+body.vscode-light,
+body.vscode-high-contrast-light {
+	color-scheme: light;
+}
+
+body.vscode-dark,
+body.vscode-high-contrast {
+	color-scheme: dark;
+}
+
+#attachmentsViewMenu,
+#layersViewMenu,
+#editorModeButtons,
+#editorModeSeparator,
+#printButton,
+#downloadButton,
+#secondaryPrint,
+#secondaryDownload,
+#presentationMode,
+#printServiceDialog,
+#printContainer {
+	display: none !important;
+}

@@ -51,6 +51,7 @@ export const prebuiltOIDistributionExtensions = new Set([
 	'adpyke.codesnap',
 	'danielpinto8zz6.c-cpp-compile-run',
 	'llvm-vs-code-extensions.vscode-clangd',
+	'mathematic.vscode-pdf',
 ]);
 
 function minifyExtensionResources(input: Stream): Stream {

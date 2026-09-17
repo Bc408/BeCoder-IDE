@@ -1,0 +1,102 @@
+{
+	"name": "vscode-pdf",
+	"displayName": "%becoder.displayName%",
+	"description": "%becoder.description%",
+	"version": "0.2.5",
+	"publisher": "mathematic",
+	"license": "Apache-2.0",
+	"icon": "icon.png",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mathematic-inc/vscode-pdf.git"
+	},
+	"engines": {
+		"vscode": "^1.130.0"
+	},
+	"categories": [
+		"Visualization",
+		"Other"
+	],
+	"keywords": [
+		"pdf",
+		"viewer",
+		"reader",
+		"contest",
+		"problem statement"
+	],
+	"activationEvents": [
+		"onCustomEditor:pdf.view"
+	],
+	"main": "./src/extension.js",
+	"contributes": {
+		"configurationDefaults": {
+			"workbench.editorAssociations": {
+				"*.pdf": "pdf.view"
+			}
+		},
+		"configuration": {
+			"title": "%becoder.configurationTitle%",
+			"type": "object",
+			"properties": {
+				"pdf.defaultZoomValue": {
+					"type": "string",
+					"default": "auto",
+					"scope": "resource",
+					"enum": [
+						"auto",
+						"page-actual",
+						"page-fit",
+						"page-width",
+						"50",
+						"75",
+						"100",
+						"125",
+						"150",
+						"200"
+					],
+					"enumDescriptions": [
+						"%becoder.zoom.auto%",
+						"%becoder.zoom.actual%",
+						"%becoder.zoom.page%",
+						"%becoder.zoom.width%",
+						"50%",
+						"75%",
+						"100%",
+						"125%",
+						"150%",
+						"200%"
+					],
+					"description": "%becoder.defaultZoom%"
+				},
+				"pdf.sidebarViewOnLoad": {
+					"type": "number",
+					"default": 0,
+					"scope": "resource",
+					"enum": [
+						0,
+						1,
+						2
+					],
+					"enumDescriptions": [
+						"%becoder.sidebar.none%",
+						"%becoder.sidebar.thumbnails%",
+						"%becoder.sidebar.outline%"
+					],
+					"description": "%becoder.sidebarView%"
+				}
+			}
+		},
+		"customEditors": [
+			{
+				"viewType": "pdf.view",
+				"displayName": "%becoder.editorName%",
+				"priority": "default",
+				"selector": [
+					{
+						"filenamePattern": "*.pdf"
+					}
+				]
+			}
+		]
+	}
+}

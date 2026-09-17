@@ -27,7 +27,7 @@ suite('BeCoder toolchain isolation', () => {
         'bin', 'clangd.exe');
     assert.strictEqual(
         bundledCompilerPath(clangd),
-        path.join('C:\\BeCoder', 'data', 'toolchains', 'becoder-ucrt64',
+        path.join('C:\\BeCoder', 'data', 'toolchains', 'ucrt64',
                   'bin', 'g++.exe'));
   });
 
@@ -43,6 +43,7 @@ suite('BeCoder toolchain isolation', () => {
                        compiler.replace(/g\+\+\.exe$/i, 'gcc.exe'));
     assert.ok(cCommand.compilationCommand.includes('-xc'));
     assert.ok(cCommand.compilationCommand.includes('-std=c17'));
+    assert.ok(!cCommand.compilationCommand.includes('bits/debugger.h'));
     assert.strictEqual(
         cCommand.compilationCommand[cCommand.compilationCommand.length - 1],
         cFile);
@@ -50,6 +51,10 @@ suite('BeCoder toolchain isolation', () => {
     assert.strictEqual(cppCommand.compilationCommand[0], compiler);
     assert.ok(cppCommand.compilationCommand.includes('-xc++'));
     assert.ok(cppCommand.compilationCommand.includes('-std=c++20'));
+    const debuggerFlagIndex = cppCommand.compilationCommand.indexOf('-include');
+    assert.ok(debuggerFlagIndex >= 0);
+    assert.strictEqual(cppCommand.compilationCommand[debuggerFlagIndex + 1],
+                       'bits/debugger.h');
     assert.strictEqual(
         cppCommand.compilationCommand[cppCommand.compilationCommand.length - 1],
         cppFile);

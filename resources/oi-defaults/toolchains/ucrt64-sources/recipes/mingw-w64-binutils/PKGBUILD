@@ -5,12 +5,13 @@
 _realname=binutils
 pkgbase=mingw-w64-${_realname}
 pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
-pkgver=2.42
-pkgrel=2
+pkgver=2.47
+pkgrel=3
 pkgdesc="A set of programs to assemble and manipulate binary and object files (mingw-w64)"
 arch=('any')
 mingw_arch=('mingw32' 'mingw64' 'ucrt64')
 url="https://www.gnu.org/software/binutils/"
+msys2_repository_url='https://sourceware.org/git/?p=binutils-gdb.git'
 msys2_references=(
   "cpe: cpe:/a:gnu:binutils"
 )
@@ -22,29 +23,29 @@ depends=("${MINGW_PACKAGE_PREFIX}-gettext-runtime"
          "${MINGW_PACKAGE_PREFIX}-zstd")
 makedepends=("${MINGW_PACKAGE_PREFIX}-cc"
              "${MINGW_PACKAGE_PREFIX}-gettext-tools"
-             "${MINGW_PACKAGE_PREFIX}-autotools")
-source=(https://ftp.gnu.org/gnu/binutils/${_realname}-${pkgver}.tar.bz2{,.sig}
+             "${MINGW_PACKAGE_PREFIX}-autotools"
+             "${MINGW_PACKAGE_PREFIX}-texinfo")
+source=(https://ftp.gnu.org/gnu/binutils/binutils-${pkgver}.tar.bz2{,.sig}
         0002-check-for-unusual-file-harder.patch
-        0010-bfd-Increase-_bfd_coff_max_nscns-to-65279.patch
-        0110-binutils-mingw-gnu-print.patch
         2001-ld-option-to-move-default-bases-under-4GB.patch
-        2003-Restore-old-behaviour-of-windres-so-that-options-con.patch
+        2003-Revert-Restore-old-behaviour-of-windres-so-that-opti.patch
+        2004-ld-Prevent-_tls_used-and-_load_config_used-from-bein.patch
         reproducible-import-libraries.patch
         libiberty-unlink-handle-windows-nul.patch
-        3001-hack-libiberty-link-order.patch
+        4000-fix-DEBUG_S_INLINEELINES.patch
 )
-sha256sums=('aa54850ebda5064c72cd4ec2d9b056c294252991486350d9a97ab2a6dfdfaf12'
+sha256sums=('3068128c75cda9f898ccb4211d360246e8e195ffcc9dfb655b23ae23a54800e8'
             'SKIP'
             '2c99345fc575c3a060d6677537f636c6c4154fac0fde508070f3b6296c1060d4'
-            '4e8ac055df61b1b5d6ae29dc87e1154737c2e87c7b244b44866702cabf1a5d18'
-            '5f3fc3949172d2d6e7cd595f9359077e012391a8c3c2aebc02e30fa656ded833'
-            '328ed91bdc9c729ab19f2a566d2d1cbb5ac1beb4775bd71d85e9777b4ed4c17a'
-            'd584f1cd9e94cba0e9b27625c4acc8ad5242cd625c9b44839d42fc116072568c'
+            '9945635f4a67712616202f09cbb66cf70df01be168c2c8054c455bb58bf334dd'
+            '3e3c53b0751a6389cd50dcbd7f78b52aaa55113414da01d3415592af18809702'
+            '5fddd0c6e380955c2d219f173d286bae07ff23ba79afcd15aba6f29ae6dea47d'
             'a094660ec95996c00b598429843b7869037732146442af567ada9f539bd40480'
             '7ccbd418695733c50966068fa9755a6abb156f53af23701d2bc097c63e9e0030'
-            '604628156c08f3e361de60329af250fab6839e23e61e289f8369a7e18a04e277')
-validpgpkeys=('EAF1C276A747E9ED86210CBAC3126D3B4AE55E93'
-              '3A24BC1E8FB409FA9F14371813FCEF89DD9E3C4F')
+            '5ed35a728b956ad49a5e196ae59f681666f2754f0a4903b9280a430d7a312ea8')
+validpgpkeys=('EAF1C276A747E9ED86210CBAC3126D3B4AE55E93'  # Tristan Gingold <gingold@adacore.com>
+              '3A24BC1E8FB409FA9F14371813FCEF89DD9E3C4F'  # Nick Clifton <nickc@redhat.com>
+              '5EF3A41171BB77E6110ED2D01F3D03348DB1A3E2') # Sam James <sam@cmpct.info>
 
 apply_patch_with_msg() {
   for _patch in "$@"
@@ -55,12 +56,10 @@ apply_patch_with_msg() {
 }
 
 prepare() {
-  cd ${srcdir}/${_realname}-${pkgver}
+  cd "binutils-${pkgver}"
 
   apply_patch_with_msg \
-    0002-check-for-unusual-file-harder.patch \
-    0010-bfd-Increase-_bfd_coff_max_nscns-to-65279.patch \
-    0110-binutils-mingw-gnu-print.patch
+    0002-check-for-unusual-file-harder.patch
 
   # Add an option to change default bases back below 4GB to ease transition
   # https://github.com/msys2/MINGW-packages/issues/7027
@@ -68,7 +67,10 @@ prepare() {
   apply_patch_with_msg 2001-ld-option-to-move-default-bases-under-4GB.patch
 
   # https://github.com/msys2/MINGW-packages/pull/9233#issuecomment-889439433
-  patch -R -p1 -i "${srcdir}/2003-Restore-old-behaviour-of-windres-so-that-options-con.patch"
+  apply_patch_with_msg 2003-Revert-Restore-old-behaviour-of-windres-so-that-opti.patch
+
+  # This is required for `gcc -Wl,--gc-sections` to work with recent mingw-w64.
+  apply_patch_with_msg 2004-ld-Prevent-_tls_used-and-_load_config_used-from-bein.patch
 
   # patches for reproducibility from Debian:
   # https://salsa.debian.org/mingw-w64-team/binutils-mingw-w64/-/tree/master/debian/patches
@@ -84,11 +86,9 @@ prepare() {
   # https://gcc.gnu.org/pipermail/gcc-patches/2023-January/609487.html
   patch -p1 -i "${srcdir}/libiberty-unlink-handle-windows-nul.patch"
 
-  # XXX: make sure we link against the just built libiberty, not the system one
-  # to avoid a linker error. All the ld deps contain system deps and system
-  # search paths, so imho if things link against the system lib or the just
-  # built one is just luck, and I don't know how that is supposed to work.
-  patch -p1 -i "${srcdir}/3001-hack-libiberty-link-order.patch"
+  # https://github.com/msys2/MINGW-packages/issues/24148
+  # https://sourceware.org/bugzilla/show_bug.cgi?id=32942
+  patch -p1 -i "${srcdir}/4000-fix-DEBUG_S_INLINEELINES.patch"
 }
 
 build() {
@@ -105,30 +105,36 @@ build() {
     LDFLAGS+=" -Wl,--large-address-aware"
   fi
 
-  ../${_realname}-${pkgver}/configure \
+  # XXX: make sure we link against the just built libiberty, not the system one
+  # to avoid a linker error. All the ld deps contain system deps and system
+  # search paths, so imho if things link against the system lib or the just
+  # built one is just luck, and I don't know how that is supposed to work.
+  LDFLAGS+=" -L\"${PWD}/libiberty\""
+
+  ../binutils-"${pkgver}"/configure \
+    --prefix=${MINGW_PREFIX} \
     --build=${MINGW_CHOST} \
     --host=${MINGW_CHOST} \
     --target=${MINGW_CHOST} \
-    --prefix=${MINGW_PREFIX} \
-    --disable-werror \
-    --enable-lto \
-    --with-sysroot=${MINGW_PREFIX} \
-    --with-libiconv-prefix=${MINGW_PREFIX} \
-    "${extra_config[@]}" \
-    --enable-nls \
-    --disable-rpath \
     --disable-multilib \
-    --enable-install-libiberty \
-    --enable-plugins \
+    --disable-rpath \
     --disable-shared \
+    --disable-werror \
     --enable-deterministic-archives \
-    --with-system-zlib
+    --enable-install-libiberty \
+    --enable-lto \
+    --enable-nls \
+    --enable-plugins \
+    --with-libiconv-prefix=${MINGW_PREFIX} \
+    --with-sysroot=${MINGW_PREFIX} \
+    --with-system-zlib \
+    "${extra_config[@]}"
 
   make
 }
 
 check() {
-  cd ${srcdir}/build-${MSYSTEM}
+  cd "${srcdir}"/build-${MSYSTEM}
 
   # unset LDFLAGS as testsuite makes assumptions about which ones are active
   # do not abort on errors - manually check log files
@@ -136,16 +142,14 @@ check() {
 }
 
 package() {
-  cd ${srcdir}/build-${MSYSTEM}
-  make DESTDIR=${pkgdir} install
+  cd "${srcdir}"/build-${MSYSTEM}
+  make DESTDIR="${pkgdir}" install
+
+  install -Dm644 "${srcdir}/binutils-"${pkgver}"/COPYING"* -t "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}"
 
   # https://github.com/msys2/MINGW-packages/issues/7890
-  rm "${pkgdir}${MINGW_PREFIX}/lib/bfd-plugins/libdep.a"
+  rm -f "${pkgdir}${MINGW_PREFIX}/lib/bfd-plugins/libdep.a"
 
-  find ${pkgdir}${MINGW_PREFIX}/share -type f -iname "opcodes.mo" -o -iname "bfd.mo" | xargs -rtl1 rm
-
-  install -Dm644 ${srcdir}/${_realname}-${pkgver}/COPYING      ${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING
-  install -Dm644 ${srcdir}/${_realname}-${pkgver}/COPYING.LIB  ${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING.LIB
-  install -Dm644 ${srcdir}/${_realname}-${pkgver}/COPYING3     ${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING3
-  install -Dm644 ${srcdir}/${_realname}-${pkgver}/COPYING3.LIB ${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING3.LIB
+  # Remove files shipped with gdb
+  find "${pkgdir}"${MINGW_PREFIX}/share -type f -iname "opcodes.mo" -o -iname "bfd.mo" | xargs -rtl1 rm
 }

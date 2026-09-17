@@ -1,0 +1,15 @@
+{
+	"becoder.displayName": "BeCoder PDF Viewer",
+	"becoder.description": "BeCoder's built-in read-only PDF problem statement viewer.",
+	"becoder.configurationTitle": "PDF Viewer",
+	"becoder.defaultZoom": "Default zoom level when opening a PDF.",
+	"becoder.zoom.auto": "Automatic",
+	"becoder.zoom.actual": "Actual size",
+	"becoder.zoom.page": "Fit page",
+	"becoder.zoom.width": "Fit width",
+	"becoder.sidebarView": "Sidebar panel to show when opening a PDF.",
+	"becoder.sidebar.none": "None",
+	"becoder.sidebar.thumbnails": "Thumbnails",
+	"becoder.sidebar.outline": "Outline",
+	"becoder.editorName": "PDF View"
+}

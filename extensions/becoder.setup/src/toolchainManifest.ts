@@ -11,7 +11,7 @@ export interface IToolchainManifestFile {
 
 export interface IToolchainManifest {
 	readonly schemaVersion: 2;
-	readonly toolchainVersion: 'gcc-14.1.0-clangd-22.1.6';
+	readonly toolchainVersion: 'gcc-16.2.0-clangd-22.1.6';
 	readonly files: readonly IToolchainManifestFile[];
 }
 
@@ -44,7 +44,7 @@ export function validateToolchainManifest(value: unknown): { manifest?: IToolcha
 	}
 	const candidate = value as Record<string, unknown>;
 	if (candidate.schemaVersion !== 2
-		|| candidate.toolchainVersion !== 'gcc-14.1.0-clangd-22.1.6'
+		|| candidate.toolchainVersion !== 'gcc-16.2.0-clangd-22.1.6'
 		|| !Array.isArray(candidate.files)) {
 		return { issue: 'The toolchain manifest has an unsupported format or version.' };
 	}

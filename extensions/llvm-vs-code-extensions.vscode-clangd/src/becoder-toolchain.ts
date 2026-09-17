@@ -31,7 +31,7 @@ export function bundledClangdPath(
 export function bundledCompilerPath(clangdPath: string): string {
   const toolchainRoot = path.resolve(
       path.dirname(clangdPath), '..', '..', '..');
-  return path.join(toolchainRoot, 'becoder-ucrt64', 'bin', 'g++.exe');
+  return path.join(toolchainRoot, 'ucrt64', 'bin', 'g++.exe');
 }
 
 export function managedClangdArguments(): string[] {
@@ -47,14 +47,14 @@ export function managedClangdArguments(): string[] {
 export function managedClangdFallbackFlags(compilerPath: string): string[] {
   const toolchainRoot = path.dirname(path.dirname(compilerPath));
   const standardInclude = path.join(
-      toolchainRoot, 'include', 'c++', '14.1.0');
+      toolchainRoot, 'include', 'c++', '16.2.0');
   const targetInclude = path.join(
       standardInclude, 'x86_64-w64-mingw32');
   const gccInclude = path.join(
-      toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0',
+      toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '16.2.0',
       'include');
   const includeFixed = path.join(
-      toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '14.1.0',
+      toolchainRoot, 'lib', 'gcc', 'x86_64-w64-mingw32', '16.2.0',
       'include-fixed');
   const includeFlags = [
     standardInclude,
@@ -100,11 +100,13 @@ export function managedClangdCompileCommand(
   const language = languageId === 'objective-c'
       ? 'objective-c'
       : languageId === 'objective-cpp' ? 'objective-c++' : isC ? 'c' : 'c++';
+  const debuggerFlags = isC ? [] : ['-include', 'bits/debugger.h'];
   return {
     workingDirectory: path.dirname(filePath),
     compilationCommand: [
       compiler,
       ...baseFlags,
+      ...debuggerFlags,
       `-x${language}`,
       isC ? '-std=c17' : '-std=c++20',
       filePath

@@ -886,6 +886,8 @@ suite('OI extension boundary', () => {
 		const manifest = readJson<{
 			publisher?: string;
 			name?: string;
+			main?: string;
+			browser?: string;
 			enabledApiProposals?: readonly string[];
 			contributes?: {
 				commands?: readonly { command?: string }[];
@@ -897,6 +899,8 @@ suite('OI extension boundary', () => {
 			};
 		}>(path.join(extensionPath, 'package.json'));
 		assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'vscode.mermaid-markdown-features');
+		assert.strictEqual(manifest.main, './out/extension');
+		assert.strictEqual(manifest.browser, './dist/browser/extension');
 		assert.deepStrictEqual(manifest.enabledApiProposals, undefined);
 		assert.strictEqual(manifest.contributes?.chatOutputRenderers, undefined);
 		assert.deepStrictEqual(manifest.contributes?.['markdown.previewScripts']?.map(item => item.path), ['./markdown-preview-out/index.js']);

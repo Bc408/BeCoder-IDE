@@ -596,7 +596,7 @@ foreach ($mermaidFile in @(
 	'package.json',
 	'README.md',
 	'ThirdPartyNotices.txt',
-	'out\extension.js',
+	'dist\extension.js',
 	'diagram-preview-out\index.js',
 	'diagram-preview-out\codicon.css',
 	'markdown-preview-out\index.js',
@@ -608,6 +608,8 @@ foreach ($mermaidFile in @(
 }
 $mermaidManifest = Get-Content -LiteralPath (Join-Path $mermaidExtensionPath 'package.json') -Raw | ConvertFrom-Json
 if ("$($mermaidManifest.publisher).$($mermaidManifest.name)" -ne 'vscode.mermaid-markdown-features' -or
+	$mermaidManifest.main -ne './dist/extension' -or
+	$mermaidManifest.browser -ne './dist/browser/extension' -or
 	-not $mermaidManifest.contributes.'markdown.previewScripts' -or
 	-not $mermaidManifest.contributes.notebookRenderer -or
 	-not $mermaidManifest.contributes.'markdown.markdownItPlugins' -or
@@ -618,7 +620,7 @@ if ("$($mermaidManifest.publisher).$($mermaidManifest.name)" -ne 'vscode.mermaid
 if (Test-Path -LiteralPath (Join-Path $mermaidExtensionPath 'chat-webview-out')) {
 	throw 'The packaged Mermaid extension contains the removed Chat output bundle.'
 }
-$mermaidBundle = Get-Content -LiteralPath (Join-Path $mermaidExtensionPath 'out\extension.js') -Raw
+$mermaidBundle = Get-Content -LiteralPath (Join-Path $mermaidExtensionPath 'dist\extension.js') -Raw
 foreach ($forbiddenMermaidApi in @('registerChatOutputRenderer', 'text/vnd.mermaid', 'ChatOutputDataItem', 'LanguageModelTextPart', 'LanguageModelToolResult')) {
 	if ($mermaidBundle.Contains($forbiddenMermaidApi)) {
 		throw "The packaged Mermaid extension contains removed Chat integration: $forbiddenMermaidApi"

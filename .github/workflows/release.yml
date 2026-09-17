@@ -156,5 +156,5 @@ jobs:
           gh release create "$RELEASE_TAG" "$setup" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$RELEASE_COMMIT" \
-            --title "BeCoder $RELEASE_TAG" \
+            --title "$RELEASE_TAG" \
             --generate-notes

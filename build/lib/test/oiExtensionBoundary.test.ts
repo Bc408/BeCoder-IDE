@@ -1937,6 +1937,8 @@ suite('OI extension boundary', () => {
 		assert.match(releaseWorkflow, /RELEASE_TAG: v\$\{\{ inputs\.version \}\}/);
 		assert.match(releaseWorkflow, /main_sha=.*git ls-remote origin refs\/heads\/main/);
 		assert.match(releaseWorkflow, /gh release create "\$RELEASE_TAG" "\$setup"[\s\S]*--target "\$RELEASE_COMMIT"/);
+		assert.match(releaseWorkflow, /--title "\$RELEASE_TAG"/);
+		assert.doesNotMatch(releaseWorkflow, /--title "BeCoder \$RELEASE_TAG"/);
 		assert.ok(releaseWorkflow.indexOf('needs: build') < releaseWorkflow.indexOf('gh release create'));
 		assert.match(releaseWorkflow, /^permissions:\s*\n\s{2}contents: read\s*$/m);
 		assert.match(releaseWorkflow, /^\s{4}permissions:\s*\n\s{6}contents: write\s*$/m);

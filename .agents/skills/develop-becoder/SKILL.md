@@ -143,6 +143,16 @@ Archive only after project-owner acceptance.
 
 For a plain cloud backup, create only the scoped commit and requested branch push. Do not add a PR, release, or unrelated publishing workflow.
 
+## Publish a Release
+
+Treat the `Release BeCoder Setup` GitHub Actions workflow as an optional release path, not a default consequence of updating `main`.
+
+- Keep the workflow limited to its release-tag triggers; do not add a `main` push trigger.
+- Do not create, move, or push a release tag unless the project owner explicitly authorizes both publishing the accepted changes to `main` and publishing a Release.
+- An ordinary commit, backup, branch push, or `main` update must not run the release workflow.
+- When explicitly authorized, use the version-matched release tag expected by the current workflow, wait for the clean Windows runner to install dependencies, validate, build and verify Setup, and publish the Release, then verify the final Release and its Setup asset.
+- A failed workflow attempt is not a published release. Diagnose and fix the failure under the validation stop rule, rerun only with the existing release authorization, and report earlier failed attempts separately from the successful final run.
+
 ## Hand Off
 
 Before transferring to a new conversation:

@@ -38,6 +38,7 @@ import rceditCallback from 'rcedit';
 import { spawnTsgo } from './lib/tsgo.ts';
 import { runEsbuildTranspile, runEsbuildBundle } from './lib/esbuild.ts';
 import { stageBeCoderWindowsToolchain } from './lib/becoderToolchain.ts';
+import { buildRunnerInputHelper } from './win32/build-runner-input-helper.mjs';
 
 
 const glob = promisify(globCallback);
@@ -637,7 +638,15 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 
 function stageBeCoderWindowsToolchainTask(destinationFolderName: string, platform: string, arch: string) {
 	const packageRoot = path.join(path.dirname(root), destinationFolderName);
-	return () => stageBeCoderWindowsToolchain(root, packageRoot, platform, arch);
+	return async () => {
+		await stageBeCoderWindowsToolchain(root, packageRoot, platform, arch);
+		if (platform === 'win32' && arch === 'x64') {
+			buildRunnerInputHelper(
+				path.join(packageRoot, 'data', 'toolchains', 'ucrt64', 'bin', 'g++.exe'),
+				path.join(packageRoot, 'resources', 'app', 'extensions', 'danielpinto8zz6.c-cpp-compile-run', 'dist', 'runner-input.exe')
+			);
+		}
+	};
 }
 
 const buildRoot = path.dirname(root);

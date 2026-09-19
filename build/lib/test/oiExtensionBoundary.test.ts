@@ -1000,7 +1000,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
 		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
 		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
-		assert.strictEqual(ucrt64?.sha256, '21d04b7cda3889a7946e9049ef039c001373d966e53ebe59493e5b28cbe3c6a2');
+		assert.strictEqual(ucrt64?.sha256, '60805e87afb607e9fd16e82a2b0f740107003204ee1600da58337ac40c602adb');
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
 		assert.ok(ucrt64?.correspondingSource);
 		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
@@ -1529,7 +1529,7 @@ suite('OI extension boundary', () => {
 			"'-std=c++20'",
 			"'-DDEBUGER_H'",
 			"'-I'",
-			"'-fdiagnostics-format=json'",
+			"'-fdiagnostics-format=sarif-stderr'",
 			"'-fdiagnostics-color=never'",
 			"'-iquote'"
 		]) {
@@ -1619,6 +1619,8 @@ suite('OI extension boundary', () => {
 		assert.ok(processSource.indexOf('dependencies.rename(stagingPath, destination)') < processSource.indexOf('readExecutableIdentity(destination)'));
 		assert.match(processSource, /samePublishedFileIdentity\(stagingIdentity, destinationIdentity\)/);
 		assert.match(processSource, /sameExecutableIdentity\(currentIdentity, result\.publishedExecutableIdentity\)[\s\S]*fs\.rmSync\(executablePath/);
+		assert.match(processSource, /inputSnapshot = path\.join\(requestRoot, 'input\.snapshot'\)/);
+		assert.match(managerSource, /'dist', 'runner-input\.exe'/);
 		assert.match(processSource, /fs\.rmSync\(executablePath/);
 		assert.doesNotMatch(processSource, /finally \{[\s\S]*removePath\(\s*request\.source\.executablePath/);
 		assert.match(managerSource, /performWhileOpen/);

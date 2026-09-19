@@ -212,8 +212,11 @@ try {
 	), [Text.UTF8Encoding]::new($false))
 	& $compiler '-O2' '-Wall' '-DDEBUG' '-std=c++20' '-finput-charset=UTF-8' '-fexec-charset=UTF-8' $cppProbe '-o' $cppProbeExecutable
 	if ($LASTEXITCODE -ne 0) { throw 'The slim compiler failed the C++20 competitive-programming feature probe.' }
-	$probeOutput = (& $cppProbeExecutable) -join "`n"
-	if ($LASTEXITCODE -ne 0 -or
+	$probeStdout = Join-Path $workRoot 'compiler-probe.stdout'
+	$probeStderr = Join-Path $workRoot 'compiler-probe.stderr'
+	$probeProcess = Start-Process -FilePath $cppProbeExecutable -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $probeStdout -RedirectStandardError $probeStderr
+	$probeOutput = Get-Content -LiteralPath $probeStderr -Raw -Encoding utf8
+	if ($probeProcess.ExitCode -ne 0 -or (Get-Content -LiteralPath $probeStdout -Raw -Encoding utf8) -ne '11' -or
 		-not $probeOutput.Contains('-1267650600228229401496703205376') -or
 		-not $probeOutput.Contains('170141183460469231731687303715884105733')) {
 		throw 'The slim compiler failed the BeCoder debugger runtime probe.'

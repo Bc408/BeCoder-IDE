@@ -12,6 +12,8 @@ import { StringDecoder } from 'string_decoder';
 import type { BeCoderSource, RunnerSettings } from './compiler';
 import { RunnerPhase } from './runnerLifecycle';
 import { Osc633Filter } from './terminalVisuals';
+import { RunnerPtyProcess } from './runnerPtyProcess';
+import { RunnerInputControl } from './runnerInputControl';
 
 export type RunnerTimings = {
 	readonly panelReadyMs: number;
@@ -51,6 +53,8 @@ export type RunnerExecutionRequest = {
 	readonly compilerPath: string;
 	readonly settings: RunnerSettings;
 	readonly inputPath?: string;
+	readonly inputHelperPath?: string;
+	readonly ptyDimensions?: { readonly cols: number; readonly rows: number };
 	readonly requestStartedAt: number;
 	readonly panelReadyMs: number;
 	readonly saveMs: number;
@@ -100,6 +104,7 @@ const defaultProcessDependencies: RunnerProcessDependencies = {
 export class RunnerExecutor {
 	private activeChild: ChildProcessWithoutNullStreams | undefined;
 	private activeProgram: ChildProcessWithoutNullStreams | undefined;
+	private activePty: RunnerPtyProcess | undefined;
 	private cancellationRequested = false;
 	private executing = false;
 	private readonly dependencies: RunnerProcessDependencies;
@@ -148,6 +153,14 @@ export class RunnerExecutor {
 			}
 			this.throwIfCancellationRequested();
 			const inputData = request.inputPath ? await fs.promises.readFile(request.inputPath) : undefined;
+			let inputSnapshot: string | undefined;
+			if (request.inputPath && request.ptyDimensions) {
+				if (!request.inputHelperPath || !await isOrdinaryFile(request.inputHelperPath)) {
+					throw new Error('BeCoder Runner input helper is unavailable.');
+				}
+				inputSnapshot = path.join(requestRoot, 'input.snapshot');
+				await fs.promises.writeFile(inputSnapshot, inputData!, { flag: 'wx' });
+			}
 			this.throwIfCancellationRequested();
 			const compilerArguments = buildCompilerArguments(request.source, request.settings, temporaryExecutable);
 			callbacks.setPhase('compiling');
@@ -175,7 +188,9 @@ export class RunnerExecutor {
 				publishedExecutable = true;
 				this.throwIfCancellationRequested();
 				const processRequestedAt = Date.now();
-				const programResult = await this.runChild(
+				const programResult = request.ptyDimensions
+					? await this.runPty(request, environment, callbacks, inputSnapshot)
+					: await this.runChild(
 					request.source.executablePath,
 					[],
 					request.source.directory,
@@ -253,6 +268,9 @@ export class RunnerExecutor {
 			return false;
 		}
 		this.cancellationRequested = true;
+		if (this.activePty) {
+			this.activePty.kill();
+		}
 		const child = this.activeChild;
 		if (child) {
 			await this.dependencies.terminate(child);
@@ -261,12 +279,91 @@ export class RunnerExecutor {
 	}
 
 	writeProgramInput(text: string): boolean {
+		if (this.activePty) {
+			return this.activePty.write(text);
+		}
 		const child = this.activeProgram;
 		if (!child || child.stdin.destroyed || !child.stdin.writable) {
 			return false;
 		}
 		child.stdin.write(text);
 		return true;
+	}
+
+	resizeProgram(cols: number, rows: number): void {
+		this.activePty?.resize(cols, rows);
+	}
+
+	private async runPty(request: RunnerExecutionRequest, environment: Record<string, string>, callbacks: RunnerExecutionCallbacks, inputSnapshot?: string): Promise<ChildResult> {
+		let control: RunnerInputControl | undefined;
+		let startedAt = Date.now();
+		if (inputSnapshot) {
+			control = new RunnerInputControl(() => {
+				this.throwIfCancellationRequested();
+				startedAt = Date.now();
+				callbacks.setPhase('running');
+			}, () => this.activePty?.kill());
+		}
+		try {
+			await control?.listen();
+			this.throwIfCancellationRequested();
+			return await new Promise<ChildResult>((resolve, reject) => {
+				const spawnAt = Date.now();
+				const filter = new Osc633Filter();
+				let callbackError: unknown;
+				const session = new RunnerPtyProcess({
+					file: inputSnapshot ? request.inputHelperPath! : request.source.executablePath,
+					args: inputSnapshot ? [request.source.executablePath, inputSnapshot, control!.pipe] : [],
+					cwd: request.source.directory,
+					env: environment,
+					inheritCursor: true,
+					...request.ptyDimensions!
+				}, {
+					onData: data => {
+						if (callbackError) {
+							return;
+						}
+						try {
+							callbacks.write(filter.write(data));
+						} catch (error) {
+							callbackError = error;
+							session.kill();
+						}
+					},
+					onExit: async exit => {
+						try {
+							session.dispose();
+							if (callbackError) {
+								reject(callbackError);
+								return;
+							}
+							callbacks.write(filter.end());
+							const exitCode = control ? await control.result() : exit.exitCode;
+							resolve({ exitCode, spawnAt: control ? startedAt : spawnAt, closeAt: Date.now() });
+						} catch (error) {
+							reject(error);
+						} finally {
+							if (this.activePty === session) {
+								this.activePty = undefined;
+							}
+						}
+					}
+				});
+				this.activePty = session;
+				try {
+					if (control) {
+						control.armStartupTimeout();
+					} else {
+						callbacks.setPhase('running');
+					}
+				} catch (error) {
+					callbackError = error;
+					session.kill();
+				}
+			});
+		} finally {
+			await control?.dispose();
+		}
 	}
 
 	private runChild(

@@ -2,6 +2,13 @@ NOTICES
 
 This repository incorporates material as listed below or described in the code.
 
+GCC 16 Unicode 17 display-width data (GCC diagnostics extension)
+https://github.com/gcc-mirror/gcc/blob/0b1bd1e984db5e9f9ad94f38014e02e528116a79/libcpp/generated_cpp_wcwidth.h
+Generated upstream by contrib/unicode/gen_wcwidth.py using glibc utf8_gen.py.
+Distributed with GCC under GPL-3.0-or-later; see LICENSE.
+TypeScript representation: extensions/becoder.gcc-diagnostics/src/gccDisplayWidth.ts.
+This component is not covered by the diagnostic extension's MIT license.
+
 
 The following extensions are bundled by BeCoder. Their source code,
 copyright notices, and license texts are retained in the referenced extension
@@ -63,6 +70,8 @@ https://github.com/Bc408/BeCoder-IDE
 MIT License
 Copyright (c) 2026 BeCoder contributors
 License texts: extensions/becoder.setup/LICENSE and extensions/becoder.gcc-diagnostics/LICENSE
+The GCC display-width data in the diagnostics extension is an exception to MIT;
+see the GCC data notice above, extensions/becoder.gcc-diagnostics/NOTICE and LICENSE.
 
 ---------------------------------------------------------
 

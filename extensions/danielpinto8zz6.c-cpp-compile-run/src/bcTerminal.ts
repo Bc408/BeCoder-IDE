@@ -9,6 +9,7 @@ import { BcLineEditor, CommandHistory, LineEditorAction } from './bcLineEditor';
 import { RunnerPhase } from './runnerLifecycle';
 import { ProgramInputAction, ProgramInputEditor, TerminalOpenTracker } from './terminalInput';
 import { terminalCellWidth } from './terminalText';
+import { TerminalOutputBoundary } from './terminalOutputBoundary';
 import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart, renderBcCommand, renderBcFlowFailure, renderBcPrompt, renderBcStatus } from './terminalVisuals';
 
 export type BcTerminalCallbacks = {
@@ -18,6 +19,8 @@ export type BcTerminalCallbacks = {
 	readonly programInput: (text: string) => boolean;
 	readonly busyAttempt: () => void;
 	readonly close: () => void;
+	readonly resize?: (cols: number, rows: number) => void;
+	readonly terminalResponse?: (text: string) => void;
 };
 
 export class BcTerminal implements vscode.Pseudoterminal {
@@ -30,12 +33,16 @@ export class BcTerminal implements vscode.Pseudoterminal {
 	private busyNoticeShown = false;
 	private readonly programInputEditor = new ProgramInputEditor();
 	private outputEndsOnLineBoundary = true;
+	private readonly outputBoundary = new TerminalOutputBoundary();
 	private closed = false;
 	private programInputEnabled = true;
 	private suppressLeadingLineFeed = false;
 	private readonly openTracker = new TerminalOpenTracker();
 	private escapeFlushTimer: ReturnType<typeof setTimeout> | undefined;
 	private commandActive = false;
+	private ptyInput = false;
+	private pendingTerminalResponse = '';
+	private dimensions = { cols: 80, rows: 24 };
 
 	constructor(
 		readonly cwd: string,
@@ -45,7 +52,10 @@ export class BcTerminal implements vscode.Pseudoterminal {
 		this.lineEditor = new BcLineEditor(history);
 	}
 
-	open(): void {
+	open(initialDimensions?: vscode.TerminalDimensions): void {
+		if (initialDimensions) {
+			this.setDimensions(initialDimensions);
+		}
 		if (this.closed) {
 			return;
 		}
@@ -84,6 +94,20 @@ export class BcTerminal implements vscode.Pseudoterminal {
 			}
 		}
 		const phase = this.callbacks.phase();
+		// ConPTY cursor inheritance queries xterm before launching the helper.
+		// Forward only cursor reports, never keyboard text, to its console input.
+		if (phase !== 'ready' && this.ptyInput && !this.programInputEnabled) {
+			const response = this.pendingTerminalResponse + data;
+			this.pendingTerminalResponse = '';
+			if (/^\x1b\[\d{1,5};\d{1,5}R$/.test(response)) {
+				this.callbacks.terminalResponse?.(response);
+				return;
+			}
+			if (response.length < 16 && /^(?:\x1b|\x1b\[\d*(?:;\d*)?)$/.test(response)) {
+				this.pendingTerminalResponse = response;
+				return;
+			}
+		}
 		if (phase === 'ready') {
 			if (this.applyLineEditorActions(this.lineEditor.handleInput(data), data.endsWith('\r'))) {
 				return;
@@ -95,7 +119,15 @@ export class BcTerminal implements vscode.Pseudoterminal {
 		}
 		if (phase === 'running') {
 			if (this.programInputEnabled) {
-				this.handleProgramInput(data);
+				if (this.ptyInput) {
+					if (data.includes('\x03')) {
+						this.callbacks.cancel();
+					} else {
+						this.callbacks.programInput(data);
+					}
+				} else {
+					this.handleProgramInput(data);
+				}
 			} else if (data.includes('\x03')) {
 				this.callbacks.cancel();
 			} else if (!this.busyNoticeShown && hasUserInput(data)) {
@@ -115,11 +147,33 @@ export class BcTerminal implements vscode.Pseudoterminal {
 	}
 
 	setPhase(phase: RunnerPhase): void {
+		if (phase === 'preparing' || phase === 'ready') {
+			this.outputBoundary.reset();
+		}
 		this.clearEscapeFlush();
 		this.busyNoticeShown = false;
 		if (phase !== 'running') {
 			this.programInputEditor.reset();
 		}
+	}
+
+	setDimensions(dimensions: vscode.TerminalDimensions): void {
+		const { columns: cols, rows } = dimensions;
+		if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols <= 0 || rows <= 0 || this.closed) {
+			return;
+		}
+		this.dimensions = { cols, rows };
+		this.callbacks.resize?.(cols, rows);
+	}
+
+	get programDimensions(): { readonly cols: number; readonly rows: number } {
+		return this.dimensions;
+	}
+
+	setPtyInput(enabled: boolean): void {
+		this.ptyInput = enabled;
+		this.pendingTerminalResponse = '';
+		this.programInputEditor.reset();
 	}
 
 	setProgramInputEnabled(enabled: boolean): void {
@@ -159,7 +213,7 @@ export class BcTerminal implements vscode.Pseudoterminal {
 			return;
 		}
 		this.writeRaw(text);
-		this.outputEndsOnLineBoundary = /(?:\r\n|\n|\r)$/.test(text);
+		this.outputEndsOnLineBoundary = this.outputBoundary.write(text, this.outputEndsOnLineBoundary);
 	}
 
 	writeError(message: string): void {

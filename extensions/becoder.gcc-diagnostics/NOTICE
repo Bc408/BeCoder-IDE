@@ -1,0 +1,6 @@
+gccDisplayWidth.ts contains GCC 16 Unicode 17 display-width data from:
+https://github.com/gcc-mirror/gcc/blob/0b1bd1e984db5e9f9ad94f38014e02e528116a79/libcpp/generated_cpp_wcwidth.h
+Generated upstream using contrib/unicode/gen_wcwidth.py and glibc utf8_gen.py.
+This component is distributed under GPL-3.0-or-later, not this directory's MIT
+license. BeCoder ships the GPL license in the application root LICENSE and
+records the source above and in ThirdPartyNotices.txt.

@@ -182,11 +182,14 @@ export class CompileRunManager implements vscode.Disposable {
 		const compilerPath = bundledCompiler(this.context, prepared.source.language);
 		this.history.record(commandText);
 		pseudoterminal.setProgramInputEnabled(!command.withInput);
+		pseudoterminal.setPtyInput(true);
 		const result = await this.executor.execute({
 			source: prepared.source,
 			compilerPath,
 			settings: runnerSettings(),
 			inputPath,
+			ptyDimensions: pseudoterminal.programDimensions,
+			inputHelperPath: command.withInput ? path.join(this.context.extensionPath, 'dist', 'runner-input.exe') : undefined,
 			requestStartedAt,
 			panelReadyMs,
 			saveMs: prepared.saveMs
@@ -198,6 +201,8 @@ export class CompileRunManager implements vscode.Disposable {
 				}
 				pseudoterminal.setPhase(phase);
 				if (phase === 'running') {
+					const { cols, rows } = pseudoterminal.programDimensions;
+					this.executor.resizeProgram(cols, rows);
 					pseudoterminal.writeStatus('Compilation Successful, Running', 'success');
 				}
 			}
@@ -323,6 +328,16 @@ export class CompileRunManager implements vscode.Disposable {
 			submit: command => void this.submitTypedCommand(command, pseudoterminal),
 			cancel: () => void this.cancelActive(pseudoterminal),
 			programInput: text => this.writeProgramInput(pseudoterminal, text),
+			terminalResponse: text => {
+				if (this.activeRequest?.pseudoterminal === pseudoterminal) {
+					this.executor.writeProgramInput(text);
+				}
+			},
+			resize: (cols, rows) => {
+				if (this.activeRequest?.pseudoterminal === pseudoterminal) {
+					this.executor.resizeProgram(cols, rows);
+				}
+			},
 			busyAttempt: () => this.rejectBusy(),
 			close: () => this.handlePseudoterminalClosed(pseudoterminal)
 		});

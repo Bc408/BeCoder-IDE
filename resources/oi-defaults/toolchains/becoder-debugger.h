@@ -311,25 +311,25 @@ class __Debugger {
           bool next_need_newline = has_newline_child(i);
           level++;
           if (next_need_newline) {
-            cout << str[i] << "\n" << string(level * 2, ' ');
+            cerr << str[i] << "\n" << string(level * 2, ' ');
           } else {
-            cout << str[i];
+            cerr << str[i];
           }
           self(self, ++i, next_need_newline);
           cnt--;
         } else if (str[i] == ']' || str[i] == '}') {
           level--;
           if (need_newline) {
-            cout << "\n" << string(level * 2, ' ') << str[i];
+            cerr << "\n" << string(level * 2, ' ') << str[i];
           } else {
-            cout << str[i];
+            cerr << str[i];
           }
           return;
         } else if (str[i] == ',' && cnt == 0 && need_newline) {
           ++i;
-          cout << ",\n" << string(level * 2, ' ');
+          cerr << ",\n" << string(level * 2, ' ');
         } else {
-          cout << str[i];
+          cerr << str[i];
         }
       }
     };
@@ -344,18 +344,18 @@ class __Debugger {
   template <typename T>
   __Debugger& operator<<(const T& val) {
     output(val);
-    cout << COLOR_START;
+    cerr << COLOR_START;
     print();
-    cout << COLOR_END << endl;
+    cerr << COLOR_END << endl;
     ss.str("");
     return *this;
   }
   void sp(const string& str = "") {
-    cout << COLOR_START << "====================" << str
+    cerr << COLOR_START << "====================" << str
          << "====================" << COLOR_END << endl;
   }
 } dout;
-#define debug(x) cout << COLOR_START << #x << ": " << COLOR_END, dout << x
+#define debug(x) cerr << COLOR_START << #x << ": " << COLOR_END, dout << x
 
 #endif  // DEBUGER_H
 #endif  // DEBUG

@@ -218,7 +218,7 @@ if (-not (@($gccDiagnosticsManifest.extensionDependencies) -contains 'becoder.be
 	throw 'The packaged GCC diagnostics extension does not depend on BeCoder Setup toolchain readiness.'
 }
 $gccDiagnosticsBundle = Get-Content -LiteralPath (Join-Path $gccDiagnosticsPath 'out\compilerRunner.js') -Raw
-foreach ($requiredBoundary in @('-fsyntax-only', '-O2', '-x', '-std=c17', '-std=c++20', '-fdiagnostics-format=json', '-fdiagnostics-color=never', '-iquote')) {
+foreach ($requiredBoundary in @('-fsyntax-only', '-O2', '-x', '-std=c17', '-std=c++20', '-fdiagnostics-format=sarif-stderr', '-fdiagnostics-color=never', '-iquote')) {
 	if (-not $gccDiagnosticsBundle.Contains($requiredBoundary)) {
 		throw "The packaged GCC diagnostics extension is missing boundary argument: $requiredBoundary"
 	}
@@ -226,6 +226,9 @@ foreach ($requiredBoundary in @('-fsyntax-only', '-O2', '-x', '-std=c17', '-std=
 
 $runnerPath = Join-Path $appPath 'extensions\danielpinto8zz6.c-cpp-compile-run'
 $runnerManifest = Get-Content -LiteralPath (Join-Path $runnerPath 'package.json') -Raw | ConvertFrom-Json
+if (-not (Test-Path -LiteralPath (Join-Path $runnerPath 'dist\runner-input.exe') -PathType Leaf)) {
+	throw 'The packaged Runner input helper is missing.'
+}
 if ("$($runnerManifest.publisher).$($runnerManifest.name)" -ne 'becoder.runner' -or
 	$runnerManifest.main -ne './dist/extension.js') {
 	throw 'The packaged Runner extension has an unexpected identity or entry point.'
@@ -658,7 +661,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
-$expectedCompilerHash = '21d04b7cda3889a7946e9049ef039c001373d966e53ebe59493e5b28cbe3c6a2'
+$expectedCompilerHash = '60805e87afb607e9fd16e82a2b0f740107003204ee1600da58337ac40c602adb'
 if (-not $IncludeCompiler) {
 	throw 'Stage 4.7 Setup-only packages must always include the expanded BeCoder toolchain.'
 }

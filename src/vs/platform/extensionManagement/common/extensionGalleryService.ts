@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { distinct } from '../../../base/common/arrays.js';
+import { applyExtensionControlManifestPolicy } from './extensionControlManifestPolicy.js';
 import { Sequencer } from '../../../base/common/async.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import * as semver from '../../../base/common/semver/semver.js';
@@ -2060,7 +2061,7 @@ export abstract class AbstractExtensionGalleryService implements IExtensionGalle
 			}
 		}
 
-		return { malicious, deprecated, search, autoUpdate };
+		return { malicious: applyExtensionControlManifestPolicy(malicious, this.productService), deprecated, search, autoUpdate };
 	}
 
 	private getRequestTimeout(): number {

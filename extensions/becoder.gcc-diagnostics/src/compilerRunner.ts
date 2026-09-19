@@ -44,7 +44,7 @@ export function diagnosticArguments(
 ): string[] {
 	const sourceDirectory = path.dirname(target.filePath);
 	const debuggerIsolation = target.language === 'cpp'
-		? ['-DDEBUGER_H', '-I', debuggerIncludeRoot]
+		? ['-DDEBUGER_H', '-I', debuggerIncludeRoot, '-include', path.join(debuggerIncludeRoot, 'bits', 'debugger.h')]
 		: [];
 	return [
 		'-fsyntax-only',
@@ -56,7 +56,7 @@ export function diagnosticArguments(
 		...debuggerIsolation,
 		'-finput-charset=UTF-8',
 		'-fexec-charset=UTF-8',
-		'-fdiagnostics-format=json',
+		'-fdiagnostics-format=sarif-stderr',
 		'-fdiagnostics-color=never',
 		'-fdiagnostics-column-origin=1',
 		'-fdiagnostics-column-unit=byte',

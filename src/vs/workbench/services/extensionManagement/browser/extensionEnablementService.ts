@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
+import { applyExtensionControlManifestPolicy } from '../../../../platform/extensionManagement/common/extensionControlManifestPolicy.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IExtensionManagementService, IExtensionIdentifier, IGlobalExtensionEnablementService, ENABLED_EXTENSIONS_STORAGE_PATH, DISABLED_EXTENSIONS_STORAGE_PATH, InstallOperation, IAllowedExtensionsService, MaliciousExtensionInfo } from '../../../../platform/extensionManagement/common/extensionManagement.js';
@@ -75,7 +76,7 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 		@IExtensionManifestPropertiesService private readonly extensionManifestPropertiesService: IExtensionManifestPropertiesService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
-		@IProductService productService: IProductService
+		@IProductService private readonly productService: IProductService
 	) {
 		super();
 		this.storageManager = this._register(new StorageManager(storageService));
@@ -752,7 +753,10 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 
 	private getMaliciousExtensionsForCheck(): ReadonlyArray<MaliciousExtensionInfo> {
 		if (!this._maliciousExtensionsCache) {
-			this._maliciousExtensionsCache = this.getMaliciousExtensions().map(extensionOrPublisher => ({ extensionOrPublisher }));
+			this._maliciousExtensionsCache = applyExtensionControlManifestPolicy(
+				this.getMaliciousExtensions().map(extensionOrPublisher => ({ extensionOrPublisher })),
+				this.productService
+			);
 		}
 		return this._maliciousExtensionsCache;
 	}

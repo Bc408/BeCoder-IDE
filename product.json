@@ -31,6 +31,9 @@
 		"ms-vscode.cpptools",
 		"ms-vscode.cpptools-extension-pack"
 	],
+	"extensionControlManifestExemptions": [
+		"divyanshuagrawal.competitive-programming-helper"
+	],
 	"protectedExtensions": [
 		"becoder.becoder-setup",
 		"becoder.runner",

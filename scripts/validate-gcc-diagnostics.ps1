@@ -61,7 +61,7 @@ function Invoke-GccDiagnostic(
 ) {
 	$mirrorPath = Join-Path $mirrorRoot $SourceName
 	$debuggerIsolationArguments = if ($Language -eq 'c++') {
-		@('-DDEBUGER_H', '-I', $overlayRoot)
+		@('-DDEBUGER_H', '-I', $overlayRoot, '-include', (Join-Path $overlayRoot 'bits\debugger.h'))
 	} else {
 		@()
 	}
@@ -73,7 +73,7 @@ function Invoke-GccDiagnostic(
 		'-DDEBUG',
 		'-finput-charset=UTF-8',
 		'-fexec-charset=UTF-8',
-		'-fdiagnostics-format=json',
+		'-fdiagnostics-format=sarif-stderr',
 		'-fdiagnostics-color=never',
 		'-fdiagnostics-column-origin=1',
 		'-fdiagnostics-column-unit=byte',
@@ -116,21 +116,13 @@ function Invoke-GccDiagnostic(
 	} catch {
 		throw "Malformed GCC JSON for ${SourceName}: $stderr"
 	}
-	$diagnostics = @()
-	if ($null -ne $decoded) {
-		if ($decoded -is [Collections.IList]) {
-			for ($index = 0; $index -lt $decoded.Count; $index++) {
-				$diagnostics += $decoded[$index]
-			}
-		} else {
-			$diagnostics = @($decoded)
-		}
-	}
+	if ($decoded.version -ne '2.1.0' -or $null -eq $decoded.runs) { throw 'Expected GCC SARIF 2.1.0 runs.' }
+	$diagnostics = @($decoded.runs | ForEach-Object { $_.results } | Where-Object { $null -ne $_ })
 	return [PSCustomObject]@{ ExitCode = $exitCode; Diagnostics = $diagnostics }
 }
 
 function Assert-Clean($Result, [string]$CaseName) {
-	$errors = @($Result.Diagnostics | Where-Object { $_.kind -in @('error', 'fatal error') })
+	$errors = @($Result.Diagnostics | Where-Object { $_.level -eq 'error' })
 	$errorCount = ($errors | Measure-Object).Count
 	if ($Result.ExitCode -ne 0 -or $errorCount -ne 0) {
 		throw "$CaseName was expected to be error-clean. Exit=$($Result.ExitCode), Errors=$errorCount"
@@ -138,10 +130,10 @@ function Assert-Clean($Result, [string]$CaseName) {
 }
 
 function Assert-HasError($Result, [string]$CaseName) {
-	$errors = @($Result.Diagnostics | Where-Object { $_.kind -in @('error', 'fatal error') })
+	$errors = @($Result.Diagnostics | Where-Object { $_.level -eq 'error' })
 	$errorCount = ($errors | Measure-Object).Count
 	if ($Result.ExitCode -eq 0 -or $errorCount -eq 0) {
-		$kinds = @($Result.Diagnostics | ForEach-Object { $_.kind }) -join ','
+		$kinds = @($Result.Diagnostics | ForEach-Object { $_.level }) -join ','
 		$encoded = $Result.Diagnostics | ConvertTo-Json -Compress -Depth 10
 		throw "$CaseName was expected to produce a structured GCC error. Exit=$($Result.ExitCode), Kinds=$kinds, Diagnostics=$encoded"
 	}
@@ -201,18 +193,18 @@ int main() { std::vector<int> values{1}; debug(values); dout.sp("ok"); return 0;
 	Write-Utf8File (Join-Path $mirrorRoot 'relative.cpp') "#include `"local.h`"`nint main() { return local(); }"
 	$relative = Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'relative.cpp'
 	Assert-HasError $relative 'relative include'
-	if (-not (@($relative.Diagnostics.locations.caret.file) -match 'local\.h')) {
+	if (-not (@($relative.Diagnostics.locations.physicalLocation.artifactLocation.uri) -match 'local\.h')) {
 		throw 'Relative include diagnostics did not retain the real header location.'
 	}
 
 	Write-Utf8File (Join-Path $mirrorRoot 'warning.cpp') 'int main() { int unused = 0; return 0; }'
 	Assert-Clean (Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'warning.cpp') 'Stage 4.2 warning-only input'
 	$warningProbe = Invoke-GccDiagnostic $cppCompiler 'c++' 'c++20' 'warning.cpp' @('-Wall')
-	$warningCount = ($warningProbe.Diagnostics | Where-Object { $_.kind -eq 'warning' } | Measure-Object).Count
+	$warningCount = ($warningProbe.Diagnostics | Where-Object { $_.level -eq 'warning' } | Measure-Object).Count
 	if ($warningCount -eq 0) {
 		throw 'The warning probe did not produce a structured GCC warning.'
 	}
-	$warningErrorCount = ($warningProbe.Diagnostics | Where-Object { $_.kind -in @('error', 'fatal error') } | Measure-Object).Count
+	$warningErrorCount = ($warningProbe.Diagnostics | Where-Object { $_.level -eq 'error' } | Measure-Object).Count
 	if ($warningErrorCount -ne 0) {
 		throw 'The warning probe unexpectedly produced a GCC error.'
 	}

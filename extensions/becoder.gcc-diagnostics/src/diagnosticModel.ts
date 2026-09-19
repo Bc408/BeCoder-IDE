@@ -4,11 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { gccDisplayWidth } from './gccDisplayWidth';
 
 export interface BytePoint {
 	readonly filePath: string;
 	readonly line: number;
 	readonly byteColumn: number;
+	readonly columnUnit?: 'display' | 'byte';
 }
 
 export interface ByteRange {
@@ -32,6 +35,7 @@ interface RawPoint {
 	readonly line?: unknown;
 	readonly column?: unknown;
 	readonly 'byte-column'?: unknown;
+	readonly columnUnit?: 'display' | 'byte';
 }
 
 interface RawLocation {
@@ -77,7 +81,8 @@ function parsePoint(value: unknown, mirrorPath: string, sourcePath: string): Byt
 	return {
 		filePath: mapReportedPath(raw.file, mirrorPath, sourcePath),
 		line,
-		byteColumn
+		byteColumn,
+		columnUnit: raw.columnUnit
 	};
 }
 
@@ -143,13 +148,62 @@ export function parseGccDiagnostics(output: string, mirrorPath: string, sourcePa
 	} catch (error) {
 		throw new Error(`GCC diagnostic JSON is malformed: ${error instanceof Error ? error.message : String(error)}`);
 	}
-	if (!Array.isArray(decoded)) {
-		throw new Error('GCC diagnostic JSON must be a top-level array.');
+	if (!isRecord(decoded) || decoded.version !== '2.1.0' || !Array.isArray(decoded.runs)) {
+		throw new Error('GCC diagnostic output must be SARIF 2.1.0 with runs.');
+	}
+	const records: RawDiagnostic[] = [];
+	for (const run of decoded.runs) {
+		if (!isRecord(run) || !Array.isArray(run.results)) {
+			throw new Error('GCC SARIF run is missing results.');
+		}
+		for (const result of run.results) {
+			if (!isRecord(result) || !isRecord(result.message) || typeof result.message.text !== 'string') {
+				continue;
+			}
+			const convert = (location: unknown): RawLocation | undefined => {
+				if (!isRecord(location) || !isRecord(location.physicalLocation)) { return undefined; }
+				const physical = location.physicalLocation;
+				let artifact = physical.artifactLocation;
+				if (!isRecord(artifact)) { return undefined; }
+				if (typeof artifact.uri !== 'string' && typeof artifact.index === 'number' && Array.isArray(run.artifacts)) {
+					const entry = run.artifacts[artifact.index];
+					artifact = isRecord(entry) ? entry.location : undefined;
+				}
+				if (!isRecord(artifact) || typeof artifact.uri !== 'string' || !isRecord(physical.region)) { return undefined; }
+				const region = physical.region;
+				const line = positiveInteger(region.startLine);
+				const column = positiveInteger(region.startColumn) ?? 1;
+				if (!line) { return undefined; }
+				let file = artifact.uri;
+				if (/^file:/i.test(file)) {
+					file = fileURLToPath(file);
+				} else {
+					file = decodeURIComponent(file);
+				}
+				// GCC SARIF uses display columns when it can read the source line;
+				// without a source snippet its location machinery falls back to bytes.
+				// SARIF ends are exclusive; our internal finish remains inclusive.
+				const columnUnit = isRecord(physical.contextRegion) && isRecord(physical.contextRegion.snippet)
+					&& typeof physical.contextRegion.snippet.text === 'string' ? 'display' : 'byte';
+				const endLine = positiveInteger(region.endLine) ?? line;
+				const endColumn = positiveInteger(region.endColumn);
+				const start = { file, line, 'byte-column': column, columnUnit };
+				return { start, caret: start, finish: { file, line: endLine, 'byte-column': endColumn ? Math.max(1, endColumn - 1) : column, columnUnit } };
+			};
+			const message = result.message.text;
+			const primary = Array.isArray(result.locations) ? result.locations.map(convert).filter(Boolean) : [];
+			const children = Array.isArray(result.relatedLocations) ? result.relatedLocations.flatMap(location => {
+				const converted = convert(location);
+				if (!converted || !isRecord(location)) { return []; }
+				return [{ kind: 'note', message: isRecord(location.message) && typeof location.message.text === 'string' ? location.message.text : message, locations: [converted] }];
+			}) : [];
+			records.push({ kind: result.level ?? 'warning', message: result.message.text, locations: primary, children });
+		}
 	}
 
 	const errors: ParsedGccError[] = [];
 	const seen = new Set<string>();
-	for (const entry of decoded) {
+	for (const entry of records) {
 		if (!isRecord(entry)) {
 			continue;
 		}
@@ -187,12 +241,14 @@ function lineText(text: string, oneBasedLine: number): string {
 	return text.split(/\r?\n/)[Math.max(0, oneBasedLine - 1)] ?? '';
 }
 
-function utf16ColumnFromByteColumn(line: string, oneBasedByteColumn: number): number {
+function utf16ColumnFromByteColumn(line: string, oneBasedByteColumn: number, unit: BytePoint['columnUnit'] = 'byte'): number {
 	const byteOffset = Math.max(0, oneBasedByteColumn - 1);
 	let consumedBytes = 0;
 	let utf16Column = 0;
 	for (const character of line) {
-		const characterBytes = Buffer.byteLength(character, 'utf8');
+		const characterBytes = unit === 'display'
+			? character === '\t' ? 8 - consumedBytes % 8 : gccDisplayWidth(character.codePointAt(0)!)
+			: Buffer.byteLength(character, 'utf8');
 		if (consumedBytes + characterBytes > byteOffset) {
 			break;
 		}
@@ -202,8 +258,8 @@ function utf16ColumnFromByteColumn(line: string, oneBasedByteColumn: number): nu
 	return utf16Column;
 }
 
-function inclusiveEndCharacter(line: string, oneBasedByteColumn: number): number {
-	const start = utf16ColumnFromByteColumn(line, oneBasedByteColumn);
+function inclusiveEndCharacter(line: string, oneBasedByteColumn: number, unit: BytePoint['columnUnit']): number {
+	const start = utf16ColumnFromByteColumn(line, oneBasedByteColumn, unit);
 	if (start >= line.length) {
 		return start;
 	}
@@ -216,8 +272,8 @@ export function byteRangeToUtf16(text: string, range: ByteRange): Utf16Range {
 	const endLineText = lineText(text, range.end.line);
 	return {
 		startLine: Math.max(0, range.start.line - 1),
-		startCharacter: utf16ColumnFromByteColumn(startLineText, range.start.byteColumn),
+		startCharacter: utf16ColumnFromByteColumn(startLineText, range.start.byteColumn, range.start.columnUnit),
 		endLine: Math.max(0, range.end.line - 1),
-		endCharacter: inclusiveEndCharacter(endLineText, range.end.byteColumn)
+		endCharacter: inclusiveEndCharacter(endLineText, range.end.byteColumn, range.end.columnUnit)
 	};
 }

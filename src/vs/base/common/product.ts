@@ -113,6 +113,8 @@ export interface IProductConfiguration {
 
 	readonly extensionPublisherOrgs?: readonly string[];
 	readonly extensionBlacklist?: readonly string[];
+	/** Exact extension IDs exempted from remote extension-specific problem reports. Product bans still apply. */
+	readonly extensionControlManifestExemptions?: readonly string[];
 	readonly protectedExtensions?: readonly string[];
 	readonly trustedExtensionPublishers?: readonly string[];
 

@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as net from 'net';
 import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
-import { compilerArguments, createCphToolchain } from './toolchain';
+import type { CompilationPlan } from './toolchain';
 import { ImportedProblem } from './problem';
 import { judgeSample, SampleExecution, SampleVerdict } from './judge';
 
@@ -18,13 +18,12 @@ export interface ExecutionPreferences {
 	timeOut: number;
 	ignoreSTDERROR: boolean;
 	pythonCommand: string;
-	compilerArgs?: string;
 }
 
 export interface CheckerRun extends SampleExecution { readonly command: string }
 
 export interface CphExecutionOptions {
-	readonly extensionPath: string;
+	readonly prepareCompilation: (source: string, output: string, session: string) => Promise<CompilationPlan> | CompilationPlan;
 	readonly dataRoot: string;
 	/** Build-time helper; its inherited stdout/stderr stay separate pipes here. */
 	readonly inputHelper: string;
@@ -50,6 +49,9 @@ export class CphExecutor {
 
 	async judge(problem: ImportedProblem & { customCheckerPath?: string }, sourcePath: string, compileOnly = false): Promise<JudgeRun> {
 		if (this.controller || this.disposed) { throw new Error('CPH is busy or disposed.'); }
+		if (!/\.(c|cpp|cc|cxx)$/i.test(sourcePath) || problem.interactive || problem.input.type !== 'stdin' || problem.output.type !== 'stdout') {
+			throw new Error('Only non-interactive C/C++ stdin/stdout problems are supported.');
+		}
 		if (!compileOnly && !problem.tests.length) { throw new Error('There are no sample tests.'); }
 		const controller = new AbortController();
 		this.controller = controller;
@@ -63,10 +65,14 @@ export class CphExecutor {
 			session = fs.mkdtempSync(path.join(fs.realpathSync(this.options.dataRoot), 'request-'));
 			fs.mkdirSync(path.join(session, 'tmp'));
 			fs.mkdirSync(path.join(session, 'user'));
-			const toolchain = createCphToolchain(this.options.extensionPath, session, /\.c$/i.test(sourcePath) ? 'c' : 'cpp');
 			const executable = path.join(session, 'program.exe');
+			const toolchain = await this.options.prepareCompilation(sourcePath, executable, session);
+			if (controller.signal.aborted) { throw new Error('CPH compilation cancelled.'); }
+			for (const name of ['TEMP', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA']) {
+				fs.mkdirSync(toolchain.environment[name], { recursive: true });
+			}
 			this.options.onCompileStarted?.();
-			const compile = await runProcess(toolchain.compiler, compilerArguments(problem, sourcePath, executable, preferences?.compilerArgs), session, toolchain.environment, 120000, controller.signal, true);
+			const compile = await runProcess(toolchain.compiler, [...toolchain.args], path.dirname(sourcePath), toolchain.environment, 120000, controller.signal, true);
 			this.options.onCompileFinished?.();
 			const samples: { result: SampleExecution; verdict: SampleVerdict; checkerRun?: CheckerRun }[] = [];
 			if (compile.exitCode !== 0 || compile.launchError || compile.cancelled || compile.timedOut || compile.outputLimitExceeded) {

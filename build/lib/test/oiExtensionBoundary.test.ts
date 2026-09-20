@@ -1003,7 +1003,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
 		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
 		const ucrt64 = components.find(component => component.id === 'becoder-ucrt64');
-		assert.strictEqual(ucrt64?.sha256, '60805e87afb607e9fd16e82a2b0f740107003204ee1600da58337ac40c602adb');
+		assert.strictEqual(ucrt64?.sha256, 'afd3f697042da43e997186adb9e2033e5c0b1dfe5a4036c55af3f8822d5f1b01');
 		assert.strictEqual(ucrt64?.packageInventory, 'resources/oi-defaults/toolchains/ucrt64-packages.json');
 		assert.ok(ucrt64?.correspondingSource);
 		const languagePack = components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans');
@@ -1014,9 +1014,9 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, '0f2b889acd2d1d09eaca3e17473f54b450fd593aaba0857fd8efd6888c13058a');
+		assert.strictEqual(languagePack?.contentSha256, '889eb21608853100ad02b684e4af99df454a470c0eeb462c95f804d4ea28059e');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, '4c207c39074d08ab54b215ee34a7c18d51dabb4e348f2fe66f28d2004a83d685');
+		assert.strictEqual(languagePack?.packagedContentSha256, '994c6a92136ee135d2059c79c8becb4d69ce4bdaf3cd216442b1c4bc89a8a617');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -1610,8 +1610,10 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(managerSource, /sendText|createTerminal\([^\{]/);
 		const processSource = fs.readFileSync(path.join(extensionPath, 'src', 'runnerProcess.ts'), 'utf8');
 		assert.match(processSource, /shell: false/);
+		const compilationSource = fs.readFileSync(path.join(extensionPath, 'src', 'compilation.ts'), 'utf8');
+		assert.match(processSource, /from '\.\/compilation'/);
 		for (const argument of ['-O2', '-Wall', '-DDEBUG', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always']) {
-			assert.ok(processSource.includes(argument), `Missing Runner compiler argument ${argument}`);
+			assert.ok(compilationSource.includes(argument), `Missing Runner compiler argument ${argument}`);
 		}
 		assert.doesNotMatch(processSource, /powershell(?:\.exe)?|cmd(?:\.exe)?/i);
 		assert.match(processSource, /'runtime-error'/);

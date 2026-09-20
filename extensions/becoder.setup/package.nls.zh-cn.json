@@ -1,5 +1,9 @@
 {
 	"configuration.title": "BeCoder IDE 功能",
+	"configuration.welcome.onlineJudgeSites.title": "欢迎页：网站列表",
+	"configuration.welcome.onlineJudgeSites.description": "欢迎页快捷入口的网站名称与 URL。先在此添加 HTTP 或 HTTPS 网站，再将名称加入 `#becoder.welcome.onlineJudges#` 即可显示。自定义链接不会自动获得题目与测试样例导入能力。",
+	"configuration.welcome.onlineJudges.title": "欢迎页：显示的网站",
+	"configuration.welcome.onlineJudges.description": "按顺序列出欢迎页 OJ 区域要显示的网站名称。先在 `#becoder.welcome.onlineJudgeSites#` 中添加名称与 URL，再将相同名称加入此列表。清空列表会隐藏该区域。修改立即生效，点击链接将在内置浏览器打开。",
 	"configuration.displayLanguage.title": "界面语言",
 	"configuration.displayLanguage.description": "选择 BeCoder 的显示语言。更改将在重新启动后生效。",
 	"configuration.displayLanguage.zhCn": "简体中文",

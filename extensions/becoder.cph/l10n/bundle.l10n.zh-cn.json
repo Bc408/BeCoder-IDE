@@ -24,5 +24,6 @@
 	"Compiling and running samples…": "正在编译并运行样例…",
 	"Compilation did not complete successfully.\n{0}": "编译未成功完成。\n{0}",
 	"{0} / {1} samples passed.": "{0} / {1} 个样例通过。",
-	"CPH request failed: {0}": "CPH 请求失败：{0}"
+	"CPH request failed: {0}": "CPH 请求失败：{0}",
+	"BeCoder Runner compiler is unavailable.": "BeCoder Runner 编译接口不可用。"
 }

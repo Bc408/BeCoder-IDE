@@ -6,6 +6,7 @@
 import { isLinux, isMacintosh, isWindows } from '../../../../base/common/platform.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
+import { Codicon } from '../../../../base/common/codicons.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
@@ -28,12 +29,13 @@ registerAction2(class extends Action2 {
 			id: 'workbench.action.openWelcomePage',
 			title: localize2('miWelcome', 'Welcome'),
 			category: Categories.Help,
+			icon: Codicon.home,
 			f1: true,
-			menu: {
+			menu: [{
 				id: MenuId.MenubarHelpMenu,
 				group: '1_welcome',
 				order: 1,
-			},
+			}, { id: MenuId.TitleBar, group: 'navigation', order: 11 }],
 			metadata: {
 				description: localize2('minWelcomeDescription', 'Opens the BeCoder Welcome page.')
 			}

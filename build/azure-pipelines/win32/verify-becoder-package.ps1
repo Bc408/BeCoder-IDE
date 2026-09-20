@@ -75,6 +75,8 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.cph\ThirdPartyNotices.txt',
 	'resources\app\extensions\becoder.cph\companion\LICENSE',
 	'resources\app\extensions\becoder.cph\licenses\babel-runtime.txt',
+	'resources\app\extensions\becoder.cph\licenses\codicons.txt',
+	'resources\app\extensions\becoder.cph\UPSTREAM.md',
 	'resources\app\extensions\becoder.cph\out\extension.js',
 	'resources\app\extensions\becoder.cph\dist\problem-parser.js',
 	'resources\app\extensions\becoder.cph\dist\judge.js',
@@ -147,6 +149,7 @@ $appPath = Join-Path $PackagePath 'resources\app'
 $packagedNotices = Get-Content -LiteralPath (Join-Path $appPath 'ThirdPartyNotices.txt') -Raw
 foreach ($requiredNotice in @(
 	'BeCoder Runner 0.3.0',
+	'BeCoder CPH 0.1.0',
 	'CodeSnap 1.3.4',
 	'Mathematic PDF Viewer 0.2.5 with Mozilla PDF.js 6.2.108',
 	'clangd 22.1.6 Windows binary bundle',
@@ -672,7 +675,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $expectedClangdHash = 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1'
-$expectedCompilerHash = '60805e87afb607e9fd16e82a2b0f740107003204ee1600da58337ac40c602adb'
+$expectedCompilerHash = 'afd3f697042da43e997186adb9e2033e5c0b1dfe5a4036c55af3f8822d5f1b01'
 if (-not $IncludeCompiler) {
 	throw 'Stage 4.7 Setup-only packages must always include the expanded BeCoder toolchain.'
 }
@@ -841,8 +844,8 @@ if ($electronComponent.version -ne '42.6.0' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne '0f2b889acd2d1d09eaca3e17473f54b450fd593aaba0857fd8efd6888c13058a' -or
-	$languagePackComponent.packagedContentSha256 -ne '4c207c39074d08ab54b215ee34a7c18d51dabb4e348f2fe66f28d2004a83d685') {
+	$languagePackComponent.contentSha256 -ne '889eb21608853100ad02b684e4af99df454a470c0eeb462c95f804d4ea28059e' -or
+	$languagePackComponent.packagedContentSha256 -ne '994c6a92136ee135d2059c79c8becb4d69ce4bdaf3cd216442b1c4bc89a8a617') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

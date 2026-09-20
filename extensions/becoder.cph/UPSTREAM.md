@@ -14,7 +14,7 @@ https://github.com/jmerle/competitive-companion,
 `df90fabb52e8f566ea3382405e22d246af5d6a69`, MIT.
 
 The original six HTML problem parser files under `companion/src/parsers/problem`
-are copied unchanged from that commit. The five additional parsers listed below
+retain that commit's implementation with explicit MIT attribution headers. The five additional parsers listed below
 are adapted from the same commit. `companion/LICENSE` preserves its MIT license.
 The data-only builder, base parser and DOM utilities are adapted locally to
 remove browser-extension messaging, Java template naming and unrelated Markdown
@@ -124,3 +124,22 @@ CodeChef/PDF/resource-dependent parsers are not claimed as supported.
 tsconfig.companion.json checks the parser dependency graph without emitting code;
 strictNullChecks is disabled for the upstream DOM parser contracts, whose required
 selectors throw on missing/login pages rather than producing local problems.
+
+## Shared local compilation (2026-09-20)
+
+The owner superseded the earlier compiler freeze: CPH now consumes the bundled
+Runner extension's compiler API. Run, Run With Input and CPH use the same current
+Runner standard/flags settings, validation, compiler resolution and private child
+environment. Windows settings retain Runner's global-only policy. Legacy CPH C/C++
+Args remain visible as deprecated, ignored settings; no user settings are rewritten.
+There is no implicit CPH macro or static linking for solutions. The input helper's
+own static build is unchanged. CPH compiles with the source directory as cwd but
+keeps its executable and runtime cwd private to the request, with separate stdout
+and stderr and the existing timeout/cancellation/checker behavior.
+
+The common C++ command includes bits/stdc++.h first (allowing the bundled PCH),
+then bits/debugger.h (providing real debug output if PCH is unavailable). C gets
+neither include. The debugger implementation supports the Runner's C++11 through
+C++23 selections; the release PCH remains C++20/O2/DEBUG/UTF-8. Its archive and
+inventory hash must be regenerated with debugger changes. Tests use GCC -H and
+-Winvalid-pch to distinguish a real PCH hit from a successful textual fallback.

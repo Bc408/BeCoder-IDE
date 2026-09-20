@@ -17,6 +17,26 @@ BeCoder 源自 **Code - OSS 1.130**，并保留 **1.130.0** 扩展 API 兼容版
 - Explorer、搜索、Tasks、Markdown、Mermaid、Notebook、内置浏览器、身份验证，以及普通编辑器和终端工作流。
 - 简体中文和英文界面。
 - Open VSX 扩展发现和本地 VSIX 安装。
+- 内置 CPH 样例评测与内置浏览器题目导入。
+
+## 从题目到提交
+
+1. 打开并信任自己的竞赛工作区。在欢迎页选择 OJ，使用内置浏览器进入支持的题目页面；网站需要登录时，在网站中完成登录。
+2. 页面加载完成后，点击浏览器工具栏的“导入题目”。BeCoder 将页面样例导入 CPH，并在选定工作区创建或复用 C/C++ 源文件，保留已有源码内容。导入产生新的源码编辑器组时，该组位于题目浏览器左侧。
+3. 编写解答，按 **Ctrl+Alt+B** 运行 CPH 样例，按 **Ctrl+Alt+D** 聚焦评测器。支持编辑、添加、删除样例和从 JSON 导入样例，也可单独重跑、查看输出差异或停止当前运行。CPH 元数据保存在工作区的 `.cph` 目录中。
+4. 从源码编辑器复制解答，粘贴到 OJ 提交编辑器，在网站中选择语言和编译器并提交。BeCoder 不自动提交；本地样例通过不等于在线评测通过。本地 `debug(...)`、`dout` 是 BeCoder 辅助功能，提交到没有这些定义的 OJ 前，需要移除相关调用或自行提供兼容定义。
+
+内置解析器覆盖 Codeforces、AtCoder、洛谷、蓝桥杯、牛客、SPOJ、CSES、HDOJ、AcWing、LibreOJ（含归档站），以及明确支持的 DMOJ 站点：DMOJ、MOI Arena、Le Quy Don Online Judge、VNOI Online Judge、A.Y. Jackson Online Judge。导入仅支持非交互式、标准输入输出的 C/C++ 题目，不支持依赖 PDF 或额外资源的题目，也不会自动支持任意 DMOJ/Hydro 实例。网站结构变化、登录要求和访问限制可能导致解析失败；参见[解析器验证边界](extensions/becoder.cph/test/fixtures/OJ-SOURCES.md)。
+
+在 **设置 → 扩展 → BeCoder IDE 功能** 中，“欢迎页：网站列表”登记名称和 HTTP/HTTPS URL，“欢迎页：显示的网站”控制显示内容与顺序。默认显示 Codeforces、AtCoder、洛谷、蓝桥杯、牛客和 HDOJ。先在前者添加名称与 URL，再在后者加入相同名称；修改立即生效，清空显示列表会隐藏该区域。添加快捷入口不会自动增加题目解析能力。
+
+## 编译与输出
+
+运行、使用输入运行和 CPH 共用 Runner 的内置 GCC、语言标准设置、受校验的编译参数和私有子进程环境。CPH 旧的 C/C++ Args 设置已弃用并忽略。本地编译使用 `-O2`、`-Wall`、`-DDEBUG` 和 UTF-8；C++ 在兼容时加载内置标准预编译头，并为支持的 C++11/14/17/20/23 标准提供文本头文件回退。不隐式添加 CPH、ONLINE_JUDGE 宏或解答程序的静态链接参数。
+
+BC 的运行和使用输入运行通过 ConPTY 呈现 stdout/stderr，不再由两条独立的 JavaScript 管道回调合并输出；程序语言与运行库本身的缓冲规则仍然有效。使用输入运行在编译前保存同目录 `input` 文件的快照，将字节无回显地送入 stdin，并在文件结束时关闭输入。CPH 则保留独立 stdout/stderr 管道：stdout 用于答案比较，stderr 单独展示，默认不影响判定。CPH 的可执行文件和运行目录归当前请求私有，因此相对文件访问行为与在源码目录运行的 BC 不同。CPH 是样例测试工具，不提供沙箱或等同线上 OJ 的内存限制执行能力。
+
+可选的 CPH 自定义检查器使用用户安装的 Python，这是私有 C/C++ 工具链之外的明确例外。调用协议为 `python script input-file actual-output-file`，退出码为零表示通过，不向检查器传递期望输出。普通 C/C++ 样例评测无需 Python。
 
 BeCoder 明确不提供 AI、Chat、Agent、MCP、Debug/GDB、Source Control/Git 图形界面和远程开发产品能力。Git 仍可作为外部命令在原生终端中使用。
 

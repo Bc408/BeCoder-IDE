@@ -1,5 +1,9 @@
 {
 	"configuration.title": "BeCoder IDE Features",
+	"configuration.welcome.onlineJudgeSites.title": "Welcome Page: Websites",
+	"configuration.welcome.onlineJudgeSites.description": "Website names and URLs for Welcome page shortcuts. Add an HTTP or HTTPS website here, then add its name to `#becoder.welcome.onlineJudges#` to display it. Custom links do not automatically support problem or test case import.",
+	"configuration.welcome.onlineJudges.title": "Welcome Page: Visible Websites",
+	"configuration.welcome.onlineJudges.description": "Website names to display under Online Judges on the Welcome page, in display order. First add the name and URL to `#becoder.welcome.onlineJudgeSites#`, then add the same name here. An empty list hides the section. Changes take effect immediately; links open in the built-in browser.",
 	"configuration.displayLanguage.title": "Display Language",
 	"configuration.displayLanguage.description": "Select the display language for BeCoder. The change takes effect after restart.",
 	"configuration.displayLanguage.zhCn": "Simplified Chinese",

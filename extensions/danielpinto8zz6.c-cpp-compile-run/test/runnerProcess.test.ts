@@ -28,6 +28,7 @@ suite('Runner process boundary', () => {
 		assert.deepStrictEqual(buildCompilerArguments(source, settings, 'D:\\contest\\main.exe'), [
 			'-O2', '-Wall', '-DDEBUG', '-std=c++20',
 			'-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=always',
+			'-include', 'bits/stdc++.h', '-include', 'bits/debugger.h',
 			'D:\\contest\\main.cpp', '-o', 'D:\\contest\\main.exe'
 		]);
 		for (const flag of ['-Ioutside', '-Loutside', '-luser32', '-Wl,--subsystem,windows', '-fplugin=x.dll', '@options.txt']) {

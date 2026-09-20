@@ -14,7 +14,7 @@ test('VSCE inventory includes runtime and sources but excludes development depen
 	const files: string[] = (await vsce.listFiles({ cwd: path.resolve('extensions/becoder.cph'), packageManager: vsce.PackageManager.Npm }))
 		.map((file: string) => file.replace(/\\/g, '/'));
 	for (const file of ['out/extension.js', 'out/judgeView.js', 'out/execution.js', 'dist/judge.js', 'dist/judge.css', 'dist/problem-parser.js',
-		'LICENSE', 'ThirdPartyNotices.txt', 'companion/LICENSE', 'licenses/babel-runtime.txt', 'UPSTREAM.md', 'src/extension.ts', 'webview/CaseView.tsx', 'companion/entry.ts', 'resources/judge.svg', 'resources/icon.png']) {
+		'LICENSE', 'ThirdPartyNotices.txt', 'companion/LICENSE', 'licenses/babel-runtime.txt', 'licenses/codicons.txt', 'UPSTREAM.md', 'src/extension.ts', 'webview/CaseView.tsx', 'companion/entry.ts', 'resources/judge.svg', 'resources/icon.png']) {
 		assert.ok(files.includes(file), `Missing package file: ${file}`);
 	}
 	assert.ok(!files.some(file => /(^|\/)(node_modules|out-test|test)\//.test(file)));

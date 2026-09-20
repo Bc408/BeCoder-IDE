@@ -1,6 +1,7 @@
 {
 	"displayName": "BeCoder CPH",
-	"compilerArgs": "与 CPH 一致，使用空白分隔附加编译参数，例如 -std=c++20 -O0。不能覆盖编译器或工具链选择、产物归属、静态链接及 BeCoder 宏约定。",
+	"compilerArgs": "旧版 CPH 编译参数（已不再生效）。",
+	"compilerArgsDeprecated": "此设置已不再生效。请配置 becoder.runner.cppStandard/cStandard 与 cppFlags/cFlags；CPH 共用 Runner 编译设置。",
 	"timeOut": "每个测试用例或自定义判题脚本的超时限制，单位毫秒。",
 	"hideCompileStderr": "编译成功时隐藏编译器的标准错误输出。",
 	"ignoreSTDERROR": "不因程序标准错误流有内容而判运行错误。使用 debug 时保持开启；程序非零退出码仍会判失败。",

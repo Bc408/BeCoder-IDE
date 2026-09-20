@@ -198,8 +198,7 @@ export default defineConfig(
 	{
 		// Preserve the separately licensed Competitive Companion parser attribution.
 		files: [
-			'extensions/becoder.cph/companion/entry.ts',
-			'extensions/becoder.cph/companion/src/parsers/problem/{CSES,HDOJ,AcWing,LibreOJ,DMOJ}ProblemParser.ts'
+			'extensions/becoder.cph/companion/**/*.ts'
 		],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*MIT License)[\\s\\S]*$' }]
@@ -208,9 +207,38 @@ export default defineConfig(
 	{
 		// CPH is GPL-derived code, not Microsoft MIT code. Preserve its attribution.
 		files: ['extensions/becoder.cph/{src,test}/**/*.ts', 'extensions/becoder.cph/webview/*.{ts,tsx}'],
-		ignores: ['extensions/becoder.cph/src/diffOutput.ts', 'extensions/becoder.cph/webview/DiffView.tsx'],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]
+		}
+	},
+	{
+		'files': [
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerInputControl.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/terminalOutputBoundary.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerInputControl.test.ts'
+		],
+		'rules': {
+			'header/header': [
+				'error',
+				'block',
+				{
+					'pattern': '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$'
+				}
+			]
+		}
+	},
+	{
+		'files': [
+			'extensions/becoder.gcc-diagnostics/src/gccDisplayWidth.ts'
+		],
+		'rules': {
+			'header/header': [
+				'error',
+				'block',
+				{
+					'pattern': '^(?=[\\s\\S]*gcc-mirror/gcc)(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$'
+				}
+			]
 		}
 	},
 	// TS

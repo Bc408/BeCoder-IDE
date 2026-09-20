@@ -1,3 +1,7 @@
+/*---------------------------------------------------------------------------------------------
+ *  Derived from Competitive Companion. Copyright (c) 2017 Jasper van Merle.
+ *  Licensed under the MIT License. See companion/LICENSE and UPSTREAM.md.
+ *--------------------------------------------------------------------------------------------*/
 // Adapted from Competitive Companion (MIT), pinned source in UPSTREAM.md.
 // Browser extension messaging and Java naming are intentionally not included.
 export class TaskBuilder {

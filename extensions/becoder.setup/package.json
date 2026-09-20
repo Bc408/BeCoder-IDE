@@ -65,6 +65,42 @@
 					"title": "%configuration.newFileDefaultLanguage.title%",
 					"description": "%configuration.newFileDefaultLanguage%"
 				},
+				"becoder.welcome.onlineJudgeSites": {
+					"type": "object",
+					"additionalProperties": { "type": "string", "pattern": "^https?://[^\\s]+$" },
+					"default": {
+						"Codeforces": "https://codeforces.com/",
+						"AtCoder": "https://atcoder.jp/",
+						"洛谷": "https://www.luogu.com.cn/",
+						"蓝桥杯": "https://www.lanqiao.cn/",
+						"牛客": "https://ac.nowcoder.com/",
+						"HDOJ": "https://acm.hdu.edu.cn/",
+						"CSES": "https://cses.fi/",
+						"SPOJ": "https://www.spoj.com/",
+						"AcWing": "https://www.acwing.com/",
+						"LibreOJ": "https://loj.ac/",
+						"LibreOJ Archive": "https://libreoj.github.io/",
+						"DMOJ": "https://dmoj.ca/",
+						"MOI Arena": "https://arena.moi/",
+						"Le Quy Don Online Judge": "https://lqdoj.edu.vn/",
+						"VNOI Online Judge": "https://oj.vnoi.info/",
+						"A.Y. Jackson Online Judge": "https://ayjcoding.club/"
+					},
+					"scope": "application",
+					"order": 3,
+					"title": "%configuration.welcome.onlineJudgeSites.title%",
+					"markdownDescription": "%configuration.welcome.onlineJudgeSites.description%"
+				},
+				"becoder.welcome.onlineJudges": {
+					"type": "array",
+					"items": { "type": "string" },
+					"uniqueItems": true,
+					"default": ["Codeforces", "AtCoder", "洛谷", "蓝桥杯", "牛客", "HDOJ"],
+					"scope": "application",
+					"order": 4,
+					"title": "%configuration.welcome.onlineJudges.title%",
+					"markdownDescription": "%configuration.welcome.onlineJudges.description%"
+				},
 				"becoder.inlayHints.enabled": {
 					"type": "boolean",
 					"default": false,

@@ -59,6 +59,7 @@ class ToggleDevToolsAction extends Action2 {
 				id: MenuId.BrowserActionsToolbar,
 				group: BrowserActionGroup.Tools,
 				order: 2,
+				isHiddenByDefault: true,
 			},
 			keybinding: {
 				weight: KeybindingWeight.WorkbenchContrib,

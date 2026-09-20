@@ -138,6 +138,7 @@ test('judge streams individual results, preserves other results through saves, a
 	const execution = { stdout: 'a', stderr: '', exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false };
 	const api = {
 		workspace: { isTrusted: true, getConfiguration: () => ({ get: (_key: string, fallback: unknown) => fallback }), openTextDocument: async () => ({ save: async () => true }) },
+		extensions: { getExtension: (id: string) => { assert.strictEqual(id, 'becoder.runner'); return { activate: async () => ({ prepareCompilation: (source: string, output: string, session: string) => ({ compiler: 'shared-gcc', args: [source, output], environment: { TEMP: session } }) }) }; } },
 		commands: { executeCommand: async () => undefined },
 		Uri: { file: (fsPath: string) => ({ fsPath }) },
 		l10n: { t: (text: string) => text }
@@ -151,6 +152,9 @@ test('judge streams individual results, preserves other results through saves, a
 			return { CphExecutor: class {
 				constructor(private readonly options: CphExecutionOptions) { }
 				async judge(problem: any) {
+					const plan = await this.options.prepareCompilation(source, 'private.exe', root);
+					assert.strictEqual(plan.compiler, 'shared-gcc');
+					assert.deepStrictEqual(plan.args, [source, 'private.exe']);
 					this.options.onCompileStarted?.(); this.options.onCompileFinished?.();
 					const samples = problem.tests.map((_sample: unknown, index: number) => {
 						this.options.onSampleStarted?.(index);

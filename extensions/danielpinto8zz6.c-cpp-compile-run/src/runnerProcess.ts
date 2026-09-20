@@ -10,6 +10,8 @@ import * as path from 'path';
 import { StringDecoder } from 'string_decoder';
 
 import type { BeCoderSource, RunnerSettings } from './compiler';
+import { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
+export { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
 import { RunnerPhase } from './runnerLifecycle';
 import { Osc633Filter } from './terminalVisuals';
 import { RunnerPtyProcess } from './runnerPtyProcess';
@@ -191,20 +193,20 @@ export class RunnerExecutor {
 				const programResult = request.ptyDimensions
 					? await this.runPty(request, environment, callbacks, inputSnapshot)
 					: await this.runChild(
-					request.source.executablePath,
-					[],
-					request.source.directory,
-					environment,
-					callbacks.write,
-					child => {
-						if (inputData) {
-							child.stdin.end(inputData);
-						} else {
-							this.activeProgram = child;
+						request.source.executablePath,
+						[],
+						request.source.directory,
+						environment,
+						callbacks.write,
+						child => {
+							if (inputData) {
+								child.stdin.end(inputData);
+							} else {
+								this.activeProgram = child;
+							}
+							callbacks.setPhase('running');
 						}
-						callbacks.setPhase('running');
-					}
-				);
+					);
 				processStartMs = programResult.spawnAt - processRequestedAt;
 				compileToRunStartMs = programResult.spawnAt - compilerResult.spawnAt;
 				programRuntimeMs = programResult.closeAt - programResult.spawnAt;
@@ -448,79 +450,6 @@ export class RunnerExecutor {
 			throw new RunnerProcessCancellationError();
 		}
 	}
-}
-
-export function buildCompilerArguments(source: BeCoderSource, settings: RunnerSettings, outputPath: string): readonly string[] {
-	const standard = source.language === 'c' ? settings.cStandard : settings.cppStandard;
-	const allowedStandards = source.language === 'c' ? ['c11', 'c17', 'c23'] : ['c++11', 'c++14', 'c++17', 'c++20', 'c++23'];
-	if (!allowedStandards.includes(standard)) {
-		throw new Error(`Unsupported BeCoder ${source.language === 'c' ? 'C' : 'C++'} standard: ${standard}`);
-	}
-	const requestedFlags = source.language === 'c' ? settings.cFlags : settings.cppFlags;
-	const requiredFlags = ['-O2', '-Wall', '-DDEBUG'];
-	const flags = requestedFlags.map(validateCompilerFlag).filter(flag => !requiredFlags.includes(flag));
-	return [
-		...requiredFlags,
-		...flags,
-		`-std=${standard}`,
-		'-finput-charset=UTF-8',
-		'-fexec-charset=UTF-8',
-		'-fdiagnostics-color=always',
-		source.path,
-		'-o',
-		outputPath
-	];
-}
-
-export function privateRunnerEnvironment(sessionRoot: string, compilerPath: string): Record<string, string> {
-	const systemRoot = process.env['SystemRoot'] ?? process.env['windir'];
-	if (!systemRoot) {
-		throw new Error('Windows SystemRoot is unavailable.');
-	}
-	const environment: Record<string, string> = {};
-	for (const name of [
-		'SystemRoot', 'windir', 'SystemDrive', 'ComSpec', 'OS', 'PATHEXT',
-		'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS'
-	]) {
-		const value = process.env[name];
-		if (value) {
-			environment[name] = value;
-		}
-	}
-	const temporaryDirectory = path.join(sessionRoot, 'tmp');
-	const userRoot = path.join(sessionRoot, 'user');
-	environment['TEMP'] = temporaryDirectory;
-	environment['TMP'] = temporaryDirectory;
-	environment['USERPROFILE'] = userRoot;
-	environment['HOMEDRIVE'] = path.parse(userRoot).root.slice(0, 2);
-	environment['HOMEPATH'] = userRoot.slice(2);
-	environment['HOME'] = userRoot;
-	environment['LOCALAPPDATA'] = path.join(userRoot, 'AppData', 'Local');
-	environment['APPDATA'] = path.join(userRoot, 'AppData', 'Roaming');
-	environment['LANG'] = 'C';
-	environment['LC_ALL'] = 'C';
-	environment['PATH'] = [path.dirname(compilerPath), path.join(systemRoot, 'System32')].join(path.delimiter);
-	return environment;
-}
-
-function validateCompilerFlag(candidate: string): string {
-	if ((candidate.startsWith('-O') && candidate !== '-O2')
-		|| candidate === '-UDEBUG'
-		|| candidate.startsWith('-DDEBUG=')
-		|| candidate === '-Wno-all') {
-		throw new Error(`Compiler flag cannot override a required BeCoder Runner flag: ${candidate}`);
-	}
-	const warning = /^-W(?:no-)?[A-Za-z0-9][A-Za-z0-9+_.=-]*$/.test(candidate) && !/^-W[alp](?:,|=|$)/.test(candidate);
-	const allowed = /^-O(?:0|1|2|3|g|s|fast)$/.test(candidate)
-		|| warning
-		|| /^-D[A-Za-z_][A-Za-z0-9_]*(?:=[A-Za-z0-9_+.-]+)?$/.test(candidate)
-		|| /^-U[A-Za-z_][A-Za-z0-9_]*$/.test(candidate)
-		|| /^-g(?:0|1|2|3)?$/.test(candidate)
-		|| ['-pipe', '-pedantic', '-pedantic-errors', '-pthread'].includes(candidate);
-	if (!allowed) {
-		throw new Error(`Unsupported compiler flag in BeCoder Runner: ${candidate}`);
-	}
-	return candidate;
 }
 
 async function preparePrivateEnvironment(environment: Record<string, string>): Promise<void> {

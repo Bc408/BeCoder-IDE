@@ -1,3 +1,7 @@
+/*---------------------------------------------------------------------------------------------
+ *  Derived from Competitive Companion. Copyright (c) 2017 Jasper van Merle.
+ *  Licensed under the MIT License. See companion/LICENSE and UPSTREAM.md.
+ *--------------------------------------------------------------------------------------------*/
 import { Sendable } from '../../models/Sendable';
 import { TaskBuilder } from '../../models/TaskBuilder';
 import { decodeHtml, htmlToElement } from '../../utils/dom';

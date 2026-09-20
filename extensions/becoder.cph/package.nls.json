@@ -1,6 +1,7 @@
 {
 	"displayName": "BeCoder CPH",
-	"compilerArgs": "Additional compiler arguments separated by whitespace, as in CPH (for example -std=c++20 -O0). Compiler/toolchain selection, output ownership, static linking and BeCoder macros cannot be overridden.",
+	"compilerArgs": "Legacy CPH compiler arguments (ignored).",
+	"compilerArgsDeprecated": "No longer used. Configure becoder.runner.cppStandard/cStandard and cppFlags/cFlags; CPH shares Runner compilation settings.",
 	"timeOut": "Time limit per test or custom checker in milliseconds.",
 	"hideCompileStderr": "Hide compiler standard error when compilation succeeds.",
 	"ignoreSTDERROR": "Do not treat program standard error as a runtime error. Keep enabled to use debug output; nonzero program exit codes still fail.",

@@ -56,11 +56,4 @@ export const startEntries: readonly IGettingStartedStartEntry[] = [
 		when: '!openFolderWorkspaceSupport && workbenchState == \'workspace\'',
 		command: 'command:workbench.action.files.openFolderViaWorkspace',
 	},
-	{
-		id: 'becoder.openIntegratedBrowser',
-		title: localize('gettingStarted.integratedBrowser.title', "Open Integrated Browser"),
-		description: localize('gettingStarted.integratedBrowser.description', "Open a browser tab inside BeCoder."),
-		icon: Codicon.globe,
-		command: 'workbench.action.browser.open',
-	},
 ];

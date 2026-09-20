@@ -3,9 +3,8 @@
  *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
  *--------------------------------------------------------------------------------------------*/
 
-import { parseImportedProblem } from './problem';
+import { ImportedProblem, parseImportedProblem } from './problem';
 import { ImportResult, ProblemStore, ProblemStoreError, StoredProblem } from './problemStore';
-import { ImportedProblem } from './problem';
 import { SourcePreferences } from './importPreferences';
 
 /** UI adapter supplies only folders from this window, never paths from the page. */

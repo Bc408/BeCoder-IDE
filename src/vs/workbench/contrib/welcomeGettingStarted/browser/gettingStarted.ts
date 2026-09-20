@@ -40,6 +40,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IHistoryService } from '../../../services/history/common/history.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { startEntries } from '../common/gettingStartedStartEntries.js';
+import { getOnlineJudgeLinks, onlineJudgeSitesSetting, onlineJudgesSetting } from '../common/onlineJudges.js';
 import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
 import { GettingStartedIndexList } from './gettingStartedList.js';
 import './gettingStartedColors.js';
@@ -134,6 +135,11 @@ export class GettingStartedPage extends EditorPane {
 		inWelcomeContext.bindTo(this.contextService).set(true);
 
 		this._register(this.editorService.onDidActiveEditorChange(() => this.refreshRecentlyOpened()));
+		this._register(this.configurationService.onDidChangeConfiguration(event => {
+			if (this.editorInput && (event.affectsConfiguration(onlineJudgeSitesSetting) || event.affectsConfiguration(onlineJudgesSetting))) {
+				this.buildWelcomePage();
+			}
+		}));
 	}
 
 	override async setInput(input: GettingStartedInput, options: GettingStartedEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
@@ -189,6 +195,19 @@ export class GettingStartedPage extends EditorPane {
 			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "All set"))
 		);
 		const leftColumn = $('.categories-column.categories-column-left', {}, this.buildStartList().getDomElement());
+		const links = getOnlineJudgeLinks(this.configurationService.getValue(onlineJudgeSitesSetting), this.configurationService.getValue(onlineJudgesSetting));
+		if (links.length) {
+			const list = $('ul');
+			for (const { name, url } of links) {
+				const button = $('button.button-link', { title: url }, $(ThemeIcon.asCSSSelector(Codicon.globe) + '.icon-widget'), $('span', {}, name));
+				this.pageDisposables.add(addDisposableListener(button, 'click', async () => {
+					await this.commandService.executeCommand('workbench.action.keepEditor');
+					await this.commandService.executeCommand('workbench.action.browser.open', url);
+				}));
+				list.appendChild($('li', {}, button));
+			}
+			leftColumn.appendChild($('.index-list.start-container', {}, $('h2', {}, localize('onlineJudges', "Online Judges")), list));
+		}
 		const recentList = this.buildRecentlyOpenedList();
 		recentList.setLimit(5);
 		const rightColumn = $('.categories-column.categories-column-right', {}, recentList.getDomElement());

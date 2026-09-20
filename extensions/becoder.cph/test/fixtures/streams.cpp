@@ -7,7 +7,7 @@ int main() {
     cout<<"EOF\n";
     return 0;
   }
-  cerr<<"debug:"<<n<<'\n';
+  debug(n);
   cout<<n*2<<'\n';
   if (n==125) return 125;
   if (n==-1) for (;;) {}

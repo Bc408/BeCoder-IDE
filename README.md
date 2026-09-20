@@ -17,6 +17,26 @@ BeCoder is derived from **Code - OSS 1.130** and retains extension API compatibi
 - Explorer, search, Tasks, Markdown, Mermaid, notebooks, the built-in browser, authentication, and normal editor and terminal workflows.
 - Simplified Chinese and English interfaces.
 - Open VSX extension discovery and local VSIX installation.
+- Built-in CPH sample testing and problem import from the integrated browser.
+
+## From a Problem to a Submission
+
+1. Open and trust your contest workspace. Choose an Online Judge on the Welcome page to open it in the integrated browser, then navigate to a supported problem page. Sign in on the website if it requires an account.
+2. After the page finishes loading, choose **Import Problem** in the browser toolbar. BeCoder imports the displayed samples into CPH and creates or reuses a C/C++ source in the selected workspace. Existing source contents are preserved. When import creates a source editor group, it appears to the left of the problem browser.
+3. Write your solution and press **Ctrl+Alt+B** to run the CPH samples, or **Ctrl+Alt+D** to focus the judge. Samples can be edited, added, removed, or imported from JSON. You can rerun one sample, inspect output differences, or stop the active run. CPH metadata is stored in the workspace's `.cph` directory.
+4. Copy your solution from the source editor and paste it into the OJ's submission editor. Select the website's language/compiler and submit there. BeCoder does not submit automatically; passing local samples does not establish online acceptance. Local `debug(...)`/`dout` helpers are BeCoder conveniences: remove them or provide a compatible definition before submission to an OJ that lacks them.
+
+The bundled parsers cover Codeforces, AtCoder, Luogu, Lanqiao, NowCoder, SPOJ, CSES, HDOJ, AcWing, LibreOJ (including its archive), and the explicitly supported DMOJ sites: DMOJ, MOI Arena, Le Quy Don Online Judge, VNOI Online Judge, and A.Y. Jackson Online Judge. Import supports non-interactive C/C++ problems with standard input/output. PDF/resource-dependent problems and arbitrary DMOJ/Hydro instances are not supported. Website layout changes, login requirements and access restrictions can prevent parsing; see [parser verification boundaries](extensions/becoder.cph/test/fixtures/OJ-SOURCES.md).
+
+Under **Settings → Extensions → BeCoder IDE Features**, **Welcome Page: Websites** maps names to HTTP/HTTPS URLs; **Welcome Page: Visible Websites** selects their display order. The default visible sites are Codeforces, AtCoder, Luogu, Lanqiao, NowCoder and HDOJ. Add a name and URL to the first setting, then the same name to the second. Changes take effect immediately; an empty display list hides the section. Adding a shortcut does not add a problem parser.
+
+## Compilation and Output
+
+Run, Run With Input and CPH share Runner's bundled GCC, language-standard settings, validated flags and private child environment. CPH's old C/C++ Args settings are deprecated and ignored. Local compilation uses `-O2`, `-Wall`, `-DDEBUG` and UTF-8; C++ loads the bundled standard precompiled header when compatible, with a textual fallback for the supported C++11/14/17/20/23 standards. No CPH or ONLINE_JUDGE macro or static solution linkage is added implicitly.
+
+BC Run and Run With Input present stdout and stderr through ConPTY rather than independently merging two JavaScript pipe callbacks. Normal language/runtime buffering still applies. Run With Input snapshots the same-directory `input` file before compilation, feeds its bytes without terminal echo, and closes stdin at EOF. CPH instead retains separate stdout and stderr pipes: stdout is compared with expected output while stderr is shown separately and ignored for verdicts by default. Its executable and working directory are private to each request; relative-file behavior therefore differs from BC Run's source-directory working directory. CPH is a sample tester, not a sandbox or an OJ-equivalent memory-limit enforcer.
+
+Optional custom CPH checkers use a user-installed Python interpreter, an explicit exception to the private C/C++ toolchain. The protocol is `python script input-file actual-output-file`; exit code zero passes and expected output is not passed to the checker. Ordinary C/C++ sample testing does not require Python.
 
 BeCoder deliberately does not provide AI, Chat, Agent, MCP, Debug/GDB, Source Control/Git UI, or remote-development product capabilities. Git remains usable as an external command in the native terminal.
 

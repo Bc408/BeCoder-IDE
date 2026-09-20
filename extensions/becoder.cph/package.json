@@ -9,7 +9,7 @@
 	"engines": { "vscode": "^1.130.0" },
 	"categories": ["Programming Languages"],
 	"activationEvents": ["onCommand:_becoder.cph.importProblem", "onLanguage:c", "onLanguage:cpp"],
-	"extensionDependencies": ["becoder.becoder-setup"],
+	"extensionDependencies": ["becoder.becoder-setup", "becoder.runner"],
 	"capabilities": {
 		"untrustedWorkspaces": { "supported": false },
 		"virtualWorkspaces": false
@@ -23,8 +23,8 @@
 			"becoder.cph.general.ignoreSTDERROR": { "type": "boolean", "default": true, "scope": "resource", "description": "%ignoreSTDERROR%" },
 			"becoder.cph.general.hideOutputDifference": { "type": "boolean", "default": true, "description": "%hideOutputDifference%" },
 			"becoder.cph.language.python.Command": { "type": "string", "default": "python3", "scope": "machine", "description": "%pythonCommand%" },
-			"becoder.cph.language.c.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%" },
-			"becoder.cph.language.cpp.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%" },
+			"becoder.cph.language.c.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%", "deprecationMessage": "%compilerArgsDeprecated%" },
+			"becoder.cph.language.cpp.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%", "deprecationMessage": "%compilerArgsDeprecated%" },
 			"becoder.cph.general.defaultLanguage": { "type": "string", "default": "cpp", "enum": ["none", "c", "cpp"], "scope": "resource", "description": "%defaultLanguage%" },
 			"becoder.cph.general.defaultLanguageTemplateFileLocation": { "type": "string", "default": "", "scope": "resource", "description": "%templateFile%" },
 			"becoder.cph.general.doTemplateFileVariableReplacement": { "type": "boolean", "default": false, "scope": "resource", "description": "%templateVariables%" },

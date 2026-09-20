@@ -34,6 +34,20 @@ License text: extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE
 
 ---------------------------------------------------------
 
+BeCoder CPH 0.1.0 (based on Competitive Programming Helper)
+https://github.com/agrawal-d/cph/tree/187590eae3379bad8caaf7bd930d2987557a7966
+GPL-3.0-or-later; modified source: extensions/becoder.cph
+License text: extensions/becoder.cph/LICENSE
+Parser sources: Competitive Companion, MIT, copyright (c) 2017 Jasper van Merle
+https://github.com/jmerle/competitive-companion/tree/df90fabb52e8f566ea3382405e22d246af5d6a69
+Parser license: extensions/becoder.cph/companion/LICENSE
+React UI dependencies: MIT; Microsoft Codicons font: CC-BY-4.0.
+Dependency notices and attribution: extensions/becoder.cph/ThirdPartyNotices.txt
+Font license: extensions/becoder.cph/licenses/codicons.txt
+Modification and source records: extensions/becoder.cph/UPSTREAM.md
+
+---------------------------------------------------------
+
 vscode-clangd 0.6.0
 https://github.com/clangd/vscode-clangd
 

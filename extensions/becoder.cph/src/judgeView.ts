@@ -13,6 +13,7 @@ import { StoredProblem, ProblemStore } from './problemStore';
 import { displayOutput } from './outputPresentation';
 import { acquireWorkspaceLease } from './workspaceLease';
 import { diffOutput, DiffResult } from './diffOutput';
+import type { RunnerCompilerApi } from './toolchain';
 
 const labels: Record<string, [string, string]> = {
 	usageInstructions: ['Usage Instructions', '使用说明'], invocationFormat: ['Invocation Format', '调用格式'], documentation: ['Documentation', '文档'],
@@ -77,7 +78,12 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		const helper = path.join(context.extensionPath, '..', 'danielpinto8zz6.c-cpp-compile-run', 'dist', 'runner-input.exe');
-		const executor = new CphExecutor({ extensionPath: context.extensionPath, dataRoot: path.join(context.globalStorageUri.fsPath, 'cph-sessions'), inputHelper: helper,
+		const executor = new CphExecutor({ prepareCompilation: async (source, output, session) => {
+			const runner = vscode.extensions.getExtension<RunnerCompilerApi>('becoder.runner');
+			if (!runner) { throw new Error(vscode.l10n.t('BeCoder Runner compiler is unavailable.')); }
+			const api = await runner.activate();
+			return api.prepareCompilation(source, output, session);
+		}, dataRoot: path.join(context.globalStorageUri.fsPath, 'cph-sessions'), inputHelper: helper,
 			onCompileStarted: () => this.progress('compile'),
 			onCompileFinished: () => this.progress(undefined),
 			onSampleStarted: index => {
@@ -96,7 +102,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			},
 			preferences: source => {
 				const config = vscode.workspace.getConfiguration('becoder.cph', vscode.Uri.file(source));
-				return { timeOut: config.get('general.timeOut', 3000), ignoreSTDERROR: config.get('general.ignoreSTDERROR', true), pythonCommand: config.get('language.python.Command', 'python3'), compilerArgs: config.get(/\.c$/i.test(source) ? 'language.c.Args' : 'language.cpp.Args', '') };
+				return { timeOut: config.get('general.timeOut', 3000), ignoreSTDERROR: config.get('general.ignoreSTDERROR', true), pythonCommand: config.get('language.python.Command', 'python3') };
 			} });
 		this.session = new JudgeSession(executor, async source => {
 			if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before running samples.')); }

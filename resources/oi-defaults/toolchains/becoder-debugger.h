@@ -5,6 +5,8 @@
 #include <array>
 #include <deque>
 #include <iostream>
+#include <functional>
+#include <type_traits>
 #include <list>
 #include <map>
 #include <queue>
@@ -121,16 +123,19 @@ class __Debugger {
   // 私有成员对象
   stringstream ss;
   // 私有成员函数
-  template <typename Tuple, size_t... I>
-  void output_tuple(const Tuple& t, index_sequence<I...>) {
-    ((ss << (I == 0 ? "" : ", "), output(get<I>(t))), ...);
+  template<size_t I=0,typename... Args>
+  typename enable_if<I==sizeof...(Args)>::type output_tuple_items(const tuple<Args...>&) {}
+  template<size_t I=0,typename... Args>
+  typename enable_if<I<sizeof...(Args)>::type output_tuple_items(const tuple<Args...>& t) {
+    ss<<(I==0? "":", ");
+    output(get<I>(t));
+    output_tuple_items<I+1>(t);
   }
-
-  template <typename... Args>
+  template<typename... Args>
   void output_tuple(const tuple<Args...>& t) {
-    ss << "<";
-    output_tuple(t, make_index_sequence<sizeof...(Args)>{});
-    ss << ">";
+    ss<<"<";
+    output_tuple_items(t);
+    ss<<">";
   }
 
   template <typename T, typename S>
@@ -205,12 +210,12 @@ class __Debugger {
   void output_map(const T& m) {
     ss << "{";
     bool first = true;
-    for (const auto& [key, value] : m) {
+    for (const auto &item:m) {
       if (!first) ss << ", ";
       first = false;
-      output(key);
+      output(item.first);
       ss << ": ";
-      output(value);
+      output(item.second);
     }
     ss << "}";
   }
@@ -248,40 +253,42 @@ class __Debugger {
     ss<<digits;
   }
 
-  template <typename T>
+  //标签分派兼容 C++11，同时保留各类容器的输出格式。
+  template<typename T>
   void output(const T& val) {
-    if constexpr (is_same_v<remove_cv_t<T>,__int128>) {
-      output_int128(val);
-    } else if constexpr (is_same_v<remove_cv_t<T>,unsigned __int128>) {
-      output_uint128(val);
-    } else if constexpr (is_fundamental<T>::value) {
-      ss << val;
-    } else if constexpr (is_string_t<T>::value) {
-      ss << "\"" << val << "\"";
-    } else if constexpr (is_array_t<T>::value) {
-      output_array(val, val.size());
-    } else if constexpr (is_normal_array_t<T>::value) {
-      output_array(val, array_size(val));
-    } else if constexpr (is_queue_t<T>::value) {
-      output_queue(val);
-    } else if constexpr (is_stack_t<T>::value) {
-      output_stack(val);
-    } else if constexpr (is_priority_queue_t<T>::value) {
-      output_priority_queue(val);
-    } else if constexpr (is_list_t<T>::value) {
-      output_list(val);
-    } else if constexpr (is_set_t<T>::value) {
-      output_set(val);
-    } else if constexpr (is_map_t<T>::value) {
-      output_map(val);
-    } else if constexpr (is_pair_t<T>::value) {
-      output_pair(val);
-    } else if constexpr (is_tuple_t<T>::value) {
-      output_tuple(val);
-    } else {
-      ss << "unknown type";
-    }
+    typedef integral_constant<int,is_same<typename remove_cv<T>::type,__int128>::value? 1:is_same<typename remove_cv<T>::type,unsigned __int128>::value? 2:is_fundamental<T>::value? 3:is_string_t<T>::value? 4:is_array_t<T>::value? 5:is_normal_array_t<T>::value? 6:is_queue_t<T>::value? 7:is_stack_t<T>::value? 8:is_priority_queue_t<T>::value? 9:is_list_t<T>::value? 10:is_set_t<T>::value? 11:is_map_t<T>::value? 12:is_pair_t<T>::value? 13:is_tuple_t<T>::value? 14:0> tag;
+    output_value(val,tag());
   }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,1>) { output_int128(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,2>) { output_uint128(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,3>) { ss<<val; }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,4>) { ss<<"\""<<val<<"\""; }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,5>) { output_array(val,val.size()); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,6>) { output_array(val,array_size(val)); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,7>) { output_queue(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,8>) { output_stack(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,9>) { output_priority_queue(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,10>) { output_list(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,11>) { output_set(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,12>) { output_map(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,13>) { output_pair(val); }
+  template<typename T>
+  void output_value(const T& val,integral_constant<int,14>) { output_tuple(val); }
+  template<typename T>
+  void output_value(const T&,integral_constant<int,0>) { ss<<"unknown type"; }
   void print() {
     string str = ss.str();
     auto has_newline_child = [&](size_t i) {
@@ -302,7 +309,7 @@ class __Debugger {
       return false;
     };
     int level = 0;
-    auto dfs = [&](auto& self, size_t& i, bool need_newline) -> void {
+    function<void(size_t&,bool)> dfs = [&](size_t& i,bool need_newline) {
       int cnt = 0;
       for (; i < str.size(); ++i) {
         if (str[i] == '<' || str[i] == '[' || str[i] == '{') cnt++;
@@ -315,7 +322,7 @@ class __Debugger {
           } else {
             cerr << str[i];
           }
-          self(self, ++i, next_need_newline);
+          dfs(++i,next_need_newline);
           cnt--;
         } else if (str[i] == ']' || str[i] == '}') {
           level--;
@@ -334,7 +341,7 @@ class __Debugger {
       }
     };
     size_t i = 0;
-    dfs(dfs, i, false);
+    dfs(i,false);
   }
 
  public:
@@ -346,13 +353,13 @@ class __Debugger {
     output(val);
     cerr << COLOR_START;
     print();
-    cerr << COLOR_END << endl;
+    cerr << COLOR_END << '\n';
     ss.str("");
     return *this;
   }
   void sp(const string& str = "") {
     cerr << COLOR_START << "====================" << str
-         << "====================" << COLOR_END << endl;
+         << "====================" << COLOR_END << '\n';
   }
 } dout;
 #define debug(x) cerr << COLOR_START << #x << ": " << COLOR_END, dout << x

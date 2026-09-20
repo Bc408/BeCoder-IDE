@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Derived from Competitive Programming Helper.
+ *  Copyright (c) Competitive Programming Helper contributors and BeCoder contributors.
+ *  Licensed under GPL-3.0-or-later. See LICENSE and UPSTREAM.md.
+ *--------------------------------------------------------------------------------------------*/
 // Derived from Competitive Programming Helper (GPL-3.0-or-later); see UPSTREAM.md.
 import React from 'react';
 import { DiffResult, TokenDiff } from '../src/diffOutput';

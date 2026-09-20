@@ -25,7 +25,7 @@ Beginner-friendly does not mean hiding every technical fact. BeCoder should redu
 
 ## Product Promise
 
-> Install BeCoder, open a C or C++ file, and begin working in a prepared environment. Except for the native terminal, BeCoder's core functions should depend on BeCoder-owned paths, configurations, processes, and resources rather than the user's system development environment.
+> Install BeCoder, open a C or C++ file, and begin working in a prepared environment. Except for the native terminal and explicitly configured optional Python checkers, BeCoder's core functions should depend on BeCoder-owned paths, configurations, processes, and resources rather than the user's system development environment.
 
 This promise is built on four permanent principles:
 
@@ -58,6 +58,7 @@ Every feature must identify who owns its environment, data, process, and visible
 | Native PowerShell | The user's system environment and arbitrary commands |
 | BC panel | BeCoder's closed compile-and-run interaction |
 | Compile and run toolchain | BeCoder's bundled GCC |
+| Sample tests and local judging | Bundled CPH, using Runner's shared compilation policy |
 | Visible editor errors | BeCoder's bundled GCC diagnostics |
 | Code intelligence | BeCoder's bundled clangd |
 | Immediate C/C++ coloring | Built-in TextMate and Better C++ Syntax grammar |
@@ -81,6 +82,12 @@ Native PowerShell is the real system terminal. It receives the user's PATH, prof
 The BC panel may look and edit like a terminal, but it is not a shell. It accepts a closed BeCoder command grammar and directly owns compiler and program processes. It does not embed PowerShell, CMD, user profiles, shell pipelines, scripts, or environment mutation.
 
 Runner owns explicit compilation, warnings, linking, execution, program input, program output, cancellation, and the lifecycle of artifacts produced by the active request.
+
+### CPH and online judges
+
+The integrated browser owns website navigation and the current page used for explicit problem import. Bundled CPH owns imported sample metadata, local sample execution, separate standard output/error presentation and request-private artifacts. Runner remains the authority for C/C++ compilation policy and the private toolchain. Optional custom Python checkers use a user-configured system interpreter; ordinary sample testing requires no external Python installation.
+
+Welcome-page shortcuts are user-configurable navigation entries, not a guarantee of parser support. Online accounts, submission forms, compiler selection and final judge verdicts belong to the website. Users copy their source into the website to submit; BeCoder does not own automatic submission.
 
 ### GCC diagnostics
 

@@ -29,6 +29,7 @@ export enum BrowserViewCommandId {
 	FocusUrlInput = `${commandPrefix}.focusUrlInput`,
 	OpenExternal = `${commandPrefix}.openExternal`,
 	OpenSettings = `${commandPrefix}.openSettings`,
+	ImportProblem = `${commandPrefix}.importProblem`,
 
 	// Favorites
 	ToggleFavorite = `${commandPrefix}.toggleFavorite`,
@@ -483,6 +484,9 @@ export interface IBrowserViewService {
 	 * @returns The selected text, or empty string if no selection or page is loading
 	 */
 	getSelectedText(id: string): Promise<string>;
+
+	/** Execute only the bundled problem parser, in the owning window's view. */
+	parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }>;
 
 	/**
 	 * Clear all storage data for the global browser session

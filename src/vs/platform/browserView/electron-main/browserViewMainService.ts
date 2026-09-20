@@ -21,6 +21,8 @@ import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { localize } from '../../../nls.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
 import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
+import { promises as fs } from 'fs';
+import { join } from '../../../base/common/path.js';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -248,6 +250,42 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	async getSelectedText(id: string): Promise<string> {
 		return this._getBrowserView(id).getSelectedText();
+	}
+
+	async parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }> {
+		const view = this._getBrowserView(id);
+		if (view.owner.mainWindowId !== windowId) {
+			throw new Error(localize('browser.problem.wrongWindow', 'The problem belongs to another window.'));
+		}
+		const contents = view.getWebContentsView().webContents;
+		if (contents.isDestroyed() || contents.isLoading()) {
+			throw new Error(localize('browser.problem.loading', 'Wait for the problem page to finish loading.'));
+		}
+		const url = contents.getURL();
+		if (!/^https?:\/\//.test(url)) {
+			throw new Error(localize('browser.problem.url', 'Open an online problem page before importing.'));
+		}
+		let changed = false;
+		const navigation = view.onDidNavigate(() => { changed = true; });
+		const closed = view.onDidClose(() => { changed = true; });
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const script = await fs.readFile(join(this.environmentMainService.appRoot, 'extensions', 'becoder.cph', 'dist', 'problem-parser.js'), 'utf8');
+			if (changed || contents.isDestroyed()) { throw new Error(localize('browser.problem.changed', 'The problem page changed during import.')); }
+			const json: unknown = await Promise.race([
+				contents.executeJavaScriptInIsolatedWorld(1002, [{ code: `${script}\nBeCoderCompanion.parseCurrentProblem()` }]),
+				new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(localize('browser.problem.timeout', 'Problem parsing timed out.'))), 15000); })
+			]);
+			if (changed || contents.isDestroyed() || contents.getURL() !== url) { throw new Error(localize('browser.problem.changed', 'The problem page changed during import.')); }
+			if (typeof json !== 'string' || Buffer.byteLength(json) > 8 * 1024 * 1024) {
+				throw new Error(localize('browser.problem.invalid', 'The parser returned invalid or oversized problem data.'));
+			}
+			return { url, json };
+		} finally {
+			if (timer) { clearTimeout(timer); }
+			navigation.dispose();
+			closed.dispose();
+		}
 	}
 
 	async clearStorage(id: string): Promise<void> {

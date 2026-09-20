@@ -1,0 +1,66 @@
+{
+	"name": "cph",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"publisher": "becoder",
+	"icon": "resources/icon.png",
+	"license": "GPL-3.0-or-later",
+	"engines": { "vscode": "^1.130.0" },
+	"categories": ["Programming Languages"],
+	"activationEvents": ["onCommand:_becoder.cph.importProblem", "onLanguage:c", "onLanguage:cpp"],
+	"extensionDependencies": ["becoder.becoder-setup"],
+	"capabilities": {
+		"untrustedWorkspaces": { "supported": false },
+		"virtualWorkspaces": false
+	},
+	"main": "./out/extension.js",
+	"contributes": {
+		"configuration": { "title": "CPH", "properties": {
+			"becoder.cph.autoShowJudge": { "type": "boolean", "default": true, "description": "%autoShowJudge%" },
+			"becoder.cph.general.timeOut": { "type": "integer", "default": 3000, "minimum": 1, "maximum": 2147483647, "scope": "resource", "description": "%timeOut%" },
+			"becoder.cph.general.hideStderrorWhenCompiledOK": { "type": "boolean", "default": true, "description": "%hideCompileStderr%" },
+			"becoder.cph.general.ignoreSTDERROR": { "type": "boolean", "default": true, "scope": "resource", "description": "%ignoreSTDERROR%" },
+			"becoder.cph.general.hideOutputDifference": { "type": "boolean", "default": true, "description": "%hideOutputDifference%" },
+			"becoder.cph.language.python.Command": { "type": "string", "default": "python3", "scope": "machine", "description": "%pythonCommand%" },
+			"becoder.cph.language.c.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%" },
+			"becoder.cph.language.cpp.Args": { "type": "string", "default": "", "scope": "resource", "description": "%compilerArgs%" },
+			"becoder.cph.general.defaultLanguage": { "type": "string", "default": "cpp", "enum": ["none", "c", "cpp"], "scope": "resource", "description": "%defaultLanguage%" },
+			"becoder.cph.general.defaultLanguageTemplateFileLocation": { "type": "string", "default": "", "scope": "resource", "description": "%templateFile%" },
+			"becoder.cph.general.doTemplateFileVariableReplacement": { "type": "boolean", "default": false, "scope": "resource", "description": "%templateVariables%" },
+			"becoder.cph.general.includeProblemIndex": { "type": "boolean", "default": false, "scope": "resource", "description": "%includeProblemIndex%" },
+			"becoder.cph.general.wordRegex": { "type": "string", "default": "[\\p{L}]+|[0-9]+", "scope": "resource", "description": "%wordRegex%" },
+			"becoder.cph.general.useShortCodeForcesName": { "type": "boolean", "default": false, "scope": "resource", "description": "%shortCodeforces%" },
+			"becoder.cph.general.useShortLuoguName": { "type": "boolean", "default": false, "scope": "resource", "description": "%shortLuogu%" },
+			"becoder.cph.general.useShortAtCoderName": { "type": "boolean", "default": false, "scope": "resource", "description": "%shortAtCoder%" },
+			"becoder.cph.general.retainWebviewContext": { "type": "boolean", "default": false, "description": "%retainWebviewContext%" }
+		} },
+		"commands": [
+			{ "command": "becoder.cph.openCurrent", "title": "%openCurrent%", "category": "CPH" },
+			{ "command": "becoder.cph.runTestCases", "title": "%runTestCases%", "category": "CPH" }
+		],
+		"keybindings": [
+			{ "key": "ctrl+alt+b", "command": "becoder.cph.runTestCases" },
+			{ "key": "ctrl+alt+d", "command": "becoder.cph.judge.focus" }
+		],
+		"viewsContainers": { "activitybar": [{ "id": "becoder-cph", "title": "%judgeContainerTitle%", "icon": "resources/judge.svg" }] },
+		"views": { "becoder-cph": [{ "type": "webview", "id": "becoder.cph.judge", "name": "%judgeTitle%" }] }
+	},
+	"l10n": "./l10n",
+	"scripts": {
+		"compile": "node ../../node_modules/typescript/bin/tsc6 -p ./ && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json",
+		"compile-webview": "esbuild webview/App.tsx --bundle --platform=browser --format=iife --loader:.ttf=file --outfile=dist/judge.js",
+		"compile-parsers": "esbuild companion/entry.ts --bundle --platform=browser --format=iife --global-name=BeCoderCompanion --outfile=dist/problem-parser.js",
+		"vscode:prepublish": "npm run compile && npm run compile-parsers && npm run compile-webview"
+	},
+	"devDependencies": {
+		"esbuild": "0.28.2",
+		"jsdom": "26.1.0",
+		"react": "18.3.1",
+		"react-dom": "18.3.1",
+		"react-textarea-autosize": "8.5.9",
+		"@types/react": "18.3.18",
+		"@types/react-dom": "18.3.5"
+	},
+	"repository": { "type": "git", "url": "https://github.com/Bc408/BeCoder-IDE.git" }
+}

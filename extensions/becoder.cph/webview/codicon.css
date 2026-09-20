@@ -1,0 +1,34 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+@font-face {
+	font-family: "codicon";
+	font-display: block;
+	src: url("./codicon.ttf") format("truetype");
+}
+
+.codicon[class*='codicon-'] {
+	font: normal normal normal 16px/1 codicon;
+	display: inline-block;
+	text-decoration: none;
+	text-rendering: auto;
+	text-align: center;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	user-select: none;
+	-webkit-user-select: none;
+	-ms-user-select: none;
+}
+.codicon-chevron-down:before { content: "\eab4" }
+.codicon-chevron-up:before { content: "\eab7" }
+.codicon-play:before { content: "\eb2c" }
+.codicon-trash:before { content: "\ea81" }
+.codicon-circle-slash:before { content: "\eabd" }
+.codicon-run-above:before { content: "\ebbd" }
+.codicon-save:before { content: "\eb4b" }
+.codicon-add:before { content: "\ea60" }
+.codicon-settings:before { content: "\eb52" }
+.codicon-link-external:before { content: "\eb14" }
+.codicon-book:before { content: "\eaa4" }

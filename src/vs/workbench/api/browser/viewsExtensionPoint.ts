@@ -458,6 +458,8 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 						when: ContextKeyExpr.deserialize(item.when),
 						containerIcon: icon || viewContainer?.icon,
 						containerTitle: item.contextualTitle || (viewContainer && (typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value)),
+						// CPH supplies a complete localized title, separate from its activity-bar label.
+						singleViewPaneContainerTitle: item.id === 'becoder.cph.judge' && extension.description.identifier.value.toLowerCase() === 'becoder.cph' ? item.name : undefined,
 						canToggleVisibility: true,
 						canMoveView: true,
 						treeView: type === ViewType.Tree ? this.instantiationService.createInstance(CustomTreeView, item.id, item.name, extension.description.identifier.value) : undefined,

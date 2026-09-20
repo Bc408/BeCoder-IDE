@@ -2,6 +2,20 @@
 	"schemaVersion": 1,
 	"components": [
 		{
+			"id": "becoder.cph",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
+			"upstream": "https://github.com/agrawal-d/cph/tree/187590eae3379bad8caaf7bd930d2987557a7966",
+			"modificationStatus": "BeCoder CPH sample testing with internal browser import, bundled GCC and selected Competitive Companion parsers. See UPSTREAM.md.",
+			"license": "GPL-3.0-or-later AND MIT",
+			"spdxIdentifier": "GPL-3.0-or-later AND MIT",
+			"copyrightNotice": "CPH, Competitive Companion, React and BeCoder contributors; see extension notices.",
+			"licensePath": "extensions/becoder.cph/LICENSE",
+			"thirdPartyNoticesPath": "extensions/becoder.cph/ThirdPartyNotices.txt",
+			"correspondingSource": "https://github.com/Bc408/BeCoder-IDE",
+			"correspondingSourcePath": "extensions/becoder.cph"
+		},
+		{
 			"id": "code-oss",
 			"version": "1.130.0",
 			"source": "https://github.com/microsoft/vscode",

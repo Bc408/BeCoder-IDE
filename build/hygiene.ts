@@ -92,7 +92,7 @@ export function checkCopilotEnginesVersion(repoRoot: string): string | undefined
  *
  * Returns an error message if there are unknown JS files, or undefined if OK.
  */
-export function checkNoNewJavaScriptFiles(repoRoot: string): string | undefined {
+export function checkNoNewJavaScriptFiles(repoRoot: string, stagedAdditionsOnly = false): string | undefined {
 	const allowlistPath = path.join(repoRoot, '.eslint-allowed-javascript-files');
 	const allowed = new Set(
 		fs.readFileSync(allowlistPath, 'utf8')
@@ -101,8 +101,11 @@ export function checkNoNewJavaScriptFiles(repoRoot: string): string | undefined 
 			.filter(line => line && !line.startsWith('#'))
 	);
 
-	// `git ls-files` lists tracked files relative to repo root using forward slashes.
-	const out = cp.execSync('git ls-files "*.js" "*.cjs" "*.mjs"', {
+	// A commit checks additions; an explicit repository/allowlist audit checks all tracked files.
+	const command = stagedAdditionsOnly
+		? 'git diff --cached --name-only --diff-filter=A -- "*.js" "*.cjs" "*.mjs"'
+		: 'git ls-files "*.js" "*.cjs" "*.mjs"';
+	const out = cp.execSync(command, {
 		cwd: repoRoot,
 		encoding: 'utf8',
 		maxBuffer: 10 * 1024 * 1024,
@@ -388,7 +391,7 @@ if (import.meta.main) {
 
 					// Check that no new .js/.cjs/.mjs files are being added outside of the allowlist
 					if (some.some(f => /\.(js|cjs|mjs)$/.test(f) || f === '.eslint-allowed-javascript-files')) {
-						const jsAllowlistError = checkNoNewJavaScriptFiles(process.cwd());
+						const jsAllowlistError = checkNoNewJavaScriptFiles(process.cwd(), !some.includes('.eslint-allowed-javascript-files'));
 						if (jsAllowlistError) {
 							console.error(jsAllowlistError);
 							process.exit(1);

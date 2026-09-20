@@ -29,15 +29,14 @@
 	},
 	"extensionBlacklist": [
 		"ms-vscode.cpptools",
-		"ms-vscode.cpptools-extension-pack"
-	],
-	"extensionControlManifestExemptions": [
+		"ms-vscode.cpptools-extension-pack",
 		"divyanshuagrawal.competitive-programming-helper"
 	],
 	"protectedExtensions": [
 		"becoder.becoder-setup",
 		"becoder.runner",
 		"becoder.gcc-diagnostics",
+		"becoder.cph",
 		"becoder.one-monokai",
 		"llvm-vs-code-extensions.vscode-clangd",
 		"adpyke.codesnap",

@@ -33,9 +33,10 @@ suite('BeCoder extension control manifest policy', () => {
 		assert.deepStrictEqual(applyExtensionControlManifestPolicy(reports, { ...product, extensionBlacklist: [cph.toUpperCase()] }), reports);
 	});
 
-	test('ships only the authorized CPH exception and retains existing product bans', () => {
+	test('protects bundled CPH and blocks the original without a remote-report exception', () => {
 		const current = JSON.parse(readFileSync(new URL('../../../product.json', import.meta.url), 'utf8'));
-		assert.deepStrictEqual(current.extensionControlManifestExemptions, [cph]);
-		assert.deepStrictEqual(current.extensionBlacklist, ['ms-vscode.cpptools', 'ms-vscode.cpptools-extension-pack']);
+		assert.strictEqual(current.extensionControlManifestExemptions, undefined);
+		assert.deepStrictEqual(current.extensionBlacklist, ['ms-vscode.cpptools', 'ms-vscode.cpptools-extension-pack', cph]);
+		assert.ok(current.protectedExtensions.includes('becoder.cph'));
 	});
 });

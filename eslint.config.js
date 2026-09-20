@@ -195,6 +195,24 @@ export default defineConfig(
 			]
 		}
 	},
+	{
+		// Preserve the separately licensed Competitive Companion parser attribution.
+		files: [
+			'extensions/becoder.cph/companion/entry.ts',
+			'extensions/becoder.cph/companion/src/parsers/problem/{CSES,HDOJ,AcWing,LibreOJ,DMOJ}ProblemParser.ts'
+		],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*MIT License)[\\s\\S]*$' }]
+		}
+	},
+	{
+		// CPH is GPL-derived code, not Microsoft MIT code. Preserve its attribution.
+		files: ['extensions/becoder.cph/{src,test}/**/*.ts', 'extensions/becoder.cph/webview/*.{ts,tsx}'],
+		ignores: ['extensions/becoder.cph/src/diffOutput.ts', 'extensions/becoder.cph/webview/DiffView.tsx'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]
+		}
+	},
 	// TS
 	{
 		files: [

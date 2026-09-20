@@ -90,7 +90,9 @@ export class PaneCompositeBar extends Disposable {
 
 	private static readonly beCoderDefaultActivityContainers = new Set([
 		'workbench.view.explorer',
-		'workbench.view.search'
+		'workbench.view.search',
+		'workbench.view.extensions',
+		'workbench.view.extension.becoder-cph'
 	]);
 
 	private readonly viewContainerDisposables = this._register(new DisposableMap<string, IDisposable>());
@@ -375,7 +377,7 @@ export class PaneCompositeBar extends Disposable {
 
 			this.addComposite(viewContainer);
 
-			// Keep BeCoder IDE's activity bar focused on files and search.
+			// Keep BeCoder IDE's activity bar focused on files, search, extensions and CPH.
 			// Other containers stay available through the activity-bar context menu.
 			const pinByDefault = !this.isBeCoderActivityBar || PaneCompositeBar.beCoderDefaultActivityContainers.has(viewContainer.id);
 			if (!cachedViewContainer) {

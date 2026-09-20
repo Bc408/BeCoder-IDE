@@ -27,6 +27,7 @@ import './features/browserHistoryFeature.js';
 import './features/browserPermissionsFeature.js';
 import './features/browserDataStorageFeatures.js';
 import './features/browserDevToolsFeature.js';
+import './features/browserProblemFeature.js';
 import './features/browserEditorErrorFeatures.js';
 import './features/browserEditorZoomFeature.js';
 import './features/browserEditorEmulationFeatures.js';

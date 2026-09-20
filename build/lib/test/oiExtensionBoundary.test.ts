@@ -835,12 +835,14 @@ suite('OI extension boundary', () => {
 		});
 		assert.deepStrictEqual(product.extensionBlacklist, [
 			'ms-vscode.cpptools',
-			'ms-vscode.cpptools-extension-pack'
+			'ms-vscode.cpptools-extension-pack',
+			'divyanshuagrawal.competitive-programming-helper'
 		]);
 		assert.deepStrictEqual(product.protectedExtensions, [
 			'becoder.becoder-setup',
 			'becoder.runner',
 			'becoder.gcc-diagnostics',
+			'becoder.cph',
 			'becoder.one-monokai',
 			'llvm-vs-code-extensions.vscode-clangd',
 			'adpyke.codesnap',
@@ -966,6 +968,7 @@ suite('OI extension boundary', () => {
 		}>(path.join(repositoryRoot, 'resources', 'oi-defaults', 'BUNDLED-COMPONENTS.json'));
 		const components = inventory.components ?? [];
 		assert.deepStrictEqual(components.map(component => component.id), [
+			'becoder.cph',
 			'code-oss',
 			'electron',
 			'becoder.runner',

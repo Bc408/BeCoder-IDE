@@ -1,6 +1,6 @@
 {
   "name": "becoder-ide-dev",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A lightweight C++ competitive programming editor.",
   "distro": "ac355fb4d039edb8cc28e1f8e45c6d5d8c437fe2",
   "author": {
@@ -22,7 +22,7 @@
     "postinstall": "node build/npm/postinstall.ts",
     "compile": "npm run compile-client",
     "compile-client": "npm run gulp compile",
-    "compile-oi-extensions": "npm --prefix extensions/danielpinto8zz6.c-cpp-compile-run run vscode:prepublish && npm --prefix extensions/llvm-vs-code-extensions.vscode-clangd run vscode:prepublish && npm --prefix extensions/becoder.setup run vscode:prepublish && npm --prefix extensions/becoder.gcc-diagnostics run vscode:prepublish",
+    "compile-oi-extensions": "npm --prefix extensions/danielpinto8zz6.c-cpp-compile-run run vscode:prepublish && npm --prefix extensions/llvm-vs-code-extensions.vscode-clangd run vscode:prepublish && npm --prefix extensions/becoder.setup run vscode:prepublish && npm --prefix extensions/becoder.gcc-diagnostics run vscode:prepublish && npm --prefix extensions/becoder.cph run vscode:prepublish",
     "build-fast": "npm-run-all2 -lp transpile-client build-fast-extensions",
     "build-fast-extensions": "npm run gulp copy-codicons compile-extensions compile-extension-media",
     "typecheck-client": "tsc --project ./src/tsconfig.json --noEmit --skipLibCheck",

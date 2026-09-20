@@ -65,6 +65,8 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/becoder.setup/src/simpleSettings.ts',
 
 	// These bundled upstream extensions have their own code style
+	// CPH/Companion retain upstream formatting and multilingual parser selectors.
+	'!extensions/becoder.cph/**',
 	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 
@@ -132,6 +134,8 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!extensions/**/colorize-fixtures/**',
 
 	// These bundled upstream extensions have their own code style
+	// CPH has dedicated type, parser, UI and executor checks; preserve GPL/MIT sources.
+	'!extensions/becoder.cph/**',
 	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 

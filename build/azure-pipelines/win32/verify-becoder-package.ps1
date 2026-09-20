@@ -70,6 +70,16 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.gcc-diagnostics\package.nls.json',
 	'resources\app\extensions\becoder.gcc-diagnostics\package.nls.zh-cn.json',
 	'resources\app\extensions\becoder.gcc-diagnostics\out\extension.js',
+	'resources\app\extensions\becoder.cph\package.json',
+	'resources\app\extensions\becoder.cph\LICENSE',
+	'resources\app\extensions\becoder.cph\ThirdPartyNotices.txt',
+	'resources\app\extensions\becoder.cph\companion\LICENSE',
+	'resources\app\extensions\becoder.cph\licenses\babel-runtime.txt',
+	'resources\app\extensions\becoder.cph\out\extension.js',
+	'resources\app\extensions\becoder.cph\dist\problem-parser.js',
+	'resources\app\extensions\becoder.cph\dist\judge.js',
+	'resources\app\extensions\becoder.cph\dist\judge.css',
+	'resources\app\extensions\becoder.cph\l10n\bundle.l10n.zh-cn.json',
 	'resources\app\extensions\becoder.one-monokai\package.json',
 	'resources\app\extensions\becoder.one-monokai\themes\OneMonokai-color-theme.json',
 	'resources\app\extensions\becoder.one-monokai\LICENSE',
@@ -482,13 +492,14 @@ foreach ($endpoint in @('marketplace.visualstudio.com', 'marketplace.vsallin.net
 		throw "The packaged product contains a forbidden Microsoft Marketplace endpoint: $endpoint"
 	}
 }
-if ((@($product.extensionBlacklist) -join ',') -ne 'ms-vscode.cpptools,ms-vscode.cpptools-extension-pack') {
-	throw 'The packaged product does not retain the complete cpptools blacklist.'
+if ((@($product.extensionBlacklist) -join ',') -ne 'ms-vscode.cpptools,ms-vscode.cpptools-extension-pack,divyanshuagrawal.competitive-programming-helper') {
+	throw 'The packaged product does not retain the complete cpptools and original CPH blacklist.'
 }
 $expectedProtectedExtensions = @(
 	'becoder.becoder-setup',
 	'becoder.runner',
 	'becoder.gcc-diagnostics',
+	'becoder.cph',
 	'becoder.one-monokai',
 	'llvm-vs-code-extensions.vscode-clangd',
 	'adpyke.codesnap',
@@ -773,6 +784,7 @@ if ($compilerSize -gt 400MB) {
 
 $componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi-defaults\BUNDLED-COMPONENTS.json') -Raw | ConvertFrom-Json
 $expectedComponentIds = @(
+	'becoder.cph',
 	'code-oss',
 	'electron',
 	'becoder.runner',

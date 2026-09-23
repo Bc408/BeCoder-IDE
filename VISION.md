@@ -58,6 +58,7 @@ Every feature must identify who owns its environment, data, process, and visible
 | Native PowerShell | The user's system environment and arbitrary commands |
 | BC panel | BeCoder's closed compile-and-run interaction |
 | Compile and run toolchain | BeCoder's bundled GCC |
+| Beacon conversations and model connection | Built-in Beacon extension |
 | Sample tests and local judging | Bundled CPH, using Runner's shared compilation policy |
 | Visible editor errors | BeCoder's bundled GCC diagnostics |
 | Code intelligence | BeCoder's bundled clangd |
@@ -111,7 +112,9 @@ The governing rule is not to delete as much as possible. It is to delete only ow
 
 BeCoder is not intended to become a general-purpose IDE. Capabilities are included when they support the focused competitive-programming workflow and removed when they create product paths BeCoder does not intend to own.
 
-BeCoder does not provide its own AI, Chat, Agent, language-model, MCP, Debug, GDB, Source Control, or remote-development product paths. Generic editor and Workbench infrastructure remains when it has ordinary non-target consumers.
+Beacon is BeCoder's built-in AI companion for competitive programming. It owns its conversation UI, current-window sessions and explicitly configured model connection in an isolated extension. Its domain tools and teaching behavior are BeCoder-owned; it does not restore the removed upstream AI/Chat service graph. Model access is optional and uses a user-provided provider credential.
+
+BeCoder does not provide general-purpose MCP, Debug, GDB, Source Control, or remote-development product paths. Generic editor and Workbench infrastructure remains when it has ordinary non-target consumers.
 
 Removal decisions must follow registrations, consumers, services, APIs, commands, settings, build entries, and packaged resources. A component is not removed merely because its source contains a word associated with an excluded capability.
 

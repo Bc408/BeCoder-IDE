@@ -21,6 +21,7 @@ export const dirs = [
 	'build/rspack',
 	'build/vite',
 	'extensions',
+	'extensions/becoder.beacon',
 	'extensions/becoder.cph',
 	'extensions/aadityanarayan.code-snap',
 	'extensions/configuration-editing',

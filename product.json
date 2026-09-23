@@ -37,6 +37,7 @@
 		"becoder.runner",
 		"becoder.gcc-diagnostics",
 		"becoder.cph",
+		"becoder.beacon",
 		"becoder.one-monokai",
 		"llvm-vs-code-extensions.vscode-clangd",
 		"adpyke.codesnap",

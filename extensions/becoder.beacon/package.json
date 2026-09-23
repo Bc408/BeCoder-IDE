@@ -1,0 +1,81 @@
+{
+	"name": "beacon",
+	"displayName": "Beacon",
+	"description": "%description%",
+	"version": "0.1.0",
+	"publisher": "becoder",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.130.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"main": "./dist/extension.cjs",
+	"l10n": "./l10n",
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "becoder.beacon.open",
+				"title": "%open%",
+				"category": "Beacon"
+			},
+			{
+				"command": "becoder.beacon.configureKey",
+				"title": "%configureKey%",
+				"category": "Beacon"
+			}
+		],
+		"viewsContainers": {
+			"secondarySidebar": [
+				{
+					"id": "becoder-beacon",
+					"title": "Beacon",
+					"icon": "resources/beacon.svg"
+				}
+			]
+		},
+		"views": {
+			"becoder-beacon": [
+				{
+					"type": "webview",
+					"id": "becoder.beacon.chat",
+					"name": "Beacon"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
+		"build": "node build.mjs",
+		"test": "node --test dist-test/session.test.cjs",
+		"vscode:prepublish": "npm run typecheck && npm run build",
+		"lint": "node ../../node_modules/eslint/bin/eslint.js --config eslint.config.mjs src webview test build.mjs --max-warnings 0",
+		"test-render": "node test/render.mjs"
+	},
+	"devDependencies": {
+		"@ai-sdk/deepseek": "3.0.50",
+		"@streamdown/cjk": "1.0.3",
+		"@streamdown/code": "1.1.1",
+		"@streamdown/math": "1.0.2",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"ai": "7.0.111",
+		"esbuild": "0.28.2",
+		"katex": "0.16.47",
+		"react": "19.3.0",
+		"react-dom": "19.3.0",
+		"streamdown": "2.6.0",
+		"use-stick-to-bottom": "1.1.6"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Bc408/BeCoder-IDE.git"
+	}
+}

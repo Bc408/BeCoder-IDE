@@ -16,6 +16,19 @@
 			"correspondingSourcePath": "extensions/becoder.cph"
 		},
 		{
+			"id": "becoder.beacon",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
+			"modificationStatus": "Beacon built-in conversation UI, with adapted Vercel AI Elements. See UPSTREAM.md.",
+			"license": "MIT AND Apache-2.0",
+			"spdxIdentifier": "MIT AND Apache-2.0",
+			"copyrightNotice": "BeCoder contributors, Vercel Inc., and bundled dependency authors; see extension notices.",
+			"licensePath": "extensions/becoder.beacon/LICENSE",
+			"thirdPartyNoticesPath": "extensions/becoder.beacon/dist/ThirdPartyNotices.txt",
+			"correspondingSource": "https://github.com/Bc408/BeCoder-IDE",
+			"correspondingSourcePath": "extensions/becoder.beacon"
+		},
+		{
 			"id": "code-oss",
 			"version": "1.130.0",
 			"source": "https://github.com/microsoft/vscode",

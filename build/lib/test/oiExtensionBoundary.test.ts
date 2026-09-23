@@ -843,6 +843,7 @@ suite('OI extension boundary', () => {
 			'becoder.runner',
 			'becoder.gcc-diagnostics',
 			'becoder.cph',
+			'becoder.beacon',
 			'becoder.one-monokai',
 			'llvm-vs-code-extensions.vscode-clangd',
 			'adpyke.codesnap',
@@ -969,6 +970,7 @@ suite('OI extension boundary', () => {
 		const components = inventory.components ?? [];
 		assert.deepStrictEqual(components.map(component => component.id), [
 			'becoder.cph',
+			'becoder.beacon',
 			'code-oss',
 			'electron',
 			'becoder.runner',

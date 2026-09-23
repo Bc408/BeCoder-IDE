@@ -1,0 +1,8 @@
+{
+	"DeepSeek rejected the API key. Please update it.": "DeepSeek 拒绝了当前 API Key，请更新密钥。",
+	"Your DeepSeek account has insufficient balance.": "DeepSeek 账户余额不足。",
+	"DeepSeek is rate limiting requests. Please try again later.": "DeepSeek 请求频率受限，请稍后重试。",
+	"The response could not be completed. Check your connection and DeepSeek account, then retry.": "回答未能完成。请检查网络连接和 DeepSeek 账户，然后重试。",
+	"Stored securely by BeCoder. Leave empty to remove the saved key.": "由 BeCoder 安全保存。留空可移除已保存的密钥。",
+	"Unable to save the API key. Please try again.": "无法保存 API Key，请重试。"
+}

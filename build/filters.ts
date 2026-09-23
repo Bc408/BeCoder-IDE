@@ -67,6 +67,8 @@ export const unicodeFilter = Object.freeze<string[]>([
 	// These bundled upstream extensions have their own code style
 	// CPH/Companion retain upstream formatting and multilingual parser selectors.
 	'!extensions/becoder.cph/**',
+	// Beacon validates its isolated React/Webview sources with its own lint and build.
+	'!extensions/becoder.beacon/**',
 	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 
@@ -136,6 +138,8 @@ export const indentationFilter = Object.freeze<string[]>([
 	// These bundled upstream extensions have their own code style
 	// CPH has dedicated type, parser, UI and executor checks; preserve GPL/MIT sources.
 	'!extensions/becoder.cph/**',
+	// Beacon validates its isolated React/Webview sources with its own lint and build.
+	'!extensions/becoder.beacon/**',
 	'!extensions/llvm-vs-code-extensions.vscode-clangd/**',
 	'!extensions/copilot/**',
 

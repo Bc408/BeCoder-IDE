@@ -33,8 +33,8 @@
 		],
 		"menus": {
 			"editor/title": [
-				{ "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp", "group": "navigation@0" },
-				{ "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp", "group": "navigation@1" }
+				{ "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp", "group": "navigation@-2" },
+				{ "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp", "group": "navigation@-1" }
 			],
 			"commandPalette": [
 				{ "command": "becoder.runner.openPanel" },

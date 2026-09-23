@@ -1,0 +1,100 @@
+/* Copyright (c) BeCoder contributors. Licensed under MIT. */
+:root { color-scheme: light dark; --surface: var(--vscode-sideBar-background); --border: var(--vscode-widget-border, transparent); }
+* { box-sizing: border-box; }
+body { padding: 0; margin: 0; color: var(--vscode-foreground); background: var(--surface); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size, 13px); }
+html, body, #root, main { height: 100%; }
+main { display: flex; flex-direction: column; overflow: hidden; }
+button, textarea { font: inherit; }
+button { color: inherit; background: transparent; border: 0; border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+button:hover { background: var(--vscode-toolbar-hoverBackground); }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; flex: 0 0 auto; }
+.wordmark { font-weight: 600; letter-spacing: .2px; }
+.beacon-mark { margin-right: 6px; }
+.header-actions { display: flex; gap: 2px; }
+.header-actions button { font-size: 19px; width: 30px; height: 30px; padding: 0; }
+.conversation { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.conversation-content { display: flex; flex-direction: column; gap: 25px; padding: 20px 18px 30px; min-height: 100%; }
+.welcome { margin: auto 0; padding: 32px 5px 50px; text-align: center; }
+.welcome-mark { font-size: 35px; margin-bottom: 16px; opacity: .8; }
+h1 { font-size: 20px; font-weight: 500; margin: 0 0 12px; }
+.welcome p { color: var(--vscode-descriptionForeground); line-height: 1.8; margin: 0 0 20px; }
+.setup-key { border: 1px solid var(--border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 9px 13px; }
+.message { min-width: 0; line-height: 1.7; overflow-wrap: anywhere; }
+.user { align-self: flex-end; max-width: 92%; }
+.user-content { background: var(--vscode-input-background); border-radius: 14px; padding: 10px 14px; white-space: pre-wrap; }
+.assistant { width: 100%; }
+.reasoning { color: var(--vscode-descriptionForeground); margin-bottom: 12px; font-size: 12px; }
+summary { cursor: pointer; padding: 4px 0; }
+.reasoning-content { border-left: 2px solid var(--border); padding: 4px 12px; white-space: pre-wrap; max-height: 260px; overflow: auto; }
+.markdown { min-width: 0; }
+.markdown p { margin: 0 0 12px; }
+.markdown h1, .markdown h2, .markdown h3 { line-height: 1.5; margin: 20px 0 10px; font-weight: 600; }
+.markdown h1 { font-size: 19px; }
+.markdown h2 { font-size: 17px; }
+.markdown h3 { font-size: 15px; }
+.markdown ul, .markdown ol { padding-left: 23px; margin: 10px 0; }
+.markdown pre { max-width: 100%; overflow-x: auto; padding: 12px; margin: 0; background: var(--vscode-textCodeBlock-background); border-radius: 6px; }
+.markdown code { font-family: var(--vscode-editor-font-family); font-size: 12px; }
+.markdown :not(pre) > code { background: var(--vscode-textCodeBlock-background); border-radius: 3px; padding: 1px 4px; }
+.markdown [data-streamdown="code-block"] { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
+.markdown [data-streamdown="code-block-header"] { display: flex; justify-content: space-between; padding: 5px 10px; color: var(--vscode-descriptionForeground); font-size: 11px; background: var(--vscode-editor-background); }
+.markdown table { display: block; overflow-x: auto; border-collapse: collapse; margin: 12px 0; }
+.markdown td, .markdown th { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.markdown blockquote { border-left: 3px solid var(--vscode-textBlockQuote-border); margin: 12px 0; padding-left: 12px; color: var(--vscode-descriptionForeground); }
+.markdown a { color: var(--vscode-textLink-foreground); }
+.markdown .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.vscode-dark .code-line > span, .vscode-high-contrast .code-line > span { color: var(--token-dark) !important; }
+.copy, .retry, .message-status, .waiting { color: var(--vscode-descriptionForeground); font-size: 12px; }
+.copy { margin-top: 6px; padding-left: 0; }
+.scroll-bottom { position: absolute; bottom: 10px; left: calc(50% - 16px); border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; background: var(--vscode-editor-background); box-shadow: 0 2px 8px var(--vscode-widget-shadow); }
+footer { padding: 6px 12px 8px; flex: 0 0 auto; }
+.composer { border: 1px solid var(--border); border-radius: 13px; padding: 11px; background: var(--vscode-input-background); }
+.composer:focus-within { border-color: var(--vscode-focusBorder); }
+textarea { display: block; width: 100%; resize: none; border: 0; outline: none !important; color: var(--vscode-input-foreground); background: transparent; line-height: 1.6; padding: 0; min-height: 48px; max-height: 180px; }
+textarea::placeholder { color: var(--vscode-input-placeholderForeground); }
+.composer-toolbar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 5px; }
+.composer-toolbar > span { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.send { width: 29px; height: 29px; padding: 0; border-radius: 8px; font-size: 19px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.send:hover { background: var(--vscode-button-hoverBackground); }
+.footnote { text-align: center; font-size: 10px; color: var(--vscode-descriptionForeground); padding-top: 8px; }
+.error { color: var(--vscode-errorForeground); padding: 8px 3px; line-height: 1.6; }
+.retry { margin-bottom: 7px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* Beacon owns layout; rendering does not depend on upstream utility CSS. */
+body { font-size: 14px; }
+button { display: inline-flex; align-items: center; justify-content: center; }
+header { gap: 16px; padding: 8px 16px; min-height: 44px; }
+.conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; color: var(--vscode-descriptionForeground); }
+.header-actions { flex-shrink: 0; }
+.header-actions button { width: 28px; height: 28px; }
+.conversation-content { gap: 24px; padding: 16px 20px 28px; width: 100%; max-width: 840px; margin: 0 auto; }
+.message { line-height: 1.65; }
+.markdown h1 { font-size: 18px; }
+.markdown h2 { font-size: 16px; }
+.markdown h3 { font-size: 15px; }
+.markdown > :first-child { margin-top: 0; }
+.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+.markdown pre { border-radius: 0; padding: 0 14px 14px; background: transparent; white-space: pre; overflow-wrap: normal; line-height: 1.65; tab-size: 4; }
+.markdown pre code { background: transparent; padding: 0; font-size: 13px; }
+.code-block { background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background)); border-radius: 10px; overflow: hidden; margin: 14px 0; }
+.code-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px 7px 14px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.code-toolbar button { width: 28px; height: 28px; padding: 4px; }
+.code-line { background: transparent; }
+.markdown .inline-code { font-size: .92em; }
+.markdown .katex-display { margin: 18px 0; }
+.reasoning { margin-bottom: 12px; }
+.scroll-bottom { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; left: calc(50% - 14px); padding: 4px; }
+footer { padding: 8px 14px 10px; width: 100%; max-width: 840px; margin: 0 auto; }
+.composer { border-radius: 14px; padding: 12px 13px 10px; border-color: transparent; }
+textarea { min-height: 40px; font-size: 14px; }
+.send { border-radius: 50%; width: 28px; height: 28px; }
+.send svg { width: 17px; height: 17px; }
+.footnote { font-size: 10px; opacity: .8; }
+* { scrollbar-width: thin; scrollbar-color: var(--vscode-scrollbarSlider-background) transparent; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 6px; }
+::-webkit-scrollbar-button { display: none; }
+@media (max-width: 400px) { .conversation-content { padding-left: 14px; padding-right: 14px; } footer { padding-left: 10px; padding-right: 10px; } }

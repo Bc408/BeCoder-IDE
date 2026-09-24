@@ -100,8 +100,10 @@ textarea { min-height: 40px; font-size: 14px; }
 @media (max-width: 400px) { .conversation-content { padding-left: 14px; padding-right: 14px; } footer { padding-left: 10px; padding-right: 10px; } }
 
 /* Chat stays in the secondary sidebar; connection setup belongs to the left view. */
-.workspace-header { min-height: 48px; padding: 10px 18px; gap: 12px; }
-.conversation-title { min-width: 0; font-size: 14px; }
+.workspace-header { min-height: 50px; padding: 10px 18px; gap: 12px; }
+.workspace-header .conversation-title { min-width: 0; font-size: 14px; font-weight: 500; color: var(--vscode-descriptionForeground); }
+.workspace-header .header-actions { gap: 6px; }
+.workspace-header .header-actions button { border-radius: 8px; color: var(--vscode-descriptionForeground); }
 .welcome { margin: auto 0; padding: 32px 16px; text-align: center; }
 .welcome-mark { font-size: 48px; opacity: .3; margin-bottom: 18px; }
 .welcome p { font-size: 12px; max-width: 28em; margin: 0 auto; }
@@ -111,36 +113,52 @@ textarea { min-height: 40px; font-size: 14px; }
 .send { width: 32px; height: 32px; }
 .footnote { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .configuration { overflow-y: auto; }
-.configuration-content { margin: auto; width: 100%; max-width: 440px; padding: 32px 24px; }
+.configuration-content { width: 100%; padding: 16px 20px 24px; }
 .configuration-content .welcome-mark { font-size: 36px; opacity: .8; }
 .configuration-content p { color: var(--vscode-descriptionForeground); line-height: 1.7; }
 .key-status { margin: 24px 0 12px; font-size: 12px; }
-.setup-key { width: 100%; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border, transparent); padding: 10px 14px; }
-.setup-key:hover { background: var(--vscode-button-hoverBackground); }
+.setup-key { width: 100%; }
 .configuration-hint { font-size: 12px; }
-.configuration-content { max-width: 420px; padding: 40px 24px; }
 .configuration-content h1 { font-size: 23px; margin-bottom: 20px; }
 .configuration-content .welcome-mark { color: var(--vscode-textLink-foreground); margin-bottom: 24px; }
 .connection-heading { font-size: 14px; font-weight: 500; margin: 30px 0 14px; }
 .provider-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .provider-card span { font-size: 12px; color: var(--vscode-descriptionForeground); }
 .key-status { margin: 14px 0; color: var(--vscode-descriptionForeground); }
-.setup-key { min-height: 40px; border-radius: 6px; font-weight: 600; }
-.open-chat { width: 100%; gap: 8px; min-height: 40px; border: 1px solid var(--vscode-button-secondaryBackground); margin-top: 22px; }
+.configuration-content .setup-key,
+.configuration-content .open-chat,
+.configuration-content .connection-secondary { padding: 2px 5px; border: 2px solid transparent; border-radius: 2px; color: white; background: #177bb4; }
+.configuration-content .setup-key:hover,
+.configuration-content .open-chat:hover,
+.configuration-content .connection-secondary:hover { filter: brightness(115%); }
+.configuration-content .setup-key:focus-visible,
+.configuration-content .open-chat:focus-visible,
+.configuration-content .connection-secondary:focus-visible { border-color: var(--vscode-focusBorder); outline: 3px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.configuration-content .setup-key:disabled,
+.configuration-content .open-chat:disabled,
+.configuration-content .connection-secondary:disabled { background: rgb(66, 66, 66); opacity: .1; }
+.open-chat { width: 100%; gap: 4px; margin-top: 22px; }
 .history-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 24px; }
-.history-search { width: 100%; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 8px; padding: 9px 12px; }
+.history-search { width: 100%; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; }
 .history-search:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
-.history-scope, .history-empty { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 18px 0; }
+.history-scope, .history-empty { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 20px 8px 12px; }
 .history-empty { padding: 30px 0; text-align: center; }
-.history-row { display: flex; min-width: 0; align-items: center; gap: 4px; border-radius: 8px; margin: 4px 0; }
-.history-row:hover, .history-row.active { background: var(--vscode-list-hoverBackground); }
-.history-row.confirming { background: var(--vscode-list-activeSelectionBackground); }
-.history-open { min-width: 0; flex: 1; gap: 12px; justify-content: space-between; padding: 12px 8px; text-align: left; }
+.history-row { position: relative; display: flex; min-width: 0; min-height: 44px; align-items: center; border-radius: 12px; margin: 2px 0; transition: background-color 120ms ease; }
+.history-row:hover, .history-row:focus-within { background: var(--vscode-list-hoverBackground); }
+.history-row.confirming { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground)); }
+.history-open { width: 100%; min-width: 0; gap: 12px; justify-content: space-between; padding: 11px 12px; text-align: left; transition: padding-right 160ms ease; }
+.history-row:hover .history-open, .history-row:focus-within .history-open { padding-right: 76px; }
+.history-row.confirming .history-open { padding-right: 64px; }
 .history-open > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.history-open time { flex-shrink: 0; color: var(--vscode-descriptionForeground); font-size: 11px; }
-.history-actions { display: flex; flex-shrink: 0; }
-.history-actions button { width: 27px; height: 28px; padding: 4px; color: var(--vscode-descriptionForeground); }
-.history-actions .delete-confirm { width: auto; padding: 4px 10px; border-radius: 14px; color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-errorForeground) 18%, transparent); font-size: 12px; }
+.history-open time { flex-shrink: 0; color: var(--vscode-descriptionForeground); font-size: 11px; opacity: 1; transition: opacity 100ms ease; }
+.history-row:hover .history-open time, .history-row:focus-within .history-open time, .history-row.confirming .history-open time { opacity: 0; }
+.history-actions { position: absolute; right: 6px; top: 50%; display: flex; align-items: center; transform: translate(4px, -50%); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 120ms ease, transform 160ms ease; }
+.history-row:hover .history-actions, .history-row:focus-within .history-actions { transform: translate(0, -50%); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+.history-actions button { width: 28px; height: 28px; padding: 4px; border-radius: 8px; color: var(--vscode-descriptionForeground); overflow: hidden; white-space: nowrap; }
+.history-actions .history-rename { transition: width 160ms ease, padding 160ms ease, opacity 100ms ease, transform 160ms ease; }
+.history-row.confirming .history-rename { width: 0; padding: 0; opacity: 0; visibility: hidden; transform: scale(.75); pointer-events: none; }
+.history-actions .history-delete { transition: width 180ms cubic-bezier(.2, .8, .2, 1), border-radius 180ms ease, color 140ms ease, background-color 140ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1); }
+.history-actions .delete-confirm { width: 48px; border-radius: 16px; color: var(--vscode-errorForeground, #f14c4c); background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 18%, transparent); font-size: 12px; transform: translateX(0); }
 .history-actions svg { width: 15px; height: 15px; }
 .history-notice { margin: 8px 16px; padding: 10px; line-height: 1.6; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border)); border-radius: 6px; font-size: 12px; }
 .history-notice button { color: var(--vscode-textLink-foreground); }
@@ -150,10 +168,14 @@ textarea { min-height: 40px; font-size: 14px; }
 .connection-field { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 10px; font-size: 12px; }
 .connection-field input, .connection-field select, .model-select { min-width: 0; width: 100%; font: inherit; background: var(--vscode-input-background); color: var(--vscode-input-foreground); padding: 9px; border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 6px; }
 .connection-field input:focus-visible, select:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
-.connection-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); font-size: 12px; }
+.connection-secondary { background: rgba(65, 65, 65, .4); color: var(--vscode-foreground); font-size: 12px; }
+.vscode-light .configuration-content .connection-secondary { background: rgba(108, 108, 108, .1); color: black; }
 .model-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; font-size: 12px; }
 .model-heading button, .settings-link { color: var(--vscode-textLink-foreground); }
 .settings-link { width: 100%; margin-top: 12px; font-size: 12px; }
 .model-label { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--vscode-descriptionForeground); padding: 4px; }
 .composer-toolbar .send { flex-shrink: 0; }
 .message-model { color: var(--vscode-descriptionForeground); font-size: 11px; margin-bottom: 6px; }
+@media (prefers-reduced-motion: reduce) {
+	.history-row, .history-open, .history-open time, .history-actions, .history-actions .history-rename, .history-actions .history-delete { transition: none; }
+}

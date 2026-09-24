@@ -4,17 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { streamText } from 'ai';
 import type { Generate } from './session';
+import { normalizeBaseURL, type Connection } from './connection';
 
-export function createGenerator(readKey: () => PromiseLike<string | undefined>, fetchImplementation?: typeof fetch): Generate {
+export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch): Generate {
 	return async function* (messages, signal) {
-		const key = await readKey();
-		if (!key) { throw new Error('missing-key'); }
+		const connection = await readConnection();
+		if (connection.provider !== 'ollama' && !connection.apiKey) { throw new Error('missing-key'); }
+		if (!connection.model.trim()) { throw new Error('missing-model'); }
 		if (signal.aborted) { return; }
-		const provider = createDeepSeek({ apiKey: key, fetch: fetchImplementation });
+		const options = { apiKey: connection.apiKey, baseURL: normalizeBaseURL(connection.baseURL, connection.provider), fetch: ((url, init) => fetchImplementation(url, { ...init, redirect: 'error' })) as typeof fetch };
+		const provider = connection.provider === 'deepseek' ? createDeepSeek(options) : createOpenAICompatible({ ...options, name: connection.provider });
 		const result = streamText({
-			model: provider('deepseek-v4-flash'),
+			model: provider(connection.model),
 			messages: [...messages],
 			abortSignal: AbortSignal.any([signal, AbortSignal.timeout(180000)]),
 			maxRetries: 0,

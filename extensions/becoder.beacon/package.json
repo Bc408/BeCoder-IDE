@@ -24,7 +24,8 @@
 			{
 				"command": "becoder.beacon.open",
 				"title": "%open%",
-				"category": "Beacon"
+				"category": "Beacon",
+				"icon": "resources/beacon.svg"
 			},
 			{
 				"command": "becoder.beacon.configureKey",
@@ -32,7 +33,31 @@
 				"category": "Beacon"
 			}
 		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "becoder.beacon.open",
+					"when": "true",
+					"group": "navigation@99"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "becoder.beacon.open"
+				},
+				{
+					"command": "becoder.beacon.configureKey"
+				}
+			]
+		},
 		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "becoder-beacon-settings",
+					"title": "Beacon",
+					"icon": "resources/beacon.svg"
+				}
+			],
 			"secondarySidebar": [
 				{
 					"id": "becoder-beacon",
@@ -42,6 +67,13 @@
 			]
 		},
 		"views": {
+			"becoder-beacon-settings": [
+				{
+					"type": "webview",
+					"id": "becoder.beacon.configuration",
+					"name": "%configuration%"
+				}
+			],
 			"becoder-beacon": [
 				{
 					"type": "webview",
@@ -49,6 +81,81 @@
 					"name": "Beacon"
 				}
 			]
+		},
+		"configuration": {
+			"title": "Beacon",
+			"properties": {
+				"beacon.provider": {
+					"type": "string",
+					"enum": [
+						"deepseek",
+						"bailian",
+						"moonshot",
+						"ollama"
+					],
+					"enumDescriptions": [
+						"DeepSeek",
+						"Alibaba Cloud Bailian",
+						"Moonshot / Kimi",
+						"Ollama"
+					],
+					"default": "deepseek",
+					"scope": "application",
+					"description": "%settings.provider%"
+				},
+				"beacon.deepseek.baseURL": {
+					"type": "string",
+					"default": "https://api.deepseek.com",
+					"scope": "application",
+					"description": "%settings.deepseek.baseURL%"
+				},
+				"beacon.deepseek.model": {
+					"type": "string",
+					"default": "deepseek-v4-flash",
+					"maxLength": 256,
+					"scope": "application",
+					"description": "%settings.model%"
+				},
+				"beacon.bailian.baseURL": {
+					"type": "string",
+					"default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+					"scope": "application",
+					"description": "%settings.bailian.baseURL%"
+				},
+				"beacon.bailian.model": {
+					"type": "string",
+					"default": "",
+					"maxLength": 256,
+					"scope": "application",
+					"description": "%settings.model%"
+				},
+				"beacon.moonshot.baseURL": {
+					"type": "string",
+					"default": "https://api.moonshot.cn/v1",
+					"scope": "application",
+					"description": "%settings.moonshot.baseURL%"
+				},
+				"beacon.moonshot.model": {
+					"type": "string",
+					"default": "",
+					"maxLength": 256,
+					"scope": "application",
+					"description": "%settings.model%"
+				},
+				"beacon.ollama.baseURL": {
+					"type": "string",
+					"default": "http://localhost:11434/v1",
+					"scope": "application",
+					"description": "%settings.ollama.baseURL%"
+				},
+				"beacon.ollama.model": {
+					"type": "string",
+					"default": "",
+					"maxLength": 256,
+					"scope": "application",
+					"description": "%settings.model%"
+				}
+			}
 		}
 	},
 	"scripts": {
@@ -61,6 +168,7 @@
 	},
 	"devDependencies": {
 		"@ai-sdk/deepseek": "3.0.50",
+		"@ai-sdk/openai-compatible": "3.0.55",
 		"@streamdown/cjk": "1.0.3",
 		"@streamdown/code": "1.1.1",
 		"@streamdown/math": "1.0.2",

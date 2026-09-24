@@ -1,5 +1,12 @@
 {
 	"description": "Beacon: conversations for competitive programming.",
-	"open": "Open Beacon",
-	"configureKey": "Configure DeepSeek API Key"
+	"open": "Toggle Beacon Sidebar",
+	"configuration": "Beacon Settings",
+	"configureKey": "Configure Beacon API Key",
+	"settings.provider": "Model provider. Configure API keys securely in the Beacon sidebar; keys are not stored in Settings.",
+	"settings.deepseek.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
+	"settings.bailian.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
+	"settings.moonshot.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
+	"settings.ollama.baseURL": "Ollama OpenAI-compatible base URL. Local HTTP or HTTPS is supported. Beacon does not install or start Ollama.",
+	"settings.model": "Chat model ID. Fetch and select models from the Beacon sidebar, or enter an exact model ID here."
 }

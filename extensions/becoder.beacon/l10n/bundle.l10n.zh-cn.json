@@ -4,5 +4,16 @@
 	"DeepSeek is rate limiting requests. Please try again later.": "DeepSeek 请求频率受限，请稍后重试。",
 	"The response could not be completed. Check your connection and DeepSeek account, then retry.": "回答未能完成。请检查网络连接和 DeepSeek 账户，然后重试。",
 	"Stored securely by BeCoder. Leave empty to remove the saved key.": "由 BeCoder 安全保存。留空可移除已保存的密钥。",
-	"Unable to save the API key. Please try again.": "无法保存 API Key，请重试。"
+	"Unable to save the API key. Please try again.": "无法保存 API Key，请重试。",
+	"Delete": "删除",
+	"Delete this chat?": "删除此聊天？",
+	"Rename chat": "重命名聊天",
+	"Enter a title between 1 and 80 characters.": "请输入 1 到 80 个字符的标题。",
+	"The provider rejected the API key or access to this model.": "服务商拒绝了当前 API Key 或模型访问权限。",
+	"The provider account has insufficient balance.": "服务商账户余额不足。",
+	"Too many requests. Please try again later.": "请求频率受限，请稍后重试。",
+	"Unable to complete the request. Check the service address, model, credentials and connection.": "请求未能完成，请检查服务地址、模型、密钥和网络连接。",
+	"Invalid connection settings. Use HTTPS, or local HTTP for Ollama, without credentials or query parameters in the URL.": "连接设置无效。请使用 HTTPS，或 Ollama 本机 HTTP 地址；地址中不要包含凭据或查询参数。",
+	"Unable to save connection settings. Check the address and try again.": "无法保存连接设置，请检查地址后重试。",
+	"No models were returned. For Ollama, install a chat model in your Ollama service first.": "服务未返回模型。使用 Ollama 时，请先在服务中安装聊天模型。"
 }

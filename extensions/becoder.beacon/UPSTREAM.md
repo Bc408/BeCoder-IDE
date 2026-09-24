@@ -10,7 +10,7 @@ Beacon host, session, provider, application shell and styling are BeCoder code (
 
 Modifications: replaced Tailwind/shadcn styling and buttons with the BeCoder Webview theme, localized scroll control, omitted downloads, message branches and Mermaid; retained StickToBottom and Streamdown composition. The composer is a BeCoder textarea with IME handling, not the upstream rich composer.
 
-Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek provider, Streamdown, Shiki, KaTeX and their bundled transitive dependencies retain their own licenses.
+Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek and OpenAI-compatible providers, Streamdown, Shiki, KaTeX and their bundled transitive dependencies retain their own licenses.
 
 No Codex or Trae proprietary code or assets are included.
 

@@ -9,6 +9,8 @@ export interface Message {
 	text: string;
 	reasoning: string;
 	status: 'complete' | 'streaming' | 'stopped' | 'error';
+	model?: string;
+	provider?: string;
 }
 
 export interface Snapshot {
@@ -39,7 +41,7 @@ export class ChatSession {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, retry = false): Promise<void> {
+	async send(text: string, generate: Generate, retry = false, source?: { model: string; provider: string }): Promise<void> {
 		if (this.disposed || this.controller) { return; }
 		if (retry) {
 			if (!this.snapshot.canRetry) { return; }
@@ -50,7 +52,7 @@ export class ChatSession {
 			this.messages.push({ id: ++this.sequence, role: 'user', text, reasoning: '', status: 'complete' });
 		}
 		const context = this.messages.filter(message => message.status === 'complete' && message.text).map(message => ({ role: message.role, content: message.text }));
-		const reply: Message = { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', status: 'streaming' };
+		const reply: Message = { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', status: 'streaming', ...source };
 		this.messages.push(reply);
 		const controller = new AbortController();
 		this.controller = controller;
@@ -74,6 +76,14 @@ export class ChatSession {
 	}
 
 	stop(): void { this.controller?.abort(); }
+
+	restore(snapshot: Pick<Snapshot, 'messages' | 'error'>): void {
+		if (this.controller || this.disposed) { return; }
+		this.messages = snapshot.messages.map(message => ({ ...message, status: message.status === 'streaming' ? 'stopped' : message.status }));
+		this.sequence = this.messages.reduce((maximum, message) => Math.max(maximum, message.id), 0);
+		this.error = snapshot.error;
+		this.publish();
+	}
 
 	clear(): void {
 		if (this.controller) { return; }

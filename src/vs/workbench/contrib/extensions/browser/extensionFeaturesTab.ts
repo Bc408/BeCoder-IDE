@@ -38,11 +38,46 @@ import { asCssVariable } from '../../../../platform/theme/common/colorUtils.js';
 import { foreground, chartAxis, chartGuide, chartLine } from '../../../../platform/theme/common/colorRegistry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IMarkdownRendererService } from '../../../../platform/markdown/browser/markdownRenderer.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 
 interface IExtensionFeatureElementRenderer extends IExtensionFeatureRenderer {
 	type: 'element';
 	render(manifest: IExtensionManifest): IRenderedData<HTMLElement>;
 }
+
+class BeaconApiKeyRenderer extends Disposable implements IExtensionFeatureElementRenderer {
+	readonly type = 'element';
+
+	constructor(@ICommandService private readonly commandService: ICommandService) {
+		super();
+	}
+
+	shouldRender(manifest: IExtensionManifest): boolean {
+		return manifest.publisher?.toLowerCase() === 'becoder' && manifest.name.toLowerCase() === 'beacon';
+	}
+
+	render(): IRenderedData<HTMLElement> {
+		const container = $('.beacon-api-key');
+		const button = new Button(container, defaultButtonStyles);
+		button.label = localize('configureBeaconApiKey', "Configure API Key");
+		const clickListener = button.onDidClick(() => this.commandService.executeCommand('becoder.beacon.configureKey'));
+		return {
+			data: container,
+			dispose: () => {
+				clickListener.dispose();
+				button.dispose();
+			}
+		};
+	}
+}
+
+Registry.as<IExtensionFeaturesRegistry>(Extensions.ExtensionFeaturesRegistry).registerExtensionFeature({
+	id: 'becoder.beacon.apiKey',
+	label: localize('beaconApiKeyFeature', "Beacon API Key"),
+	description: localize('beaconApiKeyFeatureDescription', "Configure the API key stored securely by Beacon."),
+	access: { canToggle: false },
+	renderer: new SyncDescriptor(BeaconApiKeyRenderer),
+});
 
 class RuntimeStatusMarkdownRenderer extends Disposable implements IExtensionFeatureElementRenderer {
 

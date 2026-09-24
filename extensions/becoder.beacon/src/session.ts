@@ -9,6 +9,8 @@ export interface Message {
 	text: string;
 	reasoning: string;
 	status: 'complete' | 'streaming' | 'stopped' | 'error';
+	createdAt?: number;
+	durationMs?: number;
 	model?: string;
 	provider?: string;
 }
@@ -49,10 +51,31 @@ export class ChatSession {
 		} else {
 			text = text.trim();
 			if (!text || text.length > 32000) { return; }
-			this.messages.push({ id: ++this.sequence, role: 'user', text, reasoning: '', status: 'complete' });
+			this.messages.push({ id: ++this.sequence, role: 'user', text, reasoning: '', status: 'complete', createdAt: Date.now() });
 		}
+		await this.respond(generate, source);
+	}
+
+	async edit(id: number, text: string, generate: Generate, source?: { model: string; provider: string }): Promise<void> {
+		text = text.trim();
+		const index = this.messages.findIndex(message => message.id === id && message.role === 'user');
+		if (this.disposed || this.controller || index < 0 || !text || text.length > 32000) { return; }
+		this.messages[index] = { ...this.messages[index], text, createdAt: Date.now() };
+		this.messages.splice(index + 1);
+		await this.respond(generate, source);
+	}
+
+	async regenerate(id: number, generate: Generate, source?: { model: string; provider: string }): Promise<void> {
+		const index = this.messages.findIndex(message => message.id === id && message.role === 'assistant');
+		if (this.disposed || this.controller || index < 1 || this.messages[index - 1].role !== 'user') { return; }
+		this.messages.splice(index);
+		await this.respond(generate, source);
+	}
+
+	private async respond(generate: Generate, source?: { model: string; provider: string }): Promise<void> {
 		const context = this.messages.filter(message => message.status === 'complete' && message.text).map(message => ({ role: message.role, content: message.text }));
-		const reply: Message = { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', status: 'streaming', ...source };
+		const startedAt = Date.now();
+		const reply: Message = { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', status: 'streaming', createdAt: startedAt, ...source };
 		this.messages.push(reply);
 		const controller = new AbortController();
 		this.controller = controller;
@@ -70,6 +93,7 @@ export class ChatSession {
 			reply.status = controller.signal.aborted ? 'stopped' : 'error';
 			if (!controller.signal.aborted) { this.error = this.describeError(error); }
 		} finally {
+			reply.durationMs = Math.max(0, Date.now() - startedAt);
 			this.controller = undefined;
 			this.publish();
 		}

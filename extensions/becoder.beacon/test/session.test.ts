@@ -147,6 +147,26 @@ suite('Beacon window session', () => {
 		await session.send('followup', generate);
 		assert.deepStrictEqual(requests, [[{ role: 'user', content: 'question' }], [{ role: 'user', content: 'question' }, { role: 'assistant', content: 'answer' }, { role: 'user', content: 'followup' }]]);
 	});
+	test('editing a user turn and regenerating a response truncate later context', async () => {
+		const session = new ChatSession(() => { }, () => 'error');
+		const answer: Generate = async function* () { yield { type: 'text', text: 'answer' }; };
+		await session.send('first', answer);
+		const userId = session.snapshot.messages[0].id;
+		const assistantId = session.snapshot.messages[1].id;
+		await session.send('later', answer);
+		await session.regenerate(assistantId, async function* (messages) {
+			assert.deepStrictEqual(messages, [{ role: 'user', content: 'first' }]);
+			yield { type: 'text', text: 'regenerated' };
+		});
+		assert.deepStrictEqual(session.snapshot.messages.map(message => message.text), ['first', 'regenerated']);
+		await session.edit(userId, 'edited first', async function* (messages) {
+			assert.deepStrictEqual(messages, [{ role: 'user', content: 'edited first' }]);
+			yield { type: 'text', text: 'edited answer' };
+		});
+		assert.deepStrictEqual(session.snapshot.messages.map(message => message.text), ['edited first', 'edited answer']);
+		assert.ok(Number.isFinite(session.snapshot.messages[0].createdAt));
+		assert.ok(Number.isFinite(session.snapshot.messages[1].durationMs));
+	});
 	test('stop keeps ownership until the generator retires and blocks clear/concurrent requests', async () => {
 		const session = new ChatSession(() => { }, () => 'error');
 		let release!: () => void;

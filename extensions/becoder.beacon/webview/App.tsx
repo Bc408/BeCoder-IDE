@@ -9,7 +9,7 @@ import type { Snapshot } from '../src/session';
 import type { HistoryItem } from '../src/history';
 import { Conversation, ConversationContent, ConversationScrollButton, MessageResponse } from './elements';
 import { Icon } from './Icon';
-import { Settings, providerName } from './Settings';
+import { Settings } from './Settings';
 import { providers, type ConnectionState } from '../src/connection';
 import 'katex/dist/katex.min.css';
 import './beacon.css';
@@ -20,6 +20,8 @@ const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
 type State = Snapshot & { connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean };
+const formatTime = (value: number) => new Date(value).toLocaleTimeString(zh ? 'zh-CN' : 'en', { hour: '2-digit', minute: '2-digit', hour12: false });
+const formatDuration = (value: number) => value < 1000 ? '<1s' : value < 60000 ? `${Math.round(value / 1000)}s` : `${Math.floor(value / 60000)}m ${Math.round(value % 60000 / 1000)}s`;
 
 function App() {
 	const [state, setState] = useState<State>({ messages: [], busy: false, error: '', canRetry: false, configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false });
@@ -33,6 +35,8 @@ function App() {
 	const activeRef = useRef('');
 	const [pending, setPending] = useState(false);
 	const [copied, setCopied] = useState<number>();
+	const [editing, setEditing] = useState<number>();
+	const [editingDraft, setEditingDraft] = useState('');
 	const input = useRef<HTMLTextAreaElement>(null);
 	const composing = useRef(false);
 	useEffect(() => {
@@ -44,6 +48,7 @@ function App() {
 					draftRef.current = drafts.current.get(event.data.activeId) ?? '';
 					setDraft(draftRef.current);
 					setCopied(undefined);
+					setEditing(undefined);
 				}
 				setState(previous => ({ ...previous, ...event.data })); setReady(true); setPending(false);
 			}
@@ -94,14 +99,19 @@ function App() {
 			<ConversationContent>
 				{!hasConversation && state.history.length > 0 && <section className="recent-chats"><div className="recent-heading"><span>{t('Recent chats', '最近聊天')}</span><button onClick={() => setShowHistory(true)}>{t('View all', '查看全部')}</button></div>{renderHistory(state.history.slice(0, 3))}</section>}
 				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Configure a provider and model in the Beacon panel on the left to start.', '请在左侧 Beacon 面板配置服务商和模型后开始。')}</p></div>}
-				{state.messages.map(message => <article key={message.id} className={`message ${message.role}`}>
-					{message.role === 'user' ? <div className="user-content">{message.text}</div> : <>
-						{message.model && <div className="message-model">{providerName(message.provider ?? '')} · {message.model}</div>}
-						{message.reasoning && <details className="reasoning"><summary>{message.status === 'streaming' && !message.text ? t('Thinking…', '思考中…') : t('Thinking', '思考过程')}</summary><div className="reasoning-content">{message.reasoning}</div></details>}
+				{state.messages.map(message => <article key={message.id} className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
+					{message.role === 'user' ? <>
+						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if (!text || busy) { return; } setPending(true); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
+							<textarea autoFocus rows={3} maxLength={32000} value={editingDraft} aria-label={t('Edit message', '编辑消息')} onChange={event => setEditingDraft(event.target.value)} />
+							<div><button type="button" onClick={() => setEditing(undefined)}>{t('Cancel', '取消')}</button><button className="edit-submit" type="submit" disabled={!editingDraft.trim() || busy}>{t('Send', '发送')}</button></div>
+						</form> : <div className="user-content">{message.text}</div>}
+						{editing !== message.id && <div className="message-actions user-actions">{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt)}</time>}<button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} title={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button><button disabled={busy} onClick={() => { setEditing(message.id); setEditingDraft(message.text); }} title={t('Edit message', '编辑消息')} aria-label={t('Edit message', '编辑消息')}><Icon name="edit" /></button></div>}
+					</> : <>
+						{message.durationMs !== undefined && (message.reasoning ? <details className="thought"><summary>{t('Thought for', '用时')} {formatDuration(message.durationMs)}</summary><div className="reasoning-content">{message.reasoning}</div></details> : <div className="thought-label">{t('Thought for', '用时')} {formatDuration(message.durationMs)}</div>)}
 						{message.text && <MessageResponse streaming={message.status === 'streaming'}>{message.text}</MessageResponse>}
 						{message.status === 'streaming' && !message.text && !message.reasoning && <span className="waiting" role="status">{t('Connecting…', '正在连接…')}</span>}
 						{message.status === 'stopped' && <div className="message-status">{t('Stopped', '已停止')}</div>}
-						{message.text && message.status !== 'streaming' && <button className="copy" onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }}>{copied === message.id ? t('Copied', '已复制') : t('Copy', '复制')}</button>}
+						{message.text && message.status !== 'streaming' && <div className="message-actions assistant-actions"><button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} title={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button><button disabled={busy} onClick={() => { setPending(true); api.postMessage({ type: 'regenerate', id: message.id }); }} title={t('Regenerate response', '重新回答')} aria-label={t('Regenerate response', '重新回答')}><Icon name="retry" /></button>{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt)}</time>}</div>}
 					</>}
 				</article>)}
 			</ConversationContent>
@@ -114,9 +124,8 @@ function App() {
 				<textarea ref={input} value={draft} maxLength={32000} rows={2} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
 					if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); send(); }
 				}} />
-				<div className="composer-toolbar"><button className="model-label" type="button" onClick={() => api.postMessage({ type: 'settings' })} title={t('Choose provider and model', '选择服务商和模型')}>{providerName(state.connection.provider)} · {state.connection.model || t('Select a model', '选择模型')}</button>{busy ? <button className="send" type="button" onClick={() => api.postMessage({ type: 'stop' })} title={t('Stop response', '停止生成')} aria-label={t('Stop response', '停止生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || !draft.trim()} title={t('Send', '发送')} aria-label={t('Send', '发送')}><Icon name="up" /></button>}</div>
+				<div className="composer-toolbar"><button className="model-label" type="button" onClick={() => api.postMessage({ type: 'settings' })} title={t('Choose provider and model', '选择服务商和模型')}>{state.connection.model || t('Select a model', '选择模型')}</button>{busy ? <button className="send" type="button" onClick={() => api.postMessage({ type: 'stop' })} title={t('Stop response', '停止生成')} aria-label={t('Stop response', '停止生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || !draft.trim()} title={t('Send', '发送')} aria-label={t('Send', '发送')}><Icon name="up" /></button>}</div>
 			</form>
-			<div className="footnote"><span>{state.configured ? t('Workspace chat history', '工作区聊天记录') : t('Connection setup required', '需要配置连接')}</span><span>Shift+Enter {t('for new line', '换行')}</span></div>
 		</footer>}
 	</main>;
 }

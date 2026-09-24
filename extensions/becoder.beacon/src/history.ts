@@ -39,6 +39,7 @@ export function readHistory(value: unknown): HistoryData {
 		let previous = 0;
 		for (const message of item.messages) {
 			if ((message?.model !== undefined && typeof message.model !== 'string') || (message?.provider !== undefined && typeof message.provider !== 'string')) { throw new Error('invalid-history'); }
+			if ((message?.createdAt !== undefined && (!Number.isFinite(message.createdAt) || message.createdAt < 0 || message.createdAt > 8640000000000000)) || (message?.durationMs !== undefined && (!Number.isFinite(message.durationMs) || message.durationMs < 0))) { throw new Error('invalid-history'); }
 			if (!message || !Number.isSafeInteger(message.id) || message.id <= previous || !['user', 'assistant'].includes(message.role) || !['complete', 'streaming', 'stopped', 'error'].includes(message.status) || typeof message.text !== 'string' || typeof message.reasoning !== 'string') { throw new Error('invalid-history'); }
 			previous = message.id;
 		}

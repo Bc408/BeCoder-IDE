@@ -60,6 +60,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			case 'ready': publish(); break;
 			case 'send': if (!historyUnreadable && connections.configured && typeof value.text === 'string') { const request = connections.request(); void session.send(value.text, request.generate, false, request.source); } else { publish(); } break;
 			case 'retry': if (!historyUnreadable && connections.configured) { const request = connections.request(); void session.send('', request.generate, true, request.source); } else { publish(); } break;
+			case 'edit': if (!historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const request = connections.request(); void session.edit(value.id, value.text, request.generate, request.source); } else { publish(); } break;
+			case 'regenerate': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(); void session.regenerate(value.id, request.generate, request.source); } else { publish(); } break;
 			case 'stop': session.stop(); break;
 			case 'clear': if (!historyUnreadable) { history.newConversation(); } break;
 			case 'openHistory': if (typeof value.conversationId === 'string') { history.open(value.conversationId); } break;

@@ -38,7 +38,8 @@ try {
 	assert.equal(await page.getByRole('button', { name: '配置 API Key', exact: true }).count(), 0);
 	assert.ok(await page.getByRole('button', { name: '发送', exact: true }).isDisabled());
 	await page.screenshot({ path: path.join(output, 'chat-empty.png') });
-	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: false, messages: [] }, '*'));
+	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: false, messages: [], connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', keyConfigured: true, models: ['deepseek-chat'], loading: false, error: '' } }, '*'));
+	assert.equal(await page.locator('.model-label').textContent(), 'deepseek-chat');
 	await page.getByRole('textbox').fill('解释这段代码');
 	await page.getByRole('textbox').press('Enter');
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码' });
@@ -48,7 +49,12 @@ try {
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'stop' });
 	const code = 'int a,b;\n\n// preserved blank line\n    cin>>a>>b;\n    cout<<a+b;';
 	const text = '下面是代码和公式。\n\n```cpp\n' + code + '\n```\n\n常见的泰勒展开式：\n\n\\[ f(x)=f(0)+f\'(0)x+\\frac{f^{(2)}(0)}{2!}x^2+\\cdots \\]\n\n行内公式 \\(x^2\\)，以及 $y^2$。\n\n$$\ne^x=1+x+\\frac{x^2}{2!}+\\cdots\n$$';
-	await page.evaluate(text => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '' }, { id: 2, role: 'assistant', text, reasoning: '', status: 'complete' }] }, '*'), text);
+	const createdAt = new Date('2026-09-24T08:33:00Z').getTime();
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
+	await page.getByText('用时 18s', { exact: true }).waitFor();
+	assert.deepStrictEqual(await page.locator('.assistant-actions').evaluate(element => [...element.children].map(child => child.tagName)), ['BUTTON', 'BUTTON', 'TIME']);
+	assert.notEqual(await page.locator('.thought').evaluate(element => getComputedStyle(element).borderBottomColor), 'rgba(0, 0, 0, 0)');
+	assert.equal(await page.getByText(/深度求索|deepseek-flash/).count(), 0);
 	await page.waitForSelector('.code-line');
 	await page.waitForSelector('.katex-display');
 	assert.equal(await page.locator('.code-block pre code').textContent(), code);
@@ -59,6 +65,18 @@ try {
 	await page.getByRole('button', { name: '复制代码', exact: true }).click();
 	// Windows normalizes text clipboard line endings to CRLF.
 	assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n'), code);
+	await page.locator('.message.user').hover();
+	assert.ok(await page.getByRole('button', { name: '复制消息', exact: true }).isVisible());
+	await page.getByRole('button', { name: '复制消息', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'copy', id: 1 });
+	await page.getByRole('button', { name: '编辑消息', exact: true }).click();
+	await page.getByRole('textbox', { name: '编辑消息', exact: true }).fill('修改后的问题');
+	await page.locator('.message-edit').getByRole('button', { name: '发送', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'edit', id: 1, text: '修改后的问题' });
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
+	await page.getByRole('button', { name: '重新回答', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 2 });
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	for (const width of [760, 360]) {
 		await page.setViewportSize({ width, height: 1000 });
 		await page.screenshot({ path: path.join(output, `dark-${width}.png`) });

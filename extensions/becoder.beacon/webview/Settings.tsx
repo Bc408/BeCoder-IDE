@@ -20,7 +20,6 @@ export function Settings({ connection, ready, busy, post }: { connection: Connec
 	const update = (field: string, value: string) => post({ type: 'updateConnection', field, value, provider: connection.provider });
 	const models = [...new Set([connection.model, ...connection.models])].filter(Boolean);
 	return <main className="configuration"><section className="configuration-content">
-		<div className="welcome-mark" aria-hidden="true">✦</div>
 		<h1>{t('Connect Beacon', '连接 Beacon')}</h1>
 		<p>{t('Choose a provider and model to start a conversation.', '选择服务商和模型，开始你的对话。')}</p>
 		<label className="connection-field">{t('Provider', '服务商')}<select value={connection.provider} disabled={disabled} onChange={event => update('provider', event.target.value)}>{Object.keys(providers).map(id => <option value={id} key={id}>{providerName(id)}</option>)}</select></label>

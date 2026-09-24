@@ -1,7 +1,7 @@
 {
 	"description": "Beacon: conversations for competitive programming.",
 	"open": "Toggle Beacon Sidebar",
-	"configuration": "Beacon Settings",
+	"configuration": "Settings",
 	"configureKey": "Configure Beacon API Key",
 	"settings.provider": "Model provider. Configure API keys securely in the Beacon sidebar; keys are not stored in Settings.",
 	"settings.deepseek.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",

@@ -349,6 +349,7 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 
 	private registerCustomViewContainer(id: string, title: string, icon: URI | ThemeIcon, order: number, extensionId: ExtensionIdentifier | undefined, location: ViewContainerLocation): ViewContainer {
 		let viewContainer = this.viewContainersRegistry.get(id);
+		const isBeacon = extensionId?.value === 'becoder.beacon';
 
 		if (!viewContainer) {
 
@@ -361,7 +362,7 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 					[id, { mergeViewWithContainerWhenSingleView: true }]
 				),
 				hideIfEmpty: true,
-				order,
+				order: isBeacon ? Number.MAX_SAFE_INTEGER : order,
 				icon,
 			}, location);
 

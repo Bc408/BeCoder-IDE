@@ -111,7 +111,7 @@
 				},
 				"beacon.deepseek.model": {
 					"type": "string",
-					"default": "deepseek-v4-flash",
+					"default": "",
 					"maxLength": 256,
 					"scope": "application",
 					"description": "%settings.model%"

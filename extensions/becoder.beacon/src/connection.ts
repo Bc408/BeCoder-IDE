@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 export const providers = {
-	deepseek: { name: 'DeepSeek', baseURL: 'https://api.deepseek.com', model: 'deepseek-v4-flash' },
+	deepseek: { name: 'DeepSeek', baseURL: 'https://api.deepseek.com', model: '' },
 	bailian: { name: 'Alibaba Cloud Bailian', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: '' },
 	moonshot: { name: 'Moonshot', baseURL: 'https://api.moonshot.cn/v1', model: '' },
 	ollama: { name: 'Ollama', baseURL: 'http://localhost:11434/v1', model: '' }

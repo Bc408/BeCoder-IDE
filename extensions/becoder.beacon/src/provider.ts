@@ -9,14 +9,31 @@ import { streamText } from 'ai';
 import type { Generate } from './session';
 import { normalizeBaseURL, type Connection } from './connection';
 
+type Provider = ReturnType<typeof createDeepSeek> | ReturnType<typeof createOpenAICompatible>;
+
+/**
+ * Provider construction is deliberately delegated to the Vercel AI SDK.
+ * Beacon owns the connection snapshot and SecretStorage boundary; it does not
+ * implement provider-specific chat payloads or stream parsers.
+ */
+function createProvider(connection: Connection, fetchImplementation: typeof fetch): Provider {
+	const options = {
+		apiKey: connection.apiKey,
+		baseURL: normalizeBaseURL(connection.baseURL, connection.provider),
+		fetch: ((url, init) => fetchImplementation(url, { ...init, redirect: 'error' })) as typeof fetch,
+	};
+	return connection.provider === 'deepseek'
+		? createDeepSeek(options)
+		: createOpenAICompatible({ ...options, name: connection.provider });
+}
+
 export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch): Generate {
 	return async function* (messages, signal) {
 		const connection = await readConnection();
 		if (connection.provider !== 'ollama' && !connection.apiKey) { throw new Error('missing-key'); }
 		if (!connection.model.trim()) { throw new Error('missing-model'); }
 		if (signal.aborted) { return; }
-		const options = { apiKey: connection.apiKey, baseURL: normalizeBaseURL(connection.baseURL, connection.provider), fetch: ((url, init) => fetchImplementation(url, { ...init, redirect: 'error' })) as typeof fetch };
-		const provider = connection.provider === 'deepseek' ? createDeepSeek(options) : createOpenAICompatible({ ...options, name: connection.provider });
+		const provider = createProvider(connection, fetchImplementation);
 		const result = streamText({
 			model: provider(connection.model),
 			messages: [...messages],

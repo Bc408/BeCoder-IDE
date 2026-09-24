@@ -134,7 +134,7 @@ suite('Beacon window session', () => {
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
 		const session = new ChatSession(() => { }, () => 'provider error');
-		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, apiKey: 'test-key' }), fetchMock));
+		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'test-key' }), fetchMock));
 		assert.equal(session.snapshot.error, '');
 		assert.equal(session.snapshot.messages[1].text, 'hello back');
 		assert.equal(session.snapshot.messages[1].reasoning, 'thinking');

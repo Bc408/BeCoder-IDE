@@ -98,14 +98,14 @@ try {
 	await page.screenshot({ path: path.join(output, 'light-360.png') });
 	await page.goto(`http://127.0.0.1:${server.address().port}/configuration`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-font-family:Segoe UI, sans-serif; --vscode-textLink-foreground:#7db9e8; --vscode-button-background:#365a78; --vscode-button-foreground:#fff; --vscode-button-secondaryBackground:#454c57; --vscode-widget-border:#343b44; }' });
-	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: false, busy: false, connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-v4-flash', keyConfigured: false, models: [], loading: false, error: '' } }, '*'));
+	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: false, busy: false, connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: '', keyConfigured: false, models: [], loading: false, error: '' } }, '*'));
 	await page.getByRole('button', { name: '配置 API Key', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'configure' });
 	assert.equal(await page.getByRole('textbox').count(), 1);
 	await page.screenshot({ path: path.join(output, 'configuration-dark-360.png') });
 	await page.getByRole('button', { name: '打开聊天', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'openChat' });
-	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: true, connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-v4-flash', keyConfigured: true, models: ['deepseek-v4-flash'], loading: false, error: '' } }, '*'));
+	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: true, connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: '', keyConfigured: true, models: ['deepseek-v4-flash'], loading: false, error: '' } }, '*'));
 	await page.getByText('API Key 已保存', { exact: true }).waitFor();
 	assert.ok(await page.getByRole('button', { name: '更新 API Key', exact: true }).isDisabled());
 	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Configuration fits a narrow sidebar');

@@ -80,8 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		const item = history.snapshot.history.find(item => item.id === id);
 		if (!item) { return; }
 		if (remove) {
-			const label = vscode.l10n.t('Delete');
-			if (await vscode.window.showWarningMessage(vscode.l10n.t('Delete this chat?'), { modal: true, detail: item.title }, label) === label) { history.remove(id); }
+			history.remove(id);
 		} else {
 			const title = await vscode.window.showInputBox({ title: vscode.l10n.t('Rename chat'), value: item.title, ignoreFocusOut: true, validateInput: value => value.trim() && value.trim().length <= 80 ? undefined : vscode.l10n.t('Enter a title between 1 and 80 characters.') });
 			if (title !== undefined) { history.rename(id, title); }

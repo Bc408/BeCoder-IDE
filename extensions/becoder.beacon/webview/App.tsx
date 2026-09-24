@@ -26,6 +26,7 @@ function App() {
 	const [ready, setReady] = useState(false);
 	const [draft, setDraft] = useState('');
 	const [showHistory, setShowHistory] = useState(false);
+	const [confirmDelete, setConfirmDelete] = useState<string>();
 	const [query, setQuery] = useState('');
 	const drafts = useRef(new Map<string, string>());
 	const draftRef = useRef('');
@@ -70,9 +71,9 @@ function App() {
 	const hasConversation = state.messages.length > 0;
 	if (configuration) { return <Settings connection={state.connection} ready={ready} busy={state.busy} post={message => api.postMessage(message)} />; }
 	const historyItems = state.history.filter(item => item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''}`} key={item.id}>
+	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id}>
 		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); setShowHistory(false); }} title={item.title}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{new Date(item.updatedAt).toLocaleDateString(zh ? 'zh-CN' : 'en', { month: 'short', day: 'numeric' })}</time></button>
-		<div className="history-actions"><button disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} title={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button disabled={busy} onClick={() => api.postMessage({ type: 'deleteHistory', conversationId: item.id })} title={t('Delete chat', '删除聊天')} aria-label={t('Delete chat', '删除聊天')}><Icon name="trash" /></button></div>
+		<div className="history-actions"><button disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} title={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button className={item.id === confirmDelete ? 'delete-confirm' : undefined} disabled={busy} onClick={() => { if (item.id === confirmDelete) { setConfirmDelete(undefined); api.postMessage({ type: 'deleteHistory', conversationId: item.id }); } else { setConfirmDelete(item.id); } }} title={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')} aria-label={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')}>{item.id === confirmDelete ? t('Confirm', '确认') : <Icon name="trash" />}</button></div>
 	</div>);
 	return <main onClick={event => {
 		const link = (event.target as HTMLElement).closest('a');

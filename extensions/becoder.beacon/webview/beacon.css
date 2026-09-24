@@ -134,11 +134,13 @@ textarea { min-height: 40px; font-size: 14px; }
 .history-empty { padding: 30px 0; text-align: center; }
 .history-row { display: flex; min-width: 0; align-items: center; gap: 4px; border-radius: 8px; margin: 4px 0; }
 .history-row:hover, .history-row.active { background: var(--vscode-list-hoverBackground); }
+.history-row.confirming { background: var(--vscode-list-activeSelectionBackground); }
 .history-open { min-width: 0; flex: 1; gap: 12px; justify-content: space-between; padding: 12px 8px; text-align: left; }
 .history-open > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .history-open time { flex-shrink: 0; color: var(--vscode-descriptionForeground); font-size: 11px; }
 .history-actions { display: flex; flex-shrink: 0; }
 .history-actions button { width: 27px; height: 28px; padding: 4px; color: var(--vscode-descriptionForeground); }
+.history-actions .delete-confirm { width: auto; padding: 4px 10px; border-radius: 14px; color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-errorForeground) 18%, transparent); font-size: 12px; }
 .history-actions svg { width: 15px; height: 15px; }
 .history-notice { margin: 8px 16px; padding: 10px; line-height: 1.6; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border)); border-radius: 6px; font-size: 12px; }
 .history-notice button { color: var(--vscode-textLink-foreground); }

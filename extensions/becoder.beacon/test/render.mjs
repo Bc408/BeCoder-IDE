@@ -75,6 +75,8 @@ try {
 	await page.getByRole('button', { name: '重命名聊天', exact: true }).first().click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'renameHistory', conversationId: 'one' });
 	await page.getByRole('button', { name: '删除聊天', exact: true }).last().click();
+	assert.equal(await page.getByRole('button', { name: '确认删除', exact: true }).count(), 1);
+	await page.getByRole('button', { name: '确认删除', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'deleteHistory', conversationId: 'two' });
 	await page.locator('.history-open').last().click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'openHistory', conversationId: 'two' });

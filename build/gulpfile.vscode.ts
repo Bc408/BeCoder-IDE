@@ -371,6 +371,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				// '/spawn-helper'), so it must be unpacked: ASAR-packed binaries
 				// cannot be spawned, causing posix_spawn ENOENT at terminal launch.
 				'**/node-pty/prebuilds/**/spawn-helper',
+				'**/node-pty/prebuilds/**/conpty/{conpty.dll,OpenConsole.exe}',
 				'**/node-pty/build/Release/*',
 				'**/node-pty/build/Release/conpty/*',
 				'**/node-pty/lib/worker/conoutSocketWorker.js',

@@ -114,8 +114,8 @@ $requiredFiles = @(
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty_console_list.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty\conpty.dll',
-	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty\OpenConsole.exe',
+	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\conpty.dll',
+	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\OpenConsole.exe',
 	'resources\app\node_modules.asar.unpacked\node-pty\lib\worker\conoutSocketWorker.js',
 	'resources\app\node_modules.asar.unpacked\node-pty\lib\shared\conout.js',
 	'resources\app\node_modules.asar.unpacked\node-pty\package.json'

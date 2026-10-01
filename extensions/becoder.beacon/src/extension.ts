@@ -67,10 +67,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		const value = message as { type?: string; text?: string; id?: number; conversationId?: string; url?: string };
 		switch (value.type) {
 			case 'ready': publish(); break;
-			case 'send': if (!historyUnreadable && connections.configured && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.send(value.text, request.generate, false, request.source, request.readWorkspaceFile); } else { publish(); } break;
-			case 'retry': if (!historyUnreadable && connections.configured) { const request = connections.request(readWorkspaceFile); void session.send('', request.generate, true, request.source, request.readWorkspaceFile); } else { publish(); } break;
-			case 'edit': if (!historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.edit(value.id, value.text, request.generate, request.source, request.readWorkspaceFile); } else { publish(); } break;
-			case 'regenerate': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(readWorkspaceFile); void session.regenerate(value.id, request.generate, request.source, request.readWorkspaceFile); } else { publish(); } break;
+			case 'send': if (!historyUnreadable && connections.configured && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.send(value.text, request.generate, request.source, request.readWorkspaceFile).finally(publish); } else { publish(); } break;
+			case 'edit': if (!historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.edit(value.id, value.text, request.generate, request.source, request.readWorkspaceFile).finally(publish); } else { publish(); } break;
+			case 'regenerate': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(readWorkspaceFile); void session.regenerate(value.id, request.generate, request.source, request.readWorkspaceFile).finally(publish); } else { publish(); } break;
 			case 'continue': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(readWorkspaceFile); void session.resume(value.id, request.generate, request.source, request.readWorkspaceFile).finally(publish); } else { publish(); } break;
 			case 'stop': session.stop(); break;
 			case 'clear':
@@ -80,7 +79,7 @@ export function activate(context: vscode.ExtensionContext): void {
 					publish();
 				}
 				break;
-			case 'openHistory': if (typeof value.conversationId === 'string') { history.open(value.conversationId); } break;
+			case 'openHistory': if (typeof value.conversationId === 'string') { history.open(value.conversationId); publish(); } break;
 			case 'renameHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, false); } break;
 			case 'deleteHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, true); } break;
 			case 'saveHistory': if (!historyUnreadable) { void history.flush(); } break;

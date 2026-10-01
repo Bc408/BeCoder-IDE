@@ -110,10 +110,6 @@ function useStreamingText(text: string, streaming: boolean, reduced: boolean) {
 	return !streaming || reduced ? text : visible;
 }
 
-function MarkdownParagraph({ children, node: _node, ...props }: ComponentProps<'p'> & { node?: unknown }) {
-	return <p {...props}>{children}</p>;
-}
-
 function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> & { node?: unknown }) {
 	const streaming = useContext(StreamingContext);
 	const codeElement = Children.toArray(children).find(child => isValidElement(child) && child.type === 'code');
@@ -128,7 +124,7 @@ function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> 
 	return <CodeBlock text={readCode(codeProps.children)} language={language} streaming={streaming} />;
 }
 
-const components: Components = { img: () => null, p: MarkdownParagraph, pre: MarkdownPre, span: MarkdownSpan };
+const components: Components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan };
 
 export function Conversation(props: ComponentProps<typeof StickToBottom>) {
 	const reduced = useReducedMotion();

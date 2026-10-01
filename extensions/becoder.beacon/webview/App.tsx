@@ -37,7 +37,7 @@ const formatTime = (value: number, now: number) => {
 };
 
 function App() {
-	const [state, setState] = useState<State>({ messages: [], busy: false, error: '', canRetry: false, configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false });
+	const [state, setState] = useState<State>({ messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false });
 	const [ready, setReady] = useState(false);
 	const [draft, setDraft] = useState('');
 	const [now, setNow] = useState(Date.now);
@@ -106,7 +106,6 @@ function App() {
 	};
 	const hasConversation = state.messages.length > 0;
 	const failedReply = state.messages.at(-1)?.status === 'error';
-	const showRetry = failedReply && state.canRetry;
 	if (configuration) { return <Settings connection={state.connection} ready={ready} busy={state.busy} post={message => api.postMessage(message)} />; }
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
 		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} title={item.title}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
@@ -144,7 +143,6 @@ function App() {
 						{message.status === 'stopped' && <div className="message-status">{t('Paused', '已暂停')}</div>}
 						{message.status === 'error' && message.id === state.messages.at(-1)?.id && <>
 							{state.error && <div className="error" role="alert">{state.error}</div>}
-							{showRetry && <button className="retry" disabled={!state.configured || busy} onClick={() => { setPending(true); api.postMessage({ type: 'retry' }); }}>{t('Retry response', '重新生成回答')}</button>}
 						</>}
 						{message.status !== 'streaming' && <div className="message-actions assistant-actions">
 							{message.text && <button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} title={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button>}
@@ -158,7 +156,6 @@ function App() {
 		</Conversation>
 		<footer>
 			{!failedReply && state.error && <div className="error" role="alert">{state.error}</div>}
-			{!failedReply && showRetry && <button className="retry" disabled={!state.configured || busy} onClick={() => { setPending(true); api.postMessage({ type: 'retry' }); }}>{t('Retry response', '重新生成回答')}</button>}
 			<form className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
 				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
 					if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); send(); }

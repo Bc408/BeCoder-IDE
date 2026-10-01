@@ -51,7 +51,7 @@ try {
 	const code = 'int a,b;\n\n// preserved blank line\n    cin>>a>>b;\n    cout<<a+b;';
 	const text = '下面是代码和公式。\n\n```cpp\n' + code + '\n```\n\n常见的泰勒展开式：\n\n\\[ f(x)=f(0)+f\'(0)x+\\frac{f^{(2)}(0)}{2!}x^2+\\cdots \\]\n\n行内公式 \\(x^2\\)，以及 $y^2$。\n\n$$\ne^x=1+x+\\frac{x^2}{2!}+\\cdots\n$$';
 	const createdAt = new Date('2026-09-24T08:33:00Z').getTime();
-	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	await page.getByText('用时 18s', { exact: true }).waitFor();
 	assert.deepStrictEqual(await page.locator('.assistant-actions').evaluate(element => [...element.children].map(child => child.tagName)), ['BUTTON', 'BUTTON', 'TIME']);
 	assert.notEqual(await page.locator('.thought').evaluate(element => getComputedStyle(element).borderBottomColor), 'rgba(0, 0, 0, 0)');
@@ -74,10 +74,10 @@ try {
 	await page.getByRole('textbox', { name: '编辑消息', exact: true }).fill('修改后的问题');
 	await page.locator('.message-edit').getByRole('button', { name: '发送', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'edit', id: 1, text: '修改后的问题' });
-	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	await page.getByRole('button', { name: '重新回答', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 2 });
-	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', canRetry: false, messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
+	await page.evaluate(({ text, createdAt }) => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	for (const width of [760, 360]) {
 		await page.setViewportSize({ width, height: 1000 });
 		await page.screenshot({ path: path.join(output, `dark-${width}.png`) });
@@ -252,12 +252,14 @@ try {
 	await publishAnswer(longAnswer, '', 'complete', 9045000);
 	await page.locator('.scroll-typing').waitFor({ state: 'detached' });
 	await page.getByText('用时 2h 30m 45s', { exact: true }).waitFor();
-	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '无法建立与服务商的连接，请检查网络或代理后重试。', canRetry: true, messages: [{ id: 30, role: 'user', text: '你好', reasoning: '', activities: [], status: 'complete' }, { id: 31, role: 'assistant', text: '', reasoning: '', activities: [], status: 'error', durationMs: 0 }] }, '*'));
+	await page.evaluate(() => window.postMessage({ type: 'snapshot', configured: true, busy: false, error: '无法建立与服务商的连接，请检查网络或代理后重试。', messages: [{ id: 30, role: 'user', text: '你好', reasoning: '', activities: [], status: 'complete' }, { id: 31, role: 'assistant', text: '', reasoning: '', activities: [], status: 'error', durationMs: 0 }] }, '*'));
 	await page.locator('.assistant [role="alert"]').waitFor();
 	assert.equal(await page.locator('.thought').count(), 0, 'An empty failed request has no misleading duration or divider');
 	assert.equal(await page.locator('footer [role="alert"]').count(), 0, 'Request errors belong to their reply');
-	await page.getByRole('button', { name: '重新生成回答', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'retry' });
+	assert.equal(await page.getByRole('button', { name: '重新生成回答', exact: true }).count(), 0, 'Failed responses have no duplicate text retry action');
+	assert.equal(await page.locator('.assistant-actions button').count(), 1, 'An empty failed response has only the regenerate icon');
+	await page.getByRole('button', { name: '重新回答', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 31 });
 	// Markdown typography, formulas and narrow layouts retain their semantic elements.
 	await publishAnswer('|项目|复杂度|\n|---|---|\n|排序|$n \\log n$|\n\n- [x] 已完成\n- [ ] 待完成\n\n> 引用说明\n\n~~删除线~~ 与 **加粗**。\n\n\\[\\frac{a+b}{c}\\]\n\n```cpp\nint answer = 42;\n```', '', 'complete', 1000);
 	await page.waitForSelector('.markdown table');

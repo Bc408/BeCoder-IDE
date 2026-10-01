@@ -39,7 +39,6 @@ export interface Snapshot {
 	messages: Message[];
 	busy: boolean;
 	error: string;
-	canRetry: boolean;
 	stopping?: boolean;
 }
 
@@ -59,23 +58,18 @@ export class ChatSession {
 	constructor(private readonly changed: (snapshot: Snapshot) => void, private readonly describeError: (error: unknown) => string) { }
 
 	get snapshot(): Snapshot {
-		return { messages: structuredClone(this.messages), busy: !!this.controller, error: this.error, canRetry: !this.controller && this.messages.at(-1)?.status === 'error', ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
+		return { messages: structuredClone(this.messages), busy: !!this.controller, error: this.error, ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
 	}
 
 	private publish(): void {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, retry = false, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
+	async send(text: string, generate: Generate, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
 		if (this.disposed || this.controller) { return; }
-		if (retry) {
-			if (!this.snapshot.canRetry) { return; }
-			this.messages.pop();
-		} else {
-			text = text.trim();
-			if (!text || text.length > 32000) { return; }
-			this.messages.push({ id: ++this.sequence, role: 'user', text, activities: [], status: 'complete', createdAt: Date.now() });
-		}
+		text = text.trim();
+		if (!text || text.length > 32000) { return; }
+		this.messages.push({ id: ++this.sequence, role: 'user', text, activities: [], status: 'complete', createdAt: Date.now() });
 		await this.respond(generate, readWorkspaceFile, source);
 	}
 

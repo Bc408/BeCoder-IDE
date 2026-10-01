@@ -16,7 +16,7 @@ suite('Beacon workspace history', () => {
 	test('new chats retain history; reload restores the active conversation and isolated model context', async () => {
 		let saved: HistoryData | undefined;
 		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
-		await history.session.send('first question', answer, false, { provider: 'moonshot', model: 'kimi-test' });
+		await history.session.send('first question', answer, { provider: 'moonshot', model: 'kimi-test' });
 		const first = history.snapshot.activeId;
 		history.newConversation();
 		await history.session.send('second question', answer);
@@ -37,7 +37,7 @@ suite('Beacon workspace history', () => {
 		assert.equal(otherWorkspace.snapshot.history.length, 0);
 		await Promise.all([history.dispose(), reopened.dispose(), otherWorkspace.dispose()]);
 	});
-	test('busy sessions cannot switch, rename or delete; restored interrupted output is not retryable', async () => {
+	test('busy sessions cannot switch, rename or delete; restored interrupted output is paused', async () => {
 		let saved: HistoryData | undefined;
 		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
 		await history.session.send('old chat', answer);
@@ -55,7 +55,6 @@ suite('Beacon workspace history', () => {
 		await history.flush();
 		const restored = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
 		assert.equal(restored.snapshot.busy, false);
-		assert.equal(restored.snapshot.canRetry, false);
 		assert.equal(restored.snapshot.messages.at(-1)?.status, 'stopped');
 		history.session.stop(); release(); await running;
 		await Promise.all([history.dispose(), restored.dispose()]);
@@ -171,7 +170,7 @@ suite('Beacon window session', () => {
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
 		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', parameters: {}, apiKey: 'test-key' }), fetchMock);
-		await session.send('Read src/main.ts', generate, false, undefined, async path => ({ path, content: contents }));
+		await session.send('Read src/main.ts', generate, undefined, async path => ({ path, content: contents }));
 		assert.equal(requestCount, 2);
 		assert.equal(session.snapshot.messages[1].text, 'Here is the summary.');
 		assert.deepStrictEqual(session.snapshot.messages[1].activities, [{ id: 'call-1', type: 'read-workspace-file', path: 'src/main.ts', status: 'complete' }]);
@@ -240,7 +239,6 @@ suite('Beacon window session', () => {
 		await running;
 		assert.equal(session.snapshot.messages[1].status, 'stopped');
 		assert.ok(!session.snapshot.messages[1].text.includes('late'));
-		assert.equal(session.snapshot.canRetry, false);
 		await session.send('followup', async function* (messages) {
 			assert.deepStrictEqual(messages, [{ role: 'user', content: 'question' }, { role: 'assistant', content: 'partial' }, { role: 'user', content: 'followup' }]);
 			yield { type: 'text', text: 'continued conversation' };
@@ -321,23 +319,26 @@ suite('Beacon window session', () => {
 		assert.equal(restored.snapshot.messages[1].activities.length, 3, 'Continued tool IDs do not replace previous activities');
 		await Promise.all([history.dispose(), restored.dispose()]);
 	});
-	test('retry replaces a failed reply without duplicating the user message or leaking errors', async () => {
+	test('regenerate replaces a failed reply without duplicating the user message or leaking errors', async () => {
 		const session = new ChatSession(() => { }, () => 'safe error');
 		await session.send('question', async function* () { yield { type: 'text', text: 'partial' }; throw new Error('secret'); });
 		assert.equal(session.snapshot.error, 'safe error');
-		await session.send('', async function* (messages) { assert.deepStrictEqual(messages, [{ role: 'user', content: 'question' }]); yield { type: 'text', text: 'done' }; }, true);
+		await session.regenerate(session.snapshot.messages.at(-1)!.id, async function* (messages) { assert.deepStrictEqual(messages, [{ role: 'user', content: 'question' }]); yield { type: 'text', text: 'done' }; });
 		assert.equal(session.snapshot.messages.length, 2);
 		assert.equal(session.snapshot.messages[1].text, 'done');
 		assert.equal(session.snapshot.error, '');
 	});
-	test('empty response is retryable; snapshots cannot mutate host history; new conversation clears memory', async () => {
+	test('empty response can be regenerated; snapshots cannot mutate host history; new conversation clears memory', async () => {
 		const session = new ChatSession(() => { }, () => 'empty');
 		await session.send('question', async function* () { });
-		assert.equal(session.snapshot.canRetry, true);
+		assert.equal(session.snapshot.messages[1].status, 'error');
+		await session.regenerate(session.snapshot.messages[1].id, async function* () { yield { type: 'text', text: 'answer' }; });
+		assert.equal(session.snapshot.messages.length, 2);
+		assert.equal(session.snapshot.messages[1].status, 'complete');
 		session.snapshot.messages[0].text = 'changed';
 		assert.equal(session.snapshot.messages[0].text, 'question');
 		session.clear();
-		assert.deepStrictEqual(session.snapshot, { messages: [], busy: false, error: '', canRetry: false });
+		assert.deepStrictEqual(session.snapshot, { messages: [], busy: false, error: '' });
 	});
 	test('dispose aborts active work and suppresses later UI notifications', async () => {
 		let notifications = 0;

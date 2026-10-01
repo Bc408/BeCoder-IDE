@@ -80,7 +80,7 @@ export class ExtHostLocalizationService implements ExtHostLocalizationShape {
 			const response = await this._proxy.$fetchBundleContents(bundleUri);
 			const result = JSON.parse(response);
 			// 'contents.bundle' is a well-known key in the language pack json file that contains the _code_ translations for the extension
-			contents = extension.isBuiltin ? result.contents?.bundle : result;
+			contents = extension.isBuiltin ? result.contents?.bundle ?? (extension.l10n ? result : undefined) : result;
 		} catch (e) {
 			this.logService.error(`Failed to load translations for ${extension.identifier.value} from ${bundleUri}: ${e.message}`);
 			return;
@@ -97,7 +97,9 @@ export class ExtHostLocalizationService implements ExtHostLocalizationShape {
 	private async getBundleLocation(extension: IExtensionDescription): Promise<URI | undefined> {
 		if (extension.isBuiltin) {
 			const uri = await this._proxy.$fetchBuiltInBundleUri(extension.identifier.value, this.currentLanguage);
-			return URI.revive(uri);
+			if (uri) {
+				return URI.revive(uri);
+			}
 		}
 
 		return extension.l10n

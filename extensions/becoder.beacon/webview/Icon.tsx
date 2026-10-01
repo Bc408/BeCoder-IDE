@@ -1,6 +1,7 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
 const paths = {
-	history: 'M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2',
+	chevron: 'm9 5 7 7-7 7',
+	wrap: 'M3 6h18M3 12h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 18h4',
 	back: 'm10 5-7 7 7 7M3 12h18',
 	edit: 'm15 4 5 5M4 20l1-6L16 3l5 5L10 19Z',
 	trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',
@@ -10,7 +11,9 @@ const paths = {
 	up: 'm6 11 6-6 6 6M12 5v14',
 	down: 'm6 13 6 6 6-6M12 5v14',
 	stop: 'M6 6h12v12H6Z',
+	play: 'm8 5 11 7-11 7Z',
 	copy: 'M8 8h12v12H8ZM16 8V4H4v12h4',
+	file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M8 13h8M8 17h8',
 	retry: 'M3 12a9 9 0 1 0 3-6.7M3 4v6h6',
 	check: 'm5 12 4 4L19 6'
 };

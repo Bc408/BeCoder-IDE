@@ -154,6 +154,33 @@
 					"maxLength": 256,
 					"scope": "application",
 					"description": "%settings.model%"
+				},
+				"beacon.modelParameters": {
+					"type": "object",
+					"default": {},
+					"scope": "application",
+					"description": "%settings.modelParameters%",
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"temperature": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 2
+							},
+							"topP": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"maxOutputTokens": {
+								"type": "integer",
+								"minimum": 1,
+								"maximum": 131072
+							}
+						}
+					}
 				}
 			}
 		}
@@ -169,9 +196,7 @@
 	"devDependencies": {
 		"@ai-sdk/deepseek": "3.0.50",
 		"@ai-sdk/openai-compatible": "3.0.55",
-		"@streamdown/cjk": "1.0.3",
 		"@streamdown/code": "1.1.1",
-		"@streamdown/math": "1.0.2",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
 		"ai": "7.0.111",
@@ -179,7 +204,11 @@
 		"katex": "0.16.47",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",
-		"streamdown": "2.6.0",
+		"react-markdown": "10.1.0",
+		"rehype-katex": "7.0.1",
+		"remark-breaks": "4.0.0",
+		"remark-gfm": "4.0.1",
+		"remark-math": "6.0.0",
 		"use-stick-to-bottom": "1.1.6"
 	},
 	"repository": {

@@ -4,10 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { isProvider, listModels, normalizeBaseURL, providers, secretName, type ConnectionState, type ProviderId } from './connection';
-import { createGenerator } from './provider';
+import { isProvider, normalizeBaseURL, providers, readModelParameters, secretName, updateModelParameters, type Connection, type ConnectionState } from './connection';
+import { createGenerator, listModels } from './provider';
+import type { WorkspaceFileReader } from './session';
 
 export function connectionError(error: unknown): string {
+	let cause = error;
+	for (let depth = 0; depth < 5 && cause && typeof cause === 'object'; depth++) {
+		const details = cause as { code?: string; name?: string; cause?: unknown };
+		if (details.name === 'TimeoutError' || details.code === 'ETIMEDOUT' || details.code === 'UND_ERR_CONNECT_TIMEOUT') { return vscode.l10n.t('The provider connection timed out. Please retry.'); }
+		if (['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_SOCKET'].includes(details.code ?? '')) { return vscode.l10n.t('Could not establish a connection to the provider. Check your network or proxy, then retry.'); }
+		cause = details.cause;
+	}
 	const status = (error as { statusCode?: number })?.statusCode;
 	if (status === 401 || status === 403) { return vscode.l10n.t('The provider rejected the API key or access to this model.'); }
 	if (status === 402) { return vscode.l10n.t('The provider account has insufficient balance.'); }
@@ -17,7 +25,7 @@ export function connectionError(error: unknown): string {
 
 /** User-scoped configuration and provider-specific secrets. Never exposes keys to a Webview. */
 export class Connections implements vscode.Disposable {
-	private state: ConnectionState = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, keyConfigured: false, models: [], loading: false, error: '' };
+	private state: ConnectionState = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, models: [], loading: false, error: '' };
 	private revision = 0;
 	private controller: AbortController | undefined;
 	private mutating = false;
@@ -27,13 +35,14 @@ export class Connections implements vscode.Disposable {
 	constructor(private readonly context: vscode.ExtensionContext, private readonly busy: () => boolean, private readonly changed: () => void) {
 		this.subscriptions = [vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('beacon')) { void this.refresh(); } }), context.secrets.onDidChange(event => { if (event.key.startsWith('beacon.') && event.key.endsWith('.apiKey')) { void this.refresh(true); } })];
 	}
-	get snapshot(): ConnectionState { return { ...this.state, loading: this.state.loading || this.mutating, models: [...this.state.models] }; }
+	get snapshot(): ConnectionState { return { ...this.state, parameters: { ...this.state.parameters }, loading: this.state.loading || this.mutating, models: [...this.state.models] }; }
 	get configured(): boolean { return !this.state.loading && !this.mutating && !!this.state.model && (this.state.provider === 'ollama' || this.state.keyConfigured) && !this.state.error; }
-	private readSelection(): { provider: ProviderId; baseURL: string; model: string } {
+	private readSelection(): Omit<Connection, 'apiKey'> {
 		const config = vscode.workspace.getConfiguration('beacon');
 		const selected = config.get('provider', 'deepseek');
 		const provider = isProvider(selected) ? selected : 'deepseek';
-		return { provider, baseURL: normalizeBaseURL(config.get(`${provider}.baseURL`, providers[provider].baseURL), provider), model: config.get<string>(`${provider}.model`, providers[provider].model).trim() };
+		const model = config.get<string>(`${provider}.model`, providers[provider].model).trim();
+		return { provider, baseURL: normalizeBaseURL(config.get(`${provider}.baseURL`, providers[provider].baseURL), provider), model, parameters: readModelParameters(config.get('modelParameters', {}), provider, model) };
 	}
 	async refresh(resetModels = false): Promise<void> {
 		const revision = ++this.revision;
@@ -83,6 +92,17 @@ export class Connections implements vscode.Disposable {
 		} catch { this.state.error = vscode.l10n.t('Unable to save connection settings. Check the address and try again.'); }
 		finally { this.mutating = false; this.changed(); }
 	}
+	async updateParameter(field: unknown, value: unknown, expectedProvider: unknown, expectedModel: unknown): Promise<void> {
+		if (this.busy() || this.mutating || expectedProvider !== this.state.provider || expectedModel !== this.state.model) { return; }
+		this.mutating = true; this.changed();
+		try {
+			const config = vscode.workspace.getConfiguration('beacon');
+			const parameters = updateModelParameters(config.get('modelParameters', {}), this.state.provider, this.state.model, field, value);
+			await config.update('modelParameters', parameters, vscode.ConfigurationTarget.Global);
+			await this.refresh();
+		} catch { this.state.error = vscode.l10n.t('Unable to save model parameters. Check the values and try again.'); }
+		finally { this.mutating = false; this.changed(); }
+	}
 	async fetchModels(): Promise<void> {
 		if (this.busy() || this.mutating || this.state.loading) { return; }
 		const revision = ++this.revision;
@@ -102,9 +122,9 @@ export class Connections implements vscode.Disposable {
 			if (revision === this.revision && !this.disposed) { this.controller = undefined; this.state.loading = false; this.changed(); }
 		}
 	}
-	request() {
+	request(readWorkspaceFile: WorkspaceFileReader) {
 		const selection = this.readSelection();
-		return { source: { provider: selection.provider, model: selection.model }, generate: createGenerator(async () => ({ ...selection, apiKey: await this.context.secrets.get(secretName(selection.provider)) })) };
+		return { source: { provider: selection.provider, model: selection.model }, generate: createGenerator(async () => ({ ...selection, apiKey: await this.context.secrets.get(secretName(selection.provider)) })), readWorkspaceFile };
 	}
 	dispose(): void { this.disposed = true; this.revision++; this.controller?.abort(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
 }

@@ -8,5 +8,6 @@
 	"settings.bailian.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
 	"settings.moonshot.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
 	"settings.ollama.baseURL": "Ollama OpenAI-compatible base URL. Local HTTP or HTTPS is supported. Beacon does not install or start Ollama.",
-	"settings.model": "Chat model ID. Fetch and select models from the Beacon sidebar, or enter an exact model ID here."
+	"settings.model": "Chat model ID. Fetch and select models from the Beacon sidebar, or enter an exact model ID here.",
+	"settings.modelParameters": "Optional model parameter overrides saved separately for each provider and model. Configure them in the Beacon sidebar."
 }

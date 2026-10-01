@@ -24,6 +24,7 @@ for (const file of [...Object.keys(host.metafile.inputs), ...Object.keys(ui.meta
 	}
 }
 const notices = ['Beacon bundled dependency notices. AI Elements attribution is in ../UPSTREAM.md.'];
+notices.push('\nCaptain Who (Apache-2.0); adapted motion CSS, see ../UPSTREAM.md.\n', fs.readFileSync(path.join(root, 'licenses/captain-who.txt'), 'utf8'));
 for (const [directory, pkg] of [...packages].sort((a, b) => a[1].name.localeCompare(b[1].name))) {
 	const files = fs.readdirSync(directory).filter(file => /^(license|licence|copying|notice)([.-]|$)/i.test(file) && fs.statSync(path.join(directory, file)).isFile());
 	notices.push(`\n${pkg.name}@${pkg.version} (${pkg.license ?? 'See license'})\nhttps://registry.npmjs.org/${pkg.name}/-/${pkg.name.split('/').at(-1)}-${pkg.version}.tgz\n`);

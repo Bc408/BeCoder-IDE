@@ -7,8 +7,10 @@ import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { ChatHistory } from './history';
 import { Connections, connectionError } from './connections';
+import { createWorkspaceFileReader } from './workspaceFiles';
 
 const historyKey = 'beacon.history.v1';
+const streamSnapshotIntervalMs = 33;
 let shutdown: (() => Promise<void>) | undefined;
 
 export function deactivate(): Promise<void> | undefined { return shutdown?.(); }
@@ -29,6 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	}
 	const session = history.session;
 	const connections = new Connections(context, () => session.snapshot.busy, schedule);
+	const readWorkspaceFile = createWorkspaceFileReader();
 	let closing: Promise<void> | undefined;
 	shutdown = () => {
 		alive = false;
@@ -38,13 +41,19 @@ export function activate(context: vscode.ExtensionContext): void {
 	};
 	const publish = () => {
 		if (alive) {
-			const message = { type: 'snapshot', ...history.snapshot, configured: connections.configured, connection: connections.snapshot, historyUnreadable };
+			const snapshot = history.snapshot;
+			const messages = snapshot.messages.map(message => {
+				const visible = { ...message };
+				delete visible.toolResults;
+				return visible;
+			});
+			const message = { type: 'snapshot', ...snapshot, messages, configured: connections.configured, connection: connections.snapshot, historyUnreadable };
 			void view?.webview.postMessage(message);
 			void configurationView?.webview.postMessage({ type: 'snapshot', configured: connections.configured, connection: connections.snapshot, busy: session.snapshot.busy });
 		}
 	};
 	function schedule(): void {
-		if (!timer && alive) { timer = setTimeout(() => { timer = undefined; publish(); }, 40); }
+		if (!timer && alive) { timer = setTimeout(() => { timer = undefined; publish(); }, streamSnapshotIntervalMs); }
 	}
 	function html(webview: vscode.Webview, surface: 'chat' | 'configuration' = 'chat'): string {
 		const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
@@ -58,12 +67,19 @@ export function activate(context: vscode.ExtensionContext): void {
 		const value = message as { type?: string; text?: string; id?: number; conversationId?: string; url?: string };
 		switch (value.type) {
 			case 'ready': publish(); break;
-			case 'send': if (!historyUnreadable && connections.configured && typeof value.text === 'string') { const request = connections.request(); void session.send(value.text, request.generate, false, request.source); } else { publish(); } break;
-			case 'retry': if (!historyUnreadable && connections.configured) { const request = connections.request(); void session.send('', request.generate, true, request.source); } else { publish(); } break;
-			case 'edit': if (!historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const request = connections.request(); void session.edit(value.id, value.text, request.generate, request.source); } else { publish(); } break;
-			case 'regenerate': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(); void session.regenerate(value.id, request.generate, request.source); } else { publish(); } break;
+			case 'send': if (!historyUnreadable && connections.configured && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.send(value.text, request.generate, false, request.source, request.readWorkspaceFile); } else { publish(); } break;
+			case 'retry': if (!historyUnreadable && connections.configured) { const request = connections.request(readWorkspaceFile); void session.send('', request.generate, true, request.source, request.readWorkspaceFile); } else { publish(); } break;
+			case 'edit': if (!historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const request = connections.request(readWorkspaceFile); void session.edit(value.id, value.text, request.generate, request.source, request.readWorkspaceFile); } else { publish(); } break;
+			case 'regenerate': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(readWorkspaceFile); void session.regenerate(value.id, request.generate, request.source, request.readWorkspaceFile); } else { publish(); } break;
+			case 'continue': if (!historyUnreadable && connections.configured && typeof value.id === 'number') { const request = connections.request(readWorkspaceFile); void session.resume(value.id, request.generate, request.source, request.readWorkspaceFile).finally(publish); } else { publish(); } break;
 			case 'stop': session.stop(); break;
-			case 'clear': if (!historyUnreadable) { history.newConversation(); } break;
+			case 'clear':
+				if (!historyUnreadable) {
+					history.newConversation();
+					if (timer) { clearTimeout(timer); timer = undefined; }
+					publish();
+				}
+				break;
 			case 'openHistory': if (typeof value.conversationId === 'string') { history.open(value.conversationId); } break;
 			case 'renameHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, false); } break;
 			case 'deleteHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, true); } break;
@@ -104,12 +120,13 @@ export function activate(context: vscode.ExtensionContext): void {
 				resolved.webview.html = html(resolved.webview, 'configuration');
 				const receiveDisposable = resolved.webview.onDidReceiveMessage((message: unknown) => {
 					if (!message || typeof message !== 'object') { return; }
-					const value = message as { type?: string; field?: string; value?: string; provider?: string };
+					const value = message as { type?: string; field?: string; value?: unknown; provider?: string; model?: string };
 					const type = value.type;
 					if (type === 'ready') { publish(); }
 					if (type === 'configure') { void connections.configureKey(); }
 					if (type === 'fetchModels') { void connections.fetchModels(); }
 					if (type === 'updateConnection') { void connections.update(value.field, value.value, value.provider); }
+					if (type === 'updateParameter') { void connections.updateParameter(value.field, value.value, value.provider, value.model); }
 					if (type === 'openSettings') { void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:becoder.beacon'); }
 					if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
 				});

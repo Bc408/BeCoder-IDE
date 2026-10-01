@@ -39,8 +39,12 @@ export function readHistory(value: unknown): HistoryData {
 		let previous = 0;
 		for (const message of item.messages) {
 			if ((message?.model !== undefined && typeof message.model !== 'string') || (message?.provider !== undefined && typeof message.provider !== 'string')) { throw new Error('invalid-history'); }
+			if (message?.reasoning !== undefined && typeof message.reasoning !== 'string') { throw new Error('invalid-history'); }
+			if (message?.activeStartedAt !== undefined && (!Number.isFinite(message.activeStartedAt) || message.activeStartedAt < 0 || message.activeStartedAt > 8640000000000000)) { throw new Error('invalid-history'); }
+			if (message?.toolResults !== undefined && (!Array.isArray(message.toolResults) || message.role !== 'assistant' || message.toolResults.some(result => !result || typeof result.id !== 'string' || !result.id || typeof result.path !== 'string' || result.path.length > 1024 || !result.output || typeof result.output.ok !== 'boolean' || typeof result.output.path !== 'string' || result.output.path.length > 1024 || (result.output.contents !== undefined && (typeof result.output.contents !== 'string' || Buffer.byteLength(result.output.contents, 'utf8') > 128 * 1024)) || (result.output.error !== undefined && typeof result.output.error !== 'string')))) { throw new Error('invalid-history'); }
 			if ((message?.createdAt !== undefined && (!Number.isFinite(message.createdAt) || message.createdAt < 0 || message.createdAt > 8640000000000000)) || (message?.durationMs !== undefined && (!Number.isFinite(message.durationMs) || message.durationMs < 0))) { throw new Error('invalid-history'); }
-			if (!message || !Number.isSafeInteger(message.id) || message.id <= previous || !['user', 'assistant'].includes(message.role) || !['complete', 'streaming', 'stopped', 'error'].includes(message.status) || typeof message.text !== 'string' || typeof message.reasoning !== 'string') { throw new Error('invalid-history'); }
+			if (!message || !Number.isSafeInteger(message.id) || message.id <= previous || !['user', 'assistant'].includes(message.role) || !['complete', 'streaming', 'stopped', 'error'].includes(message.status) || typeof message.text !== 'string') { throw new Error('invalid-history'); }
+			if (message.activities !== undefined && (!Array.isArray(message.activities) || message.activities.some(activity => !activity || typeof activity.id !== 'string' || !activity.id || activity.id.length > 256 || activity.type !== 'read-workspace-file' || typeof activity.path !== 'string' || activity.path.length > 1024 || !['running', 'complete', 'error', 'stopped'].includes(activity.status)))) { throw new Error('invalid-history'); }
 			previous = message.id;
 		}
 	}
@@ -83,7 +87,12 @@ export class ChatHistory {
 			this.data.activeId = active.id;
 		}
 		if (active) {
-			active.messages = snapshot.messages;
+			active.messages = snapshot.messages.map(message => {
+				if (message.status !== 'streaming' || message.activeStartedAt === undefined) { return message; }
+				const saved = { ...message, durationMs: (message.durationMs ?? 0) + Math.max(0, Date.now() - message.activeStartedAt) };
+				delete saved.activeStartedAt;
+				return saved;
+			});
 			active.error = snapshot.error;
 			active.updatedAt = Date.now();
 		}

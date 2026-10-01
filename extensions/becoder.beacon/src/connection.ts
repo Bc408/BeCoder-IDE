@@ -15,21 +15,69 @@ export interface Connection {
 	provider: ProviderId;
 	baseURL: string;
 	model: string;
+	parameters: ModelParameters;
 	apiKey?: string;
 }
 export interface ConnectionState {
 	provider: ProviderId;
 	baseURL: string;
 	model: string;
+	parameters: ModelParameters;
 	keyConfigured: boolean;
-	models: string[];
+	models: ModelInfo[];
 	loading: boolean;
 	error: string;
+}
+export interface ModelParameters {
+	temperature?: number;
+	topP?: number;
+	maxOutputTokens?: number;
+}
+export type ModelParameterName = keyof ModelParameters;
+export interface ModelInfo {
+	id: string;
+	provider: ProviderId;
 }
 export function isProvider(value: unknown): value is ProviderId {
 	return typeof value === 'string' && Object.hasOwn(providers, value);
 }
 export function secretName(provider: ProviderId): string { return `beacon.${provider}.apiKey`; }
+
+const parameterRanges: Record<ModelParameterName, { minimum: number; maximum: number; integer?: boolean }> = {
+	temperature: { minimum: 0, maximum: 2 },
+	topP: { minimum: 0, maximum: 1 },
+	maxOutputTokens: { minimum: 1, maximum: 131072, integer: true }
+};
+
+function parameterKey(provider: ProviderId, model: string): string { return `${provider}:${encodeURIComponent(model)}`; }
+function isRecord(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
+function validParameter(name: ModelParameterName, value: unknown): value is number {
+	const range = parameterRanges[name];
+	return typeof value === 'number' && Number.isFinite(value) && value >= range.minimum && value <= range.maximum && (!range.integer || Number.isInteger(value));
+}
+
+export function readModelParameters(value: unknown, provider: ProviderId, model: string): ModelParameters {
+	if (!model || !isRecord(value)) { return {}; }
+	const stored = value[parameterKey(provider, model)];
+	if (!isRecord(stored)) { return {}; }
+	const result: ModelParameters = {};
+	for (const name of Object.keys(parameterRanges) as ModelParameterName[]) {
+		if (validParameter(name, stored[name])) { result[name] = stored[name]; }
+	}
+	return result;
+}
+
+export function updateModelParameters(value: unknown, provider: ProviderId, model: string, name: unknown, parameter: unknown): Record<string, unknown> {
+	if (!model || typeof name !== 'string' || !Object.hasOwn(parameterRanges, name) || (parameter !== null && !validParameter(name as ModelParameterName, parameter))) { throw new Error('invalid-model-parameter'); }
+	const result = isRecord(value) ? { ...value } : {};
+	const key = parameterKey(provider, model);
+	const current = readModelParameters(result, provider, model);
+	if (parameter === null) { delete current[name as ModelParameterName]; }
+	else { current[name as ModelParameterName] = parameter as number; }
+	if (Object.keys(current).length) { result[key] = current; }
+	else { delete result[key]; }
+	return result;
+}
 
 export function normalizeBaseURL(value: string, provider: ProviderId): string {
 	const url = new URL(value.trim());
@@ -40,31 +88,4 @@ export function normalizeBaseURL(value: string, provider: ProviderId): string {
 
 export class ConnectionError extends Error {
 	constructor(readonly statusCode: number) { super('provider-request-failed'); }
-}
-
-/** No redirects with credentials; no provider error body is exposed to the UI. */
-export async function listModels(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<string[]> {
-	const baseURL = normalizeBaseURL(connection.baseURL, connection.provider);
-	if (connection.provider !== 'ollama' && !connection.apiKey) { throw new ConnectionError(401); }
-	const headers: Record<string, string> = {};
-	if (connection.apiKey) { headers.Authorization = `Bearer ${connection.apiKey}`; }
-	const models = new Set<string>();
-	const nativeBailian = connection.provider === 'bailian' && baseURL.endsWith('/compatible-mode/v1');
-	let count = 0;
-	for (let page = 1; page <= 50; page++) {
-		const url = nativeBailian ? `${baseURL.replace(/\/compatible-mode\/v1$/, '/api/v1')}/models?page_no=${page}&page_size=100&capabilities=TG` : `${baseURL}/models`;
-		const response = await request(url, { headers, signal, redirect: 'error' });
-		if (!response.ok) { throw new ConnectionError(response.status); }
-		const body = await response.json() as { data?: { id?: unknown }[]; output?: { models?: { model?: unknown }[]; total?: number } };
-		const entries = nativeBailian ? body.output?.models : body.data;
-		if (!Array.isArray(entries)) { throw new Error('invalid-model-list'); }
-		for (const entry of entries) {
-			const id = nativeBailian ? (entry as { model?: unknown })?.model : (entry as { id?: unknown })?.id;
-			if (typeof id !== 'string' || !id.trim() || id.length > 256) { throw new Error('invalid-model-list'); }
-			models.add(id);
-		}
-		count += entries.length;
-		if (!nativeBailian || !entries.length || (typeof body.output?.total === 'number' ? count >= body.output.total : entries.length < 100)) { return [...models].sort(); }
-	}
-	throw new Error('model-list-too-large');
 }

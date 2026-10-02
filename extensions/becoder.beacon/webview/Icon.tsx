@@ -1,5 +1,8 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
 const paths = {
+	code: 'm7 7-4 5 4 5m10-10 4 5-4 5m-3-11-4 12',
+	codeWrap: 'M3 12h18m-4-4 4 4-4 4M10 3v4m0 10v4',
+	codeCopy: 'M10 7h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3ZM7 17H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v1',
 	chevron: 'm9 5 7 7-7 7',
 	wrap: 'M3 6h18M3 12h14a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M3 18h4',
 	back: 'm10 5-7 7 7 7M3 12h18',

@@ -10,6 +10,76 @@ import { createGenerator, listModels } from '../src/provider';
 import { normalizeBaseURL, providers, readModelParameters, secretName, updateModelParameters, type ProviderId } from '../src/connection';
 import { normalizeMath } from '../webview/math';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
+import { readFileSync } from 'fs';
+import { createSyntaxRegistry, IncrementalSyntax } from '../webview/syntax';
+import { languages } from 'beacon-syntax-assets';
+
+suite('Beacon default TextMate syntax', () => {
+	test('every fence language has a working grammar and preserves incremental source exactly', async () => {
+		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
+		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
+		try {
+			const scopes = [...new Set(Object.values(languages).map(language => language.scope))];
+			assert.ok(scopes.length > 200, 'Preserve all previously supported fence languages');
+			for (const scope of scopes) {
+				const grammar = await registry.loadGrammar(scope);
+				assert.ok(grammar, scope);
+				const tokenizer = new IncrementalSyntax(grammar, registry.getColorMap());
+				const source = 'value = 42;\n"hello"\n';
+				tokenizer.update(source.slice(0, 8));
+				const result = tokenizer.update(source);
+				assert.equal(result.lines.map(line => line.map(token => token.content).join('')).join('\n'), source, scope);
+				assert.deepStrictEqual(result, new IncrementalSyntax(grammar, registry.getColorMap()).update(source), scope);
+			}
+		} finally { registry.dispose(); }
+	});
+	test('Python and Shell use the BeCoder grammar scopes and One Monokai during unfinished multiline output', async () => {
+		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
+		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
+		try {
+			for (const [language, scope, source] of [
+				['python', 'source.python', 'def greet(name: str):\n    """first\n    second"""\n    return f"hello {name}"\n'],
+				['shellscript', 'source.shell', '#!/bin/bash\ncat <<EOF\nhello\nEOF\necho "world"\n']
+			]) {
+				assert.equal(languages[language].scope, scope);
+				const grammar = (await registry.loadGrammar(scope))!;
+				const tokenizer = new IncrementalSyntax(grammar, registry.getColorMap());
+				for (let length = 1; length <= source.length; length += 3) {
+					const text = source.slice(0, length);
+					assert.deepStrictEqual(tokenizer.update(text), new IncrementalSyntax(grammar, registry.getColorMap()).update(text));
+				}
+				assert.ok(tokenizer.update(source).lines.flat().some(token => token.color.toLowerCase() !== '#bbbbbb'));
+			}
+		} finally { registry.dispose(); }
+	});
+	test('incremental C/C++ matches one-pass editor tokens across unfinished lines and replacements', async () => {
+		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
+		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
+		try {
+			for (const language of ['source.c', 'source.cpp']) {
+				const grammar = (await registry.loadGrammar(language))!;
+				const colors = registry.getColorMap();
+				const tokenizer = new IncrementalSyntax(grammar, colors);
+				const code = '#define VALUE \\\n1\n/* comment\nstill comment */\nint value = 42;\nconst char* s = "hello";\n';
+				for (let length = 1; length <= code.length; length += 3) {
+					const text = code.slice(0, length);
+					assert.deepStrictEqual(tokenizer.update(text), new IncrementalSyntax(grammar, colors).update(text));
+				}
+				const complete = tokenizer.update(code);
+				assert.equal(complete.lines.map(line => line.map(token => token.content).join('')).join('\n'), code);
+				const continued = tokenizer.update(code + 'value++;');
+				assert.strictEqual(continued.lines[0], complete.lines[0], 'Unchanged lines retain their token objects');
+				assert.deepStrictEqual(tokenizer.update('int other;'), new IncrementalSyntax(grammar, colors).update('int other;'));
+				assert.ok(complete.lines.flat().some(token => token.content.includes('42') && token.color.toLowerCase() === '#c678dd'), 'Numbers use the editor One Monokai token rule');
+			}
+			const grammar = (await registry.loadGrammar('source.cpp'))!;
+			const raw = 'auto s = R"tag(first\nsecond)tag";\n';
+			const incremental = new IncrementalSyntax(grammar, registry.getColorMap());
+			incremental.update(raw.slice(0, 22));
+			assert.deepStrictEqual(incremental.update(raw), new IncrementalSyntax(grammar, registry.getColorMap()).update(raw));
+		} finally { registry.dispose(); }
+	});
+});
 
 suite('Beacon workspace history', () => {
 	const answer: Generate = async function* () { yield { type: 'reasoning', text: 'short internal trace' }; yield { type: 'text', text: 'answer' }; };

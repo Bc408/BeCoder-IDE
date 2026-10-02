@@ -12,13 +12,15 @@ fs.mkdirSync(output, { recursive: true });
 const server = createServer((request, response) => {
 	if (request.url === '/' || request.url === '/english' || request.url === '/configuration') {
 		response.setHeader('Content-Type', 'text/html');
-		response.end(`<!doctype html><html lang="${request.url === '/english' ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><link rel="stylesheet" href="/beacon.css"></head><body class="vscode-dark" data-surface="${request.url === '/configuration' ? 'configuration' : 'chat'}"><div id="root"></div><script src="/beacon.js"></script></body></html>`);
+		response.end(`<!doctype html><html lang="${request.url === '/english' ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-beacon-test' 'wasm-unsafe-eval'; worker-src blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;"><link rel="stylesheet" href="/beacon.css"></head><body class="vscode-dark" data-surface="${request.url === '/configuration' ? 'configuration' : 'chat'}"><div id="root"></div><script nonce="beacon-test" src="/beacon.js"></script></body></html>`);
 		return;
 	}
 	const file = path.resolve(root, 'dist', '.' + request.url);
 	if (!file.startsWith(path.join(root, 'dist') + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { response.writeHead(404).end(); return; }
 	response.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'application/octet-stream');
-	response.end(fs.readFileSync(file));
+	// Model the real Webview boundary: resource fetches from blob workers cannot
+	// resolve a Webview owner. Assets must be loaded by the window and transferred.
+	response.end(file.endsWith('syntax-worker.js') ? `globalThis.fetch = () => { throw new Error('worker-resource-fetch-forbidden'); };\n${fs.readFileSync(file, 'utf8')}` : fs.readFileSync(file));
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true });
@@ -63,6 +65,19 @@ try {
 	assert.equal(await page.locator('.katex').count(), 4);
 	const top = await page.locator('.code-line').evaluateAll(lines => lines.map(line => line.getBoundingClientRect().top));
 	assert.ok(top.at(-1) > top[0] + 40, 'Code lines must remain separate');
+	for (const [fontSize, lineHeight] of [[14, 19], [18, 27]]) {
+		const metrics = await page.locator('.code-block pre code').evaluate((code, { fontSize, lineHeight }) => {
+			document.documentElement.style.setProperty('--vscode-editor-font-size', `${fontSize}px`);
+			document.documentElement.style.setProperty('--vscode-editor-line-height', `${lineHeight}px`);
+			const style = getComputedStyle(code);
+			return { fontSize: style.fontSize, lineHeight: style.lineHeight };
+		}, { fontSize, lineHeight });
+		assert.deepStrictEqual(metrics, { fontSize: `${fontSize}px`, lineHeight: `${lineHeight}px` });
+	}
+	await page.evaluate(() => {
+		document.documentElement.style.removeProperty('--vscode-editor-font-size');
+		document.documentElement.style.removeProperty('--vscode-editor-line-height');
+	});
 	await page.getByRole('button', { name: '复制代码', exact: true }).click();
 	// Windows normalizes text clipboard line endings to CRLF.
 	assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n'), code + '\n');
@@ -165,6 +180,14 @@ try {
 		return highlightedDuringStream;
 	});
 	assert.ok(continuousHighlight, 'Syntax coloring progresses while deltas continuously arrive, before the fence closes');
+	await publishAnswer('```c\nint value = 42;\n/* first\nsecond */\n```', '', 'complete', 1000);
+	await page.waitForFunction(() => document.querySelector('.becoder-syntax pre code')?.textContent === 'int value = 42;\n/* first\nsecond */\n');
+	assert.equal(await page.locator('.code-line > span').filter({ hasText: '42' }).evaluate(element => getComputedStyle(element).color), 'rgb(198, 120, 221)', 'C numeric tokens use the default editor theme');
+	assert.equal(await page.locator('.code-line > span').filter({ hasText: 'second' }).evaluate(element => getComputedStyle(element).color), 'rgb(103, 111, 125)', 'C multi-line comments carry the prior line state');
+	await page.screenshot({ path: path.join(output, 'textmate-code-dark.png') });
+	await publishAnswer('```cpp\nint replacement = 7;\n```', '', 'complete', 1000);
+	await page.waitForFunction(() => document.querySelector('.becoder-syntax pre code')?.textContent === 'int replacement = 7;\n');
+	assert.ok(!(await page.locator('.code-block pre code').textContent()).includes('item5'), 'Replaced code does not retain stale worker tokens');
 	await publishAnswer('```unknown-language\n<plain>&code\n```', '', 'complete', 1000);
 	await page.waitForFunction(() => document.querySelector('.code-block pre code')?.textContent === '<plain>&code\n');
 	await publishAnswer('推导实时更新：$x');

@@ -4,10 +4,10 @@
  * See UPSTREAM.md and licenses/ai-elements.txt. BeCoder replaces styling and
  * controls for its Webview and omits branches, downloads and Mermaid.
  */
-import { Children, createContext, isValidElement, memo, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { Children, createContext, isValidElement, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -17,15 +17,55 @@ import { normalizeMath } from './math';
 import { Icon } from './Icon';
 
 const remarkPlugins = [remarkGfm, remarkMath, remarkBreaks];
-const rehypePlugins: NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']> = [[rehypeKatex, { throwOnError: false }], rehypeStreamingText];
+const rehypePlugins: NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']> = [rehypeMathExpressions, rehypeStreamingText];
 const StreamingContext = createContext(false);
 const ReducedMotionContext = createContext(false);
+
+/** Keep raw math in stable React slots instead of creating KaTeX error nodes. */
+function rehypeMathExpressions() {
+	return (tree: Root) => {
+		const visit = (parent: Root | Element) => {
+			parent.children = parent.children.map(child => {
+				if (child.type !== 'element') { return child; }
+				const expression = child.tagName === 'pre' ? child.children.find(node => node.type === 'element' && node.tagName === 'code') : child;
+				if (expression?.type === 'element') {
+					const classes = expression.properties.className as string[] | undefined;
+					if (classes?.some(name => ['language-math', 'math-inline', 'math-display'].includes(name))) {
+						const display = child.tagName === 'pre' || classes.includes('math-display');
+						return { type: 'element', tagName: 'span', properties: { className: ['math-formula', display ? 'math-display' : 'math-inline'] }, children: expression.children } as Element;
+					}
+				}
+				visit(child);
+				return child;
+			});
+		};
+		visit(tree);
+	};
+}
+
+function MathFormula({ expression, display }: { expression: string; display: boolean }) {
+	const streaming = useContext(StreamingContext);
+	const previous = useRef<{ expression: string; display: boolean; html: string } | undefined>(undefined);
+	const rendered = useMemo(() => {
+		try { return katex.renderToString(expression, { displayMode: display, throwOnError: true, strict: 'ignore', trust: false }); }
+		catch { return undefined; }
+	}, [expression, display]);
+	useLayoutEffect(() => {
+		if (rendered) { previous.current = { expression, display, html: rendered }; }
+	}, [expression, display, rendered]);
+	// A growing command, group or environment can temporarily be unparseable.
+	// Retain only an append-compatible result from this formula, never another one.
+	const retained = streaming && previous.current?.display === display && expression.startsWith(previous.current.expression) ? previous.current.html : undefined;
+	const html = rendered ?? retained;
+	return html ? <span className="math-formula" data-math-pending={!rendered || undefined} dangerouslySetInnerHTML={{ __html: html }} />
+		: <span className={`math-pending${display ? ' is-display' : ''}`}>{expression}</span>;
+}
 
 /** Keep generated formula markup and highlighted code outside prose animation. */
 function rehypeStreamingText() {
 	return (tree: Root) => {
 		const visit = (parent: Root | Element) => {
-			if (parent.type === 'element' && (['pre', 'code'].includes(parent.tagName) || (parent.properties.className as string[] | undefined)?.some(name => name.startsWith('katex')))) { return; }
+			if (parent.type === 'element' && (['pre', 'code'].includes(parent.tagName) || (parent.properties.className as string[] | undefined)?.some(name => name.startsWith('katex') || name === 'math-formula'))) { return; }
 			parent.children = parent.children.map(child => {
 				if (child.type === 'element') { visit(child); }
 				if (child.type !== 'text' || !child.value.trim()) { return child; }
@@ -57,6 +97,7 @@ function StreamingSpan({ children, node: _node, ...props }: ComponentProps<'span
 }
 
 function MarkdownSpan({ children, node: _node, ...props }: ComponentProps<'span'> & { node?: unknown }) {
+	if (props.className?.split(' ').includes('math-formula')) { return <MathFormula expression={Children.toArray(children).join('')} display={props.className.includes('math-display')} />; }
 	return 'data-stream-text' in props ? <StreamingSpan {...props}>{children}</StreamingSpan> : <span {...props}>{children}</span>;
 }
 
@@ -99,6 +140,12 @@ function useStreamingText(text: string, streaming: boolean, reduced: boolean) {
 			let end = Math.floor(cursor.current);
 			// Never paint half of a UTF-16 surrogate pair.
 			if (end > 0 && end < source.length && /[\uD800-\uDBFF]/.test(source[end - 1])) { end--; }
+			// Reveal fence lines together. Painting one or two closing markers as
+			// code briefly adds a row which disappears when the fence completes.
+			const lineStart = end > 0 ? source.lastIndexOf('\n', end - 1) + 1 : 0;
+			const lineEnd = source.indexOf('\n', lineStart);
+			const line = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd);
+			if ((/^ {0,3}(?:`{3,}|~{3,})/.test(line) || /^ {0,3}(?:`{1,2}|~{1,2})$/.test(line)) && (lineEnd < 0 || end <= lineEnd)) { end = lineStart; }
 			setVisible(source.slice(0, end));
 			last = Math.max(last, now);
 			if (cursor.current < source.length) { frame.current = requestAnimationFrame(paint); }

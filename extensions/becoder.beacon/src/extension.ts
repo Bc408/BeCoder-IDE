@@ -60,7 +60,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		webview.options = { enableScripts: true, localResourceRoots: [dist] };
 		const nonce = randomBytes(18).toString('base64');
 		const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(dist, name));
-		return `<!DOCTYPE html><html lang="${vscode.env.language.startsWith('zh') ? 'zh-CN' : 'en'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:;"><link rel="stylesheet" href="${asset('beacon.css')}"></head><body data-surface="${surface}"><div id="root"></div><script nonce="${nonce}" src="${asset('beacon.js')}"></script></body></html>`;
+		return `<!DOCTYPE html><html lang="${vscode.env.language.startsWith('zh') ? 'zh-CN' : 'en'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:;"><link rel="stylesheet" href="${asset('beacon.css')}"></head><body data-surface="${surface}"><div id="root"></div><script nonce="${nonce}" src="${asset('beacon.js')}"></script></body></html>`;
 	}
 	function receive(message: unknown): void {
 		if (!message || typeof message !== 'object') { return; }

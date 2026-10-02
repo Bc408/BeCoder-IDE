@@ -21,8 +21,12 @@ The text shimmer and typing indicator CSS in `webview/beacon.css` adapt
 The original license is in `licenses/captain-who.txt`; modifications map colors to VS Code
 theme tokens and keep Beacon's control placement. `ResponseActivity.tsx` implements the observed
 activity lifecycle. `elements.tsx` uses `react-markdown`, `remark-gfm`, `remark-math`,
-`remark-breaks` and `rehype-katex` for the rendering pipeline. `CodeBlock.tsx` adapts Captain Who's
+`remark-breaks` and KaTeX for the rendering pipeline. Formula slots retain their last valid
+KaTeX result while an appended command or group is incomplete; invalid final expressions
+remain ordinary readable text. `CodeBlock.tsx` adapts Captain Who's
 code-card layout, wrapping/copy controls and stable streaming-highlight behavior while using
-Beacon's existing Shiki-backed highlighter. No Electron/Rust services are imported.
+Beacon's shared incremental TextMate Worker. No Electron/Rust services are imported.
 
 Some npm packages omit their repository license file. The notice generator uses the Vercel AI repository Apache-2.0 license for `@ai-sdk/provider-utils`, and `licenses/remark-math.txt` for `remark-math` / `rehype-katex` (source: https://github.com/remarkjs/remark-math/blob/main/license, retrieved 2026-09-23).
+
+All code languages share the incremental renderer using pinned root `vscode-textmate`, `vscode-oniguruma` and its WASM, with the default token rules under `extensions/becoder.one-monokai`. Build-time language discovery prefers the repository's bundled grammar contributions (including Better C++ Syntax, MagicPython and embedded/injection grammars); other previously supported languages use pinned `@shikijs/langs` assets. The old Shiki rendering engine, timers and whole-block highlight cache are removed from the Webview. Built-in grammar upstream notices, additional LaTeX licenses, @shikijs/langs and Better C++ Syntax/One Monokai licenses ship in ThirdPartyNotices. No semantic or user-theme customization is applied.

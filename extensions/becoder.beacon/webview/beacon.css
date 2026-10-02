@@ -83,20 +83,27 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .markdown pre code { background: transparent; padding: 0; font-size: 13px; }
 .code-block { max-width: 100%; margin: .9em 0; overflow: hidden; color: var(--vscode-foreground); background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background)); border: 1px solid var(--border); border-radius: 10px; }
 .code-toolbar { display: flex; min-height: 36px; align-items: center; justify-content: space-between; padding: 0 8px 0 14px; color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--border); font-size: 11px; }
-.code-toolbar > span { min-width: 0; overflow: hidden; font-family: var(--vscode-editor-font-family); text-overflow: ellipsis; white-space: nowrap; }
+.code-toolbar > span { min-width: 0; overflow: hidden; font-family: var(--vscode-font-family); text-overflow: ellipsis; white-space: nowrap; }
+.code-language { display: flex; align-items: center; gap: 10px; }
+.code-language > svg { flex: 0 0 auto; width: 20px; height: 20px; }
+.code-language > span { overflow: hidden; text-overflow: ellipsis; }
 .code-actions { display: flex; flex: 0 0 auto; gap: 2px; align-items: center; }
-.code-toolbar button { display: inline-flex; width: 28px; height: 28px; padding: 0; align-items: center; justify-content: center; color: var(--vscode-descriptionForeground); border-radius: 5px; }
+.code-toolbar button { display: inline-flex; width: 36px; height: 36px; padding: 0; align-items: center; justify-content: center; color: var(--chat-title); border-radius: 50%; }
 .code-toolbar button:hover, .code-toolbar button[aria-pressed="true"] { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
 .code-toolbar button:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
-.code-toolbar button svg { width: 15px; height: 15px; }
+.code-toolbar button svg { width: 18px; height: 18px; }
+.code-toolbar .code-wrap svg { width: 16px; height: 16px; }
 .code-scroller { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .markdown .code-block pre { width: max-content; min-width: 100%; max-width: none; padding: 14px 16px; margin: 0; overflow: visible; background: transparent; border: 0; border-radius: 0; }
 .markdown .code-block pre code { overflow-wrap: normal; white-space: pre; word-break: normal; }
 .markdown .code-block.is-wrapped pre { width: 100%; max-width: 100%; }
 .markdown .code-block.is-wrapped pre code { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .code-line { background: transparent; }
+.becoder-syntax .code-scroller { color: #bbb; }
 .markdown .inline-code { font-size: .92em; }
 .markdown .katex-display { margin: 18px 0; }
+.math-pending { color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.math-pending.is-display { display: block; margin: 18px 0; text-align: center; }
 .scroll-bottom { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; left: calc(50% - 14px); padding: 4px; }
 footer { padding: 8px 10px 10px; width: 100%; max-width: 840px; margin: 0 auto; }
 .composer { border-radius: 14px; padding: 12px 13px 10px; border-color: transparent; }
@@ -283,10 +290,18 @@ textarea { min-height: 40px; font-size: 14px; }
 .markdown h1 { font-size: 19px; }
 .markdown h2 { font-size: 17px; }
 .markdown h3 { font-size: 15px; }
-.code-block { border-radius: 20px; border: 0; }
-.code-toolbar { min-height: 48px; padding: 0 12px 0 16px; background: color-mix(in srgb, var(--vscode-foreground) 2%, var(--vscode-textCodeBlock-background, var(--vscode-editor-background))); border-bottom: 0; font-size: 12px; }
-.markdown .code-block pre { padding: 0 16px 14px; line-height: 1.6; }
-.markdown .code-block pre code { font-size: 12px; }
+.code-block { border-radius: 20px; border: 0; overflow: visible; }
+.code-toolbar { min-height: 48px; padding: 0 8px 0 16px; background: color-mix(in srgb, var(--vscode-foreground) 2%, var(--vscode-textCodeBlock-background, var(--vscode-editor-background))); border-bottom: 0; border-radius: 20px 20px 0 0; color: var(--chat-title); font-size: 12px; font-weight: 600; }
+.code-scroller { border-radius: 0 0 20px 20px; }
+.code-toolbar button { position: relative; }
+.code-toolbar button::after { content: attr(aria-label); position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 2; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--chat-title) 8%, transparent); border-radius: 10px; color: var(--chat-title); background: var(--surface); box-shadow: 0 2px 8px #0002; font-family: var(--vscode-font-family); font-size: 12px; font-weight: 400; line-height: 18px; white-space: nowrap; pointer-events: none; opacity: 0; }
+.code-toolbar button:hover::after, .code-toolbar button:focus-visible::after { opacity: 1; }
+.vscode-dark .code-block { background: #181a1e; }
+.vscode-dark .code-toolbar { background: linear-gradient(180deg, #1c1e23, #1c1f24); }
+.vscode-dark .code-toolbar button:hover, .vscode-dark .code-toolbar button[aria-pressed="true"] { background: #282c34; }
+.vscode-dark .code-toolbar button::after { background: #1c1e23; }
+.markdown .code-block pre { padding: 0 16px 8px; font-size: var(--vscode-editor-font-size, 14px); line-height: var(--vscode-editor-line-height, 19px); }
+.markdown .code-block pre code { font-size: inherit; }
 .thought { margin-bottom: 18px; padding-bottom: 6px; border-bottom-color: color-mix(in srgb, var(--vscode-foreground) 9%, transparent); font-size: 13px; }
 .thought-label, .reasoning-details > summary { min-height: 24px; line-height: 24px; }
 .reasoning-details > summary { display: flex; width: fit-content; padding: 0; }

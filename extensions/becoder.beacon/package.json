@@ -196,7 +196,6 @@
 	"devDependencies": {
 		"@ai-sdk/deepseek": "3.0.50",
 		"@ai-sdk/openai-compatible": "3.0.55",
-		"@streamdown/code": "1.1.1",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
 		"ai": "7.0.111",
@@ -209,6 +208,7 @@
 		"remark-breaks": "4.0.0",
 		"remark-gfm": "4.0.1",
 		"remark-math": "6.0.0",
+		"shiki": "3.23.0",
 		"use-stick-to-bottom": "1.1.6"
 	},
 	"repository": {

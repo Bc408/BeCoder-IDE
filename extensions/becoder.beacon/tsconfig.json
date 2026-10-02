@@ -23,6 +23,7 @@
 	},
 	"include": [
 		"src/**/*.ts",
+		"webview/**/*.ts",
 		"webview/**/*.tsx",
 		"test/**/*.ts",
 		"../../src/vscode-dts/vscode.d.ts"

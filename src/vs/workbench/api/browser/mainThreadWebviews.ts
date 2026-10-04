@@ -56,6 +56,12 @@ export class MainThreadWebviews extends Disposable implements extHostProtocol.Ma
 		this.tryGetWebview(handle)?.setHtml(value);
 	}
 
+	public onDidDropResources(handle: extHostProtocol.WebviewHandle, resources: URI[], source: 'internal' | 'external'): void {
+		if (this._webviews.has(handle)) {
+			this._proxy.$onDidDropResources(handle, resources, source);
+		}
+	}
+
 	public $setOptions(handle: extHostProtocol.WebviewHandle, options: extHostProtocol.IWebviewContentOptions): void {
 		const webview = this.tryGetWebview(handle);
 		if (webview) {

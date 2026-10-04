@@ -4,14 +4,27 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ModelMessage } from 'ai';
+import type { FileInput, FileOutput, FileTool } from './fileTools';
+import { replayProtocol, type ProtocolTurn } from './protocol';
+import type { WebSource, WebError } from './webTools';
+import { attachmentParts, validAttachments, type Attachment } from './attachments';
 
-export interface WorkspaceReadResult {
+export interface FileResult {
 	id: string;
 	path: string;
-	output: { ok: boolean; path: string; contents?: string; error?: string };
+	input: FileInput;
+	output: FileOutput;
+}
+
+export function fileModelOutput(output: FileOutput) {
+	if (output.ok && output.kind === 'image' && output.contents && output.mediaType) {
+		return { type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify({ ...output, contents: undefined }) }, { type: 'file' as const, mediaType: output.mediaType, data: { type: 'data' as const, data: output.contents } }] };
+	}
+	return { type: 'json' as const, value: { ...output } };
 }
 
 export interface Message {
+	attachments?: Attachment[];
 	id: number;
 	role: 'user' | 'assistant';
 	text: string;
@@ -21,19 +34,20 @@ export interface Message {
 	createdAt?: number;
 	durationMs?: number;
 	activeStartedAt?: number;
-	toolResults?: WorkspaceReadResult[];
+	toolResults?: FileResult[];
+	protocol?: ProtocolTurn[];
+	sources?: WebSource[];
 	model?: string;
 	provider?: string;
 }
 
 export interface ToolActivity {
 	id: string;
-	type: 'read-workspace-file';
+	type: 'read' | 'list' | 'find' | 'search' | 'web-search' | 'web-fetch';
 	path: string;
 	status: 'running' | 'complete' | 'error' | 'stopped';
+	error?: WebError;
 }
-
-export type WorkspaceFileReader = (path: string, signal: AbortSignal) => Promise<{ path: string; content: string }>;
 
 export interface Snapshot {
 	messages: Message[];
@@ -42,10 +56,11 @@ export interface Snapshot {
 	stopping?: boolean;
 }
 
-export type Delta = { type: 'text'; text: string } | { type: 'reasoning'; text: string } | { type: 'activity'; activity: ToolActivity } | { type: 'tool-result'; result: WorkspaceReadResult };
-export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, readWorkspaceFile: WorkspaceFileReader) => AsyncIterable<Delta>;
+export type Delta = { type: 'text'; text: string; turn?: ProtocolTurn } | { type: 'reasoning'; text: string; turn?: ProtocolTurn } | { type: 'activity'; activity: ToolActivity } | { type: 'tool-result'; result: FileResult } | { type: 'web-result'; sources: WebSource[] } | { type: 'protocol'; turn: ProtocolTurn };
+export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, files: FileTool) => AsyncIterable<Delta>;
+type ResponseSource = { model: string; provider: string; baseURL?: string };
 
-const unavailableWorkspaceFileReader: WorkspaceFileReader = async () => { throw new Error('workspace-file-unavailable'); };
+const unavailableFileTool: FileTool = async input => ({ ok: false, path: input.path, error: 'Local file access is disabled.' });
 
 /** The extension host owns request retirement, partial answers and durable tool context. */
 export class ChatSession {
@@ -58,59 +73,68 @@ export class ChatSession {
 	constructor(private readonly changed: (snapshot: Snapshot) => void, private readonly describeError: (error: unknown) => string) { }
 
 	get snapshot(): Snapshot {
-		return { messages: structuredClone(this.messages), busy: !!this.controller, error: this.error, ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
+		const messages = this.messages.map(message => {
+			const { attachments, ...content } = message;
+			// Attachment strings are immutable. Copy their records without copying
+			// megabytes of image bytes on each streaming update.
+			return { ...structuredClone(content), ...(attachments ? { attachments: attachments.map(item => ({ ...item })) } : {}) };
+		});
+		return { messages, busy: !!this.controller, error: this.error, ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
 	}
 
 	private publish(): void {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
+	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = []): Promise<void> {
 		if (this.disposed || this.controller) { return; }
 		text = text.trim();
-		if (!text || text.length > 32000) { return; }
-		this.messages.push({ id: ++this.sequence, role: 'user', text, activities: [], status: 'complete', createdAt: Date.now() });
-		await this.respond(generate, readWorkspaceFile, source);
+		if ((!text && !attachments.length) || text.length > 32000 || !validAttachments(attachments)) { return; }
+		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
+		await this.respond(generate, files, source);
 	}
 
-	async edit(id: number, text: string, generate: Generate, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
+	async edit(id: number, text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool): Promise<void> {
 		text = text.trim();
 		const index = this.messages.findIndex(message => message.id === id && message.role === 'user');
-		if (this.disposed || this.controller || index < 0 || !text || text.length > 32000) { return; }
+		if (this.disposed || this.controller || index < 0 || (!text && !this.messages[index].attachments?.length) || text.length > 32000) { return; }
 		this.messages[index] = { ...this.messages[index], text, createdAt: Date.now() };
 		this.messages.splice(index + 1);
-		await this.respond(generate, readWorkspaceFile, source);
+		await this.respond(generate, files, source);
 	}
 
-	async regenerate(id: number, generate: Generate, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
+	async regenerate(id: number, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool): Promise<void> {
 		const index = this.messages.findIndex(message => message.id === id && message.role === 'assistant');
 		if (this.disposed || this.controller || index < 1 || this.messages[index - 1].role !== 'user') { return; }
 		this.messages.splice(index);
-		await this.respond(generate, readWorkspaceFile, source);
+		await this.respond(generate, files, source);
 	}
 
-	async resume(id: number, generate: Generate, source?: { model: string; provider: string }, readWorkspaceFile: WorkspaceFileReader = unavailableWorkspaceFileReader): Promise<void> {
+	async resume(id: number, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool): Promise<void> {
 		const reply = this.messages.at(-1);
 		if (this.disposed || this.controller || reply?.id !== id || reply.role !== 'assistant' || reply.status !== 'stopped') { return; }
-		await this.respond(generate, readWorkspaceFile, source, reply);
+		await this.respond(generate, files, source, reply);
 	}
 
-	private modelContext(): ModelMessage[] {
+	private modelContext(source?: ResponseSource): ModelMessage[] {
 		const context: ModelMessage[] = [];
 		for (const message of this.messages) {
 			if (message.status !== 'complete' && message.status !== 'stopped') { continue; }
-			for (const [index, result] of (message.toolResults ?? []).entries()) {
-				const toolCallId = `beacon_${message.id}_${index}`;
-				context.push({ role: 'assistant', content: [{ type: 'tool-call', toolCallId, toolName: 'readWorkspaceFile', input: { path: result.path } }] });
-				context.push({ role: 'tool', content: [{ type: 'tool-result', toolCallId, toolName: 'readWorkspaceFile', output: { type: 'json', value: result.output } }] });
+			if (message.protocol?.length) {
+				for (const turn of message.protocol) { context.push(...replayProtocol(turn, source)); }
+				continue;
+			}
+			if (message.role === 'user' && message.attachments?.length) {
+				context.push({ role: 'user', content: [...(message.text ? [{ type: 'text' as const, text: message.text }] : []), ...attachmentParts(message.attachments)] });
+				continue;
 			}
 			if (message.text) { context.push({ role: message.role, content: message.text }); }
 		}
 		return context;
 	}
 
-	private async respond(generate: Generate, readWorkspaceFile: WorkspaceFileReader, source?: { model: string; provider: string }, resumedReply?: Message): Promise<void> {
-		const context = this.modelContext();
+	private async respond(generate: Generate, files: FileTool, source?: ResponseSource, resumedReply?: Message): Promise<void> {
+		const context = this.modelContext(source);
 		if (resumedReply) {
 			context.push({ role: 'user', content: 'The user paused the previous answer and explicitly asked to continue it. Continue the unfinished answer using the saved conversation and completed tool results. Your new text will be appended directly to the existing answer. Continue exactly where it ends, including any unfinished sentence, code fence or formula. Do not repeat the existing answer or add a new introduction. If no answer text exists, begin answering the original request.' });
 		}
@@ -118,6 +142,7 @@ export class ChatSession {
 		const reply: Message = resumedReply ?? { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', createdAt: startedAt, ...source };
 		const previousDuration = reply.durationMs ?? 0;
 		const previousText = reply.text;
+		const protocolOffset = reply.protocol?.length ?? 0;
 		const activityOffset = reply.activities.length;
 		const activityId = (id: string) => activityOffset ? `${id}:${activityOffset}` : id;
 		reply.status = 'streaming';
@@ -129,14 +154,24 @@ export class ChatSession {
 		this.error = '';
 		this.publish();
 		try {
-			for await (const delta of generate(context, controller.signal, readWorkspaceFile)) {
+			for await (const delta of generate(context, controller.signal, files)) {
 				if (controller.signal.aborted) { break; }
+				if ('turn' in delta && delta.turn) {
+					(reply.protocol ??= [])[protocolOffset] = structuredClone({ ...delta.turn, messages: [...(resumedReply ? [context.at(-1)!] : []), ...delta.turn.messages] });
+				}
+				if (delta.type === 'protocol') { this.publish(); continue; }
 				if (delta.type === 'text') {
 					reply.text += delta.text;
 				} else if (delta.type === 'reasoning') {
 					reply.reasoning = (reply.reasoning ?? '') + delta.text;
 				} else if (delta.type === 'tool-result') {
 					(reply.toolResults ??= []).push({ ...delta.result, id: activityId(delta.result.id), output: { ...delta.result.output } });
+				} else if (delta.type === 'web-result') {
+					const sources = new Map((reply.sources ?? []).map(source => [source.id, source]));
+					for (const source of delta.sources) {
+						if (sources.get(source.id)?.kind !== 'page' || source.kind === 'page') { sources.set(source.id, structuredClone(source)); }
+					}
+					reply.sources = [...sources.values()];
 				} else {
 					const activity = { ...delta.activity, id: activityId(delta.activity.id) };
 					const index = reply.activities.findIndex(item => item.id === activity.id);

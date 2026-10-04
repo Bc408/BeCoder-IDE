@@ -81,7 +81,7 @@ suite('Beacon default TextMate syntax', () => {
 	});
 });
 
-suite('Beacon workspace history', () => {
+suite('Beacon shared history', () => {
 	const answer: Generate = async function* () { yield { type: 'reasoning', text: 'short internal trace' }; yield { type: 'text', text: 'answer' }; };
 	test('new chats retain history; reload restores the active conversation and isolated model context', async () => {
 		let saved: HistoryData | undefined;
@@ -103,8 +103,8 @@ suite('Beacon workspace history', () => {
 			assert.deepStrictEqual(messages.map(item => item.content), ['first question', 'answer', 'followup']);
 			yield { type: 'text', text: 'followup answer' };
 		});
-		const otherWorkspace = new ChatHistory(undefined, async () => {}, () => {}, () => 'error');
-		assert.equal(otherWorkspace.snapshot.history.length, 0);
+		const otherWorkspace = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		assert.equal(otherWorkspace.snapshot.history.length, 2);
 		await Promise.all([history.dispose(), reopened.dispose(), otherWorkspace.dispose()]);
 	});
 	test('busy sessions cannot switch, rename or delete; restored interrupted output is paused', async () => {
@@ -201,13 +201,13 @@ suite('Beacon math delimiters', () => {
 });
 
 suite('Beacon window session', () => {
-	test('installed AI SDK/provider sends model parameters and read tool and parses DeepSeek SSE', async () => {
+	test('installed AI SDK/provider sends model parameters and read tool with web disabled and parses DeepSeek SSE', async () => {
 		const fetchMock: typeof fetch = async (url, options) => {
 			assert.equal(String(url), 'https://api.deepseek.com/chat/completions');
 			const body = JSON.parse(String(options?.body));
 			assert.equal(body.model, 'deepseek-chat');
 			assert.deepStrictEqual(body.messages, [{ role: 'user', content: 'hello' }]);
-			assert.deepStrictEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['readWorkspaceFile']);
+			assert.deepStrictEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['inspectFiles']);
 			assert.equal(body.temperature, 0.7);
 			assert.equal(body.top_p, 0.9);
 			assert.equal(body.max_tokens, 4096);
@@ -215,7 +215,7 @@ suite('Beacon window session', () => {
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
 		const session = new ChatSession(() => { }, () => 'provider error');
-		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', parameters: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 }, apiKey: 'test-key' }), fetchMock));
+		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', parameters: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 }, apiKey: 'test-key' }), fetchMock, 'workspace', [], false));
 		assert.equal(session.snapshot.error, '');
 		assert.equal(session.snapshot.messages[1].text, 'hello back');
 		assert.equal(session.snapshot.messages[1].reasoning, 'thinking');
@@ -229,8 +229,8 @@ suite('Beacon window session', () => {
 			requestCount++;
 			if (requestCount === 1) {
 				const chunks = [
-					{ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'readWorkspaceFile', arguments: '' } }] },
-					{ tool_calls: [{ index: 0, function: { arguments: '{"path":"src/main.ts"}' } }] },
+					{ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'inspectFiles', arguments: '' } }] },
+					{ tool_calls: [{ index: 0, function: { arguments: '{"operation":"read","path":"src/main.ts"}' } }] },
 					{}
 				].map((delta, index) => 'data: ' + JSON.stringify({ id: 'tool-test', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: index === 2 ? 'tool_calls' : null }] }) + '\n\n');
 				return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
@@ -239,12 +239,12 @@ suite('Beacon window session', () => {
 			const chunks = [{ content: 'Here is the summary.' }, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'tool-test', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: index === 1 ? 'stop' : null }] }) + '\n\n');
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
-		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', parameters: {}, apiKey: 'test-key' }), fetchMock);
-		await session.send('Read src/main.ts', generate, undefined, async path => ({ path, content: contents }));
+		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', parameters: {}, apiKey: 'test-key' }), fetchMock, 'workspace');
+		await session.send('Read src/main.ts', generate, undefined, async input => ({ ok: true, path: input.path, contents }));
 		assert.equal(requestCount, 2);
 		assert.equal(session.snapshot.messages[1].text, 'Here is the summary.');
-		assert.deepStrictEqual(session.snapshot.messages[1].activities, [{ id: 'call-1', type: 'read-workspace-file', path: 'src/main.ts', status: 'complete' }]);
-		assert.deepStrictEqual(session.snapshot.messages[1].toolResults, [{ id: 'call-1', path: 'src/main.ts', output: { ok: true, path: 'src/main.ts', contents } }]);
+		assert.deepStrictEqual(session.snapshot.messages[1].activities, [{ id: 'call-1', type: 'read', path: 'src/main.ts', status: 'complete' }]);
+		assert.deepStrictEqual(session.snapshot.messages[1].toolResults, [{ id: 'call-1', path: 'src/main.ts', input: { operation: 'read', path: 'src/main.ts' }, output: { ok: true, path: 'src/main.ts', contents } }]);
 		await session.send('What did that file contain?', generate);
 		assert.equal(requestCount, 3);
 	});
@@ -260,13 +260,13 @@ suite('Beacon window session', () => {
 	test('workspace tool activity and reasoning are snapshotted separately from answer text', async () => {
 		const session = new ChatSession(() => { }, () => 'error');
 		await session.send('read package.json', async function* () {
-			yield { type: 'activity', activity: { id: 'tool-1', type: 'read-workspace-file', path: 'package.json', status: 'running' } };
-			yield { type: 'activity', activity: { id: 'tool-1', type: 'read-workspace-file', path: 'package.json', status: 'complete' } };
+			yield { type: 'activity', activity: { id: 'tool-1', type: 'read', path: 'package.json', status: 'running' } };
+			yield { type: 'activity', activity: { id: 'tool-1', type: 'read', path: 'package.json', status: 'complete' } };
 			yield { type: 'reasoning', text: 'checking the file' };
 			yield { type: 'text', text: 'done' };
 		});
 		const snapshot = session.snapshot;
-		assert.deepStrictEqual(snapshot.messages[1].activities, [{ id: 'tool-1', type: 'read-workspace-file', path: 'package.json', status: 'complete' }]);
+		assert.deepStrictEqual(snapshot.messages[1].activities, [{ id: 'tool-1', type: 'read', path: 'package.json', status: 'complete' }]);
 		assert.equal(snapshot.messages[1].reasoning, 'checking the file');
 		snapshot.messages[1].activities[0].path = 'mutated';
 		assert.equal(session.snapshot.messages[1].activities[0].path, 'package.json');
@@ -364,14 +364,15 @@ suite('Beacon window session', () => {
 		});
 		assert.deepStrictEqual(restored.snapshot.messages.map(message => message.text), ['question', 'replacement']);
 	});
-	test('completed tool results survive pause and reload without replaying interrupted tools or reasoning', async () => {
+	test('completed protocol survives pause and reload without replaying interrupted tools', async () => {
 		let saved: HistoryData | undefined;
 		const history = new ChatHistory(undefined, async data => { saved = data; }, () => {}, () => 'error');
 		await history.session.send('read file', async function* () {
-			yield { type: 'activity', activity: { id: 'call', type: 'read-workspace-file', path: 'main.cpp', status: 'complete' } };
-			yield { type: 'tool-result', result: { id: 'call', path: 'main.cpp', output: { ok: true, path: 'main.cpp', contents: 'int main() {}' } } };
-			yield { type: 'activity', activity: { id: 'unfinished', type: 'read-workspace-file', path: 'other.cpp', status: 'running' } };
+			yield { type: 'activity', activity: { id: 'call', type: 'read', path: 'main.cpp', status: 'complete' } };
+			yield { type: 'tool-result', result: { id: 'call', path: 'main.cpp', input: { operation: 'read', path: 'main.cpp' }, output: { ok: true, path: 'main.cpp', contents: 'int main() {}' } } };
+			yield { type: 'activity', activity: { id: 'unfinished', type: 'read', path: 'other.cpp', status: 'running' } };
 			yield { type: 'reasoning', text: 'private reasoning' };
+			yield { type: 'protocol', turn: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call', toolName: 'inspectFiles', input: { operation: 'read', path: 'main.cpp' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call', toolName: 'inspectFiles', output: { type: 'json', value: { ok: true, contents: 'int main() {}' } } }] }, { role: 'assistant', content: 'This file' }] } };
 			yield { type: 'text', text: 'This file' };
 			history.session.stop();
 		});
@@ -383,7 +384,7 @@ suite('Beacon window session', () => {
 			assert.ok(JSON.stringify(messages).includes('int main() {}'));
 			assert.ok(!JSON.stringify(messages).includes('other.cpp'));
 			assert.ok(!JSON.stringify(messages).includes('private reasoning'));
-			yield { type: 'activity', activity: { id: 'call', type: 'read-workspace-file', path: 'new.cpp', status: 'complete' } };
+			yield { type: 'activity', activity: { id: 'call', type: 'read', path: 'new.cpp', status: 'complete' } };
 			yield { type: 'text', text: ' is C++.' };
 		});
 		assert.equal(restored.snapshot.messages[1].activities.length, 3, 'Continued tool IDs do not replace previous activities');
@@ -441,7 +442,7 @@ suite('Beacon provider connections', () => {
 				assert.equal(String(url), providers[provider].baseURL + '/models');
 				return Response.json({ data: [{ id: 'b' }, { id: 'a' }, { id: 'b' }] });
 			});
-			assert.deepStrictEqual(result, [{ id: 'a', provider }, { id: 'b', provider }]);
+			assert.deepStrictEqual(result.map(({ id, provider }) => ({ id, provider })), [{ id: 'a', provider }, { id: 'b', provider }]);
 			assert.equal(pages, provider === 'bailian' ? 2 : 1);
 		});
 		if (provider === 'deepseek') { continue; }

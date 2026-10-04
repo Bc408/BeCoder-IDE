@@ -40,9 +40,10 @@ export function ResponseActivity({ message }: { message: Message }) {
 			<div className="reasoning-content"><MessageResponse streaming={running}>{message.reasoning}</MessageResponse></div>
 		</details> : <div className="thought-label"><span className={running ? 'running-text' : undefined} role={running ? 'status' : undefined}>{label}</span></div>}
 		{message.activities.map(activity => <div className="thought-activity" data-status={activity.status} key={activity.id}>
-			<Icon name="file" />
+			<Icon name={activity.type.startsWith('web-') ? 'globe' : 'file'} />
 			<span className={activity.status === 'running' ? 'running-text' : undefined}>
-				{activity.status === 'running' ? (zh ? '正在读取' : 'Reading') : activity.status === 'complete' ? (zh ? '已读取' : 'Read') : activity.status === 'stopped' ? (zh ? '已停止' : 'Stopped') : (zh ? '读取失败' : 'Could not read')} <code>{activity.path || (zh ? '工作区文件' : 'workspace file')}</code>
+				{activity.status === 'running' ? (activity.type === 'web-search' ? (zh ? '正在搜索' : 'Searching') : activity.type === 'web-fetch' ? (zh ? '正在读取网页' : 'Reading page') : activity.type === 'read' ? (zh ? '正在读取' : 'Reading') : (zh ? '正在查找' : 'Inspecting')) : activity.status === 'complete' ? (activity.type === 'web-search' ? (zh ? '已搜索' : 'Searched') : activity.type === 'web-fetch' ? (zh ? '已读取网页' : 'Read page') : activity.type === 'read' ? (zh ? '已读取' : 'Read') : (zh ? '已查找' : 'Inspected')) : activity.status === 'stopped' ? (zh ? '已停止' : 'Stopped') : (zh ? '访问失败' : 'Could not access')} <code>{activity.path || (activity.type.startsWith('web-') ? (zh ? '网页' : 'web') : (zh ? '文件' : 'files'))}</code>
+				{activity.error && <small>{activity.error === 'rate-limit' ? (zh ? '搜索服务暂时限流，请稍后再试。' : 'Search service rate limited. Try again later.') : activity.error === 'timeout' ? (zh ? '联网查询超时。' : 'Web lookup timed out.') : activity.error === 'budget' ? (zh ? '已达本轮联网查询上限。' : 'Web lookup limit reached for this response.') : activity.error === 'invalid-input' ? (zh ? '请使用有效的查询或公开网页地址。' : 'Use a valid query or public webpage URL.') : (zh ? '联网查询未成功，请检查网络或稍后再试。' : 'Web lookup failed. Check your network or try again later.')}</small>}
 			</span>
 		</div>)}
 	</div>;

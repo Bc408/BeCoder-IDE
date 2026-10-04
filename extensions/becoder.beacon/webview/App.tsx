@@ -9,8 +9,12 @@ import type { Snapshot } from '../src/session';
 import type { HistoryItem } from '../src/history';
 import { Conversation, ConversationContent, ConversationScrollButton, MessageResponse } from './elements';
 import { Icon } from './Icon';
-import { Settings } from './Settings';
+import { capabilitySummary, Settings } from './Settings';
+import { resolveCapabilities } from '../src/models';
 import { ResponseActivity } from './ResponseActivity';
+import { Permissions } from './Permissions';
+import type { FilePermission } from '../src/fileTools';
+import type { Attachment } from '../src/attachments';
 import { providers, type ConnectionState } from '../src/connection';
 import 'katex/dist/katex.min.css';
 import './beacon.css';
@@ -20,7 +24,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean };
+type State = Snapshot & { attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -36,8 +40,27 @@ const formatTime = (value: number, now: number) => {
 	return date.toLocaleDateString(locale, { year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric', month: 'short', day: 'numeric' }) + ' ' + time;
 };
 
+function AttachmentCard({ item, remove, busy }: { item: Attachment; remove?: () => void; busy?: boolean }) {
+	const [url, setUrl] = useState<string>();
+	useEffect(() => {
+		if (item.kind !== 'image') { return; }
+		const receive = (event: MessageEvent) => {
+			if (event.data?.type === 'attachmentPreview' && event.data.id === item.id && /^data:image\/(png|jpeg|webp|gif);base64,/.test(event.data.url)) { setUrl(event.data.url); }
+		};
+		window.addEventListener('message', receive);
+		api.postMessage({ type: 'previewAttachment', id: item.id });
+		return () => window.removeEventListener('message', receive);
+	}, [item.id, item.kind]);
+	return <div className="attachment-card" title={item.path}>
+		{url ? <img src={url} alt={item.name} /> : <Icon name={item.kind === 'image' ? 'image' : 'file'} />}
+		<span><strong>{item.name}</strong><small>{item.kind === 'image' ? t('Image', '图片') : item.kind === 'binary' ? t('Binary excerpt', '二进制摘要') : t('Text', '文本')}{item.truncated ? t(' · excerpt', ' · 节选') : ''}</small></span>
+		{remove && <button type="button" disabled={busy} onClick={remove} aria-label={t('Remove attachment', '移除附件') + ' ' + item.name}><Icon name="close" /></button>}
+	</div>;
+}
+
 function App() {
-	const [state, setState] = useState<State>({ messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false });
+	const [state, setState] = useState<State>({ attachments: [], messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false, permission: 'none', webEnabled: true });
+	const [notice, setNotice] = useState<string>();
 	const [ready, setReady] = useState(false);
 	const [draft, setDraft] = useState('');
 	const [now, setNow] = useState(Date.now);
@@ -53,7 +76,17 @@ function App() {
 	const editInput = useRef<HTMLTextAreaElement>(null);
 	const composing = useRef(false);
 	useEffect(() => {
+		if (!state.requestNotice) { return; }
+		setNotice(state.requestNotice.text);
+		const timer = setTimeout(() => setNotice(undefined), 4500);
+		return () => clearTimeout(timer);
+	}, [state.requestNotice?.id]);
+	useEffect(() => {
 		const listener = (event: MessageEvent) => {
+			if (event.data?.type === 'sendAccepted' && activeRef.current === event.data.activeId) {
+				if (draftRef.current === event.data.text) { draftRef.current = ''; setDraft(''); }
+				drafts.current.set(event.data.conversationId ?? event.data.activeId, draftRef.current);
+			}
 			if (event.data?.type === 'snapshot') {
 				if (typeof event.data.activeId === 'string' && activeRef.current !== event.data.activeId) {
 					drafts.current.set(activeRef.current, draftRef.current);
@@ -95,23 +128,24 @@ function App() {
 	}, [copied]);
 	const busy = state.busy || pending;
 	const pausedReply = state.messages.at(-1);
-	const canContinue = pausedReply?.role === 'assistant' && pausedReply.status === 'stopped' && !draft.trim();
+	const canContinue = pausedReply?.role === 'assistant' && pausedReply.status === 'stopped' && !draft.trim() && !state.attachments.length;
+	const capabilities = state.connection.capabilities ?? resolveCapabilities(state.connection.provider, state.connection.baseURL, state.connection.model, undefined, state.connection.modelSettings);
+	const blocked = state.attachments.length && (state.permission === 'none' || (state.permission === 'workspace' && state.attachments.some(item => item.source !== 'internal'))) ? t('These attachments are not allowed by the current permission. Remove them or change the permission.', '当前权限不允许发送这些附件，请移除附件或切换权限。') : capabilities.vision !== 'supported' && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
 	const send = () => {
-		if (!ready || busy || !state.configured || state.historyUnreadable || (!draft.trim() && !canContinue)) { return; }
+		if (!ready || busy || !state.configured || state.historyUnreadable || blocked || (!draft.trim() && !state.attachments.length && !canContinue)) { return; }
 		setPending(true);
 		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id }); return; }
 		api.postMessage({ type: 'send', text: draft });
-		draftRef.current = '';
-		setDraft('');
 	};
 	const hasConversation = state.messages.length > 0;
 	const failedReply = state.messages.at(-1)?.status === 'error';
+	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (capabilities.tools !== 'supported' ? '\n' + t('This model does not have confirmed tool support. Web search is unavailable; check its capabilities in settings.', '当前模型未确认支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
 	if (configuration) { return <Settings connection={state.connection} ready={ready} busy={state.busy} post={message => api.postMessage(message)} />; }
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
-		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} title={item.title}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
+		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} title={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
 		<div className="history-actions"><button className="history-rename" disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} title={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button className={`history-delete ${item.id === confirmDelete ? 'delete-confirm' : ''}`} disabled={busy} onClick={() => { if (item.id === confirmDelete) { setConfirmDelete(undefined); api.postMessage({ type: 'deleteHistory', conversationId: item.id }); } else { setConfirmDelete(item.id); } }} title={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')} aria-label={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')}>{item.id === confirmDelete ? t('Confirm', '确认') : <Icon name="trash" />}</button></div>
 	</div>);
-	return <main onClick={event => {
+	return <main onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); api.postMessage({ type: 'unsupportedDrop' }); }} onClick={event => {
 		const link = (event.target as HTMLElement).closest('a');
 		if (link) { event.preventDefault(); api.postMessage({ type: 'link', url: link.href }); }
 	}}>
@@ -122,6 +156,7 @@ function App() {
 			<button onClick={() => api.postMessage({ type: 'settings' })} title={t('Connection settings', '连接设置')} aria-label={t('Connection settings', '连接设置')}><Icon name="settings" /></button>
 			<button disabled={busy || !ready || state.historyUnreadable} onClick={() => { api.postMessage({ type: 'clear' }); setCopied(undefined); }} title={t('New chat', '新聊天')} aria-label={t('New chat', '新聊天')}><Icon name="new" /></button>
 		</div></header>
+		{notice && <div className="permission-toast" role="status">{notice}</div>}
 		{state.historyUnreadable && <div className="history-notice" role="alert">{t('Chat history could not be read. Your saved data has been preserved. Reload the window to try again.', '无法读取聊天记录，已保留原有数据。请重新加载窗口后再试。')}</div>}
 		{state.saveFailed && !state.historyUnreadable && <div className="history-notice" role="alert">{t('Changes have not been saved. Keep this window open and retry.', '更改尚未保存，请保留此窗口并重试。')}<button onClick={() => api.postMessage({ type: 'saveHistory' })}>{t('Retry saving', '重试保存')}</button></div>}
 		{!hasConversation && state.history.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(state.history)}</section>}
@@ -130,16 +165,18 @@ function App() {
 				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Configure a provider and model in the Beacon panel on the left to start.', '请在左侧 Beacon 面板配置服务商和模型后开始。')}</p></div>}
 				{state.messages.map(message => <article key={message.id} className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
-						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if (!text || busy) { return; } setPending(true); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
+						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} />)}</div>}
+						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if ((!text && !message.attachments?.length) || busy) { return; } setPending(true); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
 							<textarea ref={editInput} rows={1} maxLength={32000} value={editingDraft} aria-label={t('Edit message', '编辑消息')} onChange={event => setEditingDraft(event.target.value)} onKeyDown={event => {
 								if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
 							}} />
-							<div><button type="button" onClick={() => setEditing(undefined)}>{t('Cancel', '取消')}</button><button className="edit-submit" type="submit" disabled={!editingDraft.trim() || busy}>{t('Send', '发送')}</button></div>
+							<div><button type="button" onClick={() => setEditing(undefined)}>{t('Cancel', '取消')}</button><button className="edit-submit" type="submit" disabled={(!editingDraft.trim() && !message.attachments?.length) || busy}>{t('Send', '发送')}</button></div>
 						</form> : <div className="user-content">{message.text}</div>}
 						{editing !== message.id && <div className="message-actions user-actions">{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt, now)}</time>}<button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} title={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button><button disabled={busy} onClick={() => { setEditing(message.id); setEditingDraft(message.text); }} title={t('Edit message', '编辑消息')} aria-label={t('Edit message', '编辑消息')}><Icon name="edit" /></button></div>}
 					</> : <>
 						<ResponseActivity message={message} />
 						{message.text && <MessageResponse streaming={message.status === 'streaming'}>{message.text}</MessageResponse>}
+						{!!message.sources?.length && <details className="web-sources"><summary><Icon name="globe" />{t('Sources', '来源')} · {message.sources.length}<Icon name="chevron" /></summary><ul>{message.sources.map(source => <li key={source.id}><a href={source.url} title={source.url}>{source.title}<span>{new URL(source.url).hostname}</span></a><small>{source.kind === 'search' ? t('Search excerpt', '搜索摘要') : t('Page excerpt', '网页节选')}{source.truncated ? t(' · truncated', ' · 已截断') : ''}</small></li>)}</ul></details>}
 						{message.status === 'stopped' && <div className="message-status">{t('Paused', '已暂停')}</div>}
 						{message.status === 'error' && message.id === state.messages.at(-1)?.id && <>
 							{state.error && <div className="error" role="alert">{state.error}</div>}
@@ -157,10 +194,19 @@ function App() {
 		<footer>
 			{!failedReply && state.error && <div className="error" role="alert">{state.error}</div>}
 			<form className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
+				{!!state.attachments.length && <div className="attachments draft-attachments">{state.attachments.map(item => <AttachmentCard key={item.id} item={item} busy={busy} remove={() => api.postMessage({ type: 'removeAttachment', id: item.id })} />)}</div>}
+				{blocked && <div className="attachment-warning" role="status">{blocked}</div>}
 				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
 					if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); send(); }
 				}} />
-				<div className="composer-toolbar"><span className="composer-spacer" aria-hidden="true" /><button className="model-label" type="button" onClick={() => api.postMessage({ type: 'settings' })} title={t('Choose provider and model', '选择服务商和模型')}>{state.connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} title={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || (!draft.trim() && !canContinue)} title={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}</div>
+				<div className="composer-toolbar">
+					<Permissions permission={state.permission} ready={ready} post={message => api.postMessage(message)} />
+					{state.permission === 'computer' && <button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} title={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="attach" /></button>}
+					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools === 'supported'} title={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
+					<span className="composer-spacer" aria-hidden="true" />
+					<button className="model-label" type="button" onClick={() => api.postMessage({ type: 'settings' })} title={t('Choose provider and model', '选择服务商和模型') + '\n' + capabilitySummary(capabilities)}>{state.connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
+					{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} title={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} title={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
+				</div>
 			</form>
 		</footer>
 	</main>;

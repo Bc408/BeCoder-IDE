@@ -49,6 +49,10 @@ const ui = await build({ ...shared, entryPoints: ['webview/App.tsx'], outfile: '
 const worker = await build({ ...shared, entryPoints: ['webview/syntax.worker.ts'], outfile: 'dist/syntax-worker.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets] });
 fs.copyFileSync(path.join(root, '../../node_modules/vscode-oniguruma/release/onig.wasm'), path.join(root, 'dist/onig.wasm'));
 await build({ ...shared, entryPoints: ['test/session.test.ts'], outfile: 'dist-test/session.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [syntaxAssets] });
+await build({ ...shared, entryPoints: ['test/files.test.ts'], outfile: 'dist-test/files.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/models.test.ts'], outfile: 'dist-test/models.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/web.test.ts'], outfile: 'dist-test/web.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/attachments.test.ts'], outfile: 'dist-test/attachments.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [{ name: 'test-vscode', setup(builder) { builder.onResolve({ filter: /^vscode$/ }, () => ({ path: path.join(root, 'test/vscodeMock.ts') })); } }] });
 
 // Distribute full dependency licenses alongside the bundled code, including transitive packages.
 const packages = new Map();

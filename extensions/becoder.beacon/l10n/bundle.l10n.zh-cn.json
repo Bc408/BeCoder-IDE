@@ -17,5 +17,21 @@
 	"Unable to complete the request. Check the service address, model, credentials and connection.": "请求未能完成，请检查服务地址、模型、密钥和网络连接。",
 	"Invalid connection settings. Use HTTPS, or local HTTP for Ollama, without credentials or query parameters in the URL.": "连接设置无效。请使用 HTTPS，或 Ollama 本机 HTTP 地址；地址中不要包含凭据或查询参数。",
 	"Unable to save connection settings. Check the address and try again.": "无法保存连接设置，请检查地址后重试。",
-	"No models were returned. For Ollama, install a chat model in your Ollama service first.": "服务未返回模型。使用 Ollama 时，请先在服务中安装聊天模型。"
+	"No models were returned. For Ollama, install a chat model in your Ollama service first.": "服务未返回模型。使用 Ollama 时，请先在服务中安装聊天模型。",
+	"Could not save the file permission. Please try again.": "无法保存文件权限，请重试。",
+	"Permission changes will take effect in the next response.": "权限变更将在下一轮回复中生效。",
+	"This model is not a chat model. Select a chat model in Beacon settings.": "当前模型不是聊天模型，请在 Beacon 设置中选择聊天模型。",
+	"This conversation contains images. Select a vision-capable model or correct its capabilities in Beacon settings.": "当前会话包含图片，请选择支持视觉的模型，或在 Beacon 设置中修正其能力。",
+	"The maximum output tokens exceed this model's limit. Adjust the model parameters.": "最大输出 Token 数超过当前模型上限，请调整模型参数。",
+	"This model does not support the selected thinking mode. Restore the model default or correct its capabilities.": "当前模型不支持所选思考模式，请恢复模型默认或修正其能力。",
+	"Unable to save model capabilities. Check the values and try again.": "无法保存模型能力，请检查设置值后重试。",
+	"Could not save web access. Please try again.": "无法保存联网开关，请重试。",
+	"Web access changes will take effect in the next response.": "联网开关将在下一轮回复中生效。",
+	"File access is disabled. Change the permission before adding or sending attachments.": "当前禁止读取文件，请先切换权限再添加或发送附件。",
+	"Workspace permission only accepts files dragged from BeCoder. Explorer drops and the file picker require computer permission.": "工作区权限只接受从 BeCoder 内拖入的文件；资源管理器拖入和文件选择器需要全机只读权限。",
+	"The image is invalid or unsupported. Use PNG, JPEG, WebP or GIF, up to 4 MiB each.": "图片无效或格式不支持，请使用 PNG、JPEG、WebP 或 GIF，单张不超过 4 MiB。",
+	"Attachments exceed the limit: 8 MiB in total, up to 64 files.": "附件超出限制：内容总量不超过 8 MiB，最多 64 个文件。",
+	"Could not read attachment {0}. Check its location, permissions and whether it is a private file.": "无法读取附件 {0}，请检查位置、权限以及是否属于隐私文件。",
+	"Add files": "添加文件",
+	"Add files to Beacon": "向 Beacon 添加文件"
 }

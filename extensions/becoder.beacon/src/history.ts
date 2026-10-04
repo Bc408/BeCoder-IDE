@@ -5,13 +5,18 @@
 
 import { randomUUID } from 'crypto';
 import { ChatSession, type Message, type Snapshot } from './session';
+import type { FileRoot } from './fileTools';
+import { modelMessageSchema } from 'ai';
+import { isWebSource } from './webTools';
+import { validAttachments } from './attachments';
 
-interface Conversation {
+export interface Conversation {
 	id: string;
 	title: string;
 	updatedAt: number;
 	messages: Message[];
 	error: string;
+	workspace: FileRoot[];
 }
 
 export interface HistoryData {
@@ -24,6 +29,7 @@ export interface HistoryItem {
 	id: string;
 	title: string;
 	updatedAt: number;
+	workspace: FileRoot[];
 }
 
 /** Validate persisted data before it can become model context. Never replace unreadable history. */
@@ -36,15 +42,19 @@ export function readHistory(value: unknown): HistoryData {
 	for (const item of data.conversations) {
 		if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.title !== 'string' || typeof item.error !== 'string' || (!Number.isFinite(item.updatedAt) || item.updatedAt < 0 || item.updatedAt > 8640000000000000) || !Array.isArray(item.messages)) { throw new Error('invalid-history'); }
 		ids.add(item.id);
+		if (!Array.isArray(item.workspace) || item.workspace.some(root => typeof root.name !== 'string' || typeof root.path !== 'string')) { throw new Error('invalid-history'); }
 		let previous = 0;
 		for (const message of item.messages) {
+			if (message?.attachments !== undefined && (message.role !== 'user' || !validAttachments(message.attachments))) { throw new Error('invalid-history'); }
+			if (message?.sources !== undefined && (message.role !== 'assistant' || !Array.isArray(message.sources) || message.sources.length > 1000 || message.sources.some(source => !isWebSource(source)) || new Set(message.sources.map(source => source.id)).size !== message.sources.length)) { throw new Error('invalid-history'); }
+			if (message?.protocol !== undefined && (message.role !== 'assistant' || !Array.isArray(message.protocol) || Buffer.byteLength(JSON.stringify(message.protocol), 'utf8') > 32 * 1024 * 1024 || message.protocol.some(turn => !turn || typeof turn.provider !== 'string' || typeof turn.baseURL !== 'string' || typeof turn.model !== 'string' || !Array.isArray(turn.messages) || turn.messages.some(part => !part || part.role === 'system' || !modelMessageSchema.safeParse(part).success)))) { throw new Error('invalid-history'); }
 			if ((message?.model !== undefined && typeof message.model !== 'string') || (message?.provider !== undefined && typeof message.provider !== 'string')) { throw new Error('invalid-history'); }
 			if (message?.reasoning !== undefined && typeof message.reasoning !== 'string') { throw new Error('invalid-history'); }
 			if (message?.activeStartedAt !== undefined && (!Number.isFinite(message.activeStartedAt) || message.activeStartedAt < 0 || message.activeStartedAt > 8640000000000000)) { throw new Error('invalid-history'); }
-			if (message?.toolResults !== undefined && (!Array.isArray(message.toolResults) || message.role !== 'assistant' || message.toolResults.some(result => !result || typeof result.id !== 'string' || !result.id || typeof result.path !== 'string' || result.path.length > 1024 || !result.output || typeof result.output.ok !== 'boolean' || typeof result.output.path !== 'string' || result.output.path.length > 1024 || (result.output.contents !== undefined && (typeof result.output.contents !== 'string' || Buffer.byteLength(result.output.contents, 'utf8') > 128 * 1024)) || (result.output.error !== undefined && typeof result.output.error !== 'string')))) { throw new Error('invalid-history'); }
+			if (message?.toolResults !== undefined && (!Array.isArray(message.toolResults) || message.role !== 'assistant' || message.toolResults.some(result => !result || typeof result.id !== 'string' || !result.id || typeof result.path !== 'string' || result.path.length > 4096 || !result.input || !['read', 'list', 'find', 'search'].includes(result.input.operation) || typeof result.input.path !== 'string' || !result.output || typeof result.output.ok !== 'boolean' || typeof result.output.path !== 'string' || result.output.path.length > 4096 || (result.output.contents !== undefined && (typeof result.output.contents !== 'string' || Buffer.byteLength(result.output.contents, 'utf8') > 8 * 1024 * 1024)) || (result.output.kind === 'image' && !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(result.output.mediaType ?? '')) || (result.output.error !== undefined && typeof result.output.error !== 'string')))) { throw new Error('invalid-history'); }
 			if ((message?.createdAt !== undefined && (!Number.isFinite(message.createdAt) || message.createdAt < 0 || message.createdAt > 8640000000000000)) || (message?.durationMs !== undefined && (!Number.isFinite(message.durationMs) || message.durationMs < 0))) { throw new Error('invalid-history'); }
 			if (!message || !Number.isSafeInteger(message.id) || message.id <= previous || !['user', 'assistant'].includes(message.role) || !['complete', 'streaming', 'stopped', 'error'].includes(message.status) || typeof message.text !== 'string') { throw new Error('invalid-history'); }
-			if (message.activities !== undefined && (!Array.isArray(message.activities) || message.activities.some(activity => !activity || typeof activity.id !== 'string' || !activity.id || activity.id.length > 256 || activity.type !== 'read-workspace-file' || typeof activity.path !== 'string' || activity.path.length > 1024 || !['running', 'complete', 'error', 'stopped'].includes(activity.status)))) { throw new Error('invalid-history'); }
+			if (message.activities !== undefined && (!Array.isArray(message.activities) || message.activities.some(activity => !activity || typeof activity.id !== 'string' || !activity.id || activity.id.length > 256 || !['read', 'list', 'find', 'search', 'web-search', 'web-fetch'].includes(activity.type) || typeof activity.path !== 'string' || activity.path.length > 4096 || !['running', 'complete', 'error', 'stopped'].includes(activity.status) || (activity.error !== undefined && !['unavailable', 'rate-limit', 'timeout', 'invalid-response', 'invalid-input', 'budget'].includes(activity.error))))) { throw new Error('invalid-history'); }
 			previous = message.id;
 		}
 	}
@@ -52,7 +62,7 @@ export function readHistory(value: unknown): HistoryData {
 	return structuredClone(data);
 }
 
-/** One live request per window, durable conversations scoped by the host's workspaceState. */
+/** One live request per window, with a shared installation history. */
 export class ChatHistory {
 	readonly session: ChatSession;
 	private data: HistoryData;
@@ -63,7 +73,7 @@ export class ChatHistory {
 	private restoring = false;
 	private saveFailed = false;
 
-	constructor(value: unknown, private readonly save: (data: HistoryData) => PromiseLike<void>, private readonly changed: () => void, describeError: (error: unknown) => string) {
+	constructor(value: unknown, private readonly save: (data: HistoryData) => PromiseLike<HistoryData | void>, private readonly changed: () => void, describeError: (error: unknown) => string, private readonly workspace: () => FileRoot[] = () => []) {
 		this.data = readHistory(value);
 		this.session = new ChatSession(snapshot => this.capture(snapshot), describeError);
 		const active = this.data.conversations.find(item => item.id === this.data.activeId);
@@ -75,14 +85,14 @@ export class ChatHistory {
 	}
 
 	get snapshot(): Snapshot & { activeId: string; history: HistoryItem[]; saveFailed: boolean } {
-		return { ...this.session.snapshot, activeId: this.data.activeId, history: this.data.conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })).sort((a, b) => b.updatedAt - a.updatedAt), saveFailed: this.saveFailed };
+		return { ...this.session.snapshot, activeId: this.data.activeId, history: this.data.conversations.map(({ id, title, updatedAt, workspace }) => ({ id, title, updatedAt, workspace })).sort((a, b) => b.updatedAt - a.updatedAt), saveFailed: this.saveFailed };
 	}
 
 	private capture(snapshot: Snapshot): void {
 		if (this.restoring || this.disposed) { return; }
 		let active = this.data.conversations.find(item => item.id === this.data.activeId);
 		if (!active && snapshot.messages.length) {
-			active = { id: randomUUID(), title: snapshot.messages[0].text.replace(/\s+/g, ' ').slice(0, 80), updatedAt: Date.now(), messages: [], error: '' };
+			active = { id: randomUUID(), title: (snapshot.messages[0].text || snapshot.messages[0].attachments?.map(item => item.name).join(', ') || '').replace(/\s+/g, ' ').slice(0, 80), updatedAt: Date.now(), messages: [], error: '', workspace: this.workspace() };
 			this.data.conversations.push(active);
 			this.data.activeId = active.id;
 		}
@@ -137,6 +147,18 @@ export class ChatHistory {
 		else { void this.flush(); this.changed(); }
 	}
 
+	refresh(value: HistoryData): boolean {
+		if (this.session.snapshot.busy || this.pending || this.writing || this.saveFailed || this.disposed) { return false; }
+		const activeId = this.data.activeId;
+		this.data = readHistory({ ...value, activeId: value.conversations.some(item => item.id === activeId) ? activeId : '' });
+		this.restoring = true;
+		const active = this.data.conversations.find(item => item.id === this.data.activeId);
+		if (active) { this.session.restore(active); } else { this.session.clear(); }
+		this.restoring = false;
+		this.changed();
+		return true;
+	}
+
 	async flush(): Promise<void> {
 		if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
 		this.pending = structuredClone(this.data);
@@ -153,7 +175,24 @@ export class ChatHistory {
 			while (this.pending) {
 				const data = this.pending;
 				this.pending = undefined;
-				try { await this.save(data); this.saveFailed = false; }
+				try {
+					const saved = await this.save(data);
+					if (saved) {
+						// Adopt other windows' records without discarding local changes made
+						// while this snapshot was being written.
+						const previous = new Map(data.conversations.map(item => [item.id, item]));
+						const local = new Map(this.data.conversations.map(item => [item.id, item]));
+						const merged = new Map(saved.conversations.map(item => [item.id, item]));
+						for (const id of new Set([...previous.keys(), ...local.keys()])) {
+							if (JSON.stringify(previous.get(id)) === JSON.stringify(local.get(id))) { continue; }
+							const item = local.get(id);
+							if (item) { merged.set(id, item); } else { merged.delete(id); }
+						}
+						this.data = { version: 1, activeId: merged.has(this.data.activeId) ? this.data.activeId : '', conversations: [...merged.values()] };
+						if (this.pending) { this.pending = structuredClone(this.data); }
+					}
+					this.saveFailed = false;
+				}
 				catch { this.saveFailed = true; this.pending = undefined; break; }
 			}
 		} finally {

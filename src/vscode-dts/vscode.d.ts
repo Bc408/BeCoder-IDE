@@ -9756,6 +9756,14 @@ declare module 'vscode' {
 		readonly portMapping?: readonly WebviewPortMapping[];
 	}
 
+	/** BeCoder: a native file drop delivered only to the bundled Beacon chat view. */
+	export interface WebviewResourceDropEvent {
+		/** Local resources obtained by the workbench from the native drag event. */
+		readonly uris: readonly Uri[];
+		/** False only for a native resource drag started in this BeCoder window. */
+		readonly isExternal: boolean;
+	}
+
 	/**
 	 * Displays html content, similarly to an iframe.
 	 */
@@ -9833,6 +9841,12 @@ declare module 'vscode' {
 		 *   confirmation message back to your extension.
 		 */
 		postMessage(message: any): Thenable<boolean>;
+
+		/**
+		 * BeCoder: native resource drops for the bundled Beacon chat view only.
+		 * Source is determined by the workbench, independently of webview messages.
+		 */
+		readonly onDidDropResources?: Event<WebviewResourceDropEvent>;
 
 		/**
 		 * Convert a uri for the local file system to one that can be used inside webviews.

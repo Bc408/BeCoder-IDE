@@ -1043,6 +1043,7 @@ export interface WebviewPanelViewStateData {
 }
 
 export interface ExtHostWebviewsShape {
+	$onDidDropResources(handle: WebviewHandle, resources: UriComponents[], source: 'internal' | 'external'): void;
 	$onMessage(handle: WebviewHandle, jsonSerializedMessage: string, buffers: SerializableObjectWithBuffers<VSBuffer[]>): void;
 	$onMissingCsp(handle: WebviewHandle, extensionId: string): void;
 }

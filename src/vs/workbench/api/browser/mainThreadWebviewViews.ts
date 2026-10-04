@@ -13,6 +13,9 @@ import { IViewBadge } from '../../common/views.js';
 import { IWebviewViewService, WebviewView } from '../../contrib/webviewView/browser/webviewViewService.js';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry.js';
 import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+import { addDisposableListener, EventType, getWindow } from '../../../base/browser/dom.js';
+import { extractEditorsDropData } from '../../../platform/dnd/browser/dnd.js';
+import { WebviewResourceDrag } from '../../contrib/webview/common/webviewResourceDrag.js';
 
 
 export class MainThreadWebviewsViews extends Disposable implements extHostProtocol.MainThreadWebviewViewsShape {
@@ -87,6 +90,31 @@ export class MainThreadWebviewsViews extends Disposable implements extHostProtoc
 				}
 
 				const subscriptions = new DisposableStore();
+				// The iframe cannot claim an internal origin. Native workbench gestures
+				// arrive through a separate RPC event, restricted to the bundled view.
+				if (extension.id.value === 'becoder.beacon' && viewType === 'becoder.beacon.chat') {
+					const container = webviewView.webview.container;
+					const targetWindow = getWindow(container);
+					const drag = new WebviewResourceDrag();
+					const resources = (event: DragEvent) => extractEditorsDropData(event).flatMap(item => item.resource?.scheme === 'file' ? [item.resource] : []);
+					subscriptions.add(addDisposableListener(targetWindow, EventType.DRAG_START, (event: DragEvent) => drag.start(event.isTrusted, resources(event).map(uri => uri.toString()))));
+					subscriptions.add(addDisposableListener(targetWindow, EventType.DRAG_END, () => drag.end()));
+					subscriptions.add(addDisposableListener(container, EventType.DRAG_OVER, (event: DragEvent) => {
+						event.preventDefault();
+						event.stopPropagation();
+						if (event.dataTransfer) { event.dataTransfer.dropEffect = 'copy'; }
+					}, true));
+					subscriptions.add(addDisposableListener(container, EventType.DROP, (event: DragEvent) => {
+						event.preventDefault();
+						event.stopImmediatePropagation();
+						if (event.isTrusted) {
+							const uris = resources(event);
+							this.mainThreadWebviews.onDidDropResources(handle, uris, drag.source(true, uris.map(uri => uri.toString())));
+						}
+						drag.end();
+						webviewView.webview.windowDidDragEnd();
+					}, true));
+				}
 				subscriptions.add(webviewView.onDidChangeVisibility(visible => {
 					this._proxy.$onDidChangeWebviewViewVisibility(handle, visible);
 				}));

@@ -25,7 +25,10 @@
 				"command": "becoder.beacon.open",
 				"title": "%open%",
 				"category": "Beacon",
-				"icon": "resources/beacon.svg"
+				"icon": {
+					"light": "resources/beacon-light.svg",
+					"dark": "resources/beacon.svg"
+				}
 			},
 			{
 				"command": "becoder.beacon.configureKey",
@@ -181,6 +184,105 @@
 							}
 						}
 					}
+				},
+				"beacon.filePermission": {
+					"type": "string",
+					"enum": [
+						"none",
+						"workspace",
+						"computer"
+					],
+					"enumDescriptions": [
+						"%permissions.none%",
+						"%permissions.workspace%",
+						"%permissions.computer%"
+					],
+					"default": "none",
+					"scope": "application",
+					"description": "%permissions.description%"
+				},
+				"beacon.modelCapabilities": {
+					"type": "object",
+					"default": {},
+					"scope": "application",
+					"description": "%settings.modelCapabilities%",
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": false,
+						"properties": {
+							"overrides": {
+								"type": "object",
+								"additionalProperties": false,
+								"properties": {
+									"purpose": {
+										"type": "string",
+										"enum": [
+											"chat",
+											"embedding",
+											"rerank",
+											"image",
+											"unknown"
+										]
+									},
+									"vision": {
+										"type": "string",
+										"enum": [
+											"supported",
+											"unsupported",
+											"unknown"
+										]
+									},
+									"reasoning": {
+										"type": "string",
+										"enum": [
+											"supported",
+											"unsupported",
+											"unknown"
+										]
+									},
+									"tools": {
+										"type": "string",
+										"enum": [
+											"supported",
+											"unsupported",
+											"unknown"
+										]
+									},
+									"contextWindow": {
+										"type": "integer",
+										"minimum": 1,
+										"maximum": 10000000
+									},
+									"maxOutputTokens": {
+										"type": "integer",
+										"minimum": 1,
+										"maximum": 10000000
+									}
+								}
+							},
+							"thinking": {
+								"type": "string",
+								"enum": [
+									"enabled",
+									"disabled"
+								]
+							},
+							"effort": {
+								"type": "string",
+								"enum": [
+									"low",
+									"high",
+									"max"
+								]
+							}
+						}
+					}
+				},
+				"beacon.webEnabled": {
+					"type": "boolean",
+					"default": true,
+					"scope": "application",
+					"description": "%settings.webEnabled%"
 				}
 			}
 		}
@@ -188,7 +290,7 @@
 	"scripts": {
 		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
 		"build": "node build.mjs",
-		"test": "node --test dist-test/session.test.cjs",
+		"test": "node --test dist-test/session.test.cjs dist-test/files.test.cjs dist-test/models.test.cjs dist-test/web.test.cjs dist-test/attachments.test.cjs",
 		"vscode:prepublish": "npm run typecheck && npm run build",
 		"lint": "node ../../node_modules/eslint/bin/eslint.js --config eslint.config.mjs src webview test build.mjs --max-warnings 0",
 		"test-render": "node test/render.mjs"

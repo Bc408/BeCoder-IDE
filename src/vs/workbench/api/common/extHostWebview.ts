@@ -8,7 +8,7 @@ import { Emitter, Event } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { Schemas } from '../../../base/common/network.js';
 import * as objects from '../../../base/common/objects.js';
-import { URI } from '../../../base/common/uri.js';
+import { URI, UriComponents } from '../../../base/common/uri.js';
 import { normalizeVersion, parseVersion } from '../../../platform/extensions/common/extensionValidator.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 import { ILogService } from '../../../platform/log/common/log.js';
@@ -57,6 +57,8 @@ export class ExtHostWebview implements vscode.Webview {
 
 	/* internal */ readonly _onMessageEmitter = new Emitter<any>();
 	public readonly onDidReceiveMessage: Event<any> = this._onMessageEmitter.event;
+	/* internal */ readonly _onDropEmitter = new Emitter<vscode.WebviewResourceDropEvent>();
+	public readonly onDidDropResources = this._onDropEmitter.event;
 
 	readonly #onDidDisposeEmitter = new Emitter<void>();
 	/* internal */ readonly _onDidDispose: Event<void> = this.#onDidDisposeEmitter.event;
@@ -68,6 +70,7 @@ export class ExtHostWebview implements vscode.Webview {
 
 		this.#onDidDisposeEmitter.dispose();
 		this._onMessageEmitter.dispose();
+		this._onDropEmitter.dispose();
 	}
 
 	public asWebviewUri(resource: vscode.Uri): vscode.Uri {
@@ -226,6 +229,10 @@ export class ExtHostWebviews extends Disposable implements extHostProtocol.ExtHo
 		extensionId: string
 	): void {
 		this._logService.warn(`${extensionId} created a webview without a content security policy: https://aka.ms/vscode-webview-missing-csp`);
+	}
+
+	public $onDidDropResources(handle: extHostProtocol.WebviewHandle, resources: UriComponents[], source: 'internal' | 'external'): void {
+		this.getWebview(handle)?._onDropEmitter.fire({ uris: resources.map(resource => URI.revive(resource)), isExternal: source !== 'internal' });
 	}
 
 	public createNewWebview(handle: string, options: extHostProtocol.IWebviewContentOptions, extension: IExtensionDescription): ExtHostWebview {

@@ -170,16 +170,16 @@ textarea { min-height: 40px; font-size: 14px; }
 .configuration-content .connection-secondary:disabled { background: rgb(66, 66, 66); opacity: .1; }
 .open-chat { width: 100%; gap: 4px; margin-top: 22px; }
 .history-row { position: relative; display: flex; min-width: 0; min-height: 32px; align-items: center; border-radius: 999px; margin: 0; transition: background-color 30ms linear; }
-.history-row:hover, .history-row:focus-within, .history-row.confirming { background: color-mix(in srgb, var(--vscode-foreground) 5%, var(--surface)); }
+.history-row:hover, .history-row:has(:focus-visible), .history-row.confirming { background: color-mix(in srgb, var(--vscode-foreground) 5%, var(--surface)); }
 .history-open:hover { background: transparent; }
 .history-open { width: 100%; min-width: 0; gap: 12px; justify-content: space-between; padding: 7px 12px; text-align: left; color: var(--chat-title); }
-.history-row:hover .history-open, .history-row:focus-within .history-open { padding-right: 76px; }
+.history-row:hover .history-open, .history-row:has(:focus-visible) .history-open { padding-right: 76px; }
 .history-row.confirming .history-open { padding-right: 64px; }
 .history-open > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .history-open time { flex: 0 0 auto; white-space: nowrap; overflow-wrap: normal; color: var(--chat-muted); font-size: 11px; opacity: 1; }
-.history-row:hover .history-open time, .history-row:focus-within .history-open time, .history-row.confirming .history-open time { opacity: 0; }
+.history-row:hover .history-open time, .history-row:has(:focus-visible) .history-open time, .history-row.confirming .history-open time { opacity: 0; }
 .history-actions { position: absolute; right: 6px; top: 50%; display: flex; align-items: center; transform: translate(3px, -50%); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 30ms linear, transform 40ms ease-out; }
-.history-row:hover .history-actions, .history-row:focus-within .history-actions { transform: translate(0, -50%); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+.history-row:hover .history-actions, .history-row:has(:focus-visible) .history-actions { transform: translate(0, -50%); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 .history-actions button { width: 28px; height: 28px; padding: 4px; border-radius: 50%; color: var(--vscode-descriptionForeground); overflow: hidden; white-space: nowrap; }
 .history-actions .history-rename { transition: width 40ms ease-out, padding 40ms ease-out, opacity 25ms linear, transform 40ms ease-out; }
 .history-row.confirming .history-rename { width: 0; padding: 0; opacity: 0; visibility: hidden; transform: scale(.75); pointer-events: none; }

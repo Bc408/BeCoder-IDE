@@ -4,7 +4,7 @@
 
 BeCoder 是一款面向 OI、ICPC 和日常 C/C++ 竞赛编程的 Windows 自包含编辑器，内置 AI 助手 Beacon。安装完成后，编译器、代码智能、编辑器诊断和运行环境已经准备就绪，可以直接开始编程。Beacon 按需使用；编辑、编译和运行代码不需要配置模型。
 
-BeCoder 源自 **Code - OSS 1.140**，并保留 **1.140.0** 扩展 API 兼容版本。BeCoder 是独立产品，不与系统中安装的 Visual Studio Code 共用产品数据或配置。
+BeCoder 源自 **Code - OSS 1.140.0**，桌面运行时为 **Electron 43.7.3**，扩展 API 兼容版本设为 **1.140.0**。BeCoder 是独立产品，不与系统中安装的 Visual Studio Code 共用产品数据或配置。本次内核升级更新编辑器、工作台界面与现有 BeCoder 功能使用的 API，不引入上游 Copilot、Chat、Agents 或 MCP 功能；Beacon 继续作为 BeCoder 自有的可选 AI 助手。
 
 ## 主要功能
 
@@ -14,11 +14,20 @@ BeCoder 源自 **Code - OSS 1.140**，并保留 **1.140.0** 扩展 API 兼容版
 - GCC 编辑器诊断；内置 clangd 提供补全、悬停、定义、引用、重命名、格式化、语义高亮和可选内嵌提示。
 - 受保护、离线且只读的 PDF 竞赛题面阅读器，支持搜索、缩放、缩略图和目录。
 - BeCoder One Monokai、Better C++ Syntax 和 Seti 文件图标主题。
+- 1.140 Modern UI：圆润工作台界面，以及可切换的默认／紧凑布局密度。
 - Explorer、搜索、Tasks、Markdown、Mermaid、Notebook、内置浏览器、身份验证，以及普通编辑器和终端工作流。
 - 简体中文和英文界面。
 - Open VSX 扩展发现和本地 VSIX 安装。
 - 内置 CPH 样例评测与内置浏览器题目导入。
 - Beacon 对话、模型配置、只读文件访问、联网搜索，以及模型支持时的图片输入。
+
+## 界面与布局密度
+
+Modern UI 默认开启，提供圆角、悬浮侧栏与底部面板，以及更新后的编辑器标签、菜单和对话框样式。默认布局在工作台各区域之间保留间距。
+
+打开“管理”齿轮菜单，选择 **布局密度 → 默认** 或 **紧凑**。紧凑布局移除工作台区域之间的间隙，并缩小内部间距，为内容留出更多空间。切换立即生效，选择保存在 `window.density.layout` 设置中，对应值为 `default` 或 `compact`。
+
+若希望使用经典工作台界面，可在设置中关闭 `workbench.experimental.modernUI`。布局密度仅在 Modern UI 开启时生效；这两项设置已有的值优先于默认值。
 
 ## 从题目到提交
 
@@ -81,6 +90,6 @@ Open VSX 是 BeCoder 唯一配置的在线扩展源，同时支持安装本地 V
 
 BeCoder 源码位于 [github.com/Bc408/BeCoder-IDE](https://github.com/Bc408/BeCoder-IDE)。
 
-BeCoder 修改内容以 [GPL-3.0-or-later](LICENSE) 许可发布。Code - OSS 1.140 继续遵循 MIT 许可证，内置第三方组件保留各自的许可证与声明。组件来源和许可证详情见 [ThirdPartyNotices.txt](ThirdPartyNotices.txt) 与[内置组件清单](resources/oi-defaults/BUNDLED-COMPONENTS.json)。
+BeCoder 修改内容以 [GPL-3.0-or-later](LICENSE) 许可发布。Code - OSS 1.140.0 继续遵循 MIT 许可证，内置第三方组件保留各自的许可证与声明。组件来源和许可证详情见 [ThirdPartyNotices.txt](ThirdPartyNotices.txt) 与[内置组件清单](resources/oi-defaults/BUNDLED-COMPONENTS.json)。
 
 产品问题或安全问题请通过 [GitHub Issues](https://github.com/Bc408/BeCoder-IDE/issues) 报告。

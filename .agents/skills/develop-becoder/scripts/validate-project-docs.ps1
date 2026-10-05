@@ -26,12 +26,12 @@ foreach ($relativePath in $requiredFiles) {
 
 $readme = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README.md') -Raw -Encoding UTF8
 $readmeCn = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README_cn.md') -Raw -Encoding UTF8
-foreach ($requiredText in @('Code - OSS 1.130', 'Open VSX', 'GitHub Issues')) {
+foreach ($requiredText in @('Code - OSS 1.140.0', 'Open VSX', 'GitHub Issues')) {
 	if ($readme -notmatch [regex]::Escape($requiredText)) {
 		$errors.Add("English README does not mention: $requiredText")
 	}
 }
-foreach ($requiredText in @('Code - OSS 1.130', 'Open VSX', 'GitHub Issues')) {
+foreach ($requiredText in @('Code - OSS 1.140.0', 'Open VSX', 'GitHub Issues')) {
 	if ($readmeCn -notmatch [regex]::Escape($requiredText)) {
 		$errors.Add("Simplified-Chinese README does not mention: $requiredText")
 	}

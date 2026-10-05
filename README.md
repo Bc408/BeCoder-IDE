@@ -4,7 +4,7 @@
 
 BeCoder is a self-contained Windows editor for OI, ICPC, and everyday C/C++ competitive-programming work, with Beacon as its built-in AI companion. Install it once and begin coding with the compiler, code intelligence, diagnostics, and run environment already prepared. Beacon is optional; model setup is not needed to edit, compile or run code.
 
-BeCoder is derived from **Code - OSS 1.140** and retains extension API compatibility with **1.140.0**. It is an independent product and does not share product data or configuration with a system installation of Visual Studio Code.
+BeCoder is derived from **Code - OSS 1.140.0**, uses **Electron 43.7.3** for its desktop runtime, and sets its extension API compatibility version to **1.140.0**. It is an independent product and does not share product data or configuration with a system installation of Visual Studio Code. The upstream migration updates the editor, workbench UI, and APIs used by existing BeCoder features; upstream Copilot, Chat, Agents, and MCP features are not bundled. Beacon remains BeCoder's optional AI companion.
 
 ## Main Features
 
@@ -14,11 +14,20 @@ BeCoder is derived from **Code - OSS 1.140** and retains extension API compatibi
 - GCC-based editor diagnostics and bundled clangd for completion, hover, definitions, references, rename, formatting, semantic highlighting, and optional inlay hints.
 - A protected, offline, read-only PDF viewer for contest problem statements, with search, zoom, thumbnails, and outlines.
 - BeCoder One Monokai, Better C++ Syntax, and the Seti file icon theme.
+- The 1.140 Modern UI with rounded workbench surfaces and switchable Default/Compact layout density.
 - Explorer, search, Tasks, Markdown, Mermaid, notebooks, the built-in browser, authentication, and normal editor and terminal workflows.
 - Simplified Chinese and English interfaces.
 - Open VSX extension discovery and local VSIX installation.
 - Built-in CPH sample testing and problem import from the integrated browser.
 - Beacon conversations with configurable models, read-only file access, web search and image input when the selected model supports them.
+
+## Appearance and Layout Density
+
+Modern UI is enabled by default, with rounded corners, floating side bars and a bottom panel, and refreshed editor tabs, menus, and dialogs. The default layout leaves space between workbench parts.
+
+Open the **Manage** gear menu and choose **Layout Density → Default** or **Compact**. Compact removes gaps between workbench parts and reduces internal spacing to leave more room for content. Changes take effect immediately and are saved in `window.density.layout` as `default` or `compact`.
+
+To use the classic workbench appearance, turn off `workbench.experimental.modernUI` in Settings. Layout Density applies only while Modern UI is enabled. Existing values for these settings take precedence over the defaults.
 
 ## From a Problem to a Submission
 
@@ -81,6 +90,6 @@ Application updates and their settings are currently disabled. BeCoder does not 
 
 BeCoder source is available at [github.com/Bc408/BeCoder-IDE](https://github.com/Bc408/BeCoder-IDE).
 
-BeCoder modifications are distributed under [GPL-3.0-or-later](LICENSE). Code - OSS 1.140 remains under the MIT License, and bundled third-party components retain their own licenses and notices. See [ThirdPartyNotices.txt](ThirdPartyNotices.txt) and the [bundled component inventory](resources/oi-defaults/BUNDLED-COMPONENTS.json) for provenance and license details.
+BeCoder modifications are distributed under [GPL-3.0-or-later](LICENSE). Code - OSS 1.140.0 remains under the MIT License, and bundled third-party components retain their own licenses and notices. See [ThirdPartyNotices.txt](ThirdPartyNotices.txt) and the [bundled component inventory](resources/oi-defaults/BUNDLED-COMPONENTS.json) for provenance and license details.
 
 Report product or security problems through [GitHub Issues](https://github.com/Bc408/BeCoder-IDE/issues).

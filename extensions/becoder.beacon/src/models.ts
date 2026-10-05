@@ -29,49 +29,27 @@ const capabilityFields = ['purpose', 'vision', 'reasoning', 'tools', 'contextWin
 export type CapabilityField = typeof capabilityFields[number];
 
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
-function validCapability(field: CapabilityField, value: unknown): boolean {
+export function validCapability(field: CapabilityField, value: unknown): boolean {
 	if (field === 'purpose') { return purposes.includes(value as ModelPurpose); }
 	if (field === 'contextWindow' || field === 'maxOutputTokens') { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= 10000000; }
 	return supports.includes(value as Support);
 }
 
-/** Endpoint identity is part of the key: an identically named gateway model is not the official model. */
-export function modelSettingsKey(provider: ProviderId, baseURL: string, model: string): string {
-	return `${provider}:${encodeURIComponent(baseURL.replace(/\/+$/, ''))}:${encodeURIComponent(model)}`;
-}
-export function readModelSettings(value: unknown, provider: ProviderId, baseURL: string, model: string): ModelSettings {
-	if (!record(value)) { return {}; }
-	const stored = value[modelSettingsKey(provider, baseURL, model)];
-	if (!record(stored)) { return {}; }
+export function parseModelSettings(stored: unknown): ModelSettings {
+	if (!record(stored)) { throw new Error('invalid-model-settings'); }
 	const result: ModelSettings = {};
-	if (record(stored.overrides)) {
-		const overrides = Object.fromEntries(capabilityFields.filter(field => validCapability(field, (stored.overrides as Record<string, unknown>)[field])).map(field => [field, (stored.overrides as Record<string, unknown>)[field]]));
-		if (Object.keys(overrides).length) { result.overrides = overrides; }
+	if (stored.overrides !== undefined) {
+		if (!record(stored.overrides) || Object.keys(stored.overrides).some(field => !capabilityFields.includes(field as CapabilityField) || !validCapability(field as CapabilityField, (stored.overrides as Record<string, unknown>)[field]))) { throw new Error('invalid-model-capability'); }
+		result.overrides = { ...stored.overrides };
 	}
-	if (stored.thinking === 'enabled' || stored.thinking === 'disabled') { result.thinking = stored.thinking; }
-	if (['low', 'high', 'max'].includes(stored.effort as string)) { result.effort = stored.effort as ModelSettings['effort']; }
-	return result;
-}
-export function updateModelSettings(value: unknown, provider: ProviderId, baseURL: string, model: string, field: unknown, next: unknown): Record<string, unknown> {
-	if (!model || typeof field !== 'string') { throw new Error('invalid-model-capability'); }
-	const key = modelSettingsKey(provider, baseURL, model);
-	const result = record(value) ? { ...value } : {};
-	const settings = readModelSettings(value, provider, baseURL, model);
-	if (field === 'reset') { delete result[key]; return result; }
-	if (capabilityFields.includes(field as CapabilityField)) {
-		if (next !== null && !validCapability(field as CapabilityField, next)) { throw new Error('invalid-model-capability'); }
-		const overrides = { ...settings.overrides };
-		if (next === null) { delete overrides[field as CapabilityField]; }
-		else { Object.assign(overrides, { [field]: next }); }
-		settings.overrides = overrides;
-	} else if (field === 'thinking' || field === 'effort') {
-		if (next === null) { delete settings[field]; }
-		else if (field === 'thinking' && (next === 'enabled' || next === 'disabled')) { settings.thinking = next; }
-		else if (field === 'effort' && ['low', 'high', 'max'].includes(next as string)) { settings.effort = next as ModelSettings['effort']; }
-		else { throw new Error('invalid-model-capability'); }
-	} else { throw new Error('invalid-model-capability'); }
-	if (!Object.keys(settings.overrides ?? {}).length) { delete settings.overrides; }
-	if (Object.keys(settings).length) { result[key] = settings; } else { delete result[key]; }
+	if (stored.thinking !== undefined) {
+		if (stored.thinking !== 'enabled' && stored.thinking !== 'disabled') { throw new Error('invalid-thinking'); }
+		result.thinking = stored.thinking;
+	}
+	if (stored.effort !== undefined) {
+		if (!['low', 'high', 'max'].includes(stored.effort as string)) { throw new Error('invalid-effort'); }
+		result.effort = stored.effort as ModelSettings['effort'];
+	}
 	return result;
 }
 

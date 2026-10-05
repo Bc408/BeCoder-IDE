@@ -77,6 +77,7 @@ interface IOpenedWindow {
 export interface IOpenedMainWindow extends IOpenedWindow {
 	readonly workspace?: IAnyWorkspaceIdentifier;
 	readonly dirty: boolean;
+	readonly iconPath?: URI;
 }
 
 export interface IOpenedAuxiliaryWindow extends IOpenedWindow {
@@ -207,6 +208,7 @@ export interface IWindowSettings {
 
 export interface IDensitySettings {
 	readonly editorTabHeight: 'default' | 'compact';
+	readonly layout: 'default' | 'compact';
 }
 
 export const enum TitleBarSetting {

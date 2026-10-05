@@ -142,16 +142,16 @@ suite('OI extension boundary', () => {
 
 		const product = readJson<Record<string, unknown>>(path.join(repositoryRoot, 'product.json'));
 		for (const property of ['agentsTelemetryAppName', 'agentSdks', 'defaultChatAgent', 'sessionsWindowAllowedExtensions', 'voiceWsUrl']) {
-			assert.ok(!(property in product), `Unsupported product property remains: ${property}`);
+			assert.ok(!(Object.hasOwn(product, property)), `Unsupported product property remains: ${property}`);
 		}
 		const packageManifest = readJson<{
 			dependencies?: Record<string, string>;
 			devDependencies?: Record<string, string>;
 		}>(path.join(repositoryRoot, 'package.json'));
 		for (const dependency of ['@huggingface/transformers', 'onnxruntime-node']) {
-			assert.ok(!(dependency in (packageManifest.dependencies ?? {})), `AI runtime remains a product dependency: ${dependency}`);
+			assert.ok(!(Object.hasOwn((packageManifest.dependencies ?? {}), dependency)), `AI runtime remains a product dependency: ${dependency}`);
 		}
-		assert.ok('@playwright/test' in (packageManifest.devDependencies ?? {}), 'Playwright should remain available only as development test infrastructure');
+		assert.ok(Object.hasOwn((packageManifest.devDependencies ?? {}), '@playwright/test'), 'Playwright should remain available only as development test infrastructure');
 
 		const buildfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'buildfile.ts'), 'utf8');
 		for (const entrypoint of [
@@ -572,7 +572,7 @@ suite('OI extension boundary', () => {
 			'win32TunnelServiceMutex',
 			'win32TunnelMutex'
 		]) {
-			assert.ok(!(property in product), `Remote product property remains: ${property}`);
+			assert.ok(!(Object.hasOwn(product, property)), `Remote product property remains: ${property}`);
 		}
 
 		for (const removedPath of [
@@ -719,13 +719,13 @@ suite('OI extension boundary', () => {
 			overrides?: Record<string, unknown>;
 			allowScripts?: Record<string, boolean>;
 		}>(path.join(repositoryRoot, 'package.json'));
-		assert.ok(!('cpu-features' in (packageManifest.dependencies ?? {})));
-		assert.ok(!('cpu-features' in (packageManifest.devDependencies ?? {})));
-		assert.ok(!('cpu-features' in (packageManifest.overrides ?? {})));
-		assert.ok(!('cpu-features' in (packageManifest.allowScripts ?? {})));
-		assert.ok(!('ssh2' in (packageManifest.dependencies ?? {})));
-		assert.ok(!('@types/ssh2' in (packageManifest.devDependencies ?? {})));
-		assert.ok(!('ssh2' in (packageManifest.allowScripts ?? {})));
+		assert.ok(!(Object.hasOwn((packageManifest.dependencies ?? {}), 'cpu-features')));
+		assert.ok(!(Object.hasOwn((packageManifest.devDependencies ?? {}), 'cpu-features')));
+		assert.ok(!(Object.hasOwn((packageManifest.overrides ?? {}), 'cpu-features')));
+		assert.ok(!(Object.hasOwn((packageManifest.allowScripts ?? {}), 'cpu-features')));
+		assert.ok(!(Object.hasOwn((packageManifest.dependencies ?? {}), 'ssh2')));
+		assert.ok(!(Object.hasOwn((packageManifest.devDependencies ?? {}), '@types/ssh2')));
+		assert.ok(!(Object.hasOwn((packageManifest.allowScripts ?? {}), 'ssh2')));
 		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'build', 'npm', 'stubs', 'cpu-features')));
 
 		const packageLock = readJson<{
@@ -807,7 +807,7 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(listService, /scm view/);
 		for (const integrationScriptPath of ['scripts/test-integration.sh', 'scripts/test-integration.bat']) {
 			const integrationScript = fs.readFileSync(path.join(repositoryRoot, ...integrationScriptPath.split('/')), 'utf8');
-			assert.doesNotMatch(integrationScript, /terminal-suggest|git-base|--suite git\b|\bcopilot\b|chat\.notifyWindow/);
+			assert.doesNotMatch(integrationScript, /terminal-suggest|git-base|--suite git\b|\bcopilot\b|chat\.notifyWindow|agent-host-e2e|agentHost|AGENT_HOST_E2E|Agent Host E2E/);
 		}
 
 		const extensionBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'extensions.ts'), 'utf8');
@@ -1000,7 +1000,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(clangd?.sha256, 'ce54f16e0b4fd76d450eeda9664420b195360b73febcfe40e661108fa57f2ce1');
 		assert.strictEqual(clangd?.archiveLicenseEntry, 'clangd_22.1.6/LICENSE.TXT');
 		const electron = components.find(component => component.id === 'electron');
-		assert.strictEqual(electron?.version, '42.6.0');
+		assert.strictEqual(electron?.version, '43.7.3');
 		assert.strictEqual(electron?.spdxIdentifier, 'MIT');
 		assert.strictEqual(electron?.licensePath, 'licenses/MIT-Electron.txt');
 		assert.match(fs.readFileSync(path.join(repositoryRoot, electron.licensePath), 'utf8'), /Copyright \(c\) Electron contributors/);
@@ -1016,9 +1016,9 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, '889eb21608853100ad02b684e4af99df454a470c0eeb462c95f804d4ea28059e');
+		assert.strictEqual(languagePack?.contentSha256, 'f540e1998614860b09f861d93ccc7914cef14433a8bab6c6532d931c4d494707');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, '994c6a92136ee135d2059c79c8becb4d69ce4bdaf3cd216442b1c4bc89a8a617');
+		assert.strictEqual(languagePack?.packagedContentSha256, 'bda62445734b128ee929b027e43a65544fa3daaae51836f4e08579d7aa13c8e1');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -1072,8 +1072,8 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(updateTranslations.default, '启用自动更新检查。BeCoder 将定期自动检查更新。');
 		assert.strictEqual(updateTranslations.enableWindowsBackgroundUpdates, '启用在后台下载和安装新的 BeCoder 版本。');
 		assert.strictEqual(updateTranslations.showReleaseNotes, '在更新后显示发行说明。发行说明将从 BeCoder 更新服务获取。');
-		assert.ok(!('imageCarousel.chat.enabled' in imageCarouselTranslations));
-		assert.ok(!('openImageInCarousel' in imageCarouselTranslations));
+		assert.ok(!(Object.hasOwn(imageCarouselTranslations, 'imageCarousel.chat.enabled')));
+		assert.ok(!(Object.hasOwn(imageCarouselTranslations, 'openImageInCarousel')));
 		const packageVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-package.ps1'), 'utf8');
 		const languagePackVerifier = fs.readFileSync(path.join(repositoryRoot, 'build', 'azure-pipelines', 'win32', 'verify-becoder-language-pack.ts'), 'utf8');
 		assert.match(packageVerifier, /verify-becoder-language-pack\.ts/);
@@ -1081,7 +1081,7 @@ suite('OI extension boundary', () => {
 		assert.match(languagePackVerifier, /Object\.hasOwn\(imageCarouselTranslations, 'imageCarousel\.chat\.enabled'\)/);
 		const authenticationTranslations = mainTranslation.contents?.['vs/workbench/api/browser/mainThreadAuthentication'] ?? {};
 		for (const removedAuthenticationKey of ['xaaResourceSecretPlaceholder', 'xaaResourceSecretPrompt', 'xaaResourceSecretTitle']) {
-			assert.ok(!(removedAuthenticationKey in authenticationTranslations), `MCP-specific authentication translation remains: ${removedAuthenticationKey}`);
+			assert.ok(!(Object.hasOwn(authenticationTranslations, removedAuthenticationKey)), `MCP-specific authentication translation remains: ${removedAuthenticationKey}`);
 		}
 		for (const [moduleName, removedKeys] of [
 			['vs/workbench/contrib/accessibility/browser/accessibilityConfiguration', ['verbosity.scm']],
@@ -1121,15 +1121,15 @@ suite('OI extension boundary', () => {
 		] as const) {
 			const moduleTranslations = mainTranslation.contents?.[moduleName] ?? {};
 			for (const removedKey of removedKeys) {
-				assert.ok(!(removedKey in moduleTranslations), `Removed Stage 4.6 translation remains: ${moduleName}.${removedKey}`);
+				assert.ok(!(Object.hasOwn(moduleTranslations, removedKey)), `Removed Stage 4.6 translation remains: ${moduleName}.${removedKey}`);
 			}
 		}
 		assert.doesNotMatch(mainTranslation.contents?.['vs/platform/list/browser/listService']?.multiSelectModifier ?? '', /\bscm\b|\u6e90\u4ee3\u7801\u7ba1\u7406/i);
 		const searchTranslations = mainTranslation.contents?.['vs/workbench/contrib/search/browser/search.contribution'] ?? {};
 		assert.strictEqual(typeof searchTranslations['search.defaultViewMode.list'], 'string');
 		assert.strictEqual(typeof searchTranslations['search.defaultViewMode.tree'], 'string');
-		assert.ok(!('scm.defaultViewMode.list' in searchTranslations));
-		assert.ok(!('scm.defaultViewMode.tree' in searchTranslations));
+		assert.ok(!(Object.hasOwn(searchTranslations, 'scm.defaultViewMode.list')));
+		assert.ok(!(Object.hasOwn(searchTranslations, 'scm.defaultViewMode.tree')));
 		assert.strictEqual(
 			mainTranslation.contents?.['vs/workbench/contrib/issue/browser/baseIssueReporterService']?.internalPreviewMessage,
 			'\u5982\u679c\u8bca\u65ad\u65e5\u5fd7\u5305\u542b\u79c1\u4eba\u4fe1\u606f\uff1a'
@@ -1283,13 +1283,13 @@ suite('OI extension boundary', () => {
 
 		const viewerSource = fs.readFileSync(path.join(extensionPath, 'assets', 'main.mjs'), 'utf8');
 		for (const disabledOption of [
-			"supportsDownloading', false",
-			"supportsPrinting', false",
-			"annotationEditorMode', -1",
-			"annotationMode', 1",
-			"enableScripting', false",
-			"enableXfa', false",
-			"enableSignatureEditor', false"
+			'supportsDownloading\', false',
+			'supportsPrinting\', false',
+			'annotationEditorMode\', -1',
+			'annotationMode\', 1',
+			'enableScripting\', false',
+			'enableXfa\', false',
+			'enableSignatureEditor\', false'
 		]) {
 			assert.ok(viewerSource.includes(disabledOption), `PDF viewer does not enforce ${disabledOption}`);
 		}
@@ -1417,8 +1417,8 @@ suite('OI extension boundary', () => {
 		assert.deepStrictEqual(manifest.contributes?.menus ?? {}, {});
 		assert.deepStrictEqual(manifest.contributes?.views ?? {}, {});
 		assert.ok(!manifest.categories?.includes('Linters'));
-		assert.ok(!('@clangd/install' in (manifest.dependencies ?? {})));
-		assert.ok(!('clang-format' in (manifest.devDependencies ?? {})));
+		assert.ok(!(Object.hasOwn((manifest.dependencies ?? {}), '@clangd/install')));
+		assert.ok(!(Object.hasOwn((manifest.devDependencies ?? {}), 'clang-format')));
 		assert.deepStrictEqual(
 			manifest.contributes?.configurationDefaults?.['[c][cpp][cuda-cpp][objective-c][objective-cpp]'],
 			{
@@ -1479,11 +1479,11 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(readme, /download it|compile_commands\.json file|Format on Type/);
 		const lockfile = readJson<{ packages?: Record<string, unknown> }>(
 			path.join(extensionPath, 'package-lock.json'));
-		assert.ok(!('node_modules/@clangd/install' in (lockfile.packages ?? {})));
-		assert.ok(!('node_modules/clang-format' in (lockfile.packages ?? {})));
+		assert.ok(!(Object.hasOwn((lockfile.packages ?? {}), 'node_modules/@clangd/install')));
+		assert.ok(!(Object.hasOwn((lockfile.packages ?? {}), 'node_modules/clang-format')));
 		const compatibilityDependencies = (lockfile as { dependencies?: Record<string, unknown> }).dependencies ?? {};
-		assert.ok(!('@clangd/install' in compatibilityDependencies));
-		assert.ok(!('clang-format' in compatibilityDependencies));
+		assert.ok(!(Object.hasOwn(compatibilityDependencies, '@clangd/install')));
+		assert.ok(!(Object.hasOwn(compatibilityDependencies, 'clang-format')));
 		const vscodeIgnore = fs.readFileSync(path.join(extensionPath, '.vscodeignore'), 'utf8');
 		assert.doesNotMatch(vscodeIgnore, /!\*\.png|!doc-assets/);
 
@@ -1527,16 +1527,16 @@ suite('OI extension boundary', () => {
 
 		const runnerSource = fs.readFileSync(path.join(extensionPath, 'src', 'compilerRunner.ts'), 'utf8');
 		for (const argument of [
-			"'-fsyntax-only'",
-			"'-O2'",
-			"'-x'",
-			"'-std=c17'",
-			"'-std=c++20'",
-			"'-DDEBUGER_H'",
-			"'-I'",
-			"'-fdiagnostics-format=sarif-stderr'",
-			"'-fdiagnostics-color=never'",
-			"'-iquote'"
+			'\'-fsyntax-only\'',
+			'\'-O2\'',
+			'\'-x\'',
+			'\'-std=c17\'',
+			'\'-std=c++20\'',
+			'\'-DDEBUGER_H\'',
+			'\'-I\'',
+			'\'-fdiagnostics-format=sarif-stderr\'',
+			'\'-fdiagnostics-color=never\'',
+			'\'-iquote\''
 		]) {
 			assert.ok(runnerSource.includes(argument), `Missing GCC diagnostics argument ${argument}`);
 		}
@@ -1594,7 +1594,7 @@ suite('OI extension boundary', () => {
 			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'parts', 'editor', 'media', 'singleeditortabscontrol.css')
 		]) {
 			const css = fs.readFileSync(cssPath, 'utf8');
-			assert.match(css, /\.monaco-workbench\.windows [^{]*\.editor-group-container\.window-controls-overlay-right-host [^{]*\[data-command-id="becoder\.runner\.runWithInput"\] \{\s*margin-right: calc\(var\(--becoder-windows-window-controls-width\) - 56px\)/);
+			assert.match(css, /\.monaco-workbench\.windows [^{]*\.editor-group-container\.window-controls-overlay-right-host [^{]*\[data-command-id="becoder\.runner\.runWithInput"\] \{\s*margin-right: calc\(var\(--becoder-windows-window-controls-width\) - 82px\)/);
 			assert.doesNotMatch(css, /custom-titlebar-hidden\.windows [^{]*\[data-command-id="becoder\.runner\.runWithInput"\]/);
 		}
 
@@ -1892,10 +1892,10 @@ suite('OI extension boundary', () => {
 			const functionBase64 = Buffer.from(shortcutFunction, 'utf8').toString('base64');
 			const pathsBase64 = Buffer.from(JSON.stringify([desktopRoot, startMenuRoot]), 'utf8').toString('base64');
 			const command = [
-				"$ErrorActionPreference = 'Stop'",
-				"$functionSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_FUNCTION))",
+				'$ErrorActionPreference = \'Stop\'',
+				'$functionSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_FUNCTION))',
 				'Invoke-Expression $functionSource',
-				"$paths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_PATHS)) | ConvertFrom-Json",
+				'$paths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_SHORTCUT_PATHS)) | ConvertFrom-Json',
 				'$snapshot = @(Get-ShortcutSnapshot -Paths $paths)',
 				'ConvertTo-Json -InputObject $snapshot -Compress'
 			].join('; ');

@@ -16,6 +16,7 @@ import { createTraceLogger, ITraceLogEntry, ITraceLogger } from '../../../../../
 import { IAccessibilitySignalService } from '../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { SyncDescriptor } from '../../../../../platform/instantiation/common/descriptors.js';
 import { ServiceCollection } from '../../../../../platform/instantiation/common/serviceCollection.js';
+import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { CoreEditingCommands, CoreNavigationCommands } from '../../../../browser/coreCommands.js';
 import { IBulkEditService } from '../../../../browser/services/bulkEditService.js';
 import { IRenameSymbolTrackerService, NullRenameSymbolTrackerService } from '../../../../browser/services/renameSymbolTrackerService.js';
@@ -244,6 +245,7 @@ export interface IWithAsyncTestCodeEditorAndInlineCompletionsModel {
 	context: GhostTextContext;
 	store: DisposableStore;
 	logger: ITraceLogger;
+	instantiationService: TestInstantiationService;
 }
 
 export async function withAsyncTestCodeEditorAndInlineCompletionsModel<T>(
@@ -300,7 +302,7 @@ export async function withAsyncTestCodeEditorAndInlineCompletionsModel<T>(
 				const model = controller.model.get()!;
 				const context = new GhostTextContext(model, editor, logger);
 				try {
-					result = await callback({ editor, editorViewModel, model, context, store: disposableStore, logger });
+					result = await callback({ editor, editorViewModel, model, context, store: disposableStore, logger, instantiationService });
 				} finally {
 					context.dispose();
 					model.dispose();
@@ -405,6 +407,10 @@ class MockTextModelService implements ITextModelService {
 
 	registerTextModelContentProvider(): never {
 		throw new Error('MockTextModelService.registerTextModelContentProvider not implemented');
+	}
+
+	createSyntheticDocument(): never {
+		throw new Error('MockTextModelService.createSyntheticDocument not implemented');
 	}
 
 	canHandleResource(): boolean {

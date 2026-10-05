@@ -12,6 +12,7 @@ cd "$ROOT"
 
 # Parse arguments
 EXTRA_ARGS=()
+BUILD_ARGS=()
 RUN_FILE=""
 RUN_GLOB=""
 GREP_PATTERN=""
@@ -22,6 +23,11 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--help|-h)
 			HELP=true
+			shift
+			;;
+		--build)
+			BUILD_ARGS=(--build)
+			EXTRA_ARGS+=("$1")
 			shift
 			;;
 		--run)
@@ -51,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Known suite names (used for help text and validation)
-KNOWN_SUITES="api-folder api-workspace colorize typescript markdown emmet ipynb notebook-renderers configuration-editing github-authentication css html"
+KNOWN_SUITES="api-folder api-workspace colorize typescript markdown emmet ipynb notebook-renderers configuration-editing github-authentication css html json"
 
 if $HELP; then
 	echo "Usage: $0 [options]"
@@ -70,6 +76,7 @@ if $HELP; then
 	echo "Node.js integration tests are skipped when this option is used."
 	echo ""
 	echo "Options:"
+	echo "  --build                      use the out-build directory for node.js and JSON tests"
 	echo "  --run <file>                  run tests from a specific file (src/ path)"
 	echo "  --runGlob, --glob <pattern>   select test files by path glob (e.g. '**/editor/**/*.integrationTest.js')"
 	echo "  --grep, -g, -f <pattern>      filter test cases by name (matched against test titles)"
@@ -100,7 +107,7 @@ if [[ -n "$RUN_FILE" || -n "$RUN_GLOB" ]]; then
 fi
 
 # Check whether a given suite name matches the --suite filter.
-# Supports comma-separated patterns with shell globbing (e.g. "git*,api*").
+# Supports comma-separated patterns with shell globbing (e.g. "markdown,api*").
 should_run_suite() {
 	if [[ -z "$SUITE_FILTER" ]]; then
 		return 0
@@ -294,6 +301,13 @@ echo
 echo "### HTML tests"
 echo
 cd "$ROOT/extensions/html-language-features/server" && "$ROOT/scripts/node-electron.sh" test/index.js
+fi
+
+if should_run_suite json; then
+echo
+echo "### JSON tests"
+echo
+"$ROOT/scripts/node-electron.sh" "$ROOT/extensions/json-language-features/client/out/test/index.js" "${BUILD_ARGS[@]}"
 fi
 
 

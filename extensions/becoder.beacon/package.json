@@ -31,9 +31,10 @@
 				}
 			},
 			{
-				"command": "becoder.beacon.configureKey",
-				"title": "%configureKey%",
-				"category": "Beacon"
+				"command": "becoder.beacon.settings",
+				"title": "%command.settings%",
+				"category": "Beacon",
+				"icon": "$(gear)"
 			}
 		],
 		"menus": {
@@ -49,18 +50,11 @@
 					"command": "becoder.beacon.open"
 				},
 				{
-					"command": "becoder.beacon.configureKey"
+					"command": "becoder.beacon.settings"
 				}
 			]
 		},
 		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "becoder-beacon-settings",
-					"title": "Beacon",
-					"icon": "resources/beacon.svg"
-				}
-			],
 			"secondarySidebar": [
 				{
 					"id": "becoder-beacon",
@@ -70,13 +64,6 @@
 			]
 		},
 		"views": {
-			"becoder-beacon-settings": [
-				{
-					"type": "webview",
-					"id": "becoder.beacon.configuration",
-					"name": "%configuration%"
-				}
-			],
 			"becoder-beacon": [
 				{
 					"type": "webview",
@@ -88,103 +75,6 @@
 		"configuration": {
 			"title": "Beacon",
 			"properties": {
-				"beacon.provider": {
-					"type": "string",
-					"enum": [
-						"deepseek",
-						"bailian",
-						"moonshot",
-						"ollama"
-					],
-					"enumDescriptions": [
-						"DeepSeek",
-						"Alibaba Cloud Bailian",
-						"Moonshot / Kimi",
-						"Ollama"
-					],
-					"default": "deepseek",
-					"scope": "application",
-					"description": "%settings.provider%"
-				},
-				"beacon.deepseek.baseURL": {
-					"type": "string",
-					"default": "https://api.deepseek.com",
-					"scope": "application",
-					"description": "%settings.deepseek.baseURL%"
-				},
-				"beacon.deepseek.model": {
-					"type": "string",
-					"default": "",
-					"maxLength": 256,
-					"scope": "application",
-					"description": "%settings.model%"
-				},
-				"beacon.bailian.baseURL": {
-					"type": "string",
-					"default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-					"scope": "application",
-					"description": "%settings.bailian.baseURL%"
-				},
-				"beacon.bailian.model": {
-					"type": "string",
-					"default": "",
-					"maxLength": 256,
-					"scope": "application",
-					"description": "%settings.model%"
-				},
-				"beacon.moonshot.baseURL": {
-					"type": "string",
-					"default": "https://api.moonshot.cn/v1",
-					"scope": "application",
-					"description": "%settings.moonshot.baseURL%"
-				},
-				"beacon.moonshot.model": {
-					"type": "string",
-					"default": "",
-					"maxLength": 256,
-					"scope": "application",
-					"description": "%settings.model%"
-				},
-				"beacon.ollama.baseURL": {
-					"type": "string",
-					"default": "http://localhost:11434/v1",
-					"scope": "application",
-					"description": "%settings.ollama.baseURL%"
-				},
-				"beacon.ollama.model": {
-					"type": "string",
-					"default": "",
-					"maxLength": 256,
-					"scope": "application",
-					"description": "%settings.model%"
-				},
-				"beacon.modelParameters": {
-					"type": "object",
-					"default": {},
-					"scope": "application",
-					"description": "%settings.modelParameters%",
-					"additionalProperties": {
-						"type": "object",
-						"additionalProperties": false,
-						"properties": {
-							"temperature": {
-								"type": "number",
-								"minimum": 0,
-								"maximum": 2
-							},
-							"topP": {
-								"type": "number",
-								"minimum": 0,
-								"maximum": 1
-							},
-							"maxOutputTokens": {
-								"type": "integer",
-								"minimum": 1,
-								"maximum": 131072
-							}
-						}
-					}
-				},
 				"beacon.filePermission": {
 					"type": "string",
 					"enum": [
@@ -201,88 +91,33 @@
 					"scope": "application",
 					"description": "%permissions.description%"
 				},
-				"beacon.modelCapabilities": {
-					"type": "object",
-					"default": {},
-					"scope": "application",
-					"description": "%settings.modelCapabilities%",
-					"additionalProperties": {
-						"type": "object",
-						"additionalProperties": false,
-						"properties": {
-							"overrides": {
-								"type": "object",
-								"additionalProperties": false,
-								"properties": {
-									"purpose": {
-										"type": "string",
-										"enum": [
-											"chat",
-											"embedding",
-											"rerank",
-											"image",
-											"unknown"
-										]
-									},
-									"vision": {
-										"type": "string",
-										"enum": [
-											"supported",
-											"unsupported",
-											"unknown"
-										]
-									},
-									"reasoning": {
-										"type": "string",
-										"enum": [
-											"supported",
-											"unsupported",
-											"unknown"
-										]
-									},
-									"tools": {
-										"type": "string",
-										"enum": [
-											"supported",
-											"unsupported",
-											"unknown"
-										]
-									},
-									"contextWindow": {
-										"type": "integer",
-										"minimum": 1,
-										"maximum": 10000000
-									},
-									"maxOutputTokens": {
-										"type": "integer",
-										"minimum": 1,
-										"maximum": 10000000
-									}
-								}
-							},
-							"thinking": {
-								"type": "string",
-								"enum": [
-									"enabled",
-									"disabled"
-								]
-							},
-							"effort": {
-								"type": "string",
-								"enum": [
-									"low",
-									"high",
-									"max"
-								]
-							}
-						}
-					}
-				},
 				"beacon.webEnabled": {
 					"type": "boolean",
 					"default": true,
 					"scope": "application",
 					"description": "%settings.webEnabled%"
+				},
+				"beacon.modelConfiguration": {
+					"type": "object",
+					"default": {
+						"providers": {
+							"deepseek": { "baseURL": "https://api.deepseek.com", "models": [] },
+							"bailian": { "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1", "models": [] },
+							"moonshot": { "baseURL": "https://api.moonshot.cn/v1", "models": [] },
+							"ollama": { "baseURL": "http://localhost:11434/v1", "models": [] }
+						}
+					},
+					"scope": "application",
+					"description": "%settings.modelConfiguration%",
+					"additionalProperties": false,
+					"properties": {
+						"selection": {
+							"type": "object"
+						},
+						"providers": {
+							"type": "object"
+						}
+					}
 				}
 			}
 		}
@@ -290,7 +125,7 @@
 	"scripts": {
 		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
 		"build": "node build.mjs",
-		"test": "node --test dist-test/session.test.cjs dist-test/files.test.cjs dist-test/models.test.cjs dist-test/web.test.cjs dist-test/attachments.test.cjs",
+		"test": "node --test dist-test/session.test.cjs dist-test/files.test.cjs dist-test/models.test.cjs dist-test/web.test.cjs dist-test/attachments.test.cjs dist-test/settings.test.cjs",
 		"vscode:prepublish": "npm run typecheck && npm run build",
 		"lint": "node ../../node_modules/eslint/bin/eslint.js --config eslint.config.mjs src webview test build.mjs --max-warnings 0",
 		"test-render": "node test/render.mjs"

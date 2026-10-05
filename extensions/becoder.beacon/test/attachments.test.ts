@@ -127,7 +127,7 @@ suite('Beacon attachments', () => {
 			assert.ok(JSON.stringify(bodies).includes('latest unsaved editor')); assert.equal(snapshot().attachments.length, 0);
 			assert.equal(snapshot().messages[0].attachments?.[0].contents, '', 'Streaming snapshots do not repeatedly transfer attachment bytes');
 			view.drop({ uris: [mock.Uri.file(image)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
-			await mock.workspace.getConfiguration().update('deepseek.model', 'deepseek-chat'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-chat');
+			await mock.selectModel('deepseek-chat'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-chat');
 			view.receive({ type: 'send', text: 'image' }); await until(() => !snapshot().busy); assert.equal(bodies.length, 1); assert.equal(snapshot().attachments.length, 1);
 			view.receive({ type: 'removeAttachment', id: snapshot().attachments[0].id }); assert.equal(snapshot().attachments.length, 0);
 			await mock.workspace.getConfiguration().update('filePermission', 'computer'); await until(() => snapshot().configured);
@@ -143,11 +143,11 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'clear' }); view.receive({ type: 'stop' }); await until(() => !snapshot().busy);
 			assert.equal(JSON.stringify(snapshot().messages), previousMessages); assert.equal(snapshot().attachments.length, 1); assert.equal(bodies.length, 1);
 			view.receive({ type: 'removeAttachment', id: snapshot().attachments[0].id });
-			await mock.workspace.getConfiguration().update('deepseek.model', 'deepseek-flash'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-flash');
+			await mock.selectModel('deepseek-flash'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-flash');
 			view.drop({ uris: [mock.Uri.file(image)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			view.receive({ type: 'send', text: '' }); await until(() => snapshot().messages.length === 4 && !snapshot().busy);
 			const imageHistory = JSON.stringify(snapshot().messages);
-			await mock.workspace.getConfiguration().update('deepseek.model', 'deepseek-chat'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-chat');
+			await mock.selectModel('deepseek-chat'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-chat');
 			view.receive({ type: 'regenerate', id: snapshot().messages.at(-1)!.id });
 			view.receive({ type: 'send', text: 'blocked followup' }); await until(() => !snapshot().busy);
 			assert.equal(JSON.stringify(snapshot().messages), imageHistory, 'Vision rejection occurs before truncating or adding a message'); assert.equal(bodies.length, 2);

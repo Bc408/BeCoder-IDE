@@ -21,6 +21,7 @@ import { IExtensionGalleryManifest } from './extensionGalleryManifest.js';
 
 export const EXTENSION_IDENTIFIER_PATTERN = '^([a-z0-9A-Z][a-z0-9-A-Z]*)\\.([a-z0-9A-Z][a-z0-9-A-Z]*)$';
 export const EXTENSION_IDENTIFIER_REGEX = new RegExp(EXTENSION_IDENTIFIER_PATTERN);
+export const EXTENSION_PUBLISHER_IDENTIFIER_PATTERN = '^([a-z0-9A-Z][a-z0-9-A-Z]*)$';
 export const WEB_EXTENSION_TAG = '__web_extension';
 export const EXTENSION_INSTALL_SKIP_WALKTHROUGH_CONTEXT = 'skipWalkthrough';
 export const EXTENSION_INSTALL_SKIP_PUBLISHER_TRUST_CONTEXT = 'skipPublisherTrust';
@@ -753,7 +754,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration)
 				},
 				additionalProperties: false,
 				patternProperties: {
-					'([a-z0-9A-Z][a-z0-9-A-Z]*)\\.([a-z0-9A-Z][a-z0-9-A-Z]*)$': {
+					[EXTENSION_IDENTIFIER_PATTERN]: {
 						anyOf: [
 							{
 								type: ['boolean', 'string'],
@@ -774,7 +775,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration)
 							},
 						]
 					},
-					'([a-z0-9A-Z][a-z0-9-A-Z]*)$': {
+					[EXTENSION_PUBLISHER_IDENTIFIER_PATTERN]: {
 						type: ['boolean', 'string'],
 						enum: [true, false, 'stable'],
 						description: localize('extension.publisher.allow.description', "Allow or disallow all extensions from the publisher."),

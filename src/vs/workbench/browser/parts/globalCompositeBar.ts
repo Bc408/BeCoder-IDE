@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter } from '../../../base/common/event.js';
 import { localize } from '../../../nls.js';
 import { ActionBar, ActionsOrientation } from '../../../base/browser/ui/actionbar/actionbar.js';
 import { ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID } from '../../common/activity.js';
@@ -56,6 +57,9 @@ export class GlobalCompositeBar extends Disposable {
 	private readonly globalActivityAction = this._register(new Action(GLOBAL_ACTIVITY_ID));
 	private readonly accountAction = this._register(new Action(ACCOUNTS_ACTIVITY_ID));
 	private readonly globalActivityActionBar: ActionBar;
+
+	private readonly _onDidChange = this._register(new Emitter<void>());
+	readonly onDidChange = this._onDidChange.event;
 
 	constructor(
 		private readonly contextMenuActionsProvider: () => IAction[],
@@ -128,8 +132,9 @@ export class GlobalCompositeBar extends Disposable {
 		this.globalActivityActionBar.focus(true);
 	}
 
-	size(): number {
-		return this.globalActivityActionBar.viewItems.length;
+	getHeight(actionHeight: number, actionGap: number): number {
+		const count = this.globalActivityActionBar.length();
+		return count * actionHeight + Math.max(0, count - 1) * actionGap;
 	}
 
 	getContextMenuActions(): IAction[] {
@@ -137,14 +142,16 @@ export class GlobalCompositeBar extends Disposable {
 	}
 
 	private toggleAccountsActivity() {
-		if (this.globalActivityActionBar.length() === 2 && this.accountsVisibilityPreference) {
+		const accountsVisible = this.globalActivityActionBar.length() === 2;
+		if (accountsVisible === this.accountsVisibilityPreference) {
 			return;
 		}
-		if (this.globalActivityActionBar.length() === 2) {
+		if (accountsVisible) {
 			this.globalActivityActionBar.pull(GlobalCompositeBar.ACCOUNTS_ACTION_INDEX);
 		} else {
 			this.globalActivityActionBar.push(this.accountAction, { index: GlobalCompositeBar.ACCOUNTS_ACTION_INDEX });
 		}
+		this._onDidChange.fire();
 	}
 
 	private get accountsVisibilityPreference(): boolean {

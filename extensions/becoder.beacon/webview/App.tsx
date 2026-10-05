@@ -140,7 +140,6 @@ function App() {
 	const hasConversation = state.messages.length > 0;
 	const failedReply = state.messages.at(-1)?.status === 'error';
 	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (capabilities.tools !== 'supported' ? '\n' + t('This model does not have confirmed tool support. Web search is unavailable; check its capabilities in settings.', '当前模型未确认支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
-	if (configuration) { return <Settings connection={state.connection} ready={ready} busy={state.busy} post={message => api.postMessage(message)} />; }
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
 		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} title={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
 		<div className="history-actions"><button className="history-rename" disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} title={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button className={`history-delete ${item.id === confirmDelete ? 'delete-confirm' : ''}`} disabled={busy} onClick={() => { if (item.id === confirmDelete) { setConfirmDelete(undefined); api.postMessage({ type: 'deleteHistory', conversationId: item.id }); } else { setConfirmDelete(item.id); } }} title={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')} aria-label={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')}>{item.id === confirmDelete ? t('Confirm', '确认') : <Icon name="trash" />}</button></div>
@@ -162,7 +161,7 @@ function App() {
 		{!hasConversation && state.history.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(state.history)}</section>}
 		<Conversation hidden={!hasConversation && state.history.length > 0}>
 			<ConversationContent conversationId={state.activeId}>
-				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Configure a provider and model in the Beacon panel on the left to start.', '请在左侧 Beacon 面板配置服务商和模型后开始。')}</p></div>}
+				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Open Beacon settings to configure a provider and select a model.', '打开 Beacon 设置，配置服务商并选择模型后开始。')}</p>{!state.configured && <button onClick={() => api.postMessage({ type: 'settings' })}>{t('Open settings', '打开设置')}</button>}</div>}
 				{state.messages.map(message => <article key={message.id} className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
 						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} />)}</div>}
@@ -204,7 +203,7 @@ function App() {
 					{state.permission === 'computer' && <button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} title={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="attach" /></button>}
 					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools === 'supported'} title={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
 					<span className="composer-spacer" aria-hidden="true" />
-					<button className="model-label" type="button" onClick={() => api.postMessage({ type: 'settings' })} title={t('Choose provider and model', '选择服务商和模型') + '\n' + capabilitySummary(capabilities)}>{state.connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
+					<ModelPicker connection={state.connection} />
 					{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} title={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} title={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
 				</div>
 			</form>
@@ -212,4 +211,19 @@ function App() {
 	</main>;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function ModelPicker({ connection }: { connection: ConnectionState }) {
+	const [open, setOpen] = useState(false);
+	const node = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!open) { return; }
+		const close = (event: PointerEvent) => { if (!node.current?.contains(event.target as Node)) { setOpen(false); } };
+		document.addEventListener('pointerdown', close);
+		return () => document.removeEventListener('pointerdown', close);
+	}, [open]);
+	return <div className="model-picker" ref={node} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setOpen(false); } }} onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); node.current?.querySelector('button')?.focus(); } }}>
+		<button className="model-label" type="button" aria-expanded={open} onClick={() => setOpen(!open)} title={t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}>{connection.displayName || connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
+		{open && <div className="model-picker-menu">{connection.choices?.map(model => <button type="button" key={model.provider + ':' + model.id} disabled={connection.loading} onClick={() => { setOpen(false); api.postMessage({ type: 'selectModel', provider: model.provider, id: model.id, revision: connection.revision, requestId: Date.now() }); }}><span>{model.name}<small>{providers[model.provider].name}</small></span>{connection.provider === model.provider && connection.model === model.id && <Icon name="check" />}</button>)}<button type="button" onClick={() => { setOpen(false); api.postMessage({ type: 'settings' }); }}><Icon name="settings" />{t('Manage models', '管理模型')}</button></div>}
+	</div>;
+}
+
+createRoot(document.getElementById('root')!).render(configuration ? <Settings post={message => api.postMessage(message)} /> : <App />);

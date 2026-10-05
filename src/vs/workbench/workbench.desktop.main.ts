@@ -99,6 +99,8 @@ registerSingleton(IUserDataInitializationService, new SyncDescriptor(UserDataIni
 
 //#region --- workbench contributions
 
+// Onboarding
+
 // Logs
 import './contrib/logs/electron-browser/logs.contribution.js';
 

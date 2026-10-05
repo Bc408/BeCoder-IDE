@@ -24,7 +24,7 @@ import { CommandsRegistry, ICommandService } from '../../../../platform/commands
 import { Extensions as ConfigurationExtensions, ConfigurationScope, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IDialogService, IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
-import { ExtensionGalleryManifestStatus, ExtensionGalleryResourceType, ExtensionGalleryServiceUrlConfigKey, getExtensionGalleryManifestResourceUri, IExtensionGalleryManifest, IExtensionGalleryManifestService } from '../../../../platform/extensionManagement/common/extensionGalleryManifest.js';
+import { ExtensionGalleryManifestStatus, ExtensionGalleryResourceType, ExtensionGalleryAuthProviderConfigKey, ExtensionGalleryServiceUrlConfigKey, getExtensionGalleryManifestResourceUri, IExtensionGalleryManifest, IExtensionGalleryManifestService } from '../../../../platform/extensionManagement/common/extensionGalleryManifest.js';
 import { EXTENSION_INSTALL_SOURCE_CONTEXT, ExtensionInstallSource, ExtensionRequestsTimeoutConfigKey, ExtensionsLocalizedLabel, FilterType, IExtensionGalleryService, IExtensionManagementService, PreferencesLocalizedLabel, SortBy, VerifyExtensionSignatureConfigKey } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { areSameExtensions, getIdAndVersion } from '../../../../platform/extensionManagement/common/extensionManagementUtil.js';
 import { ExtensionStorageService } from '../../../../platform/extensionManagement/common/extensionStorage.js';
@@ -74,6 +74,7 @@ import { ExtensionRecommendationsService } from './extensionRecommendationsServi
 import { ClearLanguageAction, ConfigureWorkspaceFolderRecommendedExtensionsAction, ConfigureWorkspaceRecommendedExtensionsAction, InstallAction, InstallAnotherVersionAction, InstallSpecificVersionOfExtensionAction, SetColorThemeAction, SetFileIconThemeAction, SetProductIconThemeAction, ToggleAutoUpdateForExtensionAction, ToggleAutoUpdatesForPublisherAction, TogglePreReleaseExtensionAction } from './extensionsActions.js';
 import { ExtensionActivationProgress } from './extensionsActivationProgress.js';
 import { ExtensionsCompletionItemsProvider } from './extensionsCompletionItemsProvider.js';
+import { ExtensionEnablementContextKeysContribution } from './extensionEnablementContext.js';
 import { ExtensionDependencyChecker } from './extensionsDependencyChecker.js';
 import { clearSearchResultsIcon, configureRecommendedIcon, extensionsViewIcon, filterIcon, installWorkspaceRecommendedIcon, refreshIcon } from './extensionsIcons.js';
 import { InstallExtensionQuickAccessProvider, ManageExtensionsQuickAccessProvider } from './extensionsQuickAccess.js';
@@ -165,7 +166,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 			},
 			'extensions.autoUpdateDelay': {
 				type: 'number',
-				default: 2,
+				default: 12,
 				minimum: 0,
 				markdownDescription: localize('extensions.autoUpdateDelay', "Controls the delay in hours after an extension update is published before it is automatically installed. Only applies when `#extensions.autoUpdate#` is set to `on`. This delay helps avoid installing potentially problematic updates immediately after release."),
 				scope: ConfigurationScope.APPLICATION,
@@ -323,6 +324,39 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 							key: 'extensions.gallery.serviceUrl',
 							value: localize('extensions.gallery.serviceUrl', "Configure the Marketplace service URL to connect to"),
 						}
+					}
+				},
+			},
+			[ExtensionGalleryAuthProviderConfigKey]: {
+				type: 'string',
+				enum: ['github', 'microsoft'],
+				enumDescriptions: [
+					localize('extensions.gallery.authProvider.github', "Authenticate to the Extensions Marketplace using GitHub."),
+					localize('extensions.gallery.authProvider.microsoft', "Authenticate to the Extensions Marketplace using a Microsoft (Entra ID) account."),
+				],
+				description: localize('extensions.gallery.authProvider', "Configure the authentication provider for the Extensions Marketplace"),
+				default: 'github',
+				scope: ConfigurationScope.APPLICATION,
+				included: false,
+				policy: {
+					name: 'ExtensionGalleryAuthProvider',
+					category: PolicyCategory.Extensions,
+					minimumVersion: '1.137',
+					localization: {
+						description: {
+							key: 'extensions.gallery.authProvider',
+							value: localize('extensions.gallery.authProvider', "Configure the authentication provider for the Extensions Marketplace"),
+						},
+						enumDescriptions: [
+							{
+								key: 'extensions.gallery.authProvider.github',
+								value: localize('extensions.gallery.authProvider.github', "Authenticate to the Extensions Marketplace using GitHub."),
+							},
+							{
+								key: 'extensions.gallery.authProvider.microsoft',
+								value: localize('extensions.gallery.authProvider.microsoft', "Authenticate to the Extensions Marketplace using a Microsoft (Entra ID) account."),
+							},
+						]
 					}
 				},
 			},
@@ -2040,6 +2074,7 @@ workbenchRegistry.registerWorkbenchContribution(ExtensionActivationProgress, Lif
 workbenchRegistry.registerWorkbenchContribution(ExtensionDependencyChecker, LifecyclePhase.Eventually);
 workbenchRegistry.registerWorkbenchContribution(ExtensionEnablementWorkspaceTrustTransitionParticipant, LifecyclePhase.Restored);
 workbenchRegistry.registerWorkbenchContribution(ExtensionsCompletionItemsProvider, LifecyclePhase.Restored);
+workbenchRegistry.registerWorkbenchContribution(ExtensionEnablementContextKeysContribution, LifecyclePhase.Restored);
 workbenchRegistry.registerWorkbenchContribution(UnsupportedExtensionsMigrationContrib, LifecyclePhase.Eventually);
 workbenchRegistry.registerWorkbenchContribution(TrustedPublishersInitializer, LifecyclePhase.Eventually);
 workbenchRegistry.registerWorkbenchContribution(ExtensionMarketplaceStatusUpdater, LifecyclePhase.Eventually);

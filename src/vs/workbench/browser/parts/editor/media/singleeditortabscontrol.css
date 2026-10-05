@@ -5,7 +5,14 @@
 
 /* Title Label */
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container {
+	display: flex;
+	width: 100%;
+	height: var(--editor-group-tab-height);
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .label-container {
 	height: var(--editor-group-tab-height);
 	display: flex;
 	justify-content: flex-start;
@@ -35,24 +42,30 @@
 
 /* Keep the single-tab title clear of Electron's native Windows controls. */
 .monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-left-host > .title > .label-container,
-.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .label-container {
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-left-host > .title > .single-tab-and-actions-container > .label-container,
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .label-container,
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .single-tab-and-actions-container > .label-container {
 	box-sizing: border-box;
 }
 
-.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-left-host > .title > .label-container {
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-left-host > .title > .label-container,
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-left-host > .title > .single-tab-and-actions-container > .label-container {
 	padding-left: env(titlebar-area-x, 0px);
 }
 
 /* Preserve the recovery control's gap in the group that owns the left WCO. */
-.monaco-workbench.custom-titlebar-hidden.windows.nosidebar .part.editor > .content .editor-group-container.window-controls-overlay-left-host.sidebar-recovery-host > .title > .label-container {
+.monaco-workbench.custom-titlebar-hidden.windows.nosidebar .part.editor > .content .editor-group-container.window-controls-overlay-left-host.sidebar-recovery-host > .title > .label-container,
+.monaco-workbench.custom-titlebar-hidden.windows.nosidebar .part.editor > .content .editor-group-container.window-controls-overlay-left-host.sidebar-recovery-host > .title > .single-tab-and-actions-container > .label-container {
 	padding-left: calc(env(titlebar-area-x, 0px) + 48px);
 }
 
-.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .label-container {
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .label-container,
+.monaco-workbench.custom-titlebar-hidden.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .single-tab-and-actions-container > .label-container {
 	padding-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
 }
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container > .title-label {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container > .title-label,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .label-container > .title-label {
 	line-height: var(--editor-group-tab-height);
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -60,7 +73,8 @@
 	padding-left: 20px;
 }
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container > .title-label > .monaco-icon-label-container {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .label-container > .title-label > .monaco-icon-label-container,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .label-container > .title-label > .monaco-icon-label-container {
 	flex: initial; /* helps to show decorations right next to the label and not at the end while still preserving text overflow ellipsis */
 }
 
@@ -135,7 +149,8 @@
 
 /* Editor Actions Toolbar (via title actions) */
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .title-actions {
 	display: flex;
 	flex: initial;
 	opacity: 0.5;
@@ -143,19 +158,23 @@
 	height: var(--editor-group-tab-height);
 }
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions.hidden {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions.hidden,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .title-actions.hidden {
 	display: none;
 }
 
 
-.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions .action-item {
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .title-actions .action-item,
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .single-tab-and-actions-container > .title-actions .action-item {
 	margin-right: 4px;
 }
 
-.monaco-workbench.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .title-actions .action-item[data-command-id="becoder.runner.runWithInput"] {
+.monaco-workbench.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .title-actions .action-item[data-command-id="becoder.runner.runWithInput"],
+.monaco-workbench.windows .part.editor > .content .editor-group-container.window-controls-overlay-right-host > .title > .single-tab-and-actions-container > .title-actions .action-item[data-command-id="becoder.runner.runWithInput"] {
 	margin-right: calc(var(--becoder-windows-window-controls-width) - 82px);
 }
 
-.monaco-workbench .part.editor > .content .editor-group-container.active > .title > .title-actions {
+.monaco-workbench .part.editor > .content .editor-group-container.active > .title > .title-actions,
+.monaco-workbench .part.editor > .content .editor-group-container.active > .title > .single-tab-and-actions-container > .title-actions {
 	opacity: 1;
 }

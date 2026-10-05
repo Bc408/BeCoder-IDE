@@ -112,8 +112,8 @@ $requiredFiles = @(
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpfr\COPYING.LESSER',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\zstd\LICENSE',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty_console_list.node',
+	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty.node',
+	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty_console_list.node',
 	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\conpty.dll',
 	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\OpenConsole.exe',
 	'resources\app\node_modules.asar.unpacked\node-pty\lib\worker\conoutSocketWorker.js',
@@ -846,7 +846,7 @@ $pdfViewerComponent = @($componentInventory.components) | Where-Object { $_.id -
 if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne $expectedCompilerHash) {
 	throw 'The bundled component inventory does not pin the audited source toolchain archives.'
 }
-if ($electronComponent.version -ne '42.6.0' -or
+if ($electronComponent.version -ne '43.7.3' -or
 	$electronComponent.spdxIdentifier -ne 'MIT' -or
 	$electronComponent.licensePath -ne 'licenses/MIT-Electron.txt' -or
 	(Get-Content -LiteralPath (Join-Path $appPath $electronComponent.licensePath) -Raw -Encoding utf8) -notmatch 'Copyright \(c\) Electron contributors') {
@@ -854,8 +854,8 @@ if ($electronComponent.version -ne '42.6.0' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne '889eb21608853100ad02b684e4af99df454a470c0eeb462c95f804d4ea28059e' -or
-	$languagePackComponent.packagedContentSha256 -ne '994c6a92136ee135d2059c79c8becb4d69ce4bdaf3cd216442b1c4bc89a8a617') {
+	$languagePackComponent.contentSha256 -ne 'f540e1998614860b09f861d93ccc7914cef14433a8bab6c6532d931c4d494707' -or
+	$languagePackComponent.packagedContentSha256 -ne 'bda62445734b128ee929b027e43a65544fa3daaae51836f4e08579d7aa13c8e1') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

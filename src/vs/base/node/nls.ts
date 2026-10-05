@@ -17,6 +17,11 @@ export interface IResolveNLSConfigurationContext {
 	readonly nlsMetadataPath: string;
 
 	/**
+	 * Precomputed identity of the commit and NLS tables, supplied by packaged products.
+	 */
+	readonly nlsMetadataHash?: string;
+
+	/**
 	 * Path to the user data directory. Used as a cache for
 	 * language packs converted to the format we need.
 	 */
@@ -39,9 +44,9 @@ export interface IResolveNLSConfigurationContext {
 	readonly osLocale: string;
 }
 
-export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPath, commit, nlsMetadataPath }: IResolveNLSConfigurationContext): Promise<INLSConfiguration> {
+export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPath, commit, nlsMetadataPath, nlsMetadataHash }: IResolveNLSConfigurationContext): Promise<INLSConfiguration> {
 	mark('code/willGenerateNls');
-	const languagePackCommit = commit ?? 'dev';
+	const languagePackCommit = nlsMetadataHash ?? commit ?? 'dev';
 
 	if (
 		userLocale === 'pseudo' ||

@@ -3,99 +3,164 @@
  *  Licensed under the MIT License. See LICENSE in this directory's extension root.
  *--------------------------------------------------------------------------------------------*/
 
-import { useEffect, useState } from 'react';
-import { providers, type ConnectionState, type ModelParameterName } from '../src/connection';
+import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { normalizeBaseURL, providers, type ModelParameterName, type ProviderId } from '../src/connection';
+import { resolveCapabilities, type CapabilityField, type ModelCapabilities, type ModelSettings } from '../src/models';
+import { parameterPolicy, type ConfiguredModel, type SettingsCommand, type SettingsResult, type SettingsSnapshot } from '../src/modelConfiguration';
 import { Icon } from './Icon';
-import { resolveCapabilities, type CapabilityField, type ModelCapabilities } from '../src/models';
 
 const zh = document.documentElement.lang.startsWith('zh');
 const t = (en: string, cn: string) => zh ? cn : en;
-export function providerName(id: string): string {
-	return ({ deepseek: t('DeepSeek', '深度求索'), bailian: t('Alibaba Cloud Bailian', '阿里云百炼'), moonshot: t('Moonshot', '月之暗面'), ollama: 'Ollama' } as Record<string, string>)[id] ?? id;
-}
-
+const capabilityName = (value: ModelCapabilities['purpose' | 'vision']) => ({ chat: t('Chat', '对话'), embedding: t('Embedding', '嵌入'), rerank: t('Reranking', '重排'), image: t('Image generation', '图像生成'), supported: t('Supported', '支持'), unsupported: t('Unsupported', '不支持'), unknown: t('Unknown', '未知') })[value];
+const sourceName = (source: ModelCapabilities['source']) => ({ unknown: t('Unknown', '未知'), catalog: t('Built-in catalog', '内置目录'), service: t('Provider metadata', '服务商元数据'), manual: t('Manual correction', '手动校正') })[source];
 export function capabilitySummary(capabilities: ModelCapabilities): string {
-	const label = (value: string) => value === 'supported' ? t('Supported', '支持') : value === 'unsupported' ? t('Unsupported', '不支持') : t('Unknown', '未知');
-	return `${t('Vision', '视觉')}: ${label(capabilities.vision)} · ${t('Thinking', '推理')}: ${label(capabilities.reasoning)} · ${t('Tools', '工具')}: ${label(capabilities.tools)}`;
+	const support = (value: string) => ({ supported: t('Supported', '支持'), unsupported: t('Unsupported', '不支持'), unknown: t('Unknown', '未知') } as Record<string, string>)[value];
+	return [t('Vision', '视觉') + ': ' + support(capabilities.vision), t('Reasoning', '推理') + ': ' + support(capabilities.reasoning), t('Tools', '工具') + ': ' + support(capabilities.tools)].join(' · ');
+}
+type Run = (command: Omit<SettingsCommand, 'requestId' | 'provider' | 'revision'>, revision?: number) => Promise<boolean>;
+function Switch({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange(value: boolean): void }) {
+	return <button type="button" className="settings-switch" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}><span /></button>;
+}
+function Field({ label, children }: { label: string; children: ReactNode }) {
+	return <label className="settings-field"><span>{label}</span>{Children.map(children, child => isValidElement(child) && (child.type === 'input' || child.type === 'select') ? cloneElement(child as ReactElement<{ 'aria-label': string }>, { 'aria-label': label }) : child)}</label>;
+}
+function Badges({ capabilities }: { capabilities: ModelCapabilities }) {
+	return <span className="capability-badges">{(['vision', 'reasoning', 'tools'] as const).filter(field => capabilities[field] === 'supported').map(field => <span key={field} className={`capability-badge ${field}`} title={field === 'vision' ? t('Vision input', '视觉输入') : field === 'reasoning' ? t('Reasoning', '推理') : t('Tool calls', '工具调用')}><Icon name={field === 'vision' ? 'image' : field === 'reasoning' ? 'reasoning' : 'tools'} /></span>)}</span>;
 }
 
-function CapabilitySettings({ connection, disabled, post }: { connection: ConnectionState; disabled: boolean; post: (message: unknown) => void }) {
-	const settings = connection.modelSettings ?? {};
-	const capabilities = connection.capabilities ?? resolveCapabilities(connection.provider, connection.baseURL, connection.model, undefined, settings);
-	const update = (field: string, value: unknown) => post({ type: 'updateCapability', provider: connection.provider, baseURL: connection.baseURL, model: connection.model, field, value });
-	const labels: Record<CapabilityField, string> = { purpose: t('Model type', '模型用途'), vision: t('Vision input', '视觉输入'), reasoning: t('Thinking', '推理'), tools: t('Tool calling', '工具调用'), contextWindow: t('Declared context window', '声明的上下文窗口'), maxOutputTokens: t('Maximum model output', '模型最大输出') };
-	const source = ({ unknown: t('Unknown', '未知'), catalog: t('Built-in catalog', '内置目录'), service: t('Service metadata', '服务元数据'), manual: t('Manual override', '手动修正') })[capabilities.source];
-	return <section className="model-capabilities" aria-labelledby="model-capabilities-title">
-		<h2 id="model-capabilities-title">{t('Model capabilities', '模型能力')}</h2>
-		<p className="configuration-hint">{t('Source', '来源')}：{source}。{t('Overrides are saved for this provider, endpoint and model.', '修正按服务商、接口地址和模型保存。')}</p>
-		<div className="capability-badges" aria-label={t('Current model capabilities', '当前模型能力')}>{(['vision', 'reasoning', 'tools'] as const).map(field => <span key={field} data-support={capabilities[field]}>{labels[field]} · {capabilities[field] === 'supported' ? t('Supported', '支持') : capabilities[field] === 'unsupported' ? t('Unsupported', '不支持') : t('Unknown', '未知')}</span>)}</div>
-		{(['purpose', 'vision', 'reasoning', 'tools'] as const).map(field => <label className="connection-field" key={field}>{labels[field]}<select disabled={disabled} value={settings.overrides?.[field] ?? ''} onChange={event => update(field, event.target.value || null)}>
-			<option value="">{t('Automatic', '自动识别')} · {field === 'purpose' ? ({ chat: t('Chat', '聊天'), embedding: t('Embedding', '嵌入'), rerank: t('Reranking', '重排'), image: t('Image generation', '图像生成'), unknown: t('Unknown', '未知') })[capabilities.purpose] : capabilities[field] === 'supported' ? t('Supported', '支持') : capabilities[field] === 'unsupported' ? t('Unsupported', '不支持') : t('Unknown', '未知')}</option>
-			{field === 'purpose' ? <><option value="chat">{t('Chat', '聊天')}</option><option value="embedding">{t('Embedding', '嵌入')}</option><option value="rerank">{t('Reranking', '重排')}</option><option value="image">{t('Image generation', '图像生成')}</option><option value="unknown">{t('Unknown', '未知')}</option></> : <><option value="supported">{t('Supported', '支持')}</option><option value="unsupported">{t('Unsupported', '不支持')}</option><option value="unknown">{t('Unknown', '未知')}</option></>}
-		</select></label>)}
-		{(['contextWindow', 'maxOutputTokens'] as const).map(field => <label className="connection-field" key={`${connection.provider}:${connection.baseURL}:${connection.model}:${field}:${settings.overrides?.[field]}`}>{labels[field]}<input type="number" min={1} max={10000000} step={1} disabled={disabled} defaultValue={settings.overrides?.[field] ?? ''} placeholder={capabilities[field]?.toString() ?? t('Unknown', '未知')} onBlur={event => { if (event.currentTarget.checkValidity()) { update(field, event.currentTarget.value ? Number(event.currentTarget.value) : null); } }} /></label>)}
-		<p className="configuration-hint">{t('Context windows are declared model limits; Ollama runtime settings may be smaller. This does not change runtime settings or truncate history.', '上下文窗口为模型声明上限；Ollama 实际运行窗口可能更小。这里不会修改运行设置或截断历史。')}</p>
-		<label className="connection-field">{t('Thinking mode', '思考模式')}<select value={settings.thinking ?? ''} disabled={disabled || capabilities.reasoning !== 'supported' || /-(thinking|instruct)($|-)/.test(connection.model)} onChange={event => update('thinking', event.target.value || null)}><option value="">{t('Model default', '模型默认')}</option><option value="enabled">{t('Enabled', '开启')}</option><option value="disabled">{t('Disabled', '关闭')}</option></select></label>
-		{connection.provider === 'deepseek' && /^deepseek-(flash|pro|v4)/.test(connection.model) && capabilities.reasoning === 'supported' && <label className="connection-field">{t('Thinking effort', '思考强度')}<select value={settings.effort ?? ''} disabled={disabled || settings.thinking === 'disabled'} onChange={event => update('effort', event.target.value || null)}><option value="">{t('Model default', '模型默认')}</option><option value="low">{t('Low', '低')}</option><option value="high">{t('High', '高')}</option><option value="max">{t('Maximum', '最高')}</option></select></label>}
-		{capabilities.tools !== 'supported' && <p className="configuration-hint">{t('File tools require confirmed tool support, even when file permission is enabled.', '即使开启文件权限，也只有确认支持工具调用后才提供文件工具。')}</p>}
-		<button className="connection-secondary" disabled={disabled || !Object.keys(settings).length} onClick={() => update('reset', null)}>{t('Restore model defaults', '恢复模型默认')}</button>
-	</section>;
+function ConnectionForm({ provider, snapshot, run, dirtyChanged }: { provider: ProviderId; snapshot: SettingsSnapshot; run: Run; dirtyChanged(value: boolean): void }) {
+	const saved = snapshot.providers[provider].baseURL;
+	const [baseURL, setBaseURL] = useState(saved);
+	const [key, setKey] = useState('');
+	const [clearKey, setClearKey] = useState(false);
+	const revision = useRef(snapshot.revision);
+	const latestRevision = useRef(snapshot.revision); latestRevision.current = snapshot.revision;
+	const dirty = baseURL !== saved || !!key || clearKey;
+	const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
+	useEffect(() => { dirtyChanged(dirty); }, [dirty, dirtyChanged]);
+	useEffect(() => {
+		if (!dirtyRef.current) { setBaseURL(saved); revision.current = snapshot.revision; }
+	}, [saved, snapshot.revision]);
+	const cancel = () => { setBaseURL(saved); setKey(''); setClearKey(false); revision.current = snapshot.revision; };
+	return <form className="connection-form settings-card" onSubmit={async event => {
+		event.preventDefault();
+		if (await run({ type: 'saveConnection', baseURL, key, clearKey }, revision.current)) { setBaseURL(normalizeBaseURL(baseURL, provider)); setKey(''); setClearKey(false); revision.current = latestRevision.current; }
+	}}>
+		<h2>{t('Connection', '连接')}</h2>
+		<Field label={t('API address', 'API 地址')}><input required type="url" value={baseURL} disabled={snapshot.pending} onChange={event => setBaseURL(event.target.value)} spellCheck={false} autoComplete="off" /></Field>
+		<Field label="API Key"><input type="password" value={key} maxLength={4096} disabled={snapshot.pending || clearKey} onChange={event => setKey(event.target.value)} autoComplete="new-password" placeholder={snapshot.keyConfigured[provider] ? t('Saved securely · leave blank to keep', '已安全保存 · 留空保留') : provider === 'ollama' ? t('Optional for local Ollama', '本地 Ollama 可留空') : t('Enter a new API key', '输入新的 API 密钥')} /></Field>
+		<div className="connection-hint"><span>{t('Keys are stored securely and are never displayed again.', '密钥安全保存，页面不会回显已保存的密钥。')}</span>{snapshot.keyConfigured[provider] && <label><input type="checkbox" checked={clearKey} disabled={snapshot.pending} onChange={event => { setClearKey(event.target.checked); setKey(''); }} />{t('Remove key', '移除密钥')}</label>}</div>
+		<div className="settings-form-actions"><button type="button" disabled={snapshot.pending || !dirty} onClick={cancel}>{t('Cancel', '取消')}</button><button className="settings-primary" disabled={snapshot.pending || !dirty} type="submit">{t('Save connection', '保存连接')}</button></div>
+	</form>;
 }
 
-function ParameterField({ name, label, hint, value, defaultValue, minimum, maximum, step, disabled, update }: { name: ModelParameterName; label: string; hint: string; value?: number; defaultValue: number; minimum: number; maximum: number; step: number; disabled: boolean; update: (name: ModelParameterName, value: number | null) => void }) {
-	const [draft, setDraft] = useState(value?.toString() ?? '');
-	useEffect(() => setDraft(value?.toString() ?? ''), [value]);
+function Parameter({ name, label, maximum, disabled, unsupported, draft, setDraft }: { name: ModelParameterName; label: string; maximum: number; disabled?: boolean; unsupported?: boolean; draft: ConfiguredModel; setDraft(value: ConfiguredModel): void }) {
+	const value = draft.parameters[name];
 	const enabled = value !== undefined;
-	const commit = (input: HTMLInputElement) => {
-		if (!input.checkValidity()) { return; }
-		const next = Number(input.value);
-		if (next !== value) { update(name, next); }
-	};
-	return <div className="parameter-field">
-		<div className="parameter-heading"><label htmlFor={`parameter-${name}`}>{label}</label><label className="parameter-toggle"><input type="checkbox" role="switch" checked={enabled} disabled={disabled} aria-label={t(`Customize ${label}`, `自定义${label}`)} onChange={event => update(name, event.target.checked ? defaultValue : null)} /><span>{enabled ? t('Custom', '自定义') : t('Model default', '模型默认')}</span></label></div>
-		{enabled && <input id={`parameter-${name}`} className="parameter-input" type="number" min={minimum} max={maximum} step={step} value={draft} disabled={disabled} aria-describedby={`parameter-${name}-hint`} onChange={event => setDraft(event.target.value)} onBlur={event => commit(event.currentTarget)} onKeyDown={event => { if (event.key === 'Enter') { event.currentTarget.blur(); } }} />}
-		<p id={`parameter-${name}-hint`} className="configuration-hint">{hint}</p>
+	const minimum = name === 'maxOutputTokens' ? 1 : 0;
+	const step = name === 'maxOutputTokens' ? 1 : 0.05;
+	const change = (value: number | undefined) => { const parameters = { ...draft.parameters }; if (value === undefined) { delete parameters[name]; } else { parameters[name] = value; } setDraft({ ...draft, parameters }); };
+	return <div className="parameter-row"><div className="parameter-heading"><label htmlFor={`parameter-${name}`}>{label}</label><span>{enabled ? value : t('Model default', '模型默认')}</span><Switch label={t(`Customize ${label}`, `自定义${label}`)} checked={enabled} disabled={disabled || (unsupported && !enabled)} onChange={checked => change(checked ? name === 'temperature' ? 1 : name === 'topP' ? 1 : Math.min(4096, maximum) : undefined)} /></div>
+		{enabled && <div className="parameter-value">{name !== 'maxOutputTokens' && <input type="range" aria-label={label + t(' slider', '滑块')} disabled={disabled || unsupported} min={minimum} max={maximum} step={step} value={value} onChange={event => change(Number(event.target.value))} />}<input id={`parameter-${name}`} aria-label={label} type="number" required disabled={disabled || unsupported} min={minimum} max={maximum} step={step} value={Number.isNaN(value) ? '' : value} onChange={event => change(event.target.valueAsNumber)} /></div>}
 	</div>;
 }
 
-export function Settings({ connection, ready, busy, post }: { connection: ConnectionState; ready: boolean; busy: boolean; post: (message: unknown) => void }) {
-	const [address, setAddress] = useState(connection.baseURL);
-	useEffect(() => setAddress(connection.baseURL), [connection.provider, connection.baseURL]);
-	const disabled = !ready || busy || connection.loading;
-	const update = (field: string, value: string) => post({ type: 'updateConnection', field, value, provider: connection.provider });
-	const updateParameter = (field: ModelParameterName, value: number | null) => post({ type: 'updateParameter', field, value, provider: connection.provider, baseURL: connection.baseURL, model: connection.model });
-	const models = [...new Set([connection.model, ...connection.models.map(model => model.id)])].filter(Boolean);
-	const capabilities = connection.capabilities ?? resolveCapabilities(connection.provider, connection.baseURL, connection.model, undefined, connection.modelSettings);
-	const thinking = capabilities.reasoning === 'supported' && (connection.modelSettings?.thinking === 'enabled' || (connection.modelSettings?.thinking !== 'disabled' && connection.provider === 'deepseek' && /^deepseek-(flash|pro|v4|reasoner)/.test(connection.model)));
-	return <main className="configuration"><section className="configuration-content">
-		<h1>{t('Connect Beacon', '连接 Beacon')}</h1>
-		<p>{t('Choose a provider and model to start a conversation.', '选择服务商和模型，开始你的对话。')}</p>
-		<label className="connection-field">{t('Provider', '服务商')}<select value={connection.provider} disabled={disabled} onChange={event => update('provider', event.target.value)}>{Object.keys(providers).map(id => <option value={id} key={id}>{providerName(id)}</option>)}</select></label>
-		<label className="connection-field">{t('API base URL', 'API 基础地址')}<input type="url" value={address} disabled={disabled} spellCheck={false} onChange={event => setAddress(event.target.value)} /></label>
-		<button className="connection-secondary" disabled={disabled || address === connection.baseURL} onClick={() => update('baseURL', address)}>{t('Save address', '保存地址')}</button>
-		<p className="configuration-hint">{connection.provider === 'ollama' ? t('Start your Ollama service and install a chat model first. A local service does not require an API key.', '请先启动 Ollama 服务并安装聊天模型。本机服务无需 API Key。') : t('Use the endpoint for the same region as your API key. Do not include /chat/completions.', '请使用密钥所在地域的地址，不含 /chat/completions。')}</p>
-		<div className="key-status" role="status">{!ready ? t('Loading…', '正在加载…') : connection.keyConfigured ? t('API key saved', 'API Key 已保存') : connection.provider === 'ollama' ? t('API key optional', 'API Key 可选') : t('No API key configured', '尚未配置 API Key')}</div>
-		<button className="setup-key" disabled={disabled} onClick={() => post({ type: 'configure' })}>{connection.keyConfigured ? t('Update API Key', '更新 API Key') : t('Configure API Key', '配置 API Key')}</button>
-		<p className="configuration-hint">{t('Stored securely for this provider. Leave the key input empty to remove it.', '按服务商安全保存，配置时留空可移除密钥。')}</p>
-		<div className="model-heading"><span>{t('Chat model', '聊天模型')}</span><button disabled={disabled || address !== connection.baseURL || (connection.provider !== 'ollama' && !connection.keyConfigured)} onClick={() => post({ type: 'fetchModels' })}>{connection.loading ? t('Loading…', '正在加载…') : t('Fetch models', '获取模型')}</button></div>
-		<select className="model-select" aria-label={t('Chat model', '聊天模型')} value={connection.model} disabled={disabled} onChange={event => update('model', event.target.value)}><option value="">{t('Select a model', '选择模型')}</option>{models.map(model => {
-			const details = resolveCapabilities(connection.provider, connection.baseURL, model, connection.models.find(item => item.id === model)?.capabilities, model === connection.model ? connection.modelSettings : undefined);
-			const nonChat = !['chat', 'unknown'].includes(details.purpose);
-			return <option key={model} value={model} disabled={nonChat}>{model}{nonChat ? t(' · Non-chat model', ' · 非聊天模型') : details.purpose === 'unknown' ? t(' · Unknown capabilities', ' · 能力未知') : ''}</option>;
-		})}</select>
-		<p className="configuration-hint">{t('Availability depends on your account and service. Unknown models allow text chat; confirm capabilities before using tools or images.', '可用性以账户和服务为准。未知模型可尝试文本聊天；使用工具或图片前需确认能力。')}</p>
-		{connection.model && <CapabilitySettings connection={connection} disabled={disabled} post={post} />}
-		<section className="model-parameters" aria-labelledby="model-parameters-title">
-			<h2 id="model-parameters-title">{t('Model parameters', '模型参数')}</h2>
-			<p className="configuration-hint">{connection.model ? t('Saved for this provider, endpoint and model. Disabled parameters use the model default.', '按当前服务商、接口地址和模型保存。未启用的参数跟随模型默认值。') : t('Select a model before customizing parameters.', '选择模型后可自定义参数。')}</p>
-			<ParameterField name="temperature" label={t('Temperature', '模型温度')} hint={thinking && connection.provider === 'deepseek' ? t('Ignored by DeepSeek while thinking is enabled.', 'DeepSeek 开启思考时忽略温度。') : t('Higher values make responses more varied.', '数值越高，回答越多样。')} value={connection.parameters?.temperature} defaultValue={1} minimum={0} maximum={2} step={0.1} disabled={disabled || !connection.model || (thinking && connection.provider === 'deepseek')} update={updateParameter} />
-			<ParameterField name="topP" label="Top-P" hint={thinking && connection.provider === 'deepseek' ? t('Managed by the DeepSeek adapter in thinking mode.', '思考模式下由 DeepSeek 适配器处理。') : t('Controls probability-based token sampling.', '控制基于概率的 Token 采样范围。')} value={connection.parameters?.topP} defaultValue={1} minimum={0} maximum={1} step={0.05} disabled={disabled || !connection.model || (thinking && connection.provider === 'deepseek')} update={updateParameter} />
-			<ParameterField name="maxOutputTokens" label={t('Maximum output tokens', '最大输出 Token 数')} hint={t('Caps the length of one response.', '限制单次回答的最大长度。')} value={connection.parameters?.maxOutputTokens} defaultValue={Math.min(8192, capabilities.maxOutputTokens ?? 131072)} minimum={1} maximum={Math.min(capabilities.maxOutputTokens ?? 131072, 131072)} step={1} disabled={disabled || !connection.model} update={updateParameter} />
-			<div className="parameter-fixed"><span>{t('Streaming output', '流式输出')}</span><strong>{t('Enabled', '已开启')}</strong></div>
-		</section>
-		{connection.error && <p className="error" role="alert">{connection.error}</p>}
-		{busy && <p role="status">{t('Stop the current response before changing the connection.', '请先停止当前回答，再修改连接。')}</p>}
-		<button className="open-chat" disabled={!ready} onClick={() => post({ type: 'openChat' })}><Icon name="chat" />{t('Open chat', '打开聊天')}</button>
-		<button className="settings-link" onClick={() => post({ type: 'openSettings' })}>{t('Open Beacon settings', '打开 Beacon 设置')}</button>
-	</section></main>;
+function ModelForm({ provider, snapshot, model, run, close }: { provider: ProviderId; snapshot: SettingsSnapshot; model?: ConfiguredModel; run: Run; close(): void }) {
+	const [draft, setDraft] = useState<ConfiguredModel>(() => structuredClone(model ?? { id: '', name: '', enabled: true, parameters: {}, settings: {} }));
+	const [initialRevision] = useState(snapshot.revision);
+	const capabilities = resolveCapabilities(provider, snapshot.providers[provider].baseURL, draft.id, draft.discovered, draft.settings);
+	const automatic = resolveCapabilities(provider, snapshot.providers[provider].baseURL, draft.id, draft.discovered);
+	const policy = parameterPolicy(provider, draft.id, capabilities, draft.settings);
+	const pending = snapshot.pending;
+	const setting = (settings: ModelSettings) => {
+		const next = { ...draft, settings };
+		const nextPolicy = parameterPolicy(provider, draft.id, resolveCapabilities(provider, snapshot.providers[provider].baseURL, draft.id, draft.discovered, settings), settings);
+		if (!nextPolicy.sampling) { next.parameters = { ...draft.parameters }; delete next.parameters.temperature; delete next.parameters.topP; }
+		if (!nextPolicy.thinking) { delete settings.thinking; delete settings.effort; }
+		if (settings.thinking === 'disabled' || !nextPolicy.efforts.includes(settings.effort!)) { delete settings.effort; }
+		setDraft(next);
+	};
+	const override = (field: CapabilityField, value: unknown) => {
+		const overrides = { ...draft.settings.overrides };
+		if (value === undefined) { delete overrides[field]; } else { Object.assign(overrides, { [field]: value }); }
+		setting({ ...draft.settings, overrides });
+	};
+	return <form className="model-form settings-card" onSubmit={async event => { event.preventDefault(); if (await run({ type: 'saveModel', model: draft, originalId: model?.id }, initialRevision)) { close(); } }}>
+		<div className="settings-section-title"><h2>{model ? t('Edit model', '编辑模型') : t('Add model', '添加模型')}</h2><button type="button" className="settings-icon" aria-label={t('Cancel editing', '取消编辑')} disabled={pending} onClick={close}><Icon name="close" /></button></div>
+		<Field label={t('Model ID', '模型 ID')}><input autoFocus required maxLength={256} value={draft.id} disabled={pending} spellCheck={false} onChange={event => setDraft({ ...draft, id: event.target.value, name: draft.name === draft.id ? event.target.value : draft.name, discovered: undefined })} /></Field>
+		<Field label={t('Display name', '显示名称')}><input required maxLength={120} value={draft.name} disabled={pending} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
+		<div className="parameter-heading"><span>{t('Enabled', '启用')}</span><Switch checked={draft.enabled} disabled={pending} label={t('Enable model', '启用模型')} onChange={enabled => setDraft({ ...draft, enabled })} /></div>
+		<h3>{t('Capabilities', '模型能力')}</h3><p className="settings-note">{t('Automatic values come from the built-in catalog or provider metadata. Correct only what you know.', '自动值来自内置目录或服务商元数据，请仅校正已确认的能力。')}</p>
+		{(['purpose', 'vision', 'reasoning', 'tools'] as const).map(field => <Field key={field} label={{ purpose: t('Model type', '模型类型'), vision: t('Vision input', '视觉输入'), reasoning: t('Reasoning', '推理'), tools: t('Tool calls', '工具调用') }[field]}><select disabled={pending} value={draft.settings.overrides?.[field] ?? 'auto'} onChange={event => override(field, event.target.value === 'auto' ? undefined : event.target.value)}><option value="auto">{t('Automatic', '自动')} · {capabilityName(automatic[field])}</option>{(field === 'purpose' ? ['chat', 'embedding', 'rerank', 'image', 'unknown'] as const : ['supported', 'unsupported', 'unknown'] as const).map(value => <option key={value} value={value}>{capabilityName(value)}</option>)}</select><small>{sourceName(draft.settings.overrides?.[field] === undefined ? automatic.source : 'manual')}</small></Field>)}
+		{(['contextWindow', 'maxOutputTokens'] as const).map(field => <Field key={field} label={field === 'contextWindow' ? t('Context window (tokens)', '上下文窗口（Token）') : t('Model output limit (tokens)', '模型输出上限（Token）')}><input type="number" min={1} max={10000000} step={1} disabled={pending} value={draft.settings.overrides?.[field] ?? ''} placeholder={String(automatic[field] ?? t('Automatic · unknown', '自动 · 未知'))} onChange={event => override(field, event.target.value === '' ? undefined : event.target.valueAsNumber)} /><small>{sourceName(draft.settings.overrides?.[field] === undefined ? automatic.source : 'manual')}</small></Field>)}
+		<button type="button" className="settings-text-action" disabled={pending} onClick={() => setting({})}>{t('Restore automatic capabilities', '恢复自动能力')}</button>
+		<h3>{t('Generation parameters', '生成参数')}</h3>
+		{policy.thinking && <Field label={t('Thinking mode', '思考模式')}><select disabled={pending} value={draft.settings.thinking ?? 'default'} onChange={event => { const settings = { ...draft.settings }; if (event.target.value === 'default') { delete settings.thinking; } else { settings.thinking = event.target.value as ModelSettings['thinking']; } setting(settings); }}><option value="default">{t('Model default', '模型默认')}</option><option value="enabled">{t('Enabled', '开启')}</option>{!policy.fixedThinking && <option value="disabled">{t('Disabled', '关闭')}</option>}</select></Field>}
+		{!!policy.efforts.length && draft.settings.thinking !== 'disabled' && <Field label={t('Reasoning effort', '推理强度')}><select disabled={pending} value={draft.settings.effort ?? 'default'} onChange={event => { const settings = { ...draft.settings }; if (event.target.value === 'default') { delete settings.effort; } else { settings.effort = event.target.value as ModelSettings['effort']; } setting(settings); }}><option value="default">{t('Model default', '模型默认')}</option>{policy.efforts.map(value => <option key={value} value={value}>{({ low: t('Low', '低'), high: t('High', '高'), max: t('Maximum', '最高') })[value]}</option>)}</select></Field>}
+		{!policy.sampling && <p className="settings-note">{t('This thinking mode uses model-default sampling parameters.', '当前思考模式使用模型默认的采样参数。')}</p>}
+		<Parameter name="temperature" label={t('Temperature', '温度')} maximum={2} disabled={pending} unsupported={!policy.sampling} draft={draft} setDraft={setDraft} />
+		<Parameter name="topP" label="Top-P" maximum={1} disabled={pending} unsupported={!policy.sampling} draft={draft} setDraft={setDraft} />
+		<Parameter name="maxOutputTokens" label={t('Response token budget', '本次回复 Token 预算')} maximum={policy.outputMaximum} disabled={pending} draft={draft} setDraft={setDraft} />
+		<p className="settings-note">{t('Streaming is always enabled. Leaving a parameter at model default omits it from the request.', '始终使用流式输出。保留模型默认时，请求不携带该参数。')}</p>
+		<div className="settings-form-actions"><button type="button" disabled={pending} onClick={close}>{t('Cancel', '取消')}</button><button type="submit" className="settings-primary" disabled={pending}>{t('Save model', '保存模型')}</button></div>
+	</form>;
+}
+
+export function Settings({ post }: { post(message: unknown): void }) {
+	const [snapshot, setSnapshot] = useState<SettingsSnapshot>();
+	const [busy, setBusy] = useState(false);
+	const [provider, setProvider] = useState<ProviderId>('deepseek');
+	const [editing, setEditing] = useState<{ model?: ConfiguredModel }>();
+	const [connectionDirty, setConnectionDirty] = useState(false);
+	const [query, setQuery] = useState('');
+	const [confirm, setConfirm] = useState<string>();
+	const [result, setResult] = useState<{ ok: boolean; text: string }>();
+	const [localPending, setLocalPending] = useState(false);
+	const requests = useRef(new Map<number, (result: boolean) => void>());
+	const counter = useRef(0);
+	useEffect(() => {
+		const listener = (event: MessageEvent) => {
+			if (event.data?.type === 'settingsSnapshot') { setSnapshot(event.data.settings); setBusy(event.data.busy); }
+			if (event.data?.type === 'settingsResult') {
+				const value = event.data as SettingsResult;
+				const callback = requests.current.get(value.requestId);
+				if (!callback) { return; }
+				requests.current.delete(value.requestId); setLocalPending(false);
+				setResult({ ok: value.ok, text: value.ok ? t('Saved. Changes apply to the next response.', '已保存，修改将在下一轮回复中生效。') : value.error ?? t('Could not save. Your draft is preserved.', '无法保存，已保留草稿。') });
+				callback(value.ok);
+			}
+		};
+		window.addEventListener('message', listener); post({ type: 'ready' });
+		const pending = requests.current;
+		return () => { window.removeEventListener('message', listener); for (const callback of pending.values()) { callback(false); } pending.clear(); };
+	}, [post]);
+	if (!snapshot) { return <main className="settings-page"><p>{t('Loading settings…', '正在读取设置…')}</p></main>; }
+	const state = { ...snapshot, pending: snapshot.pending || localPending };
+	const run: Run = (command, revision = snapshot.revision) => {
+		if (state.pending || requests.current.size) { return Promise.resolve(false); }
+		const requestId = ++counter.current;
+		setLocalPending(true); setResult(undefined);
+		return new Promise(resolve => { requests.current.set(requestId, resolve); post({ ...command, provider, revision, requestId }); });
+	};
+	const profile = state.providers[provider];
+	const locked = state.pending || connectionDirty || !!editing;
+	return <main className="settings-page">
+		<header className="settings-header"><div><h1>{t('Beacon Settings', 'Beacon 设置')}</h1><p>{t('Providers, models and generation parameters', '服务商、模型与生成参数')}</p></div><button className="settings-icon" aria-label={t('Open chat', '打开聊天')} onClick={() => post({ type: 'openChat' })}><Icon name="chat" /></button></header>
+		<div className="settings-layout"><nav className="provider-list" aria-label={t('Providers', '服务商')}>{(Object.keys(providers) as ProviderId[]).map(id => <button key={id} aria-current={provider === id ? 'page' : undefined} disabled={locked} onClick={() => { setProvider(id); setQuery(''); setConfirm(undefined); setResult(undefined); }}><span className="provider-initial">{providers[id].name[0]}</span><span>{providers[id].name}<small>{state.providers[id].models.length} {t('models', '个模型')}</small></span><span className={`provider-status ${id === 'ollama' || state.keyConfigured[id] ? 'configured' : ''}`} /></button>)}</nav>
+		<div className="settings-content"><div className="settings-provider-title"><h2>{providers[provider].name}</h2>{busy && <span>{t('A response is running · changes apply next time', '正在回复 · 修改下一轮生效')}</span>}</div>
+		{state.error && <div className="settings-feedback failure" role="alert">{state.error}</div>}
+		{result && <div className={`settings-feedback ${result.ok ? 'success' : 'failure'}`} role={result.ok ? 'status' : 'alert'}>{result.text}</div>}
+		<ConnectionForm key={provider} provider={provider} snapshot={{ ...state, pending: state.pending || !!editing }} run={run} dirtyChanged={setConnectionDirty} />
+		<div className={`models-layout ${editing ? 'with-editor' : ''}`}><section className="settings-card model-list"><div className="settings-section-title"><h2>{t('Models', '模型')}</h2><div><button type="button" disabled={locked} onClick={() => { void run({ type: 'fetchModels' }); }}>{t('Fetch models', '获取模型')}</button><button className="settings-icon" aria-label={t('Add model', '添加模型')} disabled={locked} onClick={() => { setEditing({}); setResult(undefined); }}><Icon name="plus" /></button></div></div>
+		<input type="search" className="model-filter" value={query} onChange={event => setQuery(event.target.value)} aria-label={t('Search models', '搜索模型')} placeholder={t('Search models…', '搜索模型…')} />
+		{!profile.models.length && <p className="settings-empty">{t('Save the connection, then fetch models or add one manually. No model is selected automatically.', '保存连接后获取模型，或手动添加。不会自动选择模型。')}</p>}
+		{profile.models.filter(model => (model.name + ' ' + model.id).toLowerCase().includes(query.toLowerCase())).map(model => {
+			const capabilities = resolveCapabilities(provider, profile.baseURL, model.id, model.discovered, model.settings);
+			const selected = state.selection?.provider === provider && state.selection.model === model.id;
+			const usable = model.enabled && ['chat', 'unknown'].includes(capabilities.purpose) && (provider === 'ollama' || state.keyConfigured[provider]);
+			return <div className={`settings-model-row ${selected ? 'selected' : ''}`} key={model.id} onMouseLeave={() => setConfirm(undefined)}><button className="model-name" disabled={locked || !usable} onClick={() => { void run({ type: 'selectModel', id: model.id }); }} title={selected ? t('Current chat model', '当前聊天模型') : t('Use for chat', '用于聊天')}><strong>{model.name}{selected && <Icon name="check" />}</strong><small>{model.id}</small></button><Badges capabilities={capabilities} /><Switch checked={model.enabled} disabled={locked} label={t('Enable ', '启用 ') + model.name} onChange={enabled => { void run({ type: 'toggleModel', id: model.id, enabled }); }} /><button className="settings-icon" disabled={locked} aria-label={t('Edit ', '编辑 ') + model.name} onClick={() => { setEditing({ model }); setResult(undefined); }}><Icon name="settings" /></button><button className="settings-icon" disabled={locked} aria-label={(confirm === model.id ? t('Confirm removal of ', '确认移除 ') : t('Remove ', '移除 ')) + model.name} onClick={() => { if (confirm === model.id) { setConfirm(undefined); void run({ type: 'removeModel', id: model.id }); } else { setConfirm(model.id); } }}><Icon name={confirm === model.id ? 'check' : 'trash'} /></button></div>;
+		})}</section>
+		{editing && <ModelForm provider={provider} snapshot={state} model={editing.model} run={run} close={() => setEditing(undefined)} />}</div>
+		</div></div>
+	</main>;
 }

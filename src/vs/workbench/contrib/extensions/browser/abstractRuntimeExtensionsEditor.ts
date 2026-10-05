@@ -427,10 +427,11 @@ export abstract class AbstractRuntimeExtensionsEditor extends EditorPane {
 
 			disposeTemplate: (data: IRuntimeExtensionTemplateData): void => {
 				data.disposables = dispose(data.disposables);
+				data.elementDisposables = dispose(data.elementDisposables);
 			}
 		};
 
-		this._list = this._instantiationService.createInstance(WorkbenchList<IRuntimeExtension>,
+		this._list = this._register(this._instantiationService.createInstance(WorkbenchList<IRuntimeExtension>,
 			'RuntimeExtensions',
 			parent, delegate, [renderer], {
 			multipleSelectionSupport: false,
@@ -447,7 +448,7 @@ export abstract class AbstractRuntimeExtensionsEditor extends EditorPane {
 					return element.description.name;
 				}
 			}
-		});
+		}));
 
 		this._list.splice(0, this._list.length, this._elements || undefined);
 
@@ -488,6 +489,11 @@ export abstract class AbstractRuntimeExtensionsEditor extends EditorPane {
 				getActions: () => actions
 			});
 		}));
+	}
+
+	override focus(): void {
+		super.focus();
+		this._list?.domFocus();
 	}
 
 	public layout(dimension: Dimension): void {

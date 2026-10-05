@@ -58,7 +58,7 @@ export class LuoguProblemParser extends Parser {
     const memoryLimitStr = elem.querySelector('.stat > .field:nth-child(4) > .value').textContent;
     const memoryLimitAmount = parseFloat(memoryLimitStr.substring(0, memoryLimitStr.length - 2));
     const memoryLimitUnit = memoryLimitStr.substring(memoryLimitStr.length - 2);
-    const memoryLimitConverted = memoryLimitUnit == 'MB' ? memoryLimitAmount : memoryLimitAmount * 1024;
+    const memoryLimitConverted = memoryLimitUnit === 'MB' ? memoryLimitAmount : memoryLimitAmount * 1024;
     task.setMemoryLimit(Math.floor(memoryLimitConverted));
 
     elem.querySelectorAll('.io-sample').forEach(sample => {

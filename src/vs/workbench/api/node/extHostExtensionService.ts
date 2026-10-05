@@ -23,6 +23,7 @@ import { assertType } from '../../../base/common/types.js';
 import { generateUuid } from '../../../base/common/uuid.js';
 import { BidirectionalMap } from '../../../base/common/map.js';
 import { DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
+import { markNodeCompileCacheReady } from '../../../base/node/nodeCompileCache.js';
 const require = nodeModule.createRequire(import.meta.url);
 
 class NodeModuleRequireInterceptor extends RequireInterceptor {
@@ -143,6 +144,10 @@ class NodeModuleRequireInterceptor extends RequireInterceptor {
 }
 
 export class ExtHostExtensionService extends AbstractExtHostExtensionService {
+
+	protected override _onEagerExtensionsActivated(): void {
+		markNodeCompileCacheReady(message => this._logService.info(message));
+	}
 
 	readonly extensionRuntime = ExtensionRuntime.Node;
 

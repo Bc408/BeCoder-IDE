@@ -272,8 +272,8 @@ import './contrib/externalTerminal/browser/externalTerminal.contribution.js';
 // Relauncher
 import './contrib/relauncher/browser/relauncher.contribution.js';
 
-// Style Overrides (experimental)
-import './contrib/styleOverrides/browser/styleOverrides.contribution.js';
+// Modern UI (experimental)
+import './contrib/modernUI/browser/modernUI.contribution.js';
 
 // Tasks
 import './contrib/tasks/browser/task.contribution.js';
@@ -400,3 +400,5 @@ import './contrib/dropOrPasteInto/browser/dropOrPasteInto.contribution.js';
 import './contrib/opener/browser/opener.contribution.js';
 
 //#endregion
+
+import './services/dataChannel/browser/dataChannelService.js';

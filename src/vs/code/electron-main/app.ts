@@ -16,6 +16,7 @@ import { getPathLabel } from '../../base/common/labels.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Schemas, VSCODE_AUTHORITY } from '../../base/common/network.js';
 import { join } from '../../base/common/path.js';
+import { mark } from '../../base/common/performance.js';
 import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { assertType } from '../../base/common/types.js';
 import { URI } from '../../base/common/uri.js';
@@ -83,6 +84,7 @@ import { DarwinUpdateService } from '../../platform/update/electron-main/updateS
 import { LinuxUpdateService } from '../../platform/update/electron-main/updateService.linux.js';
 import { SnapUpdateService } from '../../platform/update/electron-main/updateService.snap.js';
 import { Win32UpdateService } from '../../platform/update/electron-main/updateService.win32.js';
+import { isInnoSetupInstall } from '../../platform/update/electron-main/win32UpdateType.js';
 import { IOpenURLOptions, IURLService } from '../../platform/url/common/url.js';
 import { URLHandlerChannelClient, URLHandlerRouter } from '../../platform/url/common/urlIpc.js';
 import { NativeURLService } from '../../platform/url/common/urlService.js';
@@ -117,6 +119,7 @@ import { IInitialProtocolUrls, IProtocolUrl } from '../../platform/url/electron-
 import { IUtilityProcessWorkerMainService, UtilityProcessWorkerMainService } from '../../platform/utilityProcess/electron-main/utilityProcessWorkerMainService.js';
 import { ipcUtilityProcessWorkerChannelName } from '../../platform/utilityProcess/common/utilityProcessWorkerService.js';
 import { ILocalPtyService, LocalReconnectConstants, TerminalIpcChannels, TerminalSettingId } from '../../platform/terminal/common/terminal.js';
+import { createLocalPtyChannel } from '../../platform/terminal/common/localPtyChannel.js';
 import { ElectronPtyHostStarter } from '../../platform/terminal/electron-main/electronPtyHostStarter.js';
 import { PtyHostService } from '../../platform/terminal/node/ptyHostService.js';
 import { IAuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindows.js';
@@ -124,6 +127,7 @@ import { AuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/elec
 import { normalizeNFC } from '../../base/common/normalization.js';
 import { ICSSDevelopmentService, CSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
+import { logNodeCompileCacheStatus, markNodeCompileCacheReady, waitForNodeCompileCacheReady } from '../../base/node/nodeCompileCache.js';
 
 type OSProxyConfigEvent = {
 	readonly success: boolean;
@@ -219,6 +223,10 @@ export class CodeApplication extends Disposable {
 
 		const isUrlFromWindow = (requestingUrl?: string | undefined) => requestingUrl?.startsWith(`${Schemas.vscodeFileResource}://${VSCODE_AUTHORITY}`);
 		const isUrlFromWebview = (requestingUrl: string | undefined) => requestingUrl?.startsWith(`${Schemas.vscodeWebview}://`);
+		const isUrlFromAuxiliaryWindow = (webContents: Electron.WebContents | null, requestingUrl: string | undefined, isMainFrame: boolean) =>
+			isMainFrame && requestingUrl === 'about:blank' && !!(webContents && this.auxiliaryWindowsMainService?.getWindowByWebContents(webContents));
+		const isRequestFromWindow = (webContents: Electron.WebContents | null, requestingUrl: string | undefined, isMainFrame: boolean) =>
+			isUrlFromWindow(requestingUrl) || isUrlFromAuxiliaryWindow(webContents, requestingUrl, isMainFrame);
 
 		const alwaysAllowedPermissions = new Set(['pointerLock', 'notifications']);
 
@@ -240,21 +248,21 @@ export class CodeApplication extends Disposable {
 			'deprecated-sync-clipboard-read',
 		]);
 
-		session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+		session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
 			if (isUrlFromWebview(details.requestingUrl)) {
 				return callback(allowedPermissionsInWebview.has(permission));
 			}
-			if (isUrlFromWindow(details.requestingUrl)) {
+			if (isRequestFromWindow(webContents, details.requestingUrl, details.isMainFrame)) {
 				return callback(allowedPermissionsInCore.has(permission));
 			}
 			return callback(false);
 		});
 
-		session.defaultSession.setPermissionCheckHandler((_webContents, permission, _origin, details) => {
+		session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) => {
 			if (isUrlFromWebview(details.requestingUrl)) {
 				return allowedPermissionsInWebview.has(permission);
 			}
-			if (isUrlFromWindow(details.requestingUrl)) {
+			if (isRequestFromWindow(webContents, details.requestingUrl, details.isMainFrame)) {
 				return allowedPermissionsInCore.has(permission);
 			}
 			return false;
@@ -624,14 +632,15 @@ export class CodeApplication extends Disposable {
 	}
 
 	async startup(): Promise<void> {
+		mark('code/willStartCodeApplication');
 		this.logService.debug('Starting VS Code');
 		this.logService.debug(`from: ${this.environmentMainService.appRoot}`);
 		this.logService.debug('args:', this.environmentMainService.args);
+		logNodeCompileCacheStatus(message => this.logService.info(message));
 
-		// Make sure we associate the program with the app user model id
-		// This will help Windows to associate the running program with
-		// any shortcut that is pinned to the taskbar and prevent showing
-		// two icons in the taskbar for the same app.
+		// Associate the program with the app user model id so that Windows
+		// matches it with pinned taskbar shortcuts. Use a distinct id in
+		// portable mode to not interfere with a regularly installed version.
 		const win32AppUserModelId = this.productService.win32AppUserModelId;
 		if (isWindows && win32AppUserModelId) {
 			app.setAppUserModelId(resolveBeCoderAppUserModelId(win32AppUserModelId, process.execPath));
@@ -665,17 +674,21 @@ export class CodeApplication extends Disposable {
 		});
 
 		// Resolve unique machine ID
+		mark('code/willResolveMachineId');
 		const [machineId, sqmId, devDeviceId] = await Promise.all([
 			resolveMachineId(this.stateService, this.logService),
 			resolveSqmId(this.stateService, this.logService),
 			resolveDevDeviceId(this.stateService, this.logService)
 		]);
+		mark('code/didResolveMachineId');
 
 		// Shared process
 		const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId, devDeviceId);
 
 		// Services
+		mark('code/willInitAppServices');
 		const appInstantiationService = await this.initServices(machineId, sqmId, devDeviceId, sharedProcessReady);
+		mark('code/didInitAppServices');
 
 		// Error telemetry
 		appInstantiationService.invokeFunction(accessor => this._register(new ErrorTelemetry(accessor.get(ILogService), accessor.get(ITelemetryService))));
@@ -692,22 +705,38 @@ export class CodeApplication extends Disposable {
 		this._register(appInstantiationService.createInstance(UserDataProfilesHandler));
 
 		// Init Channels
+		mark('code/willInitChannels');
 		appInstantiationService.invokeFunction(accessor => this.initChannels(accessor, mainProcessElectronServer, sharedProcessClient));
+		mark('code/didInitChannels');
 
 		// Setup Protocol URL Handlers
+		mark('code/willSetupProtocolUrlHandlers');
 		const initialProtocolUrls = await appInstantiationService.invokeFunction(accessor => this.setupProtocolUrlHandlers(accessor, mainProcessElectronServer));
+		mark('code/didSetupProtocolUrlHandlers');
 
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
 
 		// Open Windows
-		await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
+		mark('code/willOpenFirstWindow');
+		const windows = await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
+		mark('code/didOpenFirstWindow');
 
 		// Signal phase: after window open
 		this.lifecycleMainService.phase = LifecycleMainPhase.AfterWindowOpen;
 
 		// Post Open Windows Tasks
 		this.afterWindowOpen(appInstantiationService);
+
+		const isGeneratingNodeCompileCache = process.env['VSCODE_GENERATE_NODE_COMPILE_CACHE'] === '1';
+		const shouldStartCriticalNodeProcesses = isGeneratingNodeCompileCache || process.env['VSCODE_MEASURE_NODE_COMPILE_CACHE'] === '1';
+		if (shouldStartCriticalNodeProcesses) {
+			await Promise.all([
+				...windows.map(window => window.ready()),
+				sharedProcessReady,
+				appInstantiationService.invokeFunction(accessor => accessor.get(ILocalPtyService).getLatency())
+			]);
+		}
 
 		// Set lifecycle phase to `Eventually` after a short delay and when idle (min 2.5sec, max 5sec)
 		const eventuallyPhaseScheduler = this._register(new RunOnceScheduler(() => {
@@ -718,9 +747,21 @@ export class CodeApplication extends Disposable {
 
 				// Eventually Post Open Window Tasks
 				this.eventuallyAfterWindowOpen(appInstantiationService);
+
+				if (shouldStartCriticalNodeProcesses) {
+					markNodeCompileCacheReady(message => this.logService.info(message));
+				}
 			}, 2500));
 		}, 2500));
 		eventuallyPhaseScheduler.schedule();
+
+		if (isGeneratingNodeCompileCache) {
+			await Promise.all([
+				this.lifecycleMainService.when(LifecycleMainPhase.Eventually),
+				waitForNodeCompileCacheReady()
+			]);
+			await this.lifecycleMainService.quit();
+		}
 	}
 
 	private async setupProtocolUrlHandlers(accessor: ServicesAccessor, mainProcessElectronServer: ElectronIPCServer): Promise<IInitialProtocolUrls | undefined> {
@@ -1225,7 +1266,10 @@ export class CodeApplication extends Disposable {
 
 		// Native host (main & shared process)
 		this.nativeHostMainService = accessor.get(INativeHostMainService);
-		const nativeHostChannel = ProxyChannel.fromService(this.nativeHostMainService, disposables);
+		const nativeHostChannel = ProxyChannel.fromService(this.nativeHostMainService, disposables, {
+			// This event has main-process consumers but no IPC consumer, so its buffer would never drain.
+			unbufferedEvents: ['onDidBlurMainWindow']
+		});
 		mainProcessElectronServer.registerChannel('nativeHost', nativeHostChannel);
 		sharedProcessClient.then(client => client.registerChannel('nativeHost', nativeHostChannel));
 
@@ -1255,7 +1299,7 @@ export class CodeApplication extends Disposable {
 		sharedProcessClient.then(client => client.registerChannel('profileStorageListener', profileStorageListener));
 
 		// Terminal
-		const ptyHostChannel = ProxyChannel.fromService(accessor.get(ILocalPtyService), disposables);
+		const ptyHostChannel = createLocalPtyChannel(accessor.get(ILocalPtyService), disposables);
 		mainProcessElectronServer.registerChannel(TerminalIpcChannels.LocalPty, ptyHostChannel);
 
 		// External Terminal
@@ -1286,7 +1330,6 @@ export class CodeApplication extends Disposable {
 
 		// Then check for windows from protocol links to open
 		if (initialProtocolUrls) {
-
 			// Openables can open as windows directly
 			if (initialProtocolUrls.openables.length > 0) {
 				return windowsMainService.open({
@@ -1595,7 +1638,7 @@ export class CodeApplication extends Disposable {
 
 	private async installMutex(): Promise<void> {
 		const win32MutexName = this.productService.win32MutexName;
-		if (isWindows && win32MutexName) {
+		if (isWindows && win32MutexName && isInnoSetupInstall(this.productService.target)) {
 			try {
 				const WindowsMutex = await import('@vscode/windows-mutex');
 				const mutex = new WindowsMutex.Mutex(win32MutexName);

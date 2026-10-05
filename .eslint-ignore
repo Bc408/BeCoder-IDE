@@ -41,6 +41,7 @@
 **/extensions/vscode-api-tests/testWorkspace2/**
 **/fixtures/**
 **/node_modules/**
+tmp/**
 **/out/**
 **/out-*/**
 **/src/**/dompurify.js
@@ -60,3 +61,9 @@
 # Vendored third-party libraries
 src/vs/base/common/lit-html/**
 src/vs/base/common/signals-core/**
+extensions/aadityanarayan.code-snap/**
+extensions/mathematic.vscode-pdf/assets/pdf.js/**
+
+# These bundled extensions use their own coding conventions and validation.
+extensions/becoder.beacon/**
+extensions/llvm-vs-code-extensions.vscode-clangd/**

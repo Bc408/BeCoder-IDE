@@ -6,8 +6,8 @@
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createGenerator, inspectModel } from '../src/provider';
-import { providers, readModelParameters, updateModelParameters, type Connection } from '../src/connection';
-import { ModelCapabilityError, readModelSettings, resolveCapabilities, serviceCapabilities, unknownCapabilities, updateModelSettings } from '../src/models';
+import { providers, type Connection } from '../src/connection';
+import { ModelCapabilityError, resolveCapabilities, serviceCapabilities, unknownCapabilities } from '../src/models';
 import { ProtocolRecorder, replayProtocol } from '../src/protocol';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import type { Delta, Generate } from '../src/session';
@@ -31,22 +31,6 @@ suite('Beacon model capabilities', () => {
 		assert.equal(resolveCapabilities('bailian', providers.bailian.baseURL, 'qwen3-vl-plus').vision, 'supported');
 		assert.equal(serviceCapabilities({ owned_by: 'vision-tools-thinking' }), undefined);
 		assert.deepStrictEqual(serviceCapabilities({ capabilities: ['embedding'] }), { ...unknownCapabilities, purpose: 'embedding', vision: 'unsupported', reasoning: 'unsupported', tools: 'unsupported', source: 'service' });
-	});
-	test('manual corrections, parameters and reset are isolated by provider, endpoint and model', () => {
-		let data: unknown = updateModelSettings({}, 'deepseek', providers.deepseek.baseURL, 'custom', 'tools', 'supported');
-		data = updateModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'custom', 'maxOutputTokens', 4096);
-		data = updateModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'custom', 'thinking', 'disabled');
-		const settings = readModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'custom');
-		assert.equal(resolveCapabilities('deepseek', providers.deepseek.baseURL, 'custom', undefined, settings).source, 'manual');
-		assert.deepStrictEqual(readModelSettings(data, 'deepseek', 'https://other.example/v1', 'custom'), {});
-		assert.deepStrictEqual(readModelSettings(data, 'moonshot', providers.deepseek.baseURL, 'custom'), {});
-		assert.deepStrictEqual(readModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'other'), {});
-		data = updateModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'custom', 'reset', null);
-		assert.deepStrictEqual(readModelSettings(data, 'deepseek', providers.deepseek.baseURL, 'custom'), {});
-		assert.throws(() => updateModelSettings({}, 'deepseek', providers.deepseek.baseURL, 'custom', 'maxOutputTokens', -1), /invalid-model-capability/);
-		const parameters = updateModelParameters({}, 'deepseek', 'custom', 'temperature', 0.5, 'https://other.example/v1');
-		assert.deepStrictEqual(readModelParameters(parameters, 'deepseek', 'custom'), {});
-		assert.deepStrictEqual(readModelParameters(parameters, 'deepseek', 'custom', 'https://other.example/v1'), { temperature: 0.5 });
 	});
 	test('non-chat models, unsupported thinking and excessive output limits fail before fetching', async () => {
 		const connection: Connection = { provider: 'bailian', ...providers.bailian, model: 'text-embedding-v4', apiKey: 'test', parameters: {} };

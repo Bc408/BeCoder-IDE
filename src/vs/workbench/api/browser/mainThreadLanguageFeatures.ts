@@ -1129,7 +1129,10 @@ class MainThreadDocumentOnDropEditProvider implements languages.DocumentDropEdit
 					};
 				}),
 				dispose: () => {
-					this._proxy.$releaseDocumentOnDropEdits(this._handle, request.id);
+					const cacheId = edits[0]?._cacheId?.[0];
+					if (typeof cacheId === 'number') {
+						this._proxy.$releaseDocumentOnDropEdits(this._handle, cacheId);
+					}
 				},
 			};
 		} finally {
@@ -1168,10 +1171,11 @@ export class MainThreadDocumentSemanticTokensProvider implements languages.Docum
 		if (!encodedDto) {
 			return null;
 		}
+		const dto = decodeSemanticTokensDto(encodedDto);
 		if (token.isCancellationRequested) {
+			this._proxy.$releaseDocumentSemanticTokens(this._handle, dto.id);
 			return null;
 		}
-		const dto = decodeSemanticTokensDto(encodedDto);
 		if (dto.type === 'full') {
 			return {
 				resultId: String(dto.id),

@@ -35,6 +35,8 @@ export interface ISurveySegmentQuestion extends ISurveyQuestionBase {
 export interface ISurveyRadioQuestion extends ISurveyQuestionBase {
 	readonly type: SurveyQuestionType.Radio;
 	readonly columns?: number;
+	/** When true, randomize all options except the final option. */
+	readonly shuffleOptions?: boolean;
 }
 
 export type ISurveyQuestion = ISurveySegmentQuestion | ISurveyRadioQuestion;

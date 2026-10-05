@@ -321,6 +321,19 @@ suite('TerminalProfileService', () => {
 		await waitingProfileService.profilesReady;
 		deepStrictEqual(waitingProfileService.contributedProfiles, [jsdebugProfile]);
 	});
+
+	test('should unregister terminal profile providers', () => {
+		const firstProvider = { createContributedTerminalProfile: async () => undefined };
+		const secondProvider = { createContributedTerminalProfile: async () => undefined };
+		const registration = terminalProfileService.registerTerminalProfileProvider('first.extension', 'profile', firstProvider);
+		store.add(terminalProfileService.registerTerminalProfileProvider('second.extension', 'profile', secondProvider));
+
+		registration.dispose();
+
+		deepStrictEqual(terminalProfileService.getContributedProfileProvider('first.extension', 'profile'), undefined);
+		deepStrictEqual(terminalProfileService.getContributedProfileProvider('second.extension', 'profile'), secondProvider);
+	});
+
 	suite('Profiles Quickpick', () => {
 		let quickInputService: MockQuickInputService;
 		let mockTerminalProfileService: MockTerminalProfileService;

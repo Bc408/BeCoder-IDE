@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ * Copyright (c) 2026 BeCoder contributors.
+ * Licensed under GPL-3.0-or-later; see LICENSE in this extension.
+ *--------------------------------------------------------------------------------------------*/
+
 //@ts-check
 
 'use strict';
@@ -44,7 +49,7 @@ const extensionConfig = {
   },
   devtool: 'nosources-source-map',
   infrastructureLogging: {
-    level: "log", // enables logging required for problem matchers
+    level: 'log', // enables logging required for problem matchers
   },
 };
 module.exports = [ extensionConfig ];

@@ -45,7 +45,7 @@ interface IExtensionFeatureElementRenderer extends IExtensionFeatureRenderer {
 	render(manifest: IExtensionManifest): IRenderedData<HTMLElement>;
 }
 
-class BeaconApiKeyRenderer extends Disposable implements IExtensionFeatureElementRenderer {
+class BeaconSettingsRenderer extends Disposable implements IExtensionFeatureElementRenderer {
 	readonly type = 'element';
 
 	constructor(@ICommandService private readonly commandService: ICommandService) {
@@ -57,10 +57,10 @@ class BeaconApiKeyRenderer extends Disposable implements IExtensionFeatureElemen
 	}
 
 	render(): IRenderedData<HTMLElement> {
-		const container = $('.beacon-api-key');
+		const container = $('.beacon-settings');
 		const button = new Button(container, defaultButtonStyles);
-		button.label = localize('configureBeaconApiKey', "Configure API Key");
-		const clickListener = button.onDidClick(() => this.commandService.executeCommand('becoder.beacon.configureKey'));
+		button.label = localize('openBeaconSettings', "Open Beacon Settings");
+		const clickListener = button.onDidClick(() => this.commandService.executeCommand('becoder.beacon.settings'));
 		return {
 			data: container,
 			dispose: () => {
@@ -72,11 +72,11 @@ class BeaconApiKeyRenderer extends Disposable implements IExtensionFeatureElemen
 }
 
 Registry.as<IExtensionFeaturesRegistry>(Extensions.ExtensionFeaturesRegistry).registerExtensionFeature({
-	id: 'becoder.beacon.apiKey',
-	label: localize('beaconApiKeyFeature', "Beacon API Key"),
-	description: localize('beaconApiKeyFeatureDescription', "Configure the API key stored securely by Beacon."),
+	id: 'becoder.beacon.settings',
+	label: localize('beaconSettingsFeature', "Beacon Settings"),
+	description: localize('beaconSettingsFeatureDescription', "Configure Beacon providers, models and generation parameters."),
 	access: { canToggle: false },
-	renderer: new SyncDescriptor(BeaconApiKeyRenderer),
+	renderer: new SyncDescriptor(BeaconSettingsRenderer),
 });
 
 class RuntimeStatusMarkdownRenderer extends Disposable implements IExtensionFeatureElementRenderer {

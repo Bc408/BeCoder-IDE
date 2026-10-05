@@ -35,7 +35,7 @@ import { workbenchInstantiationService } from '../../../../test/browser/workbenc
 
 class TestFileDialogService extends FileDialogService {
 	constructor(
-		private simple: ISimpleFileDialog,
+		private simple: ISimpleFileDialog | undefined,
 		@IHostService hostService: IHostService,
 		@IWorkspaceContextService contextService: IWorkspaceContextService,
 		@IHistoryService historyService: IHistoryService,

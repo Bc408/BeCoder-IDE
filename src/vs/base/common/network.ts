@@ -35,6 +35,7 @@ export namespace Schemas {
 	 * An embedded code snippet.
 	 */
 	export const walkThroughSnippet = 'walkThroughSnippet';
+	export const vscodeOnboardingSample = 'vscode-onboarding-sample';
 
 	export const http = 'http';
 
@@ -187,6 +188,7 @@ export const nodeModulesPath: AppResourcePath = 'vs/../../node_modules';
 export const nodeModulesAsarPath: AppResourcePath = 'vs/../../node_modules.asar';
 export const nodeModulesAsarUnpackedPath: AppResourcePath = 'vs/../../node_modules.asar.unpacked';
 
+export const AGENTS_AUTHORITY = 'agents';
 export const VSCODE_AUTHORITY = 'vscode-app';
 
 class FileAccessImpl {

@@ -24,8 +24,8 @@ test('build and provenance are registered without external Companion reception',
 	const manifest = JSON.parse(fs.readFileSync('extensions/becoder.cph/package.json', 'utf8'));
 	const root = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 	assert.ok(root.scripts['compile-oi-extensions'].includes('extensions/becoder.cph run vscode:prepublish'));
-	assert.ok(fs.readFileSync('build/npm/dirs.ts', 'utf8').includes("'extensions/becoder.cph'"));
-	assert.ok(fs.readFileSync('build/lib/extensions.ts', 'utf8').includes("'becoder.cph'"));
+	assert.ok(fs.readFileSync('build/npm/dirs.ts', 'utf8').includes('\'extensions/becoder.cph\''));
+	assert.ok(fs.readFileSync('build/lib/extensions.ts', 'utf8').includes('\'becoder.cph\''));
 	assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.cph');
 	assert.strictEqual(manifest.capabilities.untrustedWorkspaces.supported, false);
 	assert.deepStrictEqual(manifest.contributes.keybindings, [

@@ -5,8 +5,11 @@
 
 import assert from 'assert';
 import { isCurrentEditorGroup } from '../../../../browser/parts/editor/multiEditorTabsControl.js';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 suite('MultiEditorTabsControl', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+
 	test('only opens a New Tab for a registered editor group', () => {
 		const remainingGroup = { id: 1 };
 		const removedGroup = { id: 2 };

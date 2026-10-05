@@ -37,7 +37,6 @@
 			"files.autoSave": "onFocusChange",
 			"editor.formatOnSave": false,
 			"editor.formatOnPaste": false,
-			"editor.mouseWheelZoom": true,
 			"window.systemColorTheme": "auto",
 			"window.titleBarStyle": "custom",
 			"workbench.iconTheme": "vs-seti",

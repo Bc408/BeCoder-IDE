@@ -83,15 +83,6 @@ export interface IEditorDescriptor<T extends IEditorPane> {
 }
 
 /**
- * Declares that an editor hosts the full-width group header (rendered by the
- * editor group below the tab bar, using the group's configured header menus).
- */
-export interface IEditorHeaderActions {
-	/** Editor-scoped instantiation service so the header toolbars' `when` clauses see the editor's context. */
-	readonly instantiationService: IInstantiationService;
-}
-
-/**
  * The editor pane is the container for workbench editors.
  */
 export interface IEditorPane extends IComposite {
@@ -185,14 +176,8 @@ export interface IEditorPane extends IComposite {
 	 */
 	getViewState(): object | undefined;
 
-	/**
-	 * An optional method to declare that this editor hosts the full-width group
-	 * header (rendered by the editor group below the tab bar using the group's
-	 * configured header menus), providing the editor-scoped instantiation service
-	 * so the header actions' `when` clauses evaluate in the editor's context.
-	 * Return `undefined` for no header (the default).
-	 */
-	getHeaderActions?(): IEditorHeaderActions | undefined;
+	/** An optional instantiation service scoped to the editor pane. */
+	readonly scopedInstantiationService?: IInstantiationService;
 
 	/**
 	 * An optional method to return the current selection in
@@ -883,10 +868,23 @@ export const enum EditorInputCapabilities {
 	RequiresModal = 1 << 11,
 
 	/**
-	 * Signals that the editor must remain in its current window. It can still
-	 * move or split between editor groups within that window.
+	 * Signals that the editor is exempt from the opened editors
+	 * limit (`workbench.editor.limit`): it never counts towards the
+	 * limit and is never auto-closed to satisfy it.
 	 */
-	NoNewWindow = 1 << 12
+	ExcludeFromEditorLimit = 1 << 12,
+
+	/**
+	 * Signals that the editor cannot be closed through standard user
+	 * initiated close actions, such as the tab close button, middle
+	 * click, or close commands. Callers with an explicit lifecycle
+	 * requirement can force the editor to close.
+	 */
+	CannotClose = 1 << 13
+,
+
+	/** Keep BeCoder-owned editors in the current window. */
+	NoNewWindow = 1 << 14
 }
 
 export function canOpenEditorsInNewWindow(editors: readonly EditorInput[]): boolean {
@@ -967,6 +965,19 @@ export function isDiffEditorInput(editor: unknown): editor is IDiffEditorInput {
 	const candidate = editor as IDiffEditorInput | undefined;
 
 	return isEditorInput(candidate?.modified) && isEditorInput(candidate?.original);
+}
+
+export interface IEditorInputWithDiffResources extends EditorInput {
+	readonly diffResources: {
+		readonly original: URI;
+		readonly modified: URI;
+	};
+}
+
+export function isEditorInputWithDiffResources(editor: unknown): editor is IEditorInputWithDiffResources {
+	const candidate = editor as IEditorInputWithDiffResources | undefined;
+
+	return URI.isUri(candidate?.diffResources?.original) && URI.isUri(candidate.diffResources.modified);
 }
 
 export interface IUntypedFileEditorInput extends ITextResourceEditorInput {
@@ -1279,6 +1290,7 @@ interface IEditorPartConfiguration {
 	scrollToSwitchTabs?: boolean;
 	highlightModifiedTabs?: boolean;
 	tabActionLocation?: 'left' | 'right';
+	tabActionReserveSpace?: boolean;
 	tabActionCloseVisibility?: boolean;
 	tabActionUnpinVisibility?: boolean;
 	showTabIndex?: boolean;
@@ -1321,6 +1333,7 @@ interface IEditorPartConfiguration {
 
 export interface IEditorPartOptions extends DeepRequiredNonNullable<IEditorPartConfiguration> {
 	hasIcons: boolean;
+	showBreadcrumbs?: boolean;
 }
 
 export interface IEditorPartOptionsChangeEvent {

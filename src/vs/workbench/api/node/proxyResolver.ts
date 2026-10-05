@@ -280,7 +280,7 @@ function recordFetchFeatureUse(mainThreadTelemetry: MainThreadTelemetryShape, fe
 
 type AdditionalCertificatesClassification = {
 	owner: 'chrmarti';
-	comment: 'Tracks the number of additional certificates loaded for TLS connections';
+	comment: 'Tracks loading additional certificates for TLS connections';
 	count: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of additional certificates loaded' };
 	loadLocalCertificates: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Whether local certificates are loaded' };
 	useNodeSystemCerts: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Whether Node.js system certificates are used' };

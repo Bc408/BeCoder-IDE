@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { EmptyTextEditorHintContributionId, IEmptyTextEditorHintContribution } from './emptyTextEditorHintTypes.js';
 import { $, addDisposableListener, getActiveWindow } from '../../../../../base/browser/dom.js';
 import { IContentActionHandler, renderFormattedText } from '../../../../../base/browser/formattedTextRenderer.js';
 import { StandardMouseEvent } from '../../../../../base/browser/mouseEvent.js';
@@ -15,7 +16,6 @@ import { ContentWidgetPositionPreference, ICodeEditor, IContentWidget, IContentW
 import { EditorContributionInstantiation, registerEditorContribution } from '../../../../../editor/browser/editorExtensions.js';
 import { ConfigurationChangedEvent, EditorOption } from '../../../../../editor/common/config/editorOptions.js';
 import { Position } from '../../../../../editor/common/core/position.js';
-import { IEditorContribution } from '../../../../../editor/common/editorCommon.js';
 import { PLAINTEXT_LANGUAGE_ID } from '../../../../../editor/common/languages/modesRegistry.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
@@ -31,9 +31,9 @@ import { AccessibilityVerbositySettingId } from '../../../accessibility/browser/
 import './emptyTextEditorHint.css';
 
 export const emptyTextEditorHintSetting = 'workbench.editor.empty.hint';
-export class EmptyTextEditorHintContribution extends Disposable implements IEditorContribution {
+export class EmptyTextEditorHintContribution extends Disposable implements IEmptyTextEditorHintContribution {
 
-	static readonly ID = 'editor.contrib.emptyTextEditorHint';
+	static readonly ID = EmptyTextEditorHintContributionId;
 
 	private textHintContentWidget: EmptyTextEditorHintContentWidget | undefined;
 
@@ -98,15 +98,19 @@ export class EmptyTextEditorHintContribution extends Disposable implements IEdit
 		if (shouldRenderHint && !this.textHintContentWidget) {
 			this.textHintContentWidget = this.instantiationService.createInstance(EmptyTextEditorHintContentWidget, this.editor);
 		} else if (!shouldRenderHint && this.textHintContentWidget) {
-			this.textHintContentWidget.dispose();
-			this.textHintContentWidget = undefined;
+			this.disposeHint();
 		}
+	}
+
+	disposeHint(): void {
+		this.textHintContentWidget?.dispose();
+		this.textHintContentWidget = undefined;
 	}
 
 	override dispose(): void {
 		super.dispose();
 
-		this.textHintContentWidget?.dispose();
+		this.disposeHint();
 	}
 }
 

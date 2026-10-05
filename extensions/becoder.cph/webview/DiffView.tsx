@@ -25,11 +25,11 @@ export default function DiffView({
         .join('');
 
     return (
-        <div className="textarea-container">
+        <div className='textarea-container'>
             {t('outputDifference')}
             <div style={{ display: 'inline-flex', gap: '6px', float: 'right' }}>
                 <div
-                    className="clipboard"
+                    className='clipboard'
                     onClick={() => copyToClipboard(plainText)}
                     title={t('copiedToClipboard')}
                 >
@@ -38,7 +38,7 @@ export default function DiffView({
             </div>
             <div style={{ clear: 'both' }} />
             <div
-                className="selectable received-textarea"
+                className='selectable received-textarea'
                 style={{
                     padding: '6px',
                     lineHeight: '1.5',

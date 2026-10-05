@@ -29,13 +29,13 @@ export type RunnerPtyProcessCallbacks = {
 	readonly onExit: (exit: RunnerPtyExit) => void;
 };
 
-// node-pty 1.2.0-beta.13 defers Windows operations until the first output,
+// node-pty 1.2.0-beta.15 defers Windows operations until the first output,
 // even after the input/output pipes are connected. A silent program must
 // accept input and cancellation too. Keep this compatibility seam separate
 // from the session and do not modify installed/generated dependency files.
 const defaultDependencies: RunnerPtyProcessDependencies = {
 	spawn: (file, args, options) => {
-		if (process.platform === 'win32' && require('node-pty/package.json').version !== '1.2.0-beta.13') {
+		if (process.platform === 'win32' && require('node-pty/package.json').version !== '1.2.0-beta.15') {
 			throw new Error('Runner ConPTY compatibility must be reviewed for this node-pty version.');
 		}
 		const pty = spawn(file, args, options);
@@ -88,7 +88,7 @@ export class RunnerPtyProcess implements IDisposable {
 		}
 		env.TERM = 'xterm-256color';
 		env.COLORTERM = 'truecolor';
-		this.pty = dependencies.spawn(options.file, [...options.args], {
+		const forkOptions: IWindowsPtyForkOptions = {
 			cwd: options.cwd,
 			env,
 			cols: options.cols,
@@ -96,7 +96,8 @@ export class RunnerPtyProcess implements IDisposable {
 			useConpty: true,
 			conptyInheritCursor: options.inheritCursor ?? false,
 			name: env.TERM ?? 'BeCoder Runner'
-		} as IWindowsPtyForkOptions);
+		};
+		this.pty = dependencies.spawn(options.file, [...options.args], forkOptions);
 		this.subscriptions.push(
 			this.pty.onData(callbacks.onData),
 			this.pty.onExit(exit => {

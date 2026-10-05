@@ -96,3 +96,5 @@ export class ExtensionPoints implements IWorkbenchContribution {
 }
 
 registerWorkbenchContribution2(ExtensionPoints.ID, ExtensionPoints, WorkbenchPhase.BlockStartup);
+
+import './mainThreadDataChannels.js';

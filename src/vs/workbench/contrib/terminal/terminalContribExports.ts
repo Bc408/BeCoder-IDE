@@ -12,6 +12,7 @@ import { TerminalDeveloperCommandId } from '../terminalContrib/developer/common/
 import { defaultTerminalFindCommandToSkipShell } from '../terminalContrib/find/common/terminal.find.js';
 import { defaultTerminalHistoryCommandsToSkipShell, terminalHistoryConfiguration } from '../terminalContrib/history/common/terminal.history.js';
 import { terminalOscNotificationsConfiguration } from '../terminalContrib/notification/common/terminalNotificationConfiguration.js';
+import { terminalResizeDimensionsOverlayConfiguration } from '../terminalContrib/resizeDimensionsOverlay/common/terminalResizeDimensionsOverlayConfiguration.js';
 import { TerminalStickyScrollSettingId, terminalStickyScrollConfiguration } from '../terminalContrib/stickyScroll/common/terminalStickyScrollConfiguration.js';
 import { terminalTypeAheadConfiguration } from '../terminalContrib/typeAhead/common/terminalTypeAheadConfiguration.js';
 import { terminalZoomConfiguration } from '../terminalContrib/zoom/common/terminal.zoom.js';
@@ -39,6 +40,7 @@ export const terminalContribConfiguration: IConfigurationNode['properties'] = {
 	...terminalCommandGuideConfiguration,
 	...terminalHistoryConfiguration,
 	...terminalOscNotificationsConfiguration,
+	...terminalResizeDimensionsOverlayConfiguration,
 	...terminalStickyScrollConfiguration,
 	...terminalTypeAheadConfiguration,
 	...terminalZoomConfiguration,

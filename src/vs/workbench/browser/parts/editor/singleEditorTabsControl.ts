@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/singleeditortabscontrol.css';
-import { EditorResourceAccessor, Verbosity, IEditorPartOptions, SideBySideEditor, preventEditorClose, EditorCloseMethod, IToolbarActions } from '../../../common/editor.js';
+import { EditorResourceAccessor, Verbosity, IEditorPartOptions, SideBySideEditor, preventEditorClose, EditorCloseMethod, IToolbarActions, EditorInputCapabilities } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { EditorTabsControl } from './editorTabsControl.js';
 import { ResourceLabel, IResourceLabel } from '../../labels.js';
@@ -47,28 +47,39 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 		// Gesture Support
 		this._register(Gesture.addTarget(titleContainer));
 
+		let singleTabAndActionsContainer = titleContainer;
+		if (this.breadcrumbsInHeader) {
+			singleTabAndActionsContainer = $('.single-tab-and-actions-container');
+			titleContainer.appendChild(singleTabAndActionsContainer);
+		}
+
 		const labelContainer = $('.label-container');
-		titleContainer.appendChild(labelContainer);
+		singleTabAndActionsContainer.appendChild(labelContainer);
 
 		// Editor Label
 		this.editorLabel = this._register(this.instantiationService.createInstance(ResourceLabel, labelContainer, {})).element;
 		this._register(addDisposableListener(this.editorLabel.element, EventType.CLICK, e => this.onTitleLabelClick(e)));
 
-		// Breadcrumbs
-		this.breadcrumbsControlFactory = this._register(this.instantiationService.createInstance(BreadcrumbsControlFactory, labelContainer, this.groupView, {
-			showFileIcons: false,
-			showSymbolIcons: true,
-			showDecorationColors: false,
-			widgetStyles: { ...defaultBreadcrumbsWidgetStyles, breadcrumbsBackground: Color.transparent.toString() },
-			showPlaceholder: false,
-			dragEditor: true,
-		}));
-		this._register(this.breadcrumbsControlFactory.onDidEnablementChange(() => this.handleBreadcrumbsEnablementChange()));
+		if (!this.breadcrumbsInHeader) {
+			this.breadcrumbsControlFactory = this._register(this.instantiationService.createInstance(BreadcrumbsControlFactory, labelContainer, this.groupView, {
+				showFileIcons: false,
+				showSymbolIcons: true,
+				showDecorationColors: false,
+				widgetStyles: { ...defaultBreadcrumbsWidgetStyles, breadcrumbsBackground: Color.transparent.toString() },
+				showPlaceholder: false,
+				dragEditor: true,
+			}));
+			this._register(this.breadcrumbsControlFactory.onDidEnablementChange(() => this.handleBreadcrumbsEnablementChange()));
+		}
 		titleContainer.classList.toggle('breadcrumbs', Boolean(this.breadcrumbsControl));
 		this._register(toDisposable(() => titleContainer.classList.remove('breadcrumbs'))); // important to remove because the container is a shared dom node
 
+		if (this.menuIds?.tabsBarAddTab) {
+			this.createAddTabControl(labelContainer, this.menuIds.tabsBarAddTab);
+		}
+
 		// Create editor actions toolbar
-		this.createEditorActionsToolBar(titleContainer, ['title-actions']);
+		this.createEditorActionsToolBar(singleTabAndActionsContainer, ['title-actions']);
 
 		return titleContainer;
 	}
@@ -120,7 +131,7 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 		if (e.button === 1 /* Middle Button */ && this.tabsModel.activeEditor) {
 			EventHelper.stop(e, true /* for https://github.com/microsoft/vscode/issues/56715 */);
 
-			if (!preventEditorClose(this.tabsModel, this.tabsModel.activeEditor, EditorCloseMethod.MOUSE, this.groupsView.partOptions)) {
+			if (!this.tabsModel.activeEditor.hasCapability(EditorInputCapabilities.CannotClose) && !preventEditorClose(this.tabsModel, this.tabsModel.activeEditor, EditorCloseMethod.MOUSE, this.groupsView.partOptions)) {
 				this.groupView.closeEditor(this.tabsModel.activeEditor);
 			}
 		}
@@ -193,6 +204,10 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 	updateEditorSelections(): void { }
 
 	updateEditorLabel(editor: EditorInput): void {
+		this.ifEditorIsActive(editor, () => this.redraw());
+	}
+
+	updateEditorCapabilities(editor: EditorInput): void {
 		this.ifEditorIsActive(editor, () => this.redraw());
 	}
 
@@ -297,7 +312,7 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 			// Editor Label
 			const { labelFormat } = this.groupsView.partOptions;
 			let description: string;
-			if (this.breadcrumbsControl && !this.breadcrumbsControl.isHidden()) {
+			if (this.breadcrumbsInHeader || this.breadcrumbsControl && !this.breadcrumbsControl.isHidden()) {
 				description = ''; // hide description when showing breadcrumbs
 			} else if (labelFormat === 'default' && !isGroupActive) {
 				description = ''; // hide description when group is not active and style is 'default'

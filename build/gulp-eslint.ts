@@ -5,7 +5,7 @@
 
 import { ESLint } from 'eslint';
 import fancyLog from 'fancy-log';
-import { relative } from 'path';
+import { join, relative } from 'path';
 import { Transform, type TransformOptions } from 'stream';
 
 interface ESLintResults extends Array<ESLint.LintResult> {
@@ -18,7 +18,7 @@ interface EslintAction {
 }
 
 export default function eslint(action: EslintAction) {
-	const linter = new ESLint({});
+	const linter = new ESLint({ overrideConfigFile: join(import.meta.dirname, '../eslint.config.js') });
 	const formatter = linter.loadFormatter('compact');
 
 	const results: ESLintResults = Object.assign([], { errorCount: 0, warningCount: 0 });

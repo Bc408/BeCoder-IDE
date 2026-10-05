@@ -17,6 +17,8 @@ import { SIDE_BAR_TITLE_FOREGROUND, SIDE_BAR_TITLE_BORDER, SIDE_BAR_BACKGROUND, 
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { AnchorAlignment } from '../../../../base/browser/ui/contextview/contextview.js';
+import { IBoundarySashes } from '../../../../base/browser/ui/sash/sash.js';
+import { MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { LayoutPriority } from '../../../../base/browser/ui/grid/grid.js';
 import { assertReturnsDefined } from '../../../../base/common/types.js';
@@ -38,6 +40,8 @@ import { addDisposableListener, Dimension, EventType } from '../../../../base/br
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { DEFAULT_CUSTOM_TITLEBAR_HEIGHT } from '../../../../platform/window/common/window.js';
 import { isMacintosh, isWindows } from '../../../../base/common/platform.js';
+
+const PRIMARY_SIDE_BAR_SASH_CLASS = 'primary-sidebar-sash';
 
 export class SidebarPart extends AbstractPaneCompositePart {
 
@@ -71,6 +75,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 	private readonly activityBarPart = this._register(this.instantiationService.createInstance(ActivitybarPart, this.location, this));
 	private readonly visibleViewContainersTracker: VisibleViewContainersTracker;
 	private titlebarLayoutDimension: Dimension | undefined;
+	private readonly primarySideBarSashClassDisposable = this._register(new MutableDisposable());
 
 	//#endregion
 
@@ -161,6 +166,9 @@ export class SidebarPart extends AbstractPaneCompositePart {
 	}
 
 	override layout(width: number, height: number, top: number, left: number): void {
+		if (!this.layoutService.isVisible(Parts.SIDEBAR_PART)) {
+			return;
+		}
 		// CSS moves this side surface below the Tabbar. Give its pane composite the
 		// same reduced height so views do not render into the area below the window.
 		this.titlebarLayoutDimension = new Dimension(width, height);
@@ -228,12 +236,21 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		container.style.outlineColor = this.getColor(SIDE_BAR_DRAG_AND_DROP_BACKGROUND) ?? '';
 	}
 
+
+	override setBoundarySashes(sashes: IBoundarySashes): void {
+		super.setBoundarySashes?.(sashes);
+
+		this.primarySideBarSashClassDisposable.clear();
+		const primarySideBarSash = this.layoutService.getSideBarPosition() === SideBarPosition.LEFT ? sashes.right : sashes.left;
+		this.primarySideBarSashClassDisposable.value = primarySideBarSash?.addClass(PRIMARY_SIDE_BAR_SASH_CLASS);
+	}
+
 	protected override getTitleAreaDropDownAnchorAlignment(): AnchorAlignment {
 		return this.layoutService.getSideBarPosition() === SideBarPosition.LEFT ? AnchorAlignment.LEFT : AnchorAlignment.RIGHT;
 	}
 
 	protected override createCompositeBar(): ActivityBarCompositeBar {
-		return this.instantiationService.createInstance(ActivityBarCompositeBar, ViewContainerLocation.Sidebar, this.getCompositeBarOptions(), this.partId, this, false);
+		return this.instantiationService.createInstance(ActivityBarCompositeBar, ViewContainerLocation.Sidebar, this.getCompositeBarOptions(), this.partId, this, undefined);
 	}
 
 	protected getCompositeBarOptions(): IPaneCompositeBarOptions {

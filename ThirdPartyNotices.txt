@@ -108,7 +108,7 @@ License text: extensions/becoder.one-monokai/LICENSE
 ---------------------------------------------------------
 
 Mermaid Markdown Features 10.0.0
-https://github.com/microsoft/vscode/tree/1.130.0/extensions/mermaid-markdown-features
+https://github.com/microsoft/vscode/tree/1.140.0/extensions/mermaid-markdown-features
 
 MIT License
 Copyright (c) Microsoft Corporation and Mermaid dependency contributors

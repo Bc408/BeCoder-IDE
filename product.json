@@ -1,7 +1,7 @@
 {
 	"nameShort": "BeCoder",
 	"nameLong": "BeCoder",
-	"extensionApiVersion": "1.130.0",
+	"extensionApiVersion": "1.140.0",
 	"applicationName": "becoder",
 	"dataFolderName": ".becoder",
 	"sharedDataFolderName": ".becoder-shared",

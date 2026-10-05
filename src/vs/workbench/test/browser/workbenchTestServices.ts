@@ -639,6 +639,7 @@ export class TestLayoutService implements IWorkbenchLayoutService {
 	whenRestored: Promise<void> = Promise.resolve(undefined);
 	hasFocus(_part: Parts): boolean { return false; }
 	isFloatingPanelsEnabled(): boolean { return false; }
+	isModernUICompact(): boolean { return false; }
 	focusPart(_part: Parts): void { }
 	hasMainWindowBorder(): boolean { return false; }
 	getMainWindowBorderRadius(): string | undefined { return undefined; }
@@ -655,6 +656,8 @@ export class TestLayoutService implements IWorkbenchLayoutService {
 	async setSideBarHidden(_hidden: boolean): Promise<void> { }
 	async setAuxiliaryBarHidden(_hidden: boolean): Promise<void> { }
 	async setPartHidden(_hidden: boolean, part: Parts): Promise<void> { }
+	isSecondarySideBarVisible(): boolean { return false; }
+	toggleSecondarySideBar(): void { }
 	isPanelHidden(): boolean { return false; }
 	async setPanelHidden(_hidden: boolean): Promise<void> { }
 	toggleMaximizedPanel(): void { }
@@ -1298,6 +1301,10 @@ export class TestHostService implements IHostService {
 		this._onDidChangeFocus.fire(this._hasFocus);
 	}
 
+	setActiveWindow(windowId: number) {
+		this._onDidChangeWindow.fire(windowId);
+	}
+
 	async restart(): Promise<void> { }
 	async reload(): Promise<void> { }
 	async close(): Promise<void> { }
@@ -1591,6 +1598,8 @@ export class TestEditorPart extends MainEditorPart implements IEditorGroupsServi
 
 	declare readonly _serviceBrand: undefined;
 
+	floatingBorderWidth: number | undefined;
+
 	readonly mainPart = this;
 	readonly parts: readonly IEditorPart[] = [this];
 	readonly activeModalEditorPart: IModalEditorPart | undefined = undefined;
@@ -1599,6 +1608,10 @@ export class TestEditorPart extends MainEditorPart implements IEditorGroupsServi
 
 	testSaveState(): void {
 		return super.saveState();
+	}
+
+	protected override getFloatingBorderWidth(): number {
+		return this.floatingBorderWidth ?? super.getFloatingBorderWidth();
 	}
 
 	clearState(): void {

@@ -1,19 +1,11 @@
 {
 	"description": "Beacon: conversations for competitive programming.",
 	"open": "Toggle Beacon Sidebar",
-	"configuration": "Settings",
-	"configureKey": "Configure Beacon API Key",
-	"settings.provider": "Model provider. Configure API keys securely in the Beacon sidebar; keys are not stored in Settings.",
-	"settings.deepseek.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
-	"settings.bailian.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
-	"settings.moonshot.baseURL": "API base URL (without /chat/completions). Use the endpoint for your account region.",
-	"settings.ollama.baseURL": "Ollama OpenAI-compatible base URL. Local HTTP or HTTPS is supported. Beacon does not install or start Ollama.",
-	"settings.model": "Chat model ID. Fetch and select models from the Beacon sidebar, or enter an exact model ID here.",
-	"settings.modelParameters": "Optional parameters saved separately for each provider, endpoint and model. Configure them in the Beacon sidebar.",
 	"permissions.none": "No local file access. Existing conversation context remains available.",
 	"permissions.workspace": "Read-only access to open workspace folders, excluding private files.",
 	"permissions.computer": "Read-only access to local and network-share files, excluding private files.",
 	"permissions.description": "File permission for future Beacon responses. Current responses keep their original permission. Read content is sent to the selected model service.",
-	"settings.modelCapabilities": "Model capability overrides and thinking options saved for each provider, endpoint and model. Configure them in the Beacon sidebar.",
-	"settings.webEnabled": "Allow the selected tool-capable model to search public information through Exa without a search API key. Changes during generation apply to the next response."
+	"settings.webEnabled": "Allow the selected tool-capable model to search public information through Exa without a search API key. Changes during generation apply to the next response.",
+	"command.settings": "Open Settings",
+	"settings.modelConfiguration": "Beacon model settings document. Manage connections, models and parameters in the Beacon Settings editor tab. Old configuration is not read or migrated."
 }

@@ -33,6 +33,9 @@ export interface ConnectionState {
 	models: ModelInfo[];
 	loading: boolean;
 	error: string;
+	displayName?: string;
+	choices?: { provider: ProviderId; id: string; name: string }[];
+	revision?: number;
 }
 export interface ModelParameters {
 	temperature?: number;
@@ -48,7 +51,7 @@ export interface ModelInfo {
 export function isProvider(value: unknown): value is ProviderId {
 	return typeof value === 'string' && Object.hasOwn(providers, value);
 }
-export function secretName(provider: ProviderId): string { return `beacon.${provider}.apiKey`; }
+export function secretName(provider: ProviderId): string { return `beacon.modelConfiguration.${provider}.apiKey`; }
 
 const parameterRanges: Record<ModelParameterName, { minimum: number; maximum: number; integer?: boolean }> = {
 	temperature: { minimum: 0, maximum: 2 },
@@ -56,34 +59,9 @@ const parameterRanges: Record<ModelParameterName, { minimum: number; maximum: nu
 	maxOutputTokens: { minimum: 1, maximum: 131072, integer: true }
 };
 
-function parameterKey(provider: ProviderId, model: string, baseURL: string): string { return `${provider}:${encodeURIComponent(baseURL.replace(/\/+$/, ''))}:${encodeURIComponent(model)}`; }
-function isRecord(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
-function validParameter(name: ModelParameterName, value: unknown): value is number {
+export function validParameter(name: ModelParameterName, value: unknown): value is number {
 	const range = parameterRanges[name];
 	return typeof value === 'number' && Number.isFinite(value) && value >= range.minimum && value <= range.maximum && (!range.integer || Number.isInteger(value));
-}
-
-export function readModelParameters(value: unknown, provider: ProviderId, model: string, baseURL: string = providers[provider].baseURL): ModelParameters {
-	if (!model || !isRecord(value)) { return {}; }
-	const stored = value[parameterKey(provider, model, baseURL)];
-	if (!isRecord(stored)) { return {}; }
-	const result: ModelParameters = {};
-	for (const name of Object.keys(parameterRanges) as ModelParameterName[]) {
-		if (validParameter(name, stored[name])) { result[name] = stored[name]; }
-	}
-	return result;
-}
-
-export function updateModelParameters(value: unknown, provider: ProviderId, model: string, name: unknown, parameter: unknown, baseURL: string = providers[provider].baseURL): Record<string, unknown> {
-	if (!model || typeof name !== 'string' || !Object.hasOwn(parameterRanges, name) || (parameter !== null && !validParameter(name as ModelParameterName, parameter))) { throw new Error('invalid-model-parameter'); }
-	const result = isRecord(value) ? { ...value } : {};
-	const key = parameterKey(provider, model, baseURL);
-	const current = readModelParameters(result, provider, model, baseURL);
-	if (parameter === null) { delete current[name as ModelParameterName]; }
-	else { current[name as ModelParameterName] = parameter as number; }
-	if (Object.keys(current).length) { result[key] = current; }
-	else { delete result[key]; }
-	return result;
 }
 
 export function normalizeBaseURL(value: string, provider: ProviderId): string {

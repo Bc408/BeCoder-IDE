@@ -175,6 +175,10 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 
 	@memoize
 	get extensionEnabledProposedApi(): string[] | undefined {
+		if (this.options.enabledExtensionProposedApi !== undefined) {
+			return [...this.options.enabledExtensionProposedApi];
+		}
+
 		if (!this.extensionHostEnvironment) {
 			this.extensionHostEnvironment = this.resolveExtensionHostEnvironment();
 		}
@@ -230,6 +234,9 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 	get beCoderTrustWorkspace(): string | undefined { return undefined; }
 
 	@memoize
+	get sessionTitle(): string | undefined { return this.payload?.get('sessionTitle'); }
+
+	@memoize
 	get profile(): string | undefined { return this.payload?.get('profile'); }
 
 	@memoize
@@ -259,8 +266,8 @@ export class BrowserWorkbenchEnvironmentService implements IBrowserWorkbenchEnvi
 			extensionDevelopmentKind: undefined
 		};
 
-		// Fill in selected extra environmental properties
-		if (this.payload) {
+		// Extension host development options from the payload are only valid in development or smoke test builds.
+		if (this.payload && (!this.isBuilt || this.enableSmokeTestDriver)) {
 			for (const [key, value] of this.payload) {
 				switch (key) {
 					case 'extensionDevelopmentPath':

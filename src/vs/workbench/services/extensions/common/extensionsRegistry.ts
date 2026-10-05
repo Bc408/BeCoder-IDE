@@ -537,7 +537,7 @@ export const schema: IJSONSchema = {
 							markdownDescription: nls.localize('vscode.extension.capabilities.untrustedWorkspaces.description', "A description of how workspace trust affects the extensions behavior and why it is needed. This only applies when `supported` is not `true`."),
 						}
 					}
-				}
+				},
 			}
 		},
 		sponsor: {

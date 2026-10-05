@@ -6,7 +6,8 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { ChatHistory } from './history';
-import { Connections, connectionError } from './connections';
+import { Connections, connectionError, settingsError } from './connections';
+import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools, currentFileRoots } from './workspaceFiles';
 import { isFilePermission, type FilePermission } from './fileTools';
 import { HistoryStore } from './historyStore';
@@ -20,7 +21,8 @@ export function deactivate(): Promise<void> | undefined { return shutdown?.(); }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	let view: vscode.WebviewView | undefined;
-	let configurationView: vscode.WebviewView | undefined;
+	let configurationPanel: vscode.WebviewPanel | undefined;
+	let settingsStamp = '';
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let alive = true;
 	const describeError = connectionError;
@@ -38,7 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const busy = () => session.snapshot.busy || !!attachmentJob;
 	const drafts = new Map<string, Attachment[]>();
 	const attachments = () => drafts.get(history.snapshot.activeId) ?? [];
-	const connections = new Connections(context, busy, schedule);
+	const connections = new Connections(context, schedule);
 	const readPermission = (): FilePermission => {
 		const value = vscode.workspace.getConfiguration('beacon').get('filePermission');
 		return isFilePermission(value) ? value : 'none';
@@ -75,7 +77,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			});
 			const message = { type: 'snapshot', ...snapshot, busy: busy(), stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
 			void view?.webview.postMessage(message);
-			void configurationView?.webview.postMessage({ type: 'snapshot', configured: connections.configured, connection: connections.snapshot, busy: busy() });
+			if (configurationPanel) {
+				const connection = connections.snapshot;
+				const stamp = `${connection.revision}:${connection.loading}:${connection.error}:${busy()}`;
+				if (settingsStamp !== stamp) { settingsStamp = stamp; void configurationPanel.webview.postMessage({ type: 'settingsSnapshot', settings: connections.settings, busy: busy() }); }
+			}
 		}
 	};
 	function schedule(): void {
@@ -123,7 +129,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			case 'renameHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, false); } break;
 			case 'deleteHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, true); } break;
 			case 'saveHistory': if (!historyUnreadable) { void history.flush(); } break;
-			case 'settings': void vscode.commands.executeCommand('becoder.beacon.configuration.focus'); break;
+			case 'settings': openSettings(); break;
+			case 'selectModel': void changeSettings(message, view?.webview); break;
 			case 'copy': {
 				const item = session.snapshot.messages.find(item => item.id === value.id);
 				if (item) { void vscode.env.clipboard.writeText(item.text); }
@@ -135,6 +142,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	async function setPermission(value: FilePermission): Promise<void> {
 		try { await vscode.workspace.getConfiguration('beacon').update('filePermission', value, vscode.ConfigurationTarget.Global); }
 		catch { requestNotice = { id: Date.now(), text: vscode.l10n.t('Could not save the file permission. Please try again.') }; publish(); }
+	}
+	async function changeSettings(message: unknown, webview: vscode.Webview | undefined): Promise<void> {
+		const command = message as SettingsCommand;
+		if (!command || typeof command !== 'object' || !Number.isSafeInteger(command.requestId)) { return; }
+		try {
+			await connections.apply(command);
+			if (!alive) { return; }
+			requestNotice = { id: Date.now(), text: busy() ? vscode.l10n.t('Model settings changes will take effect in the next response.') : vscode.l10n.t('Model settings saved.') };
+			publish();
+			void webview?.postMessage({ type: 'settingsResult', requestId: command.requestId, ok: true });
+		} catch (error) {
+			const text = settingsError(error);
+			if (webview === view?.webview) { requestNotice = { id: Date.now(), text }; }
+			publish();
+			void webview?.postMessage({ type: 'settingsResult', requestId: command.requestId, ok: false, error: text });
+		}
+	}
+	function openSettings(): void {
+		if (configurationPanel) { configurationPanel.reveal(vscode.ViewColumn.Active); return; }
+		const panel = vscode.window.createWebviewPanel('becoder.beacon.settings', vscode.l10n.t('Beacon Settings'), vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+		configurationPanel = panel;
+		settingsStamp = '';
+		panel.webview.html = html(panel.webview, 'configuration');
+		const received = panel.webview.onDidReceiveMessage((message: unknown) => {
+			if (!message || typeof message !== 'object') { return; }
+			const type = (message as { type?: string }).type;
+			if (type === 'ready') { settingsStamp = ''; publish(); }
+			else if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
+			else { void changeSettings(message, panel.webview); }
+		});
+		const disposed = panel.onDidDispose(() => { received.dispose(); disposed.dispose(); if (configurationPanel === panel) { configurationPanel = undefined; } });
+		context.subscriptions.push(panel, received, disposed);
+		publish();
 	}
 	function attachmentNotice(error: unknown): void {
 		const text = error instanceof AttachmentError ? error.code === 'permission' ? vscode.l10n.t('File access is disabled. Change the permission before adding or sending attachments.') : error.code === 'source' ? vscode.l10n.t('Workspace permission only accepts files dragged from BeCoder. Explorer drops and the file picker require computer permission.') : error.code === 'image' ? vscode.l10n.t('The image is invalid or unsupported. Use PNG, JPEG, WebP or GIF, up to 4 MiB each.') : error.code === 'budget' ? vscode.l10n.t('Attachments exceed the limit: 8 MiB in total, up to 64 files.') : vscode.l10n.t('Could not read attachment {0}. Check its location, permissions and whether it is a private file.', error.file) : describeError(error);
@@ -237,28 +277,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				await vscode.commands.executeCommand('becoder.beacon.chat.focus');
 			}
 		}),
-		vscode.commands.registerCommand('becoder.beacon.configureKey', () => connections.configureKey()),
-		vscode.window.registerWebviewViewProvider('becoder.beacon.configuration', {
-			resolveWebviewView(resolved) {
-				configurationView = resolved;
-				resolved.webview.html = html(resolved.webview, 'configuration');
-				const receiveDisposable = resolved.webview.onDidReceiveMessage((message: unknown) => {
-					if (!message || typeof message !== 'object') { return; }
-					const value = message as { type?: string; field?: string; value?: unknown; provider?: string; model?: string; baseURL?: string };
-					const type = value.type;
-					if (type === 'ready') { publish(); }
-					if (type === 'configure') { void connections.configureKey(); }
-					if (type === 'fetchModels') { void connections.fetchModels(); }
-					if (type === 'updateConnection') { void connections.update(value.field, value.value, value.provider); }
-					if (type === 'updateParameter') { void connections.updateParameter(value.field, value.value, value.provider, value.model, value.baseURL); }
-					if (type === 'updateCapability') { void connections.updateCapability(value.field, value.value, value.provider, value.baseURL, value.model); }
-					if (type === 'openSettings') { void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:becoder.beacon'); }
-					if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
-				});
-				const disposed = resolved.onDidDispose(() => { receiveDisposable.dispose(); disposed.dispose(); if (configurationView === resolved) { configurationView = undefined; } });
-				publish();
-			}
-		}),
+		vscode.commands.registerCommand('becoder.beacon.settings', openSettings),
 		vscode.window.registerWebviewViewProvider('becoder.beacon.chat', {
 			resolveWebviewView(resolved) {
 				view = resolved;

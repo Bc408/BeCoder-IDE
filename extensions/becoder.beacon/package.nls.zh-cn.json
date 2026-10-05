@@ -1,19 +1,11 @@
 {
 	"description": "Beacon：面向算法竞赛的对话助手。",
 	"open": "打开/关闭 Beacon 侧边栏",
-	"configuration": "设置",
-	"configureKey": "配置 Beacon API Key",
-	"settings.provider": "模型服务商。请在 Beacon 左侧栏安全配置 API Key；密钥不存入设置。",
-	"settings.deepseek.baseURL": "API 基础地址（不含 /chat/completions）。请使用密钥所在地域的地址。",
-	"settings.bailian.baseURL": "API 基础地址（不含 /chat/completions）。请使用密钥所在地域的地址。",
-	"settings.moonshot.baseURL": "API 基础地址（不含 /chat/completions）。请使用密钥所在地域的地址。",
-	"settings.ollama.baseURL": "Ollama 的 OpenAI 兼容基础地址，支持本机 HTTP 或 HTTPS。Beacon 不负责安装或启动 Ollama。",
-	"settings.model": "文本聊天模型 ID。可在 Beacon 左侧栏获取并选择模型，也可在此输入准确的模型 ID。",
-	"settings.modelParameters": "按服务商、接口地址和模型分别保存的可选参数。请在 Beacon 左侧栏中配置。",
 	"permissions.none": "不读取本地文件；已有会话上下文继续保留。",
 	"permissions.workspace": "只读访问当前工作区文件夹，排除敏感文件。",
 	"permissions.computer": "只读访问本机与网络共享文件，排除敏感文件。",
 	"permissions.description": "后续 Beacon 回复的文件权限。正在生成的回复保持原有权限；读取内容会发送给所选模型服务。",
-	"settings.modelCapabilities": "按服务商、接口地址和模型分别保存的能力修正与思考设置。请在 Beacon 左侧栏中配置。",
-	"settings.webEnabled": "允许支持工具的模型通过 Exa 按需查询公开信息，无需配置搜索密钥。生成中切换将在下一轮回复中生效。"
+	"settings.webEnabled": "允许支持工具的模型通过 Exa 按需查询公开信息，无需配置搜索密钥。生成中切换将在下一轮回复中生效。",
+	"command.settings": "打开设置",
+	"settings.modelConfiguration": "Beacon 模型设置文档。在 Beacon 设置标签页管理连接、模型与参数，不读取或迁移旧版配置。"
 }

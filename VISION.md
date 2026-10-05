@@ -1,160 +1,56 @@
 # BeCoder Vision
 
-BeCoder is a self-contained Windows editor for OI, ICPC, and everyday C/C++ competitive-programming work. This document defines the stable product vision behind BeCoder: who it serves, what experience it promises, which responsibilities it owns, and how product decisions should be made.
+BeCoder is a self-contained Windows environment for OI, ICPC and everyday C/C++ competitive programming. It combines a prepared editor and toolchain with Beacon, an optional AI companion that helps users understand problems, code and results.
 
-It does not track versions, development stages, implementation status, test results, or release candidates.
+This document describes the product direction. It is not a frozen architecture, a stage checklist or a release-status record. Specific features and implementation choices can evolve with user feedback and the project owner's decisions.
 
-## Mission
+## Purpose
 
-BeCoder exists to give competitive programmers a focused environment in which they can install one application and begin coding immediately.
+Make the path from reading a problem to writing, testing and understanding a solution easier. A beginner should be able to install BeCoder and run a first C/C++ program without separately configuring a compiler or language server. An experienced contestant should find a familiar, responsive environment with understandable input, output and errors.
 
-The editor, compiler, code intelligence, diagnostics, and run environment should already be prepared. Users should not need to install a compiler, edit environment variables, understand language-server configuration, or complete an onboarding wizard before writing and running their first program.
+BeCoder builds on Code - OSS while maintaining its own defaults, bundled resources, application data and distribution. It serves students, OI/ICPC participants and users who need a portable environment independent of a system Visual Studio Code installation.
 
-BeCoder is derived from Code - OSS and uses its mature editor and Workbench foundations where they support this mission. BeCoder remains an independent product and owns its behavior, defaults, distribution boundary, documentation, and user experience.
+## The Experience We Aim For
 
-## Who BeCoder Serves
+- **Ready to use:** editing, completion, diagnostics, compilation and sample testing work with the bundled environment.
+- **Focused and familiar:** mature editor workflows remain useful; new features should reduce effort rather than add setup and competing controls.
+- **Clear and responsive:** output appears promptly, ongoing work can be stopped, and failures explain what happened.
+- **Respectful of user work:** source files, project settings and repositories belong to the user. Product maintenance should preserve them.
+- **Self-contained:** application settings, extensions, caches and conversation history stay with the BeCoder installation. Optional services have explicit dependencies.
 
-BeCoder is designed for:
+## Beacon's Role
 
-- students beginning competitive programming;
-- OI and ICPC participants who want a predictable C/C++ workflow;
-- programmers who value a focused editor over a general-purpose IDE;
-- users who need a portable, self-contained environment that does not depend on an existing Visual Studio Code or compiler installation.
+Beacon is a read-only programming tutor. It can explain concepts and code, discuss algorithms and complexity, help diagnose mistakes, and provide complete solutions when the user asks. The user decides how to use the answer.
 
-Beginner-friendly does not mean hiding every technical fact. BeCoder should reduce unnecessary setup while keeping compilation, generated artifacts, errors, input, output, and failure states understandable.
+Model access is configured by the user, through a cloud service or a local model. Beacon being unavailable should not interrupt editing, compilation, running or sample testing.
 
-## Product Promise
+Beacon's tools read authorized information; they do not modify project files, execute commands or submit solutions. File permissions distinguish no local access, the open workspace and the computer. Known credential and private files remain excluded. Inputs, sources and model limitations should be understandable, and internet access should be controllable.
 
-> Install BeCoder, open a C or C++ file, and begin working in a prepared environment. Except for the native terminal and explicitly configured optional Python checkers, BeCoder's core functions should depend on BeCoder-owned paths, configurations, processes, and resources rather than the user's system development environment.
+The near-term aim is to connect the existing conversation experience with the user's actual problem, code, samples and observed results. Training records, personal preferences and knowledge retrieval may add value later; their scope should be chosen when the preceding experience is useful and their data behavior is clear.
 
-This promise is built on four permanent principles:
+## How the Parts Fit Together
 
-1. **Independent**: Core behavior does not depend on system Visual Studio Code, a system compiler, or preconfigured development tools.
-2. **Self-contained**: BeCoder's application data, toolchains, settings, extensions, caches, and history belong to the current BeCoder installation.
-3. **Ready by default**: The first useful state is the default state. Configuration remains available, but BeCoder does not require configuration before use.
-4. **Protect user work**: Source files, input files, workspace configuration, repositories, and other project assets belong to the user and are never disposable implementation details.
-
-## Desired Experience
-
-BeCoder should feel:
-
-- familiar rather than novel for its own sake;
-- focused rather than feature-heavy;
-- clean rather than empty;
-- immediate rather than queued;
-- explicit rather than surprisingly stateful;
-- predictable rather than dependent on hidden system configuration.
-
-A stable, complete baseline is preferable to a delayed or repeatedly changing result. Opening a source file should immediately provide readable syntax coloring. Bounded semantic analysis may refine that result, but it should not own the first usable presentation.
-
-Core operations use one active request. If an owner is busy, a conflicting request should be rejected rather than silently queued. Cancellation must retire active work before the same owner is reused.
-
-## Clear Ownership
-
-Every feature must identify who owns its environment, data, process, and visible result.
-
-| Area | Product authority |
+| Part | Main responsibility |
 | --- | --- |
-| Native PowerShell | The user's system environment and arbitrary commands |
-| BC panel | BeCoder's closed compile-and-run interaction |
-| Compile and run toolchain | BeCoder's bundled GCC |
-| Beacon conversations and model connection | Built-in Beacon extension |
-| Sample tests and local judging | Bundled CPH, using Runner's shared compilation policy |
-| Visible editor errors | BeCoder's bundled GCC diagnostics |
-| Code intelligence | BeCoder's bundled clangd |
-| Immediate C/C++ coloring | Built-in TextMate and Better C++ Syntax grammar |
-| Semantic refinement | Bundled clangd and BeCoder One Monokai |
-| Settings, extensions, caches, and history | The current BeCoder installation |
-| Workspace files and project configuration | The user project |
-| System Visual Studio Code data | Outside BeCoder's authority |
+| Editor and bundled language services | Code editing, immediate coloring, GCC diagnostics and clangd code intelligence |
+| Runner and BC panel | BeCoder's compile-and-run workflow, program input/output and cancellation |
+| Native terminal | User-directed system commands and the user's environment |
+| Integrated browser and PDF viewer | Reading problem material; the browser also supports explicit problem import |
+| CPH | Imported samples and local sample judging, sharing Runner's compilation policy |
+| Beacon | Conversations, model settings, authorized read-only context and explanations |
+| Installation data | Product settings, extensions, caches and local history |
+| User workspace and online judge | The user's files, account, submissions and final judge results |
 
-An implementation that crosses these boundaries is incorrect even when its visible result appears convenient.
+These responsibilities help guide changes without prescribing a particular module layout. Prefer extending an existing owner and a small interface when that is enough. Use shared logic where behavior is actually shared, rather than building a framework for possible future features.
 
-## Focused Tools
+## Distribution and Scope
 
-BeCoder's tools have narrow, complementary responsibilities.
+The core C/C++ workflow uses bundled GCC and clangd. Native terminal commands, optional Python checkers and model services retain their explicit external dependencies. BeCoder is distributed as a complete Windows application directory that can be moved as a unit; its setup and data behavior should stay easy to understand.
 
-### Native terminal
+Open VSX and local VSIX installation provide extension choices. Bundled components and third-party extensions retain their own licenses and responsibilities. Product-specific features do not need to recreate every upstream IDE capability; general-purpose MCP, debugging, Git UI and remote development are outside the current product focus.
 
-Native PowerShell is the real system terminal. It receives the user's PATH, profiles, aliases, scripts, compilers, and arbitrary commands. BeCoder does not inject its bundled compiler into that environment.
+## Choosing the Next Step
 
-### BC panel and Runner
+Start from a concrete user problem, inspect the current implementation, and prefer a complete, simple improvement. Keep current behavior and future ideas distinct. Learn from Code - OSS, Cherry Studio, Captain Who and Codex where their solutions fit, without inheriting their entire product architecture.
 
-The BC panel may look and edit like a terminal, but it is not a shell. It accepts a closed BeCoder command grammar and directly owns compiler and program processes. It does not embed PowerShell, CMD, user profiles, shell pipelines, scripts, or environment mutation.
-
-Runner owns explicit compilation, warnings, linking, execution, program input, program output, cancellation, and the lifecycle of artifacts produced by the active request.
-
-### CPH and online judges
-
-The integrated browser owns website navigation and the current page used for explicit problem import. Bundled CPH owns imported sample metadata, local sample execution, separate standard output/error presentation and request-private artifacts. Runner remains the authority for C/C++ compilation policy and the private toolchain. Optional custom Python checkers use a user-configured system interpreter; ordinary sample testing requires no external Python installation.
-
-Welcome-page shortcuts are user-configurable navigation entries, not a guarantee of parser support. Online accounts, submission forms, compiler selection and final judge verdicts belong to the website. Users copy their source into the website to submit; BeCoder does not own automatic submission.
-
-### GCC diagnostics
-
-Bundled GCC owns visible syntax, preprocessing, and type errors in the editor. Background diagnostics and explicit Run are separate operations and do not share cancellation or terminal state.
-
-### clangd
-
-Bundled clangd owns code intelligence, one bounded semantic refinement, explicit Google-style formatting, and optional inlay-hint data. BeCoder owns whether inlay hints are shown. clangd does not own visible diagnostics, warning presentation, inactive-region presentation, broad code actions, or a general indexing product.
-
-## Project and Artifact Safety
-
-System Visual Studio Code settings, extensions, caches, locale state, clangd configuration, and user data are outside BeCoder's authority. BeCoder neither reads nor modifies them as part of its core product behavior.
-
-Workspace assets such as `.vscode`, `.clangd`, `.clang-format`, `.git`, `.gitignore`, `.gitattributes`, source files, and input files belong to the user. Removing a BeCoder feature does not grant permission to delete or rewrite project assets previously associated with it.
-
-Generated executables are reproducible contest artifacts, not durable user data. Runner may replace or clean only artifacts owned by the current request. Cleanup outside normal overwrite preparation must remain visible and truthful. A failed cleanup is reported as a failure and leaves the file in place.
-
-The governing rule is not to delete as much as possible. It is to delete only owned artifacts, at a valid time, with an observable result.
-
-## Deliberate Product Scope
-
-BeCoder is not intended to become a general-purpose IDE. Capabilities are included when they support the focused competitive-programming workflow and removed when they create product paths BeCoder does not intend to own.
-
-Beacon is BeCoder's built-in AI companion for competitive programming. It owns its conversation UI, installation-wide conversation history and user-selected read-only file permissions and explicitly configured model connection in an isolated extension. Its domain tools and teaching behavior are BeCoder-owned; it does not restore the removed upstream AI/Chat service graph. Model access is optional and uses a user-provided provider credential.
-
-BeCoder does not provide general-purpose MCP, Debug, GDB, Source Control, or remote-development product paths. Generic editor and Workbench infrastructure remains when it has ordinary non-target consumers.
-
-Removal decisions must follow registrations, consumers, services, APIs, commands, settings, build entries, and packaged resources. A component is not removed merely because its source contains a word associated with an excluded capability.
-
-The goal is a zero product-dependency graph for excluded capabilities, not a zero keyword count or maximum deletion count.
-
-## Extension Governance
-
-Open VSX is BeCoder's only product-configured online extension registry. Local VSIX installation remains available. BeCoder does not proxy, mirror, fall back to, or expose Microsoft Marketplace.
-
-Protected built-in extensions are BeCoder product components rather than replaceable gallery dependencies. Blacklisted extensions remain unavailable through normal installation, update, enablement, and local-VSIX paths.
-
-User-installed extensions remain third-party content under their own licenses, behavior, compatibility, and trust boundaries.
-
-## Directory-Based Distribution
-
-BeCoder is distributed as one complete Windows application directory. Its Setup installs that directory at a user-selected location, and the directory can be moved as a unit, including to removable storage.
-
-Setup creates no Windows integration by default. It may create one current-user desktop shortcut only when explicitly selected. BeCoder does not require registry state, an uninstaller, Start-menu entries, file associations, PATH changes, App Paths, protocols, services, background tasks, or startup entries.
-
-Closing BeCoder and deleting its complete directory is the uninstall model. A desktop shortcut explicitly created by the user remains a separate user-owned file.
-
-Reinstalling into the same authenticated BeCoder directory is a complete replacement. Data preservation must be explicit and user-invoked rather than hidden installer behavior.
-
-## Decision Principles
-
-Product and engineering decisions should:
-
-1. begin with the user outcome and the authority that owns it;
-2. distinguish stable product requirements from historical implementation records;
-3. inspect actual consumers, registrations, processes, package entries, and data paths;
-4. preserve mature Code - OSS behavior when it fits BeCoder's purpose;
-5. keep BeCoder-specific changes narrow and intentional;
-6. protect the user's environment, project files, configuration, and data;
-7. prefer complete simple behavior over partial complex behavior;
-8. reject hidden queues, invisible cleanup, and ambiguous process ownership;
-9. preserve generic infrastructure that still serves ordinary product behavior;
-10. treat source implementation, successful builds, package verification, and user acceptance as separate kinds of evidence;
-11. avoid speculative compatibility for unapproved capabilities;
-12. document unresolved product choices instead of silently guessing.
-
-## Compact Definition
-
-BeCoder is a self-contained, strongly isolated, ready-by-default Windows editor for competitive programming. It builds on Code - OSS while deliberately focusing the product around bundled GCC, bundled clangd, a dedicated Runner, protected user projects, and a familiar, fast, clean, and predictable C/C++ workflow.
+Successful source checks, a built application and a useful experience are different milestones. Product decisions should consider actual behavior and user feedback as well as engineering evidence.

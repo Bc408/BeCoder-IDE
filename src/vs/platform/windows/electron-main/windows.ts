@@ -143,7 +143,6 @@ export function defaultBrowserWindowOptions(accessor: ServicesAccessor, windowSt
 		height: windowState.height,
 		webPreferences: {
 			...webPreferences,
-			enableWebSQL: false,
 			spellcheck: false,
 			zoomFactor: zoomLevelToZoomFactor(windowState.zoomLevel ?? windowSettings?.zoomLevel),
 			autoplayPolicy: 'user-gesture-required',
@@ -235,8 +234,8 @@ export function defaultBrowserWindowOptions(accessor: ServicesAccessor, windowSt
 		options.frame = false;
 		options.titleBarStyle = undefined;
 		options.titleBarOverlay = undefined;
-		options.minWidth = undefined;
-		options.minHeight = undefined;
+		options.minWidth = 1;
+		options.minHeight = 1;
 	}
 
 	if (overrides?.backgroundColor) {

@@ -7,7 +7,7 @@ import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { ChatSession, type Generate } from '../src/session';
 import { createGenerator, listModels } from '../src/provider';
-import { normalizeBaseURL, providers, readModelParameters, secretName, updateModelParameters, type ProviderId } from '../src/connection';
+import { normalizeBaseURL, providers, secretName, type ProviderId } from '../src/connection';
 import { normalizeMath } from '../webview/math';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { readFileSync } from 'fs';
@@ -473,18 +473,5 @@ suite('Beacon provider connections', () => {
 		await assert.rejects(listModels(connection, new AbortController().signal, async () => Response.json({ data: [null] })), /invalid-model-list/);
 		const controller = new AbortController(); controller.abort();
 		await assert.rejects(listModels(connection, controller.signal, async (_url, options) => { options?.signal?.throwIfAborted(); return Response.json({ data: [] }); }), { name: 'AbortError' });
-	});
-	test('model parameters are isolated by provider and model and invalid values are ignored or rejected', () => {
-		let stored: unknown = {};
-		stored = updateModelParameters(stored, 'deepseek', 'chat', 'temperature', 0.6);
-		stored = updateModelParameters(stored, 'deepseek', 'chat', 'maxOutputTokens', 4096);
-		stored = updateModelParameters(stored, 'moonshot', 'chat', 'topP', 0.8);
-		assert.deepStrictEqual(readModelParameters(stored, 'deepseek', 'chat'), { temperature: 0.6, maxOutputTokens: 4096 });
-		assert.deepStrictEqual(readModelParameters(stored, 'moonshot', 'chat'), { topP: 0.8 });
-		assert.deepStrictEqual(readModelParameters(stored, 'deepseek', 'other'), {});
-		stored = updateModelParameters(stored, 'deepseek', 'chat', 'temperature', null);
-		assert.deepStrictEqual(readModelParameters(stored, 'deepseek', 'chat'), { maxOutputTokens: 4096 });
-		assert.throws(() => updateModelParameters(stored, 'deepseek', 'chat', 'topP', 2), /invalid-model-parameter/);
-		assert.deepStrictEqual(readModelParameters({ 'deepseek:chat': { temperature: 'secret', maxOutputTokens: -1 } }, 'deepseek', 'chat'), {});
 	});
 });

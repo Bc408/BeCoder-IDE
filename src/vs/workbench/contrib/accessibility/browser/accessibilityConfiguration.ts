@@ -45,6 +45,7 @@ export const enum ViewDimUnfocusedOpacityProperties {
 }
 
 export const enum AccessibilityVerbositySettingId {
+	ReleaseNotes = 'accessibility.verbosity.releaseNotes',
 	Terminal = 'accessibility.verbosity.terminal',
 	DiffEditor = 'accessibility.verbosity.diffEditor',
 	MergeEditor = 'accessibility.verbosity.mergeEditor',
@@ -121,6 +122,10 @@ const configuration: IConfigurationNode = {
 	...accessibilityConfigurationNodeBase,
 	scope: ConfigurationScope.RESOURCE,
 	properties: {
+		[AccessibilityVerbositySettingId.ReleaseNotes]: {
+			description: localize('verbosity.releaseNotes.description', 'Provide information about how to access the release notes accessibility help.'),
+			...baseVerbosityProperty
+		},
 		[AccessibilityVerbositySettingId.Terminal]: {
 			description: localize('verbosity.terminal.description', 'Provide information about how to access the terminal accessibility help menu when the terminal is focused.'),
 			...baseVerbosityProperty
@@ -914,7 +919,7 @@ Registry.as<IConfigurationMigrationRegistry>(WorkbenchExtensions.ConfigurationMi
 	}]);
 
 function getDelaysFromConfig(accessor: (key: string) => any, type: 'general' | 'errorAtPosition' | 'warningAtPosition'): { announcement: number; sound: number } | undefined {
-	return accessor(`accessibility.signalOptions.experimental.delays.${type}`) || accessor('accessibility.signalOptions')?.['experimental.delays']?.[`${type}`] || accessor('accessibility.signalOptions')?.['delays']?.[`${type}`];
+	return accessor(`accessibility.signalOptions.experimental.delays.${type}`) || accessor('accessibility.signalOptions')?.['experimental.delays']?.[`${type}`] || accessor('accessibility.signalOptions')?.delays?.[`${type}`];
 }
 
 function getVolumeFromConfig(accessor: (key: string) => any): string | undefined {

@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import test from 'node:test';
+import { EventEmitter } from 'events';
+import test, { mock } from 'node:test';
+import type { IPty } from 'node-pty';
 
 import { RunnerPtyProcess, type RunnerPtyProcessDependencies } from '../src/runnerPtyProcess';
 
@@ -29,13 +31,73 @@ class FakePty {
 	resize(cols: number, rows: number): void { this.resizes.push([cols, rows]); }
 	kill(): void { this.killCount++; }
 
-	emitData(data: string): void { for (const listener of this.dataListeners) listener(data); }
-	emitExit(exitCode: number): void { for (const listener of this.exitListeners) listener({ exitCode }); }
+	emitData(data: string): void { for (const listener of this.dataListeners) { listener(data); } }
+	emitExit(exitCode: number): void { for (const listener of this.exitListeners) { listener({ exitCode }); } }
 }
 
 function dependencies(fake: FakePty): RunnerPtyProcessDependencies {
 	return { spawn: (() => fake) as unknown as RunnerPtyProcessDependencies['spawn'] };
 }
+
+test('releases queued operations when ConPTY connects before producing output', { skip: process.platform !== 'win32' }, () => {
+	class SilentConpty extends FakePty {
+		readonly _socket = new EventEmitter();
+		_isReady = false;
+		_deferreds: Array<{ run(): void }> = [];
+
+		override write(data: string): void {
+			if (this._isReady) {
+				super.write(data);
+			} else {
+				this._deferreds.push({ run: () => this.write(data) });
+			}
+		}
+
+		override resize(cols: number, rows: number): void {
+			if (this._isReady) {
+				super.resize(cols, rows);
+			} else {
+				this._deferreds.push({ run: () => this.resize(cols, rows) });
+			}
+		}
+
+		override kill(): void {
+			if (this._isReady) {
+				super.kill();
+			} else {
+				this._deferreds.push({ run: () => this.kill() });
+			}
+		}
+	}
+
+	const fake = new SilentConpty();
+	const ptyModule: typeof import('node-pty') = require('node-pty');
+	const mockedSpawn = mock.method(ptyModule, 'spawn', () => fake as unknown as IPty);
+	let runner: RunnerPtyProcess | undefined;
+	try {
+		runner = new RunnerPtyProcess({ file: 'program.exe', args: [], cwd: '.', env: {}, cols: 80, rows: 24 }, {
+			onData: () => assert.fail('This program has not produced output'),
+			onExit: () => undefined
+		});
+		assert.strictEqual(runner.write('input\n'), true);
+		assert.strictEqual(runner.resize(100, 30), true);
+		assert.strictEqual(runner.kill(), true);
+		assert.deepStrictEqual(fake.writes, []);
+		assert.deepStrictEqual(fake.resizes, []);
+		assert.strictEqual(fake.killCount, 0);
+		assert.strictEqual(fake._deferreds.length, 3);
+
+		fake._socket.emit('ready_datapipe');
+		fake._socket.emit('ready_datapipe');
+		assert.deepStrictEqual(fake.writes, ['input\n']);
+		assert.deepStrictEqual(fake.resizes, [[100, 30]]);
+		assert.strictEqual(fake.killCount, 1);
+		assert.deepStrictEqual(fake._deferreds, []);
+	} finally {
+		runner?.dispose();
+		mockedSpawn.mock.restore();
+	}
+});
 
 test('forwards one PTY data stream without reordering', () => {
 	const fake = new FakePty();

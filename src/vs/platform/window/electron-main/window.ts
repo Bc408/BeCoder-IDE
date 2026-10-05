@@ -7,9 +7,10 @@ import electron from 'electron';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { Event } from '../../../base/common/event.js';
 import { IDisposable } from '../../../base/common/lifecycle.js';
+import { URI } from '../../../base/common/uri.js';
 import { ISerializableCommandAction } from '../../action/common/action.js';
 import { NativeParsedArgs } from '../../environment/common/argv.js';
-import { FocusMode } from '../../native/common/native.js';
+import { FocusMode, IApplicationBadge } from '../../native/common/native.js';
 import { IUserDataProfile } from '../../userDataProfile/common/userDataProfile.js';
 import { ISingleFolderWorkspaceIdentifier, IWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 import { DEFAULT_AUX_WINDOW_SIZE, DEFAULT_EMPTY_WINDOW_SIZE, DEFAULT_WORKSPACE_WINDOW_SIZE, INativeWindowConfiguration } from '../common/window.js';
@@ -35,6 +36,8 @@ export interface IBaseWindow extends IDisposable {
 	setDocumentEdited(edited: boolean): void;
 	isDocumentEdited(): boolean;
 
+	setApplicationBadge(badge: IApplicationBadge | undefined): void;
+
 	readonly isFullScreen: boolean;
 	toggleFullScreen(): void;
 
@@ -44,6 +47,8 @@ export interface IBaseWindow extends IDisposable {
 }
 
 export interface ICodeWindow extends IBaseWindow {
+
+	readonly iconPath?: URI;
 
 	readonly onWillLoad: Event<ILoadEvent>;
 	readonly onDidSignalReady: Event<void>;

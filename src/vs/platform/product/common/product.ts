@@ -7,6 +7,11 @@ import { env } from '../../../base/common/process.js';
 import { IProductConfiguration } from '../../../base/common/product.js';
 import { ISandboxConfiguration } from '../../../base/parts/sandbox/common/sandboxTypes.js';
 
+interface IPackageConfiguration {
+	readonly version: string;
+	readonly dependencies?: Readonly<Record<string, string>>;
+}
+
 /**
  * @deprecated It is preferred that you use `IProductService` if you can. This
  * allows web embedders to override our defaults. But for things like `product.quality`,
@@ -28,6 +33,7 @@ if (typeof vscodeGlobal !== 'undefined' && typeof vscodeGlobal.context !== 'unde
 else if (globalThis._VSCODE_PRODUCT_JSON && globalThis._VSCODE_PACKAGE_JSON) {
 	// Obtain values from product.json and package.json-data
 	product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+	const packageConfiguration = globalThis._VSCODE_PACKAGE_JSON as unknown as IPackageConfiguration;
 
 	// Running out of sources
 	if (env['VSCODE_DEV']) {
@@ -43,12 +49,11 @@ else if (globalThis._VSCODE_PRODUCT_JSON && globalThis._VSCODE_PACKAGE_JSON) {
 	// want to have it running out of sources so we
 	// read it from package.json only when we need it.
 	if (!product.version) {
-		const pkg = globalThis._VSCODE_PACKAGE_JSON as { version: string };
-
 		Object.assign(product, {
-			version: pkg.version
+			version: packageConfiguration.version
 		});
 	}
+
 }
 
 // Web environment or unknown

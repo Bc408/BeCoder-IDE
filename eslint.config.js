@@ -3,13 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 // @ts-check
+import { fixupPluginRules } from '@eslint/compat';
 import { defineConfig } from 'eslint/config';
 import fs from 'fs';
 import { builtinModules } from 'module';
 import path from 'path';
 import tseslint from 'typescript-eslint';
 
-import stylisticTs from '@stylistic/eslint-plugin-ts';
+import stylistic from '@stylistic/eslint-plugin';
 import * as pluginLocal from './.eslint-plugin-local/index.ts';
 import pluginImport from 'eslint-plugin-import';
 import pluginJsdoc from 'eslint-plugin-jsdoc';
@@ -56,7 +57,7 @@ export default defineConfig(
 		},
 		plugins: {
 			'local': pluginLocal,
-			'header': pluginHeader,
+			'header': fixupPluginRules(/** @type {any} */ (pluginHeader)),
 		},
 		rules: {
 			'constructor-super': 'warn',
@@ -188,11 +189,47 @@ export default defineConfig(
 					' *  Copyright (c) Microsoft Corporation. All rights reserved.',
 					' *  Licensed under the MIT License. See License.txt in the project root for license information.',
 					' *---------------------------------------------------------------------------------------------',
-					' *  Modifications Copyright (c) 2026 BeCoder contributors.',
+					{ pattern: '^ \\*  Modifications Copyright \\(c\\) 2026 BeCoder(?: IDE)? contributors\\.$' },
 					' *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.',
 					' *--------------------------------------------------------------------------------------------'
 				]
 			]
+		}
+	},
+	{
+		files: [
+			'src/vs/workbench/contrib/becoder/browser/beCoderNewTab.contribution.ts',
+			'src/vs/workbench/contrib/becoder/browser/beCoderNewTabEditor.ts',
+		],
+		rules: {
+			'header/header': ['error', 'block', [
+				'---------------------------------------------------------------------------------------------',
+				' *  Copyright (c) Microsoft Corporation. All rights reserved.',
+				' *  Licensed under the MIT License. See License.txt in the project root for license information.',
+				' *--------------------------------------------------------------------------------------------'
+			]]
+		}
+	},
+	{
+		files: ['build/win32/build-runner-input-helper.{mjs,d.mts}'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\) 2026 BeCoder contributors\\.)(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]
+		}
+	},
+	{
+		files: [
+			'extensions/danielpinto8zz6.c-cpp-compile-run/{eslint.config,.vscode-test}.mjs',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/webpack.config.js',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{runnerInputProbe,runnerWithInputIntegration}.cjs',
+		],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\) 2026 BeCoder contributors\\.)(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]
+		}
+	},
+	{
+		files: ['extensions/mathematic.vscode-pdf/src/extension.js', 'extensions/mathematic.vscode-pdf/assets/main.mjs'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright 2021 Mathematic Inc)(?=[\\s\\S]*Apache License, Version 2\\.0)[\\s\\S]*$' }]
 		}
 	},
 	{
@@ -250,7 +287,7 @@ export default defineConfig(
 			parser: tseslint.parser,
 		},
 		plugins: {
-			'@stylistic/ts': stylisticTs,
+			'@stylistic': stylistic,
 			'@typescript-eslint': tseslint.plugin,
 			'local': pluginLocal,
 			'jsdoc': pluginJsdoc,
@@ -258,8 +295,8 @@ export default defineConfig(
 		rules: {
 			// Disable built-in semi rules in favor of stylistic
 			'semi': 'off',
-			'@stylistic/ts/semi': 'warn',
-			'@stylistic/ts/member-delimiter-style': 'warn',
+			'@stylistic/semi': 'warn',
+			'@stylistic/member-delimiter-style': 'warn',
 			'local/code-no-unused-expressions': [
 				'warn',
 				{
@@ -1613,6 +1650,7 @@ export default defineConfig(
 						'inspector',
 						'minimist',
 						'node:module',
+						'node:v8',
 						'native-keymap',
 						'net',
 						'node-pty',
@@ -2479,6 +2517,7 @@ export default defineConfig(
 		languageOptions: {
 			parser: tseslint.parser,
 			parserOptions: {
+				tsconfigRootDir: import.meta.dirname,
 				project: [
 					// Markdown
 					'extensions/markdown-language-features/tsconfig.json',
@@ -2518,7 +2557,7 @@ export default defineConfig(
 			parser: tseslint.parser,
 		},
 		plugins: {
-			'import': pluginImport,
+			'import': fixupPluginRules(pluginImport),
 			'copilot-local': pluginCopilotLocal,
 		},
 		rules: {

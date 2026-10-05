@@ -274,6 +274,7 @@ export abstract class AbstractCommandsQuickAccessProvider extends PickerQuickAcc
 
 		return {
 			...commandPick,
+			id: commandPick.commandId,
 			tooltip,
 			ariaLabel,
 			detail: this.options.showAlias && commandPick.commandAlias !== commandPick.label ? commandPick.commandAlias : undefined,

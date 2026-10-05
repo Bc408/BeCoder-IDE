@@ -16,7 +16,7 @@ import { debounce } from '../../../../base/common/decorators.js';
 import { BugIndicatingError, onUnexpectedError } from '../../../../base/common/errors.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
-import { ISeparator, normalizeDriveLetter, template } from '../../../../base/common/labels.js';
+import { ISeparator, normalizeDriveLetter, template, tildify } from '../../../../base/common/labels.js';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, ImmortalReference, MutableDisposable, dispose, toDisposable, type IReference } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
 import * as path from '../../../../base/common/path.js';
@@ -42,11 +42,11 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { IQuickInputService, IQuickPickItem, QuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IMarkProperties, TerminalCapability } from '../../../../platform/terminal/common/capabilities/capabilities.js';
+import { IMarkProperties, TerminalCapability, type ICommandDetectionCapability } from '../../../../platform/terminal/common/capabilities/capabilities.js';
 import { TerminalCapabilityStoreMultiplexer } from '../../../../platform/terminal/common/capabilities/terminalCapabilityStore.js';
 import { IEnvironmentVariableCollection, IMergedEnvironmentVariableCollection } from '../../../../platform/terminal/common/environmentVariable.js';
 import { deserializeEnvironmentVariableCollections } from '../../../../platform/terminal/common/environmentVariableShared.js';
-import { GeneralShellType, IProcessDataEvent, IProcessPropertyMap, IReconnectionProperties, IShellLaunchConfig, ITerminalDimensionsOverride, ITerminalLaunchError, ITerminalLogService, PosixShellType, ProcessPropertyType, ShellIntegrationStatus, TerminalExitReason, TerminalIcon, TerminalLocation, TerminalSettingId, TerminalShellType, TitleEventSource, WindowsShellType, type ShellIntegrationInjectionFailureReason } from '../../../../platform/terminal/common/terminal.js';
+import { GeneralShellType, IProcessDataEvent, IProcessPropertyMap, IReconnectionProperties, IShellLaunchConfig, ITerminalDimensionsOverride, ITerminalLaunchError, ITerminalLogService, PosixShellType, ProcessPropertyType, remoteResolverTerminal, ShellIntegrationStatus, TerminalExitReason, TerminalIcon, TerminalLocation, TerminalSettingId, TerminalShellType, TitleEventSource, WindowsShellType, type ShellIntegrationInjectionFailureReason } from '../../../../platform/terminal/common/terminal.js';
 import { formatMessageForTerminal } from '../../../../platform/terminal/common/terminalStrings.js';
 import { editorBackground } from '../../../../platform/theme/common/colorRegistry.js';
 import { getIconRegistry } from '../../../../platform/theme/common/iconRegistry.js';
@@ -148,6 +148,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	private _latestXtermWriteData: number = 0;
 	private _latestXtermParseData: number = 0;
 	private _isExiting: boolean;
+	private _isDisposing: boolean;
 	private _hadFocusOnExit: boolean;
 	private _exitCode: number | undefined;
 	private _exitReason: TerminalExitReason | undefined;
@@ -394,12 +395,14 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	) {
 		super();
 
+		delete this._shellLaunchConfig[remoteResolverTerminal];
 		this._wrapperElement = document.createElement('div');
 		this._wrapperElement.classList.add('terminal-wrapper');
 
 		this._widgetManager = this._register(instantiationService.createInstance(TerminalWidgetManager));
 
 		this._isExiting = false;
+		this._isDisposing = false;
 		this._hadFocusOnExit = false;
 		this._isVisible = false;
 		this._instanceId = TerminalInstance._instanceIdCounter++;
@@ -991,16 +994,22 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 			await Promise.race([
 				new Promise<void>(r => {
-					store.add(this.capabilities.onDidAddCommandDetectionCapability(e => {
-						commandDetection = e;
-						if (commandDetection.promptInputModel.state === PromptInputState.Input) {
+					const waitForPromptInput = (capability: ICommandDetectionCapability) => {
+						commandDetection = capability;
+						if (capability.promptInputModel.state === PromptInputState.Input) {
 							r();
 						} else {
-							store.add(commandDetection.promptInputModel.onDidStartInput(() => {
+							store.add(capability.promptInputModel.onDidStartInput(() => {
 								r();
 							}));
 						}
-					}));
+					};
+
+					if (commandDetection) {
+						waitForPromptInput(commandDetection);
+					} else {
+						store.add(this.capabilities.onDidAddCommandDetectionCapability(waitForPromptInput));
+					}
 				}),
 				timeout(timeoutMs)
 			]);
@@ -1031,6 +1040,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	detachFromElement(): void {
 		this._wrapperElement.remove();
 		this._container = undefined;
+		this._dndObserver.clear();
 	}
 
 	attachToElement(container: HTMLElement): void {
@@ -1055,7 +1065,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		this.xterm?.refresh();
 
 		setTimeout(() => {
-			if (this._store.isDisposed) {
+			if (this._store.isDisposed || this._container !== container) {
 				return;
 			}
 			this._initDragAndDrop(container);
@@ -1276,6 +1286,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			return;
 		}
 		this._logService.trace(`terminalInstance#dispose (instanceId: ${this.instanceId})`);
+		this._isDisposing = true;
 		dispose(this._widgetManager);
 
 		if (this.xterm?.raw.element) {
@@ -1285,7 +1296,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			this._wrapperElement.xterm = undefined;
 		}
 		if (this._horizontalScrollbar) {
-			this._horizontalScrollbar.dispose();
+			this._store.delete(this._horizontalScrollbar);
 			this._horizontalScrollbar = undefined;
 		}
 
@@ -1583,11 +1594,13 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 		const trusted = await this._trust();
 		if (!trusted) {
 			this._onProcessExit({ message: nls.localize('workspaceNotTrustedCreateTerminal', "Cannot launch a terminal process in an untrusted workspace") });
+			return;
 		} else if (this._workspaceContextService.getWorkspace().folders.length === 0 && this._cwd && this._userHome && normalizeDriveLetter(this._cwd) !== normalizeDriveLetter(this._userHome)) {
 			// something strange is going on if cwd is not userHome in an empty workspace
 			this._onProcessExit({
 				message: nls.localize('workspaceEmptyCreateTerminalCwd', "Cannot launch a terminal process in an empty workspace with cwd {0} different from userHome {1}", this._cwd, this._userHome)
 			});
+			return;
 		}
 		// Re-evaluate dimensions if the container has been set since the xterm instance was created
 		if (this._container && this._cols === 0 && this._rows === 0) {
@@ -1993,7 +2006,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 	}
 
 	private async _resize(immediate?: boolean): Promise<void> {
-		if (!this.xterm || !this._resizeDebouncer) {
+		if (!this.xterm || !this._resizeDebouncer || this.isDisposed || this._isDisposing) {
 			return;
 		}
 
@@ -2083,6 +2096,11 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 
 	private _updateTitleProperties(title: string | undefined, eventSource: TitleEventSource): string {
 		if (title === undefined) {
+			if (eventSource === TitleEventSource.Api) {
+				this._staticTitle = undefined;
+				this._titleSource = TitleEventSource.Process;
+				this._messageTitleDisposable.value = this.xterm?.raw.onTitleChange(e => this._onTitleChange(e));
+			}
 			return this._processName;
 		}
 		switch (eventSource) {
@@ -2252,7 +2270,7 @@ export class TerminalInstance extends Disposable implements ITerminalInstance {
 			return;
 		}
 		this._horizontalScrollbar.getDomNode().remove();
-		this._horizontalScrollbar.dispose();
+		this._store.delete(this._horizontalScrollbar);
 		this._horizontalScrollbar = undefined;
 		this._wrapperElement.remove();
 		this._wrapperElement.classList.remove('fixed-dims');
@@ -2665,7 +2683,7 @@ export class TerminalLabelComputer extends Disposable {
 		super();
 	}
 
-	refreshLabel(instance: Pick<ITerminalInstance, 'shellLaunchConfig' | 'shellType' | 'cwd' | 'fixedCols' | 'fixedRows' | 'initialCwd' | 'processName' | 'sequence' | 'userHome' | 'workspaceFolder' | 'staticTitle' | 'capabilities' | 'title' | 'description'>, reset?: boolean): void {
+	refreshLabel(instance: Pick<ITerminalInstance, 'shellLaunchConfig' | 'shellType' | 'cwd' | 'fixedCols' | 'fixedRows' | 'initialCwd' | 'processName' | 'sequence' | 'userHome' | 'workspaceFolder' | 'staticTitle' | 'capabilities' | 'title' | 'description' | 'os'>, reset?: boolean): void {
 		const tabs = this._terminalConfigurationService.config.tabs;
 		const titleTemplate = instance.shellLaunchConfig.titleTemplate ?? tabs.title;
 		this._title = this.computeLabel(instance, titleTemplate, TerminalLabelType.Title, reset);
@@ -2676,7 +2694,7 @@ export class TerminalLabelComputer extends Disposable {
 	}
 
 	computeLabel(
-		instance: Pick<ITerminalInstance, 'shellLaunchConfig' | 'shellType' | 'cwd' | 'fixedCols' | 'fixedRows' | 'initialCwd' | 'processName' | 'sequence' | 'userHome' | 'workspaceFolder' | 'staticTitle' | 'capabilities' | 'title' | 'description' | 'progressState'>,
+		instance: Pick<ITerminalInstance, 'shellLaunchConfig' | 'shellType' | 'cwd' | 'fixedCols' | 'fixedRows' | 'initialCwd' | 'processName' | 'sequence' | 'userHome' | 'workspaceFolder' | 'staticTitle' | 'capabilities' | 'title' | 'description' | 'progressState' | 'os'>,
 		labelTemplate: string,
 		labelType: TerminalLabelType,
 		reset?: boolean
@@ -2685,8 +2703,16 @@ export class TerminalLabelComputer extends Disposable {
 		const commandDetection = instance.capabilities.get(TerminalCapability.CommandDetection);
 		const promptInputModel = commandDetection?.promptInputModel;
 		const nonTaskSpinner = type === 'Task' ? '' : ' $(loading~spin)';
+
+		let cwd = instance.cwd || instance.initialCwd || '';
+		const os = instance.os ?? OS;
+		cwd = tildify(cwd, instance.userHome || '', os);
+		if (os !== OperatingSystem.Windows && cwd && instance.userHome && cwd === instance.userHome) {
+			cwd = '~';
+		}
+
 		const templateProperties: ITerminalLabelTemplateProperties = {
-			cwd: instance.cwd || instance.initialCwd || '',
+			cwd,
 			cwdFolder: '',
 			workspaceFolderName: instance.workspaceFolder?.name,
 			workspaceFolder: instance.workspaceFolder ? path.basename(instance.workspaceFolder.uri.fsPath) : undefined,

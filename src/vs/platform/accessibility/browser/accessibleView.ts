@@ -9,11 +9,12 @@ import { IPickerQuickAccessItem } from '../../quickinput/browser/pickerQuickAcce
 import { Event } from '../../../base/common/event.js';
 import { IAction } from '../../../base/common/actions.js';
 import { IQuickPickItem } from '../../quickinput/common/quickInput.js';
-import { IDisposable, Disposable } from '../../../base/common/lifecycle.js';
+import { IDisposable, Disposable, toDisposable } from '../../../base/common/lifecycle.js';
 
 export const IAccessibleViewService = createDecorator<IAccessibleViewService>('accessibleViewService');
 
 export const enum AccessibleViewProviderId {
+	ReleaseNotes = 'releaseNotes',
 	Terminal = 'terminal',
 	TerminalHelp = 'terminal-help',
 	DiffEditor = 'diffEditor',
@@ -33,6 +34,7 @@ export const enum AccessibleViewProviderId {
 	TerminalFindHelp = 'terminalFindHelp',
 	WebviewFindHelp = 'webviewFindHelp',
 	OutputFindHelp = 'outputFindHelp',
+	ChatFindHelp = 'chatFindHelp',
 	ProblemsFilterHelp = 'problemsFilterHelp',
 	Survey = 'survey',
 }
@@ -56,10 +58,11 @@ export interface IAccessibleViewOptions {
 	type: AccessibleViewType;
 	/**
 	 * By default, places the cursor on the top line of the accessible view.
-	 * If set to 'initial-bottom', places the cursor on the bottom line of the accessible view and preserves it henceforth.
+	 * If set to 'initial-bottom', places the cursor on the bottom line initially and returns it to the bottom when the content changes.
+	 * If set to 'initial-bottom-preserve', places the cursor on the bottom line initially and preserves its position when the content changes.
 	 * If set to 'bottom', places the cursor on the bottom line of the accessible view.
 	 */
-	position?: 'bottom' | 'initial-bottom';
+	position?: 'bottom' | 'initial-bottom' | 'initial-bottom-preserve';
 	/**
 	 * @returns a string that will be used as the content of the help dialog
 	 * instead of the one provided by default.
@@ -149,6 +152,9 @@ export type AccesibleViewContentProvider = AccessibleContentProvider | Extension
 
 export class AccessibleContentProvider extends Disposable implements IAccessibleViewContentProvider {
 
+	/** Releases caller-owned state on teardown, including context-view replacement without onClose. */
+	onDispose?: () => void;
+
 	constructor(
 		public id: AccessibleViewProviderId,
 		public options: IAccessibleViewOptions,
@@ -165,6 +171,7 @@ export class AccessibleContentProvider extends Disposable implements IAccessible
 		public onDidRequestClearLastProvider?: Event<AccessibleViewProviderId>,
 	) {
 		super();
+		this._register(toDisposable(() => this.onDispose?.()));
 	}
 }
 

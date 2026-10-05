@@ -4,10 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ESLint } from 'eslint';
+import { join } from 'path';
 import { eslintFilter } from './filters.ts';
 
 async function eslint(): Promise<void> {
 	const linter = new ESLint({
+		overrideConfigFile: join(import.meta.dirname, '../eslint.config.js'),
 		cache: true,
 		cacheLocation: '.eslintcache',
 		cacheStrategy: 'content',

@@ -387,8 +387,8 @@ suite('EditorResolverService', () => {
 				detail: 'Never Diff Editor Details',
 				priority: {
 					editor: RegisteredEditorPriority.option,
-					diff: RegisteredEditorPriority.never,
-					merge: RegisteredEditorPriority.never
+					diff: RegisteredEditorPriority.explicit,
+					merge: RegisteredEditorPriority.explicit
 				}
 			},
 			{},
@@ -469,8 +469,8 @@ suite('EditorResolverService', () => {
 				detail: 'Never Diff Editor Details',
 				priority: {
 					editor: RegisteredEditorPriority.option,
-					diff: RegisteredEditorPriority.never,
-					merge: RegisteredEditorPriority.never
+					diff: RegisteredEditorPriority.explicit,
+					merge: RegisteredEditorPriority.explicit
 				}
 			},
 			{},
@@ -513,8 +513,8 @@ suite('EditorResolverService', () => {
 				detail: 'Binary Editor Details',
 				priority: {
 					editor: RegisteredEditorPriority.default,
-					diff: RegisteredEditorPriority.never,
-					merge: RegisteredEditorPriority.never
+					diff: RegisteredEditorPriority.explicit,
+					merge: RegisteredEditorPriority.explicit
 				}
 			},
 			{},

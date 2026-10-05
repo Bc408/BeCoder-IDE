@@ -21,8 +21,8 @@ const parse = (value: unknown) => parseImportedProblem(JSON.stringify(value), ur
 test('imports samples and discards page-provided local authority', () => {
 	const problem = parse({ ...fixture(), srcPath: 'C:\\foreign.cpp', compiler: 'evil.exe' });
 	assert.deepStrictEqual(problem.tests, [{ input: '6 6 4\n', output: '4\n' }]);
-	assert.strictEqual('srcPath' in problem, false);
-	assert.strictEqual('compiler' in problem, false);
+	assert.strictEqual(Object.hasOwn(problem, 'srcPath'), false);
+	assert.strictEqual(Object.hasOwn(problem, 'compiler'), false);
 });
 
 test('preserves sample spaces, intentional blank lines and empty EOF', () => {

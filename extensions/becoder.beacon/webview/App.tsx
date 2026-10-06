@@ -197,7 +197,7 @@ function App() {
 		{!hasConversation && state.history.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(state.history)}</section>}
 		<Conversation hidden={!hasConversation && state.history.length > 0}>
 			<ConversationContent conversationId={state.activeId}>
-				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Open Beacon settings to configure a provider and select a model.', '打开 Beacon 设置，配置服务商并选择模型后开始。')}</p>{!state.configured && <button onClick={() => api.postMessage({ type: 'settings' })}>{t('Open settings', '打开设置')}</button>}</div>}
+				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Click the settings button in the upper right to configure a provider and select a model.', '点击右上角设置按钮，配置服务商并选择模型后开始。')}</p></div>}
 				{state.messages.map(message => <article key={message.id} className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
 						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} preview={(item, url) => openAttachment(message.attachments!, item, url)} />)}</div>}

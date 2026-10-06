@@ -40,8 +40,8 @@ button, textarea { font: inherit; }
 .image-preview button:focus-visible { outline: 2px solid #f5f5f5; outline-offset: 3px; }
 .attachment-warning { font-size: 12px; color: var(--vscode-descriptionForeground); padding: 0 0 8px; }
 .composer-toolbar .add-files { width: 28px; height: 28px; padding: 0; border-radius: 50%; flex-shrink: 0; color: var(--vscode-descriptionForeground); }
-button { color: inherit; background: transparent; border: 0; border-radius: 6px; padding: 6px 9px; cursor: pointer; }
-button:hover { background: var(--vscode-toolbar-hoverBackground); }
+button { color: inherit; background: transparent; border: 0; border-radius: 999px; padding: 6px 9px; cursor: pointer; }
+button:hover { background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
 header { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; flex: 0 0 auto; }
@@ -124,7 +124,7 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .code-language > span { overflow: hidden; text-overflow: ellipsis; }
 .code-actions { display: flex; flex: 0 0 auto; gap: 2px; align-items: center; }
 .code-toolbar button { display: inline-flex; width: 36px; height: 36px; padding: 0; align-items: center; justify-content: center; color: var(--chat-title); border-radius: 50%; }
-.code-toolbar button:hover, .code-toolbar button[aria-pressed="true"] { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+.code-toolbar button:hover, .code-toolbar button[aria-pressed="true"] { color: var(--vscode-foreground); background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); }
 .code-toolbar button:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .code-toolbar button svg { width: 18px; height: 18px; }
 .code-toolbar .code-wrap svg { width: 16px; height: 16px; }
@@ -345,6 +345,7 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .web-toggle { width: 26px; height: 26px; padding: 5px; flex: 0 0 auto; border-radius: 50%; color: var(--chat-muted); }
 .web-toggle svg { width: 16px; height: 16px; }
 .web-toggle[aria-pressed="true"][data-available="true"] { color: var(--vscode-textLink-foreground, var(--chat-title)); background: color-mix(in srgb, var(--vscode-textLink-foreground, var(--chat-title)) 12%, transparent); }
+.web-toggle[aria-pressed="true"][data-available="true"]:hover { background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); }
 .web-sources { margin: 10px 0 6px; font-size: 12px; color: var(--chat-muted); }
 .web-sources summary { display: flex; align-items: center; gap: 6px; width: fit-content; min-height: 24px; cursor: pointer; list-style: none; }
 .web-sources summary::-webkit-details-marker { display: none; }
@@ -378,7 +379,7 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .notification-slot[data-front] .notification-card, .notification-stack[data-expanded] .notification-card { pointer-events: auto; }
 .notification-card > svg { flex-shrink: 0; width: 15px; height: 15px; }
 .notification-text { min-width: 0; overflow-wrap: anywhere; }
-.notification-close { flex-shrink: 0; width: 22px; height: 22px; padding: 4px; border-radius: 6px; color: inherit; }
+.notification-close { flex-shrink: 0; width: 22px; height: 22px; padding: 4px; border-radius: 50%; color: inherit; }
 .notification-close svg { width: 14px; height: 14px; }
 .notification-close:hover { background: color-mix(in srgb, var(--notification-foreground) 12%, transparent); }
 .notification-close:focus-visible { outline: 2px solid var(--notification-foreground); outline-offset: 2px; }

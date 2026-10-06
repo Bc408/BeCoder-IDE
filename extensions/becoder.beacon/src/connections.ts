@@ -9,8 +9,18 @@ import { createGenerator, inspectModel, listModels } from './provider';
 import { ModelCapabilityError, resolveCapabilities } from './models';
 import { emptyConfiguration, parseConfiguration, parseModel, validateModel, type ModelConfiguration, type SettingsCommand, type SettingsSnapshot } from './modelConfiguration';
 import type { FileTool, FilePermission, FileRoot } from './fileTools';
+import { RequestRecoveryError, RequestRejectedError, type RequestDiagnostic } from './requestRecovery';
 
 export function connectionError(error: unknown): string {
+	if (error instanceof RequestRejectedError) {
+		if (error.code === 'QUOTA_EXHAUSTED') { return vscode.l10n.t('The provider account has insufficient balance.'); }
+		if (error.code === 'AUTHENTICATION') { return vscode.l10n.t('The provider rejected the API key or access to this model.'); }
+		return vscode.l10n.t('Unable to complete the request. Check the service address, model, credentials and connection.');
+	}
+	if (error instanceof RequestRecoveryError) {
+		const text = error.failure.kind === 'rate-limit' ? vscode.l10n.t('Too many requests. Please try again later.') : error.failure.kind === 'timeout' ? vscode.l10n.t('The provider connection timed out. Please retry.') : vscode.l10n.t('The provider is temporarily unreachable. Please retry.');
+		return error.failure.retries ? `${text} ${vscode.l10n.t('Automatic reconnection was attempted {0} times.', error.failure.retries)}` : text;
+	}
 	if (error instanceof ModelCapabilityError) {
 		if (error.code === 'non-chat') { return vscode.l10n.t('This model is not a chat model. Select a chat model in Beacon settings.'); }
 		if (error.code === 'vision') { return vscode.l10n.t('This conversation contains images. Select a vision-capable model or correct its capabilities in Beacon settings.'); }
@@ -44,7 +54,7 @@ export class Connections implements vscode.Disposable {
 	private disposed = false;
 	private readonly controller = new AbortController();
 	private readonly subscriptions: vscode.Disposable[];
-	constructor(private readonly context: vscode.ExtensionContext, private readonly changed: () => void) {
+	constructor(private readonly context: vscode.ExtensionContext, private readonly changed: () => void, private readonly diagnostic?: (event: RequestDiagnostic & { provider: ProviderId }) => void) {
 		this.subscriptions = [vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('beacon.modelConfiguration')) { this.configurationChanged(); }
 		}), context.secrets.onDidChange(event => {
@@ -182,7 +192,7 @@ export class Connections implements vscode.Disposable {
 		const model = this.data.providers[state.provider].models.find(item => item.id === state.model)!;
 		validateModel(state.provider, state.baseURL, model);
 		const connection: Connection = structuredClone({ provider: state.provider, baseURL: state.baseURL, model: state.model, parameters: state.parameters, capabilities: state.capabilities, modelSettings: state.modelSettings, apiKey: this.keys[state.provider] });
-		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled), files };
+		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }), files };
 	}
 	dispose(): void { this.disposed = true; this.controller.abort(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
 }

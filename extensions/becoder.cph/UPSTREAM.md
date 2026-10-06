@@ -127,6 +127,10 @@ selectors throw on missing/login pages rather than producing local problems.
 
 ## Shared local compilation (2026-09-20)
 
+Hover descriptions now use BeCoder's shared browser hover module (MIT), retaining
+the original translated descriptions and actions. The helper's full license ships
+in `dist/HoverLicense.txt`; this does not change the CPH component's GPL license.
+
 The owner superseded the earlier compiler freeze: CPH now consumes the bundled
 Runner extension's compiler API. Run, Run With Input and CPH use the same current
 Runner standard/flags settings, validation, compiler resolution and private child

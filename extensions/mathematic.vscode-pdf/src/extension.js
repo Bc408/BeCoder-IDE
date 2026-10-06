@@ -165,6 +165,7 @@ class PDFViewerProvider {
 
 <link rel="stylesheet" href="${pdfJs('web', 'viewer.css')}">
 <link rel="stylesheet" href="${this.resolveAsset(webview, 'assets', 'main.css')}">
+<link rel="stylesheet" href="${this.resolveAsset(webview, 'dist', 'hover.css')}">
 
 <script src="${pdfJs('build', 'pdf.mjs')}" type="module"></script>
 <script src="${this.resolveAsset(webview, 'assets', 'main.mjs')}" type="module"></script>

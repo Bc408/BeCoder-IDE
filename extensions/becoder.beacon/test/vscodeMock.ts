@@ -15,6 +15,7 @@ const configuration = event<{ affectsConfiguration(key: string): boolean }>();
 export const values = new Map<string, unknown>();
 export const controls: { updateError?: Error; secretError?: Error } = {};
 export const commandHandlers = new Map<string, () => void>();
+export const commandCalls: { id: string; args: unknown[] }[] = [];
 export const panels: ReturnType<typeof makePanel>[] = [];
 export const ViewColumn = { Active: -1 };
 export const viewProviders = new Map<string, { resolveWebviewView(view: ReturnType<typeof makeView>): void }>();
@@ -32,8 +33,9 @@ export const workspace = {
 	onDidChangeConfiguration: configuration.listen
 };
 export const env = { language: 'zh-cn', clipboard: { writeText: async () => {} }, openExternal: async () => true };
-export const commands = { registerCommand: (id: string, handler: () => void) => { commandHandlers.set(id, handler); return { dispose: () => commandHandlers.delete(id) }; }, executeCommand: async (id: string) => { commandHandlers.get(id)?.(); } };
+export const commands = { registerCommand: (id: string, handler: () => void) => { commandHandlers.set(id, handler); return { dispose: () => commandHandlers.delete(id) }; }, executeCommand: async (id: string, ...args: unknown[]) => { commandCalls.push({ id, args }); commandHandlers.get(id)?.(); } };
 export const window = {
+	createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
 	createWebviewPanel: () => { const panel = makePanel(); panels.push(panel); return panel; },
 	onDidChangeWindowState: () => ({ dispose() {} }),
 	registerWebviewViewProvider: (id: string, provider: typeof viewProviders extends Map<string, infer T> ? T : never) => { viewProviders.set(id, provider); return { dispose: () => viewProviders.delete(id) }; },
@@ -52,7 +54,7 @@ export function makeView() {
 	return { visible: true, receive: received.fire, drop: (value: { uris: ReturnType<typeof Uri.file>[]; source: 'internal' | 'external' }) => dropped.fire({ uris: value.uris, isExternal: value.source !== 'internal' }), messages, onDidDispose: () => ({ dispose() {} }), webview: { html: '', options: {}, cspSource: 'self', asWebviewUri: (uri: unknown) => uri, postMessage: async (message: Record<string, unknown>) => { messages.push(structuredClone(message)); return true; }, onDidReceiveMessage: received.listen, onDidDropResources: dropped.listen } };
 }
 export function reset(directory: string) {
-	configuration.clear(); values.clear(); viewProviders.clear(); commandHandlers.clear(); panels.length = 0; delete controls.updateError; delete controls.secretError;
+	configuration.clear(); values.clear(); viewProviders.clear(); commandHandlers.clear(); commandCalls.length = 0; panels.length = 0; delete controls.updateError; delete controls.secretError;
 	const data = emptyConfiguration();
 	data.providers.deepseek.models = ['deepseek-flash', 'deepseek-chat'].map(id => ({ id, name: id, enabled: true, parameters: {}, settings: {} }));
 	data.selection = { provider: 'deepseek', model: 'deepseek-flash' };

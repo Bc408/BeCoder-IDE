@@ -8,7 +8,7 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type * as vscode from 'vscode';
-import { AttachmentError, attachmentBudget, readAttachments, validAttachments, type Attachment } from '../src/attachments';
+import { AttachmentError, attachmentBudget, captureClipboardImages, readAttachments, validAttachments, type Attachment } from '../src/attachments';
 import { FileTools } from '../src/fileTools';
 import { ChatSession, type Generate, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
@@ -36,6 +36,73 @@ async function until(condition: () => boolean) {
 }
 
 suite('Beacon attachments', () => {
+	test('pasted image bytes work in every permission without authorizing a filesystem path', async () => {
+		const captured = captureClipboardImages([{ name: 'screenshot.png', contents: png, mediaType: 'image/png', path: 'private.png', source: 'internal' }]);
+		assert.equal(captured[0].source, 'clipboard'); assert.equal(captured[0].path, 'clipboard:' + captured[0].id);
+		const never = async () => { assert.fail('Clipboard bytes must never be read from disk'); };
+		for (const permission of ['none', 'workspace', 'computer'] as const) {
+			assert.deepStrictEqual(await readAttachments(captured, permission, never, signal), captured);
+			await assert.rejects(readAttachments([{ ...captured[0], path: 'private.png' }], permission, never, signal), AttachmentError);
+		}
+		assert.ok(validAttachments(captured));
+		assert.equal(validAttachments([{ ...captured[0], kind: 'text', mediaType: undefined }]), false);
+		assert.throws(() => captureClipboardImages([{ contents: 'bad', mediaType: 'image/png' }]), AttachmentError);
+		assert.throws(() => captureClipboardImages([{ contents: png, mediaType: 'image/svg+xml' }]), AttachmentError);
+		assert.throws(() => captureClipboardImages(Array.from({ length: 65 }, () => ({ contents: png, mediaType: 'image/png' }))), AttachmentError);
+		await assert.rejects(readAttachments([...captured, { path: 'disk.cpp', source: 'internal' }], 'none', never, signal), AttachmentError);
+		const large = Buffer.concat([Buffer.from(png, 'base64'), Buffer.alloc(3 * 1024 * 1024)]).toString('base64');
+		assert.throws(() => captureClipboardImages([{ contents: large, mediaType: 'image/png' }, { contents: large, mediaType: 'image/png' }]), AttachmentError);
+	});
+	test('actual host pastes, previews and sends clipboard images under none; history restores captured bytes', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const originalFetch = globalThis.fetch; const bodies: unknown[] = [];
+		globalThis.fetch = async (_url, options) => { bodies.push(JSON.parse(String(options?.body))); return response(); };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { activeId: string; configured: boolean; attachments: Attachment[] };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
+			for (const permission of ['workspace', 'computer', 'none']) {
+				await mock.workspace.getConfiguration().update('filePermission', permission);
+				view.receive({ type: 'pasteImages', activeId: snapshot().activeId, images: [{ name: 'screenshot.png', mediaType: 'image/png', contents: png }] });
+				assert.equal(snapshot().attachments.length, 1);
+				view.receive({ type: 'removeAttachment', id: snapshot().attachments[0].id });
+			}
+			view.receive({ type: 'pasteImages', activeId: 'stale-conversation', images: [{ mediaType: 'image/png', contents: png }] }); assert.equal(snapshot().attachments.length, 0);
+			view.receive({ type: 'pasteImages', activeId: snapshot().activeId, images: [{ mediaType: 'image/png', contents: png }] });
+			const id = snapshot().attachments[0].id;
+			await until(() => snapshot().configured);
+			view.receive({ type: 'previewAttachment', id });
+			assert.ok(view.messages.some(message => message.type === 'attachmentPreview' && message.id === id && message.url === 'data:image/png;base64,' + png));
+			view.receive({ type: 'send', text: '' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+			assert.equal(bodies.length, 1); assert.ok(JSON.stringify(bodies[0]).includes('data:image/png;base64,' + png));
+			assert.equal(snapshot().attachments.length, 0);
+			await deactivate();
+			const saved = readHistory(JSON.parse(await fs.readFile(path.join(directory, 'storage/history.json'), 'utf8')));
+			assert.equal(saved?.conversations[0].messages[0].attachments?.[0].contents, png);
+			assert.equal(saved?.conversations[0].messages[0].attachments?.[0].source, 'clipboard');
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+	}));
+	test('ordinary attachment preview uses the internal editor and rejects forged IDs, revoked permissions and missing files', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const file = path.join(directory, 'main.cpp'); await fs.writeFile(file, 'int main() {}');
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; attachments: Attachment[]; requestNotice?: { id: number } };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
+			view.receive({ type: 'openAttachment', id: 'forged', path: file }); assert.equal(mock.commandCalls.length, 0);
+			view.drop({ uris: [mock.Uri.file(file)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
+			const id = snapshot().attachments[0].id; view.receive({ type: 'openAttachment', id });
+			await until(() => mock.commandCalls.some(call => call.id === 'vscode.open'));
+			const opened = mock.commandCalls.find(call => call.id === 'vscode.open')!;
+			assert.equal((opened.args[0] as { fsPath: string }).fsPath, file); assert.deepStrictEqual(opened.args[1], { preview: true, preserveFocus: true });
+			await mock.workspace.getConfiguration().update('filePermission', 'none');
+			view.receive({ type: 'openAttachment', id }); await until(() => !!snapshot().requestNotice);
+			assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 1);
+			await mock.workspace.getConfiguration().update('filePermission', 'workspace'); await fs.unlink(file);
+			const previous = view.messages.length; view.receive({ type: 'openAttachment', id }); await until(() => view.messages.length > previous);
+			assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 1);
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
 	test('native origin cannot be claimed by a synthetic gesture or an unrelated/mixed drop', () => {
 		const drag = new WebviewResourceDrag();
 		drag.start(false, ['file:///same.cpp']); assert.equal(drag.source(true, ['file:///same.cpp']), 'external');

@@ -2,6 +2,18 @@
 
 Beacon host, session, provider, application shell and styling are BeCoder code (MIT).
 
+Product hover descriptions use BeCoder's framework-independent module under
+`../becoder.shared/browser` (MIT). Its compact typography and theme parameters
+match Code - OSS 1.140 workbench hovers; the previous code-toolbar pseudo-element
+tooltip is replaced. The full helper license is shipped in `dist/HoverLicense.txt`.
+
+`src/requestRecovery.ts` independently implements structured provider-error classification
+and category-specific retry delays with reference to Captain Who's `provider_error.rs`
+and `transport.rs` at commit `1c66395882e17a8023315e2dd4ec9fd4d1c2688e`
+(https://github.com/Tiga001/Captain_Who). Beacon retains its response-wide retry/wait
+budgets, cancellation, SDK transport and output/tool commit boundary. No Captain Who
+transport, stream rollback or provider cooldown service is imported.
+
 `webview/elements.tsx` adapts selected Conversation and MessageResponse components from Vercel AI Elements, retrieved 2026-09-23:
 
 - https://github.com/vercel/ai-elements/blob/main/packages/elements/src/conversation.tsx
@@ -13,6 +25,13 @@ Modifications: replaced Tailwind/shadcn styling and buttons with the BeCoder Web
 Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek and OpenAI-compatible providers, React Markdown, Shiki, KaTeX and their bundled transitive dependencies retain their own licenses.
 
 No Codex or Trae proprietary code or assets are included.
+
+`webview/ImagePreview.tsx` and the clipboard paste route independently implement
+the image overlay and explicit-input behavior observed in Captain Who's
+`ImagePreview.tsx` and `ChatComposer.tsx` at commit
+`1c66395882e17a8023315e2dd4ec9fd4d1c2688e` (https://github.com/Tiga001/Captain_Who).
+Beacon uses its existing captured attachments, native dialog focus handling and
+BeCoder editor routing; no Captain Who storage, Electron service or dependency is imported.
 
 Chat activity behavior and streaming code snapshots reference Captain Who at commit
 `4fabf0b2a24ed1a92cafa9988a49d8abae507332` (https://github.com/Tiga001/Captain_Who).

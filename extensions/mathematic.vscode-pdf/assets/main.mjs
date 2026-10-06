@@ -5,6 +5,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PDFViewerApplicationOptions } from './pdf.js/web/viewer.mjs';
+import '../dist/hover.js';
 
 function loadConfig() {
 	const element = document.querySelector('#pdf-view-config');

@@ -158,14 +158,14 @@ export default function CaseView(props: {
                 <div className='toggle-minimize' onClick={toggle}>
                     <span className='case-number case-title'>
                         {minimized && (
-                            <span onClick={expand} title={t('expand')}>
+                            <span onClick={expand} data-becoder-tooltip={t('expand')}>
                                 <span className='icon'>
                                     <i className='codicon codicon-chevron-down'></i>
                                 </span>
                             </span>
                         )}
                         {!minimized && (
-                            <span onClick={minimize} title={t('minimize')}>
+                            <span onClick={minimize} data-becoder-tooltip={t('minimize')}>
                                 <span className='icon'>
                                     <i className='codicon codicon-chevron-up'></i>
                                 </span>
@@ -201,7 +201,8 @@ export default function CaseView(props: {
                         <button
                             disabled={props.disabled && !running && !checking}
                             className='btn btn-orange'
-                            title={t('stop')}
+                            data-becoder-tooltip={t('stop')}
+                            aria-label={t('stop')}
                             onClick={props.stop}
                         >
                             <span className='icon'>
@@ -212,7 +213,8 @@ export default function CaseView(props: {
                         <button
                             disabled={props.disabled && !running && !checking}
                             className='btn btn-green'
-                            title={t('runAgain')}
+                            data-becoder-tooltip={t('runAgain')}
+                            aria-label={t('runAgain')}
                             onClick={rerun}
                         >
                             <span className='icon'>
@@ -223,7 +225,8 @@ export default function CaseView(props: {
                     <button
                         disabled={props.disabled && !running && !checking}
                             className='btn btn-red'
-                        title={t('deleteTestcase')}
+                        data-becoder-tooltip={t('deleteTestcase')}
+                        aria-label={t('deleteTestcase')}
                         onClick={() => {
                             props.remove(id);
                         }}
@@ -243,7 +246,7 @@ export default function CaseView(props: {
                             onClick={() => {
                                 copyToClipboard(input);
                             }}
-                            title={t('copiedToClipboard')}
+                            data-becoder-tooltip={t('copiedToClipboard')}
                         >
                             {t('copy')}
                         </div>
@@ -266,7 +269,7 @@ export default function CaseView(props: {
                             onClick={() => {
                                 copyToClipboard(output);
                             }}
-                            title={t('copiedToClipboard')}
+                            data-becoder-tooltip={t('copiedToClipboard')}
                         >
                             {t('copy')}
                         </div>
@@ -286,7 +289,7 @@ export default function CaseView(props: {
                                 onClick={() => {
                                     copyToClipboard(resultText);
                                 }}
-                                title={t('copiedToClipboard')}
+                                data-becoder-tooltip={t('copiedToClipboard')}
                             >
                                 {t('copy')}
                             </div>
@@ -297,7 +300,7 @@ export default function CaseView(props: {
                                     setOutput(resultText);
                                     props.notify(t('setAsExpectedOutput'));
                                 }}
-                                title={t('setAsExpectedOutput')}
+                                data-becoder-tooltip={t('setAsExpectedOutput')}
                             >
                                 {t('set')}
                             </div>

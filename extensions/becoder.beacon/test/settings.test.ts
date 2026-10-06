@@ -6,7 +6,8 @@
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type * as vscode from 'vscode';
-import { Connections } from '../src/connections';
+import { Connections, connectionError } from '../src/connections';
+import { RequestRecovery } from '../src/requestRecovery';
 import { secretName } from '../src/connection';
 import { emptyConfiguration, parseConfiguration, parseModel, parameterPolicy, validateModel, type SettingsCommand } from '../src/modelConfiguration';
 import { resolveCapabilities } from '../src/models';
@@ -22,6 +23,15 @@ function apply(connections: Connections, command: Omit<SettingsCommand, 'revisio
 }
 
 suite('Beacon settings', () => {
+	test('structured quota and authentication failures reuse existing safe account messages', async () => {
+		for (const [code, expected] of [['insufficient_quota', 'The provider account has insufficient balance.'], ['invalid_api_key', 'The provider rejected the API key or access to this model.']] as const) {
+			let requests = 0;
+			const recovery = new RequestRecovery(async () => { requests++; return new Response(JSON.stringify({ error: { code, message: 'private provider response' } }), { status: 429 }); }, new AbortController().signal, { wait: async () => { assert.fail('Account failure was retried'); } });
+			try { await recovery.fetch('https://provider.invalid', { method: 'POST', body: '{}' }); assert.fail('Account failure was accepted'); }
+			catch (error) { assert.equal(connectionError(error), expected); }
+			assert.equal(requests, 1);
+		}
+	});
 	test('fresh configuration ignores all old keys and never picks the first model', async () => fixture(async connections => {
 		mock.values.delete('modelConfiguration'); mock.values.set('provider', 'deepseek'); mock.values.set('deepseek.model', 'deepseek-chat');
 		await connections.refresh();

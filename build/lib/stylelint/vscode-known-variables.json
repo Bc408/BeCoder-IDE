@@ -991,6 +991,8 @@
 		"--vscode-window-inactiveBorder"
 	],
 	"others": [
+		"--becoder-hover-radius",
+		"--vscode-font-family",
 		"--action-widget-close-start-opacity",
 		"--action-widget-close-start-transform",
 		"--activity-bar-action-gap",

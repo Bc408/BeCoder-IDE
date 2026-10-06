@@ -11,7 +11,7 @@ import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools, currentFileRoots } from './workspaceFiles';
 import { isFilePermission, type FilePermission } from './fileTools';
 import { HistoryStore } from './historyStore';
-import { AttachmentError, attachmentBudget, checkAttachmentSource, readAttachments, type Attachment, type AttachmentSource } from './attachments';
+import { AttachmentError, attachmentBudget, captureClipboardImages, checkAttachmentSource, readAttachments, type Attachment, type AttachmentSource } from './attachments';
 import { ModelCapabilityError } from './models';
 
 const streamSnapshotIntervalMs = 33;
@@ -40,7 +40,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const busy = () => session.snapshot.busy || !!attachmentJob;
 	const drafts = new Map<string, Attachment[]>();
 	const attachments = () => drafts.get(history.snapshot.activeId) ?? [];
-	const connections = new Connections(context, schedule);
+	const connectionLog = vscode.window.createOutputChannel(vscode.l10n.t('Beacon Connections'));
+	context.subscriptions.push(connectionLog);
+	const connections = new Connections(context, schedule, event => connectionLog.appendLine(JSON.stringify(event)));
 	const readPermission = (): FilePermission => {
 		const value = vscode.workspace.getConfiguration('beacon').get('filePermission');
 		return isFilePermission(value) ? value : 'none';
@@ -96,11 +98,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	function receive(message: unknown): void {
 		if (!message || typeof message !== 'object') { return; }
-		const value = message as { type?: string; text?: string; id?: number | string; conversationId?: string; url?: string; permission?: unknown; enabled?: unknown };
+		const value = message as { type?: string; text?: string; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
 		try { switch (value.type) {
 			case 'ready': publish(); break;
 			case 'send': if (typeof value.text === 'string') { void send(value.text); } break;
 			case 'addFiles': void pickFiles(); break;
+			case 'pasteImages': addClipboardImages(value.images, value.activeId); break;
+			case 'attachmentInputError': if (value.code === 'image' || value.code === 'budget' || value.code === 'busy') { attachmentNotice(new AttachmentError(value.code)); } break;
 			case 'unsupportedDrop': attachmentNotice(new AttachmentError(permission === 'none' ? 'permission' : 'source')); break;
 			case 'removeAttachment': if (!busy() && typeof value.id === 'string') { drafts.set(history.snapshot.activeId, attachments().filter(item => item.id !== value.id)); publish(); } break;
 			case 'previewAttachment': {
@@ -108,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (item) { void view?.webview.postMessage({ type: 'attachmentPreview', id: item.id, url: `data:${item.mediaType};base64,${item.contents}` }); }
 				break;
 			}
+			case 'openAttachment': if (typeof value.id === 'string') { void openAttachment(value.id); } break;
 			case 'edit': if (!busy() && !historyUnreadable && connections.configured && typeof value.id === 'number' && typeof value.text === 'string') { const next = request(value.id + 1); void session.edit(value.id, value.text, next.generate, next.source, next.files).finally(publish); } else { publish(); } break;
 			case 'regenerate': if (!busy() && !historyUnreadable && connections.configured && typeof value.id === 'number') { const next = request(value.id); void session.regenerate(value.id, next.generate, next.source, next.files).finally(publish); } else { publish(); } break;
 			case 'continue': if (!busy() && !historyUnreadable && connections.configured && typeof value.id === 'number') { const next = request(); void session.resume(value.id, next.generate, next.source, next.files).finally(publish); } else { publish(); } break;
@@ -177,8 +182,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		publish();
 	}
 	function attachmentNotice(error: unknown): void {
-		const text = error instanceof AttachmentError ? error.code === 'permission' ? vscode.l10n.t('File access is disabled. Change the permission before adding or sending attachments.') : error.code === 'source' ? vscode.l10n.t('Workspace permission only accepts files dragged from BeCoder. Explorer drops and the file picker require computer permission.') : error.code === 'image' ? vscode.l10n.t('The image is invalid or unsupported. Use PNG, JPEG, WebP or GIF, up to 4 MiB each.') : error.code === 'budget' ? vscode.l10n.t('Attachments exceed the limit: 8 MiB in total, up to 64 files.') : vscode.l10n.t('Could not read attachment {0}. Check its location, permissions and whether it is a private file.', error.file) : describeError(error);
+		const text = error instanceof AttachmentError ? error.code === 'busy' ? vscode.l10n.t('Pause the response before adding attachments.') : error.code === 'permission' ? vscode.l10n.t('File access is disabled. Change the permission before adding or sending attachments.') : error.code === 'source' ? vscode.l10n.t('Workspace permission only accepts files dragged from BeCoder. Explorer drops and the file picker require computer permission.') : error.code === 'image' ? vscode.l10n.t('The image is invalid or unsupported. Use PNG, JPEG, WebP or GIF, up to 4 MiB each.') : error.code === 'budget' ? vscode.l10n.t('Attachments exceed the limit: 8 MiB in total, up to 64 files.') : vscode.l10n.t('Could not read attachment {0}. Check its location, permissions and whether it is a private file.', error.file) : describeError(error);
 		requestNotice = { id: Date.now(), text }; publish();
+	}
+	function addClipboardImages(images: unknown, activeId: string | undefined): void {
+		if (busy()) { attachmentNotice(new AttachmentError('busy')); return; }
+		if (historyUnreadable || activeId !== history.snapshot.activeId) { publish(); return; }
+		try {
+			const captured = captureClipboardImages(images);
+			const next = [...attachments(), ...captured];
+			if (next.length > 64 || next.reduce((size, item) => size + Buffer.byteLength(item.contents, 'utf8'), 0) > attachmentBudget) { throw new AttachmentError('budget'); }
+			drafts.set(activeId, next); publish();
+		} catch (error) { attachmentNotice(error); }
 	}
 	async function addResources(uris: readonly vscode.Uri[], source: AttachmentSource): Promise<void> {
 		if (busy() || historyUnreadable) { return; }
@@ -197,6 +212,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			drafts.set(history.snapshot.activeId, next);
 		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
 		finally { attachmentJob = undefined; publish(); }
+	}
+	async function openAttachment(id: string): Promise<void> {
+		const activeId = history.snapshot.activeId;
+		const item = [...attachments(), ...session.snapshot.messages.flatMap(message => message.attachments ?? [])].find(item => item.id === id);
+		if (!item || item.kind === 'image') { return; }
+		const selectedPermission = permission;
+		const roots = currentFileRoots();
+		try {
+			checkAttachmentSource(selectedPermission, item.source);
+			const result = await createFileTools(selectedPermission, roots).execute({ operation: 'read', path: item.path }, new AbortController().signal);
+			if (!result.ok) { throw new AttachmentError('read', item.name); }
+			if (!alive || history.snapshot.activeId !== activeId) { return; }
+			if (permission !== selectedPermission || JSON.stringify(currentFileRoots()) !== JSON.stringify(roots)) { throw new AttachmentError('read', item.name); }
+			await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(result.path), { preview: true, preserveFocus: true });
+		} catch (error) { if (alive) { attachmentNotice(error); } }
 	}
 	async function pickFiles(): Promise<void> {
 		if (busy() || historyUnreadable) { return; }

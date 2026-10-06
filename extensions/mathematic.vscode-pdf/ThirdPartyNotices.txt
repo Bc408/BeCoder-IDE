@@ -22,3 +22,7 @@ assets/pdf.js/web/wasm/LICENSE_JBIG2
 assets/pdf.js/web/wasm/LICENSE_PDFJS_JBIG2
 assets/pdf.js/web/standard_fonts/LICENSE_LIBERATION
 assets/pdf.js/web/standard_fonts/LICENSE_FOXIT
+
+BeCoder's shared product hover helper is distributed under MIT. Its full license
+is in dist/HoverLicense.txt. Only toolbar, sidebar and dialog title descriptions
+use this helper; the PDF.js document annotation UI is unchanged.

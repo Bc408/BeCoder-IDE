@@ -1,0 +1,30 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) BeCoder contributors. All rights reserved.
+ *  Licensed under the MIT License. See ../LICENSE.
+ *--------------------------------------------------------------------------------------------*/
+
+.becoder-hover {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	z-index: 2147483647;
+	box-sizing: border-box;
+	max-width: min(500px, calc(100vw - 16px));
+	max-height: calc(100vh - 16px);
+	overflow: auto;
+	padding: 2px 8px;
+	border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, #454545));
+	border-radius: var(--becoder-hover-radius, var(--vscode-cornerRadius-large, 8px));
+	background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background, #252526));
+	color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground, #ccc));
+	box-shadow: 0 0 12px rgb(0 0 0 / 14%);
+	font: normal 12px/19px var(--vscode-font-family, sans-serif);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	user-select: text;
+	animation: becoder-hover-fade-in 100ms linear;
+}
+
+.becoder-hover[hidden] { display: none; }
+@keyframes becoder-hover-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .becoder-hover { animation: none; } }

@@ -8,7 +8,7 @@ import * as path from 'path';
 import type { FilePart, TextPart } from 'ai';
 import type { FilePermission, FileTool } from './fileTools';
 
-export type AttachmentSource = 'internal' | 'external' | 'picker';
+export type AttachmentSource = 'internal' | 'external' | 'picker' | 'clipboard';
 export interface AttachmentRef { path: string; source: AttachmentSource }
 export interface Attachment extends AttachmentRef {
 	id: string;
@@ -22,10 +22,12 @@ export const attachmentBudget = 8 * 1024 * 1024;
 const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 export class AttachmentError extends Error {
-	constructor(readonly code: 'permission' | 'source' | 'read' | 'image' | 'budget', readonly file = '') { super(code); }
+	constructor(readonly code: 'permission' | 'source' | 'read' | 'image' | 'budget' | 'busy', readonly file = '') { super(code); }
 }
 
 export function checkAttachmentSource(permission: FilePermission, source: AttachmentSource): void {
+	// Explicitly pasted bytes are user input, never a grant to read a local path.
+	if (source === 'clipboard') { return; }
 	if (permission === 'none') { throw new AttachmentError('permission'); }
 	if (permission === 'workspace' && source !== 'internal') { throw new AttachmentError('source'); }
 }
@@ -40,16 +42,44 @@ function validImage(contents: string, mediaType: string): boolean {
 	return mediaType === 'image/webp' && bytes.length >= 16 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
 }
 
+export function captureClipboardImages(value: unknown): Attachment[] {
+	if (!Array.isArray(value) || !value.length) { throw new AttachmentError('image'); }
+	if (value.length > 64) { throw new AttachmentError('budget'); }
+	let used = 0;
+	return value.map((item): Attachment => {
+		if (!item || typeof item.contents !== 'string' || !imageTypes.includes(item.mediaType) || !validImage(item.contents, item.mediaType)) { throw new AttachmentError('image'); }
+		used += Buffer.byteLength(item.contents, 'utf8');
+		if (used > attachmentBudget) { throw new AttachmentError('budget'); }
+		const id = randomUUID();
+		const extension = item.mediaType === 'image/jpeg' ? 'jpg' : item.mediaType.slice(6);
+		const name = typeof item.name === 'string' && item.name.trim() && item.name.length <= 255 && !/[\x00-\x1f]/.test(item.name) ? path.basename(item.name) : `clipboard-image.${extension}`;
+		return { id, path: `clipboard:${id}`, source: 'clipboard', name, kind: 'image', contents: item.contents, mediaType: item.mediaType, truncated: false };
+	});
+}
+
 /** Reuse the agent's authorized reader, including editor buffers and byte budgets. */
 export async function readAttachments(refs: readonly AttachmentRef[], permission: FilePermission, files: FileTool, signal: AbortSignal): Promise<Attachment[]> {
 	// Validate every origin before any filesystem access, including mixed drops.
-	for (const ref of refs) { checkAttachmentSource(permission, ref.source); }
+	for (const ref of refs) {
+		checkAttachmentSource(permission, ref.source);
+		if (ref.source === 'clipboard' && !validAttachments([ref])) { throw new AttachmentError('image'); }
+	}
 	if (refs.length > 64) { throw new AttachmentError('budget'); }
 	const captured: Attachment[] = [];
 	const seen = new Set<string>();
 	let used = 0;
 	for (const ref of refs) {
 		signal.throwIfAborted();
+		if (ref.source === 'clipboard') {
+			const items = [ref];
+			if (!validAttachments(items)) { throw new AttachmentError('image'); }
+			if (seen.has(ref.path)) { continue; }
+			seen.add(ref.path);
+			used += Buffer.byteLength(items[0].contents, 'utf8');
+			if (used > attachmentBudget) { throw new AttachmentError('budget'); }
+			captured.push({ ...items[0] });
+			continue;
+		}
 		const result = await files({ operation: 'read', path: ref.path }, signal);
 		signal.throwIfAborted();
 		if (!result.ok || !['text', 'binary', 'image'].includes(result.kind ?? '') || result.contents === undefined) { throw new AttachmentError('read', path.basename(ref.path)); }
@@ -69,7 +99,8 @@ export function validAttachments(value: unknown): value is Attachment[] {
 	const ids = new Set<string>();
 	let used = 0;
 	return value.every(item => {
-		if (!item || typeof item.id !== 'string' || !item.id || item.id.length > 128 || ids.has(item.id) || typeof item.path !== 'string' || item.path.length > 4096 || typeof item.name !== 'string' || !item.name || item.name.length > 4096 || !['internal', 'external', 'picker'].includes(item.source) || !['text', 'binary', 'image'].includes(item.kind) || typeof item.contents !== 'string' || typeof item.truncated !== 'boolean') { return false; }
+		if (!item || typeof item.id !== 'string' || !item.id || item.id.length > 128 || ids.has(item.id) || typeof item.path !== 'string' || item.path.length > 4096 || typeof item.name !== 'string' || !item.name || item.name.length > 4096 || !['internal', 'external', 'picker', 'clipboard'].includes(item.source) || !['text', 'binary', 'image'].includes(item.kind) || typeof item.contents !== 'string' || typeof item.truncated !== 'boolean') { return false; }
+		if (item.source === 'clipboard' && (item.kind !== 'image' || item.path !== `clipboard:${item.id}` || item.truncated)) { return false; }
 		ids.add(item.id);
 		used += Buffer.byteLength(item.contents, 'utf8');
 		return used <= attachmentBudget && (item.kind === 'image' ? imageTypes.includes(item.mediaType) && validImage(item.contents, item.mediaType) : item.mediaType === undefined && (item.kind !== 'binary' || /^[\da-f]*$/.test(item.contents)));

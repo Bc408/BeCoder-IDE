@@ -10,12 +10,34 @@ button, textarea { font: inherit; }
 .draft-attachments { max-height: 164px; overflow: auto; margin-bottom: 10px; }
 .message-attachments { justify-content: flex-end; margin-bottom: 8px; }
 .attachment-card { display: flex; align-items: center; gap: 8px; padding: 8px; min-width: 0; max-width: 100%; border: 1px solid var(--border); border-radius: 12px; background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, .08)); }
-.attachment-card > img { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; }
-.attachment-card > svg { flex-shrink: 0; width: 24px; height: 24px; color: var(--vscode-descriptionForeground); }
-.attachment-card > span { min-width: 0; }
+.attachment-open { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0; text-align: left; }
+.attachment-open:hover { background: transparent; }
+.attachment-open > img { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; }
+.attachment-open > svg { flex-shrink: 0; width: 24px; height: 24px; color: var(--vscode-descriptionForeground); }
+.attachment-open > span { min-width: 0; }
 .attachment-card strong { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
 .attachment-card small { display: block; color: var(--vscode-descriptionForeground); font-size: 11px; }
-.attachment-card > button { flex-shrink: 0; width: 24px; height: 24px; padding: 3px; border-radius: 50%; }
+.attachment-card > .attachment-remove { flex-shrink: 0; width: 24px; height: 24px; padding: 3px; border-radius: 50%; }
+.image-preview { position: fixed; inset: 0; display: flex; flex-direction: column; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; color: #f5f5f5; background: #111e; }
+.image-preview:not([open]) { display: none; }
+.image-preview::backdrop { background: transparent; }
+.image-preview-header { flex: 0 0 auto; gap: 12px; padding: 12px 14px; }
+.image-preview-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.image-preview-header small { margin-left: 12px; opacity: .7; }
+.image-preview-header button, .image-preview-previous, .image-preview-next { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 8px; border-radius: 50%; background: #f5f5f5; color: #262626; }
+.image-preview-stage { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; touch-action: none; cursor: grab; }
+.image-preview-stage:active { cursor: grabbing; }
+.image-preview-canvas { display: grid; place-items: center; min-width: 100%; min-height: 100%; padding: 16px; }
+.image-preview-picture { display: block; max-width: none; max-height: none; object-fit: contain; user-select: none; }
+.image-preview-feedback { display: grid; place-items: center; height: 100%; margin: 0; font-size: 12px; }
+.image-preview-previous, .image-preview-next { position: absolute; z-index: 1; top: 50%; transform: translateY(-50%); }
+.image-preview-previous { left: 10px; }
+.image-preview-next { right: 10px; }
+.image-preview-zoom { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: center; margin: 12px 0 16px; padding: 3px; border-radius: 999px; background: #f5f5f5; color: #262626; }
+.image-preview-zoom button { display: grid; place-items: center; min-width: 34px; height: 30px; padding: 6px; border-radius: 999px; font-size: 11px; }
+.image-preview-zoom button:nth-child(2) { min-width: 54px; }
+.image-preview button:hover { background: #ddd; }
+.image-preview button:focus-visible { outline: 2px solid #f5f5f5; outline-offset: 3px; }
 .attachment-warning { font-size: 12px; color: var(--vscode-descriptionForeground); padding: 0 0 8px; }
 .composer-toolbar .add-files { width: 28px; height: 28px; padding: 0; border-radius: 50%; flex-shrink: 0; color: var(--vscode-descriptionForeground); }
 button { color: inherit; background: transparent; border: 0; border-radius: 6px; padding: 6px 9px; cursor: pointer; }
@@ -74,6 +96,8 @@ textarea::placeholder { color: var(--vscode-input-placeholderForeground); }
 .send { width: 29px; height: 29px; padding: 0; border-radius: 8px; font-size: 19px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .send:hover { background: var(--vscode-button-hoverBackground); }
 .error { color: var(--vscode-errorForeground); padding: 8px 3px; line-height: 1.6; }
+.connection-notice { display: flex; align-items: flex-start; gap: 8px; color: var(--vscode-descriptionForeground); padding: 8px 3px; line-height: 1.6; font-size: 12px; }
+.connection-notice > svg { flex-shrink: 0; width: 15px; height: 15px; margin-top: 2px; color: #c99b63; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 
 /* Beacon owns layout; rendering does not depend on upstream utility CSS. */
@@ -272,12 +296,9 @@ textarea { min-height: 40px; font-size: 14px; }
 .code-toolbar { min-height: 48px; padding: 0 8px 0 16px; background: color-mix(in srgb, var(--vscode-foreground) 2%, var(--vscode-textCodeBlock-background, var(--vscode-editor-background))); border-bottom: 0; border-radius: 20px 20px 0 0; color: var(--chat-title); font-size: 12px; font-weight: 600; }
 .code-scroller { border-radius: 0 0 20px 20px; }
 .code-toolbar button { position: relative; }
-.code-toolbar button::after { content: attr(aria-label); position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 2; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--chat-title) 8%, transparent); border-radius: 10px; color: var(--chat-title); background: var(--surface); box-shadow: 0 2px 8px #0002; font-family: var(--vscode-font-family); font-size: 12px; font-weight: 400; line-height: 18px; white-space: nowrap; pointer-events: none; opacity: 0; }
-.code-toolbar button:hover::after, .code-toolbar button:focus-visible::after { opacity: 1; }
 .vscode-dark .code-block { background: #181a1e; }
 .vscode-dark .code-toolbar { background: linear-gradient(180deg, #1c1e23, #1c1f24); }
 .vscode-dark .code-toolbar button:hover, .vscode-dark .code-toolbar button[aria-pressed="true"] { background: #282c34; }
-.vscode-dark .code-toolbar button::after { background: #1c1e23; }
 .markdown .code-block pre { padding: 0 16px 8px; font-size: var(--vscode-editor-font-size, 14px); line-height: var(--vscode-editor-line-height, 19px); }
 .markdown .code-block pre code { font-size: inherit; }
 .thought { margin-bottom: 18px; padding-bottom: 6px; border-bottom-color: color-mix(in srgb, var(--vscode-foreground) 9%, transparent); font-size: 13px; }
@@ -346,7 +367,30 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .permission-menu button > span { flex: 1; min-width: 0; }
 .permission-menu strong { display: block; font-weight: 500; font-size: 13px; }
 .permission-menu small { display: block; margin-top: 4px; color: var(--chat-muted); font-size: 12px; line-height: 1.5; }
-.permission-toast { position: absolute; z-index: 6; top: 40px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 9px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 3px 16px #0002; color: var(--chat-title); font-size: 12px; line-height: 1.5; pointer-events: none; }
+.notification-stack { --notification-background: #fff4e5; --notification-border: #c99b63; --notification-foreground: #784b1c; position: absolute; z-index: 6; top: 40px; left: 50%; transform: translateX(-50%); display: grid; width: max-content; max-width: min(420px, calc(100% - 32px)); transition: height 260ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
+.vscode-dark .notification-stack, .vscode-high-contrast .notification-stack { --notification-background: #3b2b1d; --notification-border: #a27b46; --notification-foreground: #f4d5a6; }
+.notification-stack[data-expanded] { pointer-events: auto; max-height: calc(100% - 56px); overflow-y: auto; overflow-x: hidden; }
+.notification-slot { grid-area: 1 / 1; align-self: start; min-width: 0; transform: translateY(var(--notification-offset)) scale(var(--notification-scale)); transform-origin: top center; transition: transform 260ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease-in; }
+.notification-slot:has(.notification-card[data-closing]) { opacity: 0; }
+.notification-stack:not([data-expanded]) .notification-slot:not([data-front]) { height: var(--notification-front-height); border: 1px solid var(--notification-border); border-radius: 12px; background: var(--notification-background); box-shadow: 0 3px 8px #0001; }
+.notification-stack:not([data-expanded]) .notification-slot:not([data-front]) .notification-card { visibility: hidden; }
+.notification-card { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; min-height: 40px; padding: 9px 10px 9px 12px; border: 1px solid var(--notification-border); border-radius: 12px; background: var(--notification-background); color: var(--notification-foreground); box-shadow: 0 3px 8px #0001, 0 8px 24px #0002; font-size: 12px; line-height: 1.5; animation: notification-enter 260ms cubic-bezier(.2, .8, .2, 1) both; }
+.notification-slot[data-front] .notification-card, .notification-stack[data-expanded] .notification-card { pointer-events: auto; }
+.notification-card > svg { flex-shrink: 0; width: 15px; height: 15px; }
+.notification-text { min-width: 0; overflow-wrap: anywhere; }
+.notification-close { flex-shrink: 0; width: 22px; height: 22px; padding: 4px; border-radius: 6px; color: inherit; }
+.notification-close svg { width: 14px; height: 14px; }
+.notification-close:hover { background: color-mix(in srgb, var(--notification-foreground) 12%, transparent); }
+.notification-close:focus-visible { outline: 2px solid var(--notification-foreground); outline-offset: 2px; }
+.notification-card[data-closing] { animation: notification-leave 180ms ease-in both; pointer-events: none; }
+.notification-announcement { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes notification-enter { from { opacity: 0; transform: translateY(-10px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes notification-leave { to { opacity: 0; transform: translateY(-6px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) {
+	.notification-stack, .notification-slot { transition: none; }
+	.notification-card { animation: none; }
+	.notification-card[data-closing] { animation: none; opacity: 0; }
+}
 @media (max-width: 320px) { .permission-trigger > span { display: none; } }
 
 /* Dedicated settings editor, using workbench tokens and Beacon's circular icon controls. */

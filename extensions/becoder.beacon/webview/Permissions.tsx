@@ -22,7 +22,7 @@ export function Permissions({ permission, ready, post }: { permission: FilePermi
 	}, [open]);
 	const selected = choices.find(choice => choice.value === permission) ?? choices[0];
 	return <div className="permission-control" ref={root} onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); trigger.current?.focus(); event.stopPropagation(); } }}>
-		<button ref={trigger} className="permission-trigger" type="button" disabled={!ready} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)} title={zh ? '文件读取权限' : 'File access permissions'}><Icon name={selected.icon} /><span>{selected.label}</span><Icon name="chevron" /></button>
+		<button ref={trigger} className="permission-trigger" type="button" disabled={!ready} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)} data-becoder-tooltip={zh ? '文件读取权限' : 'File access permissions'}><Icon name={selected.icon} /><span>{selected.label}</span><Icon name="chevron" /></button>
 		{open && <div className="permission-menu" role="dialog" aria-label={zh ? '文件读取权限' : 'File access permissions'}>
 			{choices.map(choice => <button type="button" key={choice.value} aria-pressed={permission === choice.value} onClick={() => { post({ type: 'setPermission', permission: choice.value }); setOpen(false); trigger.current?.focus(); }}><Icon name={choice.icon} /><span><strong>{choice.label}</strong><small>{choice.detail}</small></span>{permission === choice.value && <Icon name="check" />}</button>)}
 		</div>}

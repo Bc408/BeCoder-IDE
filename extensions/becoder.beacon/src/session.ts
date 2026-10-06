@@ -8,6 +8,7 @@ import type { FileInput, FileOutput, FileTool } from './fileTools';
 import { replayProtocol, type ProtocolTurn } from './protocol';
 import type { WebSource, WebError } from './webTools';
 import { attachmentParts, validAttachments, type Attachment } from './attachments';
+import { RequestRecoveryError, type RequestFailure, type RequestRetry } from './requestRecovery';
 
 export interface FileResult {
 	id: string;
@@ -24,6 +25,7 @@ export function fileModelOutput(output: FileOutput) {
 }
 
 export interface Message {
+	failure?: RequestFailure;
 	attachments?: Attachment[];
 	id: number;
 	role: 'user' | 'assistant';
@@ -50,6 +52,7 @@ export interface ToolActivity {
 }
 
 export interface Snapshot {
+	retry?: RequestRetry;
 	messages: Message[];
 	busy: boolean;
 	error: string;
@@ -57,7 +60,7 @@ export interface Snapshot {
 }
 
 export type Delta = { type: 'text'; text: string; turn?: ProtocolTurn } | { type: 'reasoning'; text: string; turn?: ProtocolTurn } | { type: 'activity'; activity: ToolActivity } | { type: 'tool-result'; result: FileResult } | { type: 'web-result'; sources: WebSource[] } | { type: 'protocol'; turn: ProtocolTurn };
-export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, files: FileTool) => AsyncIterable<Delta>;
+export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, files: FileTool, progress?: (retry: RequestRetry | undefined) => void) => AsyncIterable<Delta>;
 type ResponseSource = { model: string; provider: string; baseURL?: string };
 
 const unavailableFileTool: FileTool = async input => ({ ok: false, path: input.path, error: 'Local file access is disabled.' });
@@ -68,6 +71,7 @@ export class ChatSession {
 	private controller: AbortController | undefined;
 	private sequence = 0;
 	private error = '';
+	private retry: RequestRetry | undefined;
 	private disposed = false;
 
 	constructor(private readonly changed: (snapshot: Snapshot) => void, private readonly describeError: (error: unknown) => string) { }
@@ -79,7 +83,7 @@ export class ChatSession {
 			// megabytes of image bytes on each streaming update.
 			return { ...structuredClone(content), ...(attachments ? { attachments: attachments.map(item => ({ ...item })) } : {}) };
 		});
-		return { messages, busy: !!this.controller, error: this.error, ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
+		return { messages, busy: !!this.controller, error: this.error, ...(this.retry ? { retry: { ...this.retry } } : {}), ...(this.controller?.signal.aborted ? { stopping: true } : {}) };
 	}
 
 	private publish(): void {
@@ -146,15 +150,17 @@ export class ChatSession {
 		const activityOffset = reply.activities.length;
 		const activityId = (id: string) => activityOffset ? `${id}:${activityOffset}` : id;
 		reply.status = 'streaming';
+		delete reply.failure;
 		reply.activeStartedAt = startedAt;
 		if (source) { Object.assign(reply, source); }
 		if (!resumedReply) { this.messages.push(reply); }
 		const controller = new AbortController();
 		this.controller = controller;
 		this.error = '';
+		this.retry = undefined;
 		this.publish();
 		try {
-			for await (const delta of generate(context, controller.signal, files)) {
+			for await (const delta of generate(context, controller.signal, files, retry => { if (!controller.signal.aborted) { this.retry = retry; this.publish(); } })) {
 				if (controller.signal.aborted) { break; }
 				if ('turn' in delta && delta.turn) {
 					(reply.protocol ??= [])[protocolOffset] = structuredClone({ ...delta.turn, messages: [...(resumedReply ? [context.at(-1)!] : []), ...delta.turn.messages] });
@@ -184,7 +190,7 @@ export class ChatSession {
 			reply.status = controller.signal.aborted ? 'stopped' : 'complete';
 		} catch (error) {
 			reply.status = controller.signal.aborted || resumedReply ? 'stopped' : 'error';
-			if (!controller.signal.aborted) { this.error = this.describeError(error); }
+			if (!controller.signal.aborted) { this.error = this.describeError(error); if (error instanceof RequestRecoveryError) { reply.failure = { ...error.failure }; } }
 		} finally {
 			for (const activity of reply.activities) {
 				if (activity.status === 'running') { activity.status = controller.signal.aborted ? 'stopped' : 'error'; }
@@ -192,6 +198,7 @@ export class ChatSession {
 			reply.durationMs = previousDuration + Math.max(0, Date.now() - startedAt);
 			delete reply.activeStartedAt;
 			this.controller = undefined;
+			this.retry = undefined;
 			this.publish();
 		}
 	}

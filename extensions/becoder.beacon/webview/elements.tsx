@@ -171,7 +171,7 @@ function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> 
 	return <CodeBlock text={readCode(codeProps.children)} language={language} streaming={streaming} />;
 }
 
-const components: Components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan };
+const components: Components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan, a: ({ title, node: _node, ...props }) => <a {...props} data-becoder-tooltip={title} /> };
 
 export function Conversation(props: ComponentProps<typeof StickToBottom>) {
 	const reduced = useReducedMotion();
@@ -201,7 +201,7 @@ export function ConversationScrollButton({ label, streaming }: { label: string; 
 		if (contentRef.current) { observer.observe(contentRef.current); }
 		return () => observer.disconnect();
 	}, [contentRef, scrollRef, scrollToBottom]);
-	return !isAtBottom && <button className="scroll-bottom" type="button" title={label} aria-label={label} onClick={() => { void scrollToBottom({ animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : { damping: 0.55, stiffness: 0.045, mass: 1 } }); }}>{streaming ? <span className="scroll-typing" aria-hidden="true"><span /><span /><span /></span> : <Icon name="down" />}</button>;
+	return !isAtBottom && <button className="scroll-bottom" type="button" data-becoder-tooltip={label} aria-label={label} onClick={() => { void scrollToBottom({ animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : { damping: 0.55, stiffness: 0.045, mass: 1 } }); }}>{streaming ? <span className="scroll-typing" aria-hidden="true"><span /><span /><span /></span> : <Icon name="down" />}</button>;
 }
 
 export const MessageResponse = memo(function MessageResponse({ children, streaming }: { children: string; streaming: boolean }) {

@@ -28,6 +28,9 @@
 		"onCustomEditor:pdf.view"
 	],
 	"main": "./src/extension.js",
+	"scripts": {
+		"vscode:prepublish": "node build.mjs"
+	},
 	"contributes": {
 		"configurationDefaults": {
 			"workbench.editorAssociations": {

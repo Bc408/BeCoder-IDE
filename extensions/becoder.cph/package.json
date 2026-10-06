@@ -49,7 +49,7 @@
 	"l10n": "./l10n",
 	"scripts": {
 		"compile": "node ../../node_modules/typescript/bin/tsc6 -p ./ && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json",
-		"compile-webview": "esbuild webview/App.tsx --bundle --platform=browser --format=iife --loader:.ttf=file --outfile=dist/judge.js",
+		"compile-webview": "node build-webview.mjs",
 		"compile-parsers": "esbuild companion/entry.ts --bundle --platform=browser --format=iife --global-name=BeCoderCompanion --outfile=dist/problem-parser.js",
 		"vscode:prepublish": "npm run compile && npm run compile-parsers && npm run compile-webview"
 	},

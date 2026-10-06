@@ -82,7 +82,7 @@ try {
 	await page.getByRole('dialog', { name: '文件读取权限' }).getByRole('button', { name: /全机只读/ }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setPermission', permission: 'computer' });
 	await page.evaluate(() => window.postMessage({ type: 'snapshot', permission: 'computer', requestNotice: { id: 1, text: '权限变更将在下一轮回复中生效。' } }, '*'));
-	await page.getByText('权限变更将在下一轮回复中生效。', { exact: true }).waitFor();
+	await page.getByRole('status').getByText('权限变更将在下一轮回复中生效。', { exact: true }).waitFor();
 	assert.ok(await page.getByRole('button', { name: '暂停生成', exact: true }).isEnabled());
 	assert.ok(await page.getByRole('button', { name: '新聊天', exact: true }).isDisabled());
 	await page.getByRole('button', { name: '暂停生成', exact: true }).click();
@@ -459,7 +459,7 @@ try {
 	await webToggle.click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setWebEnabled', enabled: false });
 	await page.evaluate(() => window.postMessage({ type: 'snapshot', busy: true, webEnabled: false, requestNotice: { id: 2, text: '联网开关将在下一轮回复中生效。' } }, '*'));
-	await page.getByText('联网开关将在下一轮回复中生效。', { exact: true }).waitFor();
+	await page.getByRole('status').getByText('联网开关将在下一轮回复中生效。', { exact: true }).waitFor();
 	assert.ok(await page.getByRole('button', { name: '暂停生成', exact: true }).isEnabled(), 'Changing web access does not pause the response');
 	assert.ok(await sourceNode.evaluate(element => element.isConnected && element.open), 'Source list stays mounted and expanded across streaming snapshots');
 	for (const width of [360, 760]) {
@@ -473,7 +473,7 @@ try {
 	await page.setViewportSize({ width: 360, height: 1000 });
 	await page.evaluate(() => window.postMessage({ type: 'snapshot', connection: { provider: 'ollama', baseURL: 'http://localhost:11434/v1', model: 'unknown-model', parameters: {}, keyConfigured: false, models: [], loading: false, error: '' }, webEnabled: true }, '*'));
 	await page.waitForFunction(() => document.querySelector('.web-toggle')?.getAttribute('data-available') === 'false');
-	assert.ok((await webToggle.getAttribute('title')).includes('当前模型未确认支持工具'));
+	assert.ok((await webToggle.getAttribute('data-becoder-tooltip')).includes('当前模型未确认支持工具'));
 	assert.equal(await webToggle.getAttribute('aria-pressed'), 'true', 'An unavailable model does not silently rewrite the saved switch');
 	await page.evaluate(() => { document.body.className = 'vscode-light'; });
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fafafa; --vscode-editor-background:#fff; --vscode-foreground:#292d33; --vscode-descriptionForeground:#656970; --vscode-input-background:#eee; --vscode-input-foreground:#222; --vscode-textCodeBlock-background:#f0f1f3; }' });

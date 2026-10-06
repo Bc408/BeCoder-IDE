@@ -91,7 +91,7 @@ test('web problems link to their source, JSON imports append cases, and single r
 		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'state', state } }));
 		await until(() => dom.window.document.querySelectorAll('.case').length === 2);
 		assert.strictEqual(dom.window.document.querySelector('.problem-name')?.getAttribute('href'), state.url);
-		dom.window.document.querySelector('[title="runAgain"]').click();
+		dom.window.document.querySelector('[aria-label="runAgain"]').click();
 		await until(() => messages.some(message => message.command === 'run' && message.id === 0));
 		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'progress', phase: 'compile' } }));
 		await until(() => dom.window.document.querySelector('.compiling') !== null);

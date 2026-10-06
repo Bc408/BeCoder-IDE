@@ -5,6 +5,7 @@
 // BeCoder's CPH shell. Sample cards are adapted from CPH; see UPSTREAM.md.
 import React, { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import { installHovers } from '../../becoder.shared/browser/hover';
 import CaseView from './CaseView';
 import { PanelState } from './types';
 import './app.css';
@@ -132,9 +133,9 @@ function App() {
 	}
 	return <main className='ui'>
 		<div className='meta'>
-			{state.url && !state.local && /^https?:\/\//.test(state.url) ? <a className='problem-name' href={state.url} title={state.source}>{state.name || t('empty')}</a>
-				: <span className='problem-name' title={state.source}>{state.name || t('empty')}</span>}
-			{runTarget === 'compile' && <span className='compiling' title={t('compiling')}><span className='loader' /></span>}
+			{state.url && !state.local && /^https?:\/\//.test(state.url) ? <a className='problem-name' href={state.url} data-becoder-tooltip={state.source}>{state.name || t('empty')}</a>
+				: <span className='problem-name' data-becoder-tooltip={state.source}>{state.name || t('empty')}</span>}
+			{runTarget === 'compile' && <span className='compiling' data-becoder-tooltip={t('compiling')}><span className='loader' /></span>}
 			{state.source && <span className={`pass-rate ${state.cases.length > 0 && passed === state.cases.length ? 'pass-all' : ''}`}>{passed} / {state.cases.length} {t('passedRate')}</span>}
 		</div>
 		{(state.message || notice) && <div className='request-status' role='status'>{state.message || notice}</div>}
@@ -145,9 +146,9 @@ function App() {
 					<button className='btn chevron-btn' aria-label={t('moreActions')} aria-expanded={menu} disabled={state.busy} onClick={() => setMenu(value => !value)}><i className='codicon codicon-chevron-down' /></button>
 					{menu && <div className='run-menu' role='menu'><button className='btn btn-black' role='menuitem' onClick={() => send('compile')}>{t('compileOnly')}</button></div>}
 				</div>
-				{state.busy ? <button className='btn btn-orange delete-btn' title={t('stop')} aria-label={t('stop')} onClick={stop}><i className='codicon codicon-circle-slash' /></button>
-					: <button className='btn btn-red delete-btn' title={t('delete')} aria-label={t('delete')} onClick={() => send('delete')}><i className='codicon codicon-trash' /></button>}
-				<button className='btn btn-yellow settings-btn' title={t('settings')} aria-label={t('settings')} onClick={() => api.postMessage({ command: 'settings' })}><i className='codicon codicon-settings' /></button>
+				{state.busy ? <button className='btn btn-orange delete-btn' data-becoder-tooltip={t('stop')} aria-label={t('stop')} onClick={stop}><i className='codicon codicon-circle-slash' /></button>
+					: <button className='btn btn-red delete-btn' data-becoder-tooltip={t('delete')} aria-label={t('delete')} onClick={() => send('delete')}><i className='codicon codicon-trash' /></button>}
+				<button className='btn btn-yellow settings-btn' data-becoder-tooltip={t('settings')} aria-label={t('settings')} onClick={() => api.postMessage({ command: 'settings' })}><i className='codicon codicon-settings' /></button>
 			</div>
 			{!state.cases.length && <p>{t('noSamples')}</p>}
 			{state.cases.map((item, index) => <CaseView key={`${state.source}:${item.id}`} num={index + 1} case={item}
@@ -162,7 +163,7 @@ function App() {
 			})}><span className='icon'><i className='codicon codicon-add' /></span>{' '}{t('add')}</button></div></div>
 			<div className='margin-10'>
 				<input ref={importInputRef} className='case-import-input' type='file' accept='application/json,.json' onChange={event => { void importCases(event); }} />
-				<button className='btn btn-black btn-block' disabled={state.busy || state.cases.length >= 100} title={t('importTooltip')} onClick={() => importInputRef.current?.click()}>
+				<button className='btn btn-black btn-block' disabled={state.busy || state.cases.length >= 100} data-becoder-tooltip={t('importTooltip')} onClick={() => importInputRef.current?.click()}>
 					<i className='codicon codicon-cloud-upload' />{' '}{t('importTestcases')}
 				</button>
 			</div>
@@ -197,7 +198,7 @@ function App() {
                             />
                             <button
                                 className='btn-chromeless'
-                                title={t('openChecker')}
+                                data-becoder-tooltip={t('openChecker')}
                                 onClick={openCheckerFile}
                                 disabled={state.busy || saving.current || dirty || !state.customCheckerPath?.trim()}
                             >
@@ -297,4 +298,5 @@ with open(sys.argv[2], "r") as f:
 	</main>;
 }
 
+installHovers();
 createRoot(document.getElementById('app')!).render(<App />);

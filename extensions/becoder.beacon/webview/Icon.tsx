@@ -1,11 +1,14 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
 const paths = {
 	plus: 'M12 4v16M4 12h16',
+	minus: 'M4 12h16',
+	forward: 'm14 5 7 7-7 7M3 12h18',
 	reasoning: 'M9 18h6m-6 3h6M8 15a6 6 0 1 1 8 0l-1 3H9Z',
 	tools: 'm14 7 3 3 4-4a6 6 0 0 1-7 8L6 22l-4-4 8-8a6 6 0 0 1 8-7Z',
 	attach: 'm21 11-8 8a6 6 0 0 1-9-9l9-9a4 4 0 0 1 6 6l-9 9a2 2 0 0 1-3-3l8-8',
 	image: 'M3 3h18v18H3Zm0 13 6-6 12 11M16 7h.01',
 	close: 'm6 6 12 12M6 18 18 6',
+	info: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 11v6M12 7h.01',
 	globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c3 3 3 15 0 18-3-3-3-15 0-18Z',
 	shield: 'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7ZM9 12l2 2 4-4',
 	folder: 'M3 7V5h6l2 2h10v13H3Z',

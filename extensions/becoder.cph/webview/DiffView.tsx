@@ -31,7 +31,7 @@ export default function DiffView({
                 <div
                     className='clipboard'
                     onClick={() => copyToClipboard(plainText)}
-                    title={t('copiedToClipboard')}
+                    data-becoder-tooltip={t('copiedToClipboard')}
                 >
                     {t('copy')}
                 </div>

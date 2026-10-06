@@ -42,7 +42,7 @@ export class WebviewThemeDataProvider extends Disposable {
 		}));
 
 		this._register(EditorZoom.onDidChangeZoomLevel(() => this._reset()));
-		const webviewConfigurationKeys = ['editor.fontFamily', 'editor.fontWeight', 'editor.fontSize', 'editor.lineHeight', 'editor.fontLigatures', 'accessibility.underlineLinks'];
+		const webviewConfigurationKeys = ['editor.fontFamily', 'editor.fontWeight', 'editor.fontSize', 'editor.lineHeight', 'editor.fontLigatures', 'accessibility.underlineLinks', 'workbench.hover.delay', 'workbench.experimental.modernUI'];
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
 			if (webviewConfigurationKeys.some(key => e.affectsConfiguration(key))) {
 				this._reset();
@@ -85,6 +85,8 @@ export class WebviewThemeDataProvider extends Disposable {
 				'vscode-font-family': DEFAULT_FONT_FAMILY,
 				'vscode-font-weight': 'normal',
 				'vscode-font-size': '13px',
+				'becoder-hover-delay': String(this._configurationService.getValue<number>('workbench.hover.delay')),
+				'becoder-hover-radius': this._configurationService.getValue<boolean>('workbench.experimental.modernUI') ? '8px' : '5px',
 				'vscode-editor-font-family': editorFontFamily,
 				'vscode-editor-font-weight': editorFontWeight,
 				'vscode-editor-font-size': editorFontInfo.fontSize + 'px',

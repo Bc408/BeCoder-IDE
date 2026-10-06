@@ -125,10 +125,11 @@
 	"scripts": {
 		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
 		"build": "node build.mjs",
-		"test": "node --test dist-test/session.test.cjs dist-test/files.test.cjs dist-test/models.test.cjs dist-test/web.test.cjs dist-test/attachments.test.cjs dist-test/settings.test.cjs",
+		"test": "node --test dist-test/session.test.cjs dist-test/files.test.cjs dist-test/models.test.cjs dist-test/web.test.cjs dist-test/attachments.test.cjs dist-test/settings.test.cjs dist-test/requestRecovery.test.cjs",
 		"vscode:prepublish": "npm run typecheck && npm run build",
 		"lint": "node ../../node_modules/eslint/bin/eslint.js --config eslint.config.mjs src webview test build.mjs --max-warnings 0",
-		"test-render": "node test/render.mjs"
+		"test-render": "node test/render.mjs",
+		"test-attachments-render": "node test/attachments-render.mjs"
 	},
 	"devDependencies": {
 		"@ai-sdk/deepseek": "3.0.50",

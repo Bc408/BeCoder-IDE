@@ -269,8 +269,12 @@ textarea { min-height: 40px; font-size: 14px; }
 	padding: 0 14px 0 12px;
 }
 .conversation-heading { display: flex; min-width: 0; align-items: center; gap: 4px; }
-.conversation-back { width: 20px; height: 28px; flex: 0 0 auto; padding: 2px; color: var(--vscode-descriptionForeground); }
-.conversation-back svg { width: 14px; height: 14px; }
+.conversation-back { width: 20px; height: 28px; flex: 0 0 auto; padding: 2px; color: var(--vscode-descriptionForeground); transition: color 120ms ease-out; }
+.conversation-back:hover { background: transparent; }
+.conversation-back:not(:disabled):hover { color: var(--vscode-foreground); }
+.conversation-back svg { width: 14px; height: 14px; transition: filter 120ms ease-out; }
+.conversation-back:not(:disabled):hover svg { filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 45%, transparent)); }
+@media (prefers-reduced-motion: reduce) { .conversation-back, .conversation-back svg { transition: none; } }
 .workspace-header .conversation-title { color: var(--chat-title); font-size: 13px; font-weight: 400; }
 .workspace-header .chats-title { color: var(--chat-muted); }
 .workspace-header .header-actions { gap: 2px; }

@@ -185,7 +185,7 @@ function App() {
 		if (link) { event.preventDefault(); api.postMessage({ type: 'link', url: link.href }); }
 	}}>
 		<header className="workspace-header"><div className="conversation-heading">
-			{hasConversation && <button className="conversation-back" disabled={busy} onClick={() => { api.postMessage({ type: 'clear' }); }} data-becoder-tooltip={t('Back to chats', '返回聊天列表')} aria-label={t('Back to chats', '返回聊天列表')}><Icon name="back" /></button>}
+			{hasConversation && <button className="conversation-back" disabled={busy} onClick={() => { api.postMessage({ type: 'clear' }); }} data-becoder-tooltip={t('Back', '返回')} aria-label={t('Back', '返回')}><Icon name="back" /></button>}
 			<span className={`conversation-title ${hasConversation ? '' : 'chats-title'}`}>{state.history.find(item => item.id === state.activeId)?.title || t('Chat', '聊天')}</span>
 		</div><div className="header-actions">
 			<button onClick={() => api.postMessage({ type: 'settings' })} data-becoder-tooltip={t('Connection settings', '连接设置')} aria-label={t('Connection settings', '连接设置')}><Icon name="settings" /></button>

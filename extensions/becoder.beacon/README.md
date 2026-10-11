@@ -1,5 +1,9 @@
 # Beacon
 
+This guide describes the current implementation, not the confirmed next-stage design. Read [the repository Beacon/NoteBook baseline](../../docs/beacon/README.md) for independent Beacon workspaces, blackout/spot/flood, limited learning-asset writing, isolated conversations, memory and NoteBook requirements. Current read-only permissions, editor-folder roots and global history below are implementation gaps, not rules that override that baseline. This documentation update does not implement those new capabilities.
+
+本文说明当前实现，不是下一阶段设计规格。独立 Beacon 工作区、blackout/spot/flood、有限学习资产写入、会话隔离、记忆与 NoteBook 的已确认规则见[仓库正式基线](../../docs/beacon/README.md)。下文现有只读档位、编辑器文件夹范围和全局历史属于待改造的实现，不覆盖正式需求；本次文档更新没有实现新能力。
+
 Hover descriptions share BeCoder's compact product tooltip layer with CPH and the PDF toolbar. They follow the editor-hover theme colors, Modern UI corner radius and workbench hover delay. Keyboard focus, Escape, viewport edges, dynamic labels and reduced motion are supported; button layout and actions remain unchanged.
 
 悬停说明与 CPH、PDF 工具栏共用 BeCoder 的紧凑提示层，沿用编辑器悬停主题颜色、Modern UI 圆角和工作台悬停延时。支持键盘焦点、Esc、视口边缘避让、动态文案和减少动态效果；按钮布局及操作保持不变。

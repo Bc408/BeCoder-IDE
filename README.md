@@ -42,6 +42,8 @@ Under **Settings → Extensions → BeCoder IDE Features**, **Welcome Page: Webs
 
 ## Beacon
 
+This section describes the current implementation. The [confirmed Beacon and NoteBook design baseline](docs/beacon/README.md) defines the next design stage; its new workspace, mode, memory and notebook rules are not yet implemented by this documentation change.
+
 Open Beacon from the editor's upper-right toolbar. Its settings button opens a separate settings tab: configure DeepSeek, Alibaba Cloud Bailian, Moonshot or Ollama, fetch or add models, then select a chat model. Each provider has one connection and each model ID has one configuration. API keys use SecretStorage; local Ollama needs no key. Model capabilities and optional generation parameters can be adjusted in the same page.
 
 Beacon supports streaming replies, Markdown, code highlighting and formulas. Code blocks use the editor's font size and line height with fixed One Monokai syntax colors. Pausing retains the partial answer. With an empty composer, Continue appends a new response to that answer; sending new text keeps it as conversation context. Regenerate replaces the answer and its later branch. Enter sends; Shift+Enter adds a newline.
@@ -51,6 +53,12 @@ File access defaults to **No file access**. **Workspace read-only** allows files
 Web search is enabled by default, has a globe toggle in the composer, and requires confirmed model tool support. The limited Exa-backed search needs no search key. Sources are shown with links; availability depends on the network and service limits. Permission, network and model-setting changes during generation apply to the next response.
 
 Beacon does not write your project files, run commands or submit solutions. Messages and included file/image contents go to the configured model service. Search queries and public page URLs go to the search service. Chat history is saved locally in Beacon's global extension storage; changing workspaces does not split or clear the list. Current problem statements, samples and run results do not yet have a dedicated structured connection to Beacon. See the [Beacon guide](extensions/becoder.beacon/README.md) for implementation details and limits.
+
+### Confirmed Design Direction
+
+Beacon is being designed as a long-term algorithm-learning companion with limited, explicitly requested writing of notebooks, handouts and diagrams. It will not create or modify the student's C/C++ source files or autonomously run programs or submit solutions. Each window independently chooses a Beacon workspace; `.beaconWork` owns its history and memory, while associated `.bcnb` documents use the editor folder's separate `.notebook`.
+
+The design allows only `blackout` without a usable workspace and only `spot`/`flood` with one. Recent workspace choices are shared; current selections are independent. Conversations stay in their workspace, temporary conversations are not automatically saved, and the same conversation cannot be open in two windows. The full confirmed rules and remaining research questions are in the [formal documents](docs/beacon/README.md); the current read-only tools and installation-wide history described above are implementation gaps to address, not constraints on that design.
 
 ## Compilation and Output
 
@@ -74,7 +82,7 @@ The installed BeCoder directory is self-contained and may be moved as a complete
 
 ## Data and Uninstall
 
-BeCoder stores its settings, installed extensions, caches, history, and extracted toolchains under the installation directory's `data` folder. It does not use the user data of system Visual Studio Code or another BeCoder installation.
+The current application stores its settings, installed extensions, caches, history, and extracted toolchains under the installation directory's `data` folder. It does not use the user data of system Visual Studio Code or another BeCoder installation. The confirmed future design stores persistent Beacon assets in the selected workspace's `.beaconWork` and associated notebooks in the editor folder's `.notebook`; that change has not yet been implemented. The replacement and uninstall behavior below describes the current application.
 
 Reinstalling into an existing BeCoder installation is a complete replacement and removes that installation's private data, including Beacon history. Back up needed data before replacement; built-in profile export should not be treated as a complete chat backup. User projects outside the BeCoder installation directory are not part of Setup replacement.
 

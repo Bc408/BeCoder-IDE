@@ -8,6 +8,8 @@ BeCoder is a Code - OSS fork for OI/ICPC workflows. Core TypeScript lives in `sr
 
 After reading this file completely, and before analyzing a new stage or making a nontrivial change, read `VISION.md` completely. Then inspect the current source and the project owner's latest requirements relevant to the task. Do not assume that deleted historical stage, handoff, or contract documents remain authoritative.
 
+For Beacon or BeCoder NoteBook work, then read `docs/beacon/README.md` and the relevant formal PRD, architecture, Notebook design, and research agenda it links. These repository-owned documents contain the confirmed design baseline. Root and extension READMEs describe the current implementation; differences from the baseline are implementation gaps, not permission to discard confirmed requirements. Desktop drafts are historical references, not a competing source of current rules. The project owner's latest direct decisions take precedence.
+
 Before proposing or starting implementation for a new stage or nontrivial change, provide an understanding proof covering the product purpose, relevant ownership boundaries, current repository/stage facts, requested change, protected/out-of-scope behavior, and validation/project-owner acceptance boundary. This requirement also applies when the user directly authorizes implementation. Wait for explicit plan approval before editing unless the user directly requested implementation.
 
 ## Build, Test, and Development Commands

@@ -4,6 +4,8 @@ BeCoder is a self-contained Windows environment for OI, ICPC and everyday C/C++ 
 
 This document describes the product direction. It is not a frozen architecture, a stage checklist or a release-status record. Specific features and implementation choices can evolve with user feedback and the project owner's decisions.
 
+The confirmed Beacon and BeCoder NoteBook design baseline is maintained in [docs/beacon](docs/beacon/README.md). Read its PRD, architecture, Notebook design and research agenda for work in those areas. Root and extension READMEs describe the current implementation, which does not yet implement all of that baseline. The project owner's latest direct decisions take precedence; desktop drafts preserve historical discussion rather than a competing set of current rules.
+
 ## Purpose
 
 Make the path from reading a problem to writing, testing and understanding a solution easier. A beginner should be able to install BeCoder and run a first C/C++ program without separately configuring a compiler or language server. An experienced contestant should find a familiar, responsive environment with understandable input, output and errors.
@@ -16,17 +18,21 @@ BeCoder builds on Code - OSS while maintaining its own defaults, bundled resourc
 - **Focused and familiar:** mature editor workflows remain useful; new features should reduce effort rather than add setup and competing controls.
 - **Clear and responsive:** output appears promptly, ongoing work can be stopped, and failures explain what happened.
 - **Respectful of user work:** source files, project settings and repositories belong to the user. Product maintenance should preserve them.
-- **Self-contained:** application settings, extensions, caches and conversation history stay with the BeCoder installation. Optional services have explicit dependencies.
+- **Self-contained environment and user-owned learning assets:** application settings, extensions and caches stay with the BeCoder installation. The confirmed design keeps persistent Beacon learning assets in the selected workspace's `.beaconWork`, and associated notebooks in the editor folder's separate `.notebook`. Optional services have explicit dependencies. Current data behavior remains documented in the READMEs until the design is implemented.
 
 ## Beacon's Role
 
-Beacon is a read-only programming tutor. It can explain concepts and code, discuss algorithms and complexity, help diagnose mistakes, and provide complete solutions when the user asks. The user decides how to use the answer.
+Beacon is a programming tutor and long-term learning companion. Algorithm tutoring is a permanent core capability: naming, expression or role customization cannot remove it or the product-wide boundary against helping with explicit cheating. It can explain concepts and code, discuss algorithms and complexity, diagnose mistakes, and provide complete solutions during normal learning. Personality and language-style details remain open.
 
 Model access is configured by the user, through a cloud service or a local model. Beacon being unavailable should not interrupt editing, compilation, running or sample testing.
 
-Beacon's tools read authorized information; they do not modify project files, execute commands or submit solutions. File permissions distinguish no local access, the open workspace and the computer. Known credential and private files remain excluded. Inputs, sources and model limitations should be understandable, and internet access should be controllable.
+The confirmed design permits authorized context reading and, on an explicit user request, limited writing of learning assets such as notebooks, handouts and diagrams. Beacon also manages its own conversations and workspace memory. It does not create or modify the student's C/C++ source files, autonomously execute or stop programs, log into accounts or submit solutions. Tutorial code in answers or notebooks is distinct from editing the student's source file. Known credential and private files remain excluded, sources and model limitations should be understandable, and internet access should be controllable.
 
-The near-term aim is to connect the existing conversation experience with the user's actual problem, code, samples and observed results. Training records, personal preferences and knowledge retrieval may add value later; their scope should be chosen when the preceding experience is useful and their data behavior is clear.
+Each window independently selects and remembers a Beacon workspace; recent workspace choices are shared. Without a usable workspace only `blackout` is available: explicit user materials, no automatic reading, learning-asset writing or local conversation persistence. A valid selected workspace permits only `spot` or `flood`. `spot` confines automatic file access and learning-asset writing to that root; `flood` extends allowed file locations while retaining the same asset kinds and persistent workspace ownership. A remembered but unavailable root remains selected and visible, with only `blackout` available until access is restored.
+
+History and memory belong to the selected Beacon workspace. Windows using the same workspace share those assets, but a conversation can be open in only one window; another window only receives a notice. Busy windows refuse workspace switches; idle switches show the target history without moving conversations or automatically creating one. Temporary conversations do not automatically become saved conversations. Runner and CPH persist their separate recent queues only for source files inside the initiating window's usable Beacon root. Conversation deletion leaves derived memory and independent learning assets intact; conversation archives retain their data. Conversations remain isolated, including in `flood`.
+
+The next technical work should connect the conversation experience with the user's actual code, samples and observed results, using sufficient authorized context and distinguishing execution snapshots from current unsaved edits. The approved memory direction is lightweight workspace memory: the main model maintains concise `teach tips`, appends observations to `student status`, and uses user-triggered `dream` to consolidate it with readable archives. BeCoder NoteBook is an independent document capability; Beacon-assisted problem notes are one entry point. Its four complete user flows, four-platform OJ evidence and autonomous tips adaptation are confirmed first-version requirements, not generic ideas to postpone. Other version scope and implementation details remain open in the formal documents.
 
 ## How the Parts Fit Together
 
@@ -37,8 +43,11 @@ The near-term aim is to connect the existing conversation experience with the us
 | Native terminal | User-directed system commands and the user's environment |
 | Integrated browser and PDF viewer | Reading problem material; the browser also supports explicit problem import |
 | CPH | Imported samples and local sample judging, sharing Runner's compilation policy |
-| Beacon | Conversations, model settings, authorized read-only context and explanations |
-| Installation data | Product settings, extensions, caches and local history |
+| Beacon | Conversations, model settings, authorized context, explanations, workspace memory and explicitly requested learning-asset assistance |
+| BeCoder NoteBook | Independent editable learning documents and user-initiated C/C++ program-block execution; path-based source association with independent content |
+| Selected Beacon workspace | `.beaconWork` assets and valid workspace ownership under the confirmed design, independent of editor folder selection |
+| Editor folder's `.notebook` | Associated `.bcnb` documents, separate from `.beaconWork`; no automatic source rename/move/content synchronization |
+| Installation data | Product settings, extensions and caches; current implementation history remains described in the READMEs |
 | User workspace and online judge | The user's files, account, submissions and final judge results |
 
 These responsibilities help guide changes without prescribing a particular module layout. Prefer extending an existing owner and a small interface when that is enough. Use shared logic where behavior is actually shared, rather than building a framework for possible future features.

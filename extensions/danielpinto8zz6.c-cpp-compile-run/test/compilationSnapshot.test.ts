@@ -15,7 +15,7 @@ import { buildCompilerArguments, privateRunnerEnvironment } from '../src/compila
 import { captureCompilationSource, CompilerPathMapper } from '../src/compilationSnapshot';
 
 const settings = { cStandard: 'c17', cppStandard: 'c++20', cFlags: [] as string[], cppFlags: [] as string[] };
-const compilerRoot = path.resolve(process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? '../VSCode-win32-x64/data/toolchains/ucrt64');
+const compilerRoot = process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? path.resolve(__dirname, '../../../../../VSCode-win32-x64/data/toolchains/ucrt64');
 
 test('snapshot preserves exact bytes, hash, timestamp and the original file', async t => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-snapshot-bytes-'));

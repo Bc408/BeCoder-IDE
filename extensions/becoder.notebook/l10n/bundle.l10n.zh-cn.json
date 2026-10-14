@@ -23,5 +23,7 @@
 	"Stopped": "已停止",
 	"Unable to start": "无法启动",
 	"Result: {0}; exit: {1}; input: {2}": "结果：{0}；退出码：{1}；所用输入：{2}",
-	"Output was truncated by {0} bytes. The program was not stopped for this limit.": "输出已截断 {0} 字节；程序继续运行，不因输出限制而停止。"
+	"Program stopped after reaching the {0} ms runtime limit.": "程序运行达到 {0} ms 上限后已停止。",
+	"Program stopped after exceeding the {0} byte output limit; at least {1} observed bytes were not retained.": "程序输出超过 {0} 字节上限后已停止；至少有 {1} 个已观察到的字节未保留。",
+	"Output was truncated by {0} bytes.": "输出已截断 {0} 字节。"
 }

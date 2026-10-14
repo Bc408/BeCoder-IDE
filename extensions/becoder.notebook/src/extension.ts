@@ -239,5 +239,8 @@ async function chooseCreationRoot(): Promise<string | undefined> {
 	return folders.length === 1 ? folders[0].uri.fsPath : folders.length ? (await vscode.window.showWorkspaceFolderPick({ placeHolder: vscode.l10n.t('Choose the folder used by this unsaved Notebook when running programs.') }))?.uri.fsPath : undefined;
 }
 function describeResult(result: NotebookRunResult): string {
-	return [result.truncated ? vscode.l10n.t('Output was truncated by {0} bytes. The program was not stopped for this limit.', result.omittedBytes) : '', result.error, result.cleanupError].filter(Boolean).join('\n');
+	const limitMessage = result.status === 'timed-out' ? vscode.l10n.t('Program stopped after reaching the {0} ms runtime limit.', result.runtimeLimitMs)
+		: result.status === 'output-limit' ? vscode.l10n.t('Program stopped after exceeding the {0} byte output limit; at least {1} observed bytes were not retained.', result.outputLimitBytes, result.omittedBytes)
+			: result.truncated ? vscode.l10n.t('Output was truncated by {0} bytes.', result.omittedBytes) : '';
+	return [limitMessage, result.error, result.cleanupError].filter(Boolean).join('\n');
 }

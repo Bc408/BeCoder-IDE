@@ -17,6 +17,8 @@ test('Notebook output heading uses actual phase timings and English states', () 
 	assert.equal(formatBeCoderRunHeading({ status: 'completed', compileMs: 592.4, runMs: 7 }), 'OK | compile 592 ms | run 7 ms');
 	assert.equal(formatBeCoderRunHeading({ status: 'compile-error', compileMs: 15 }), 'CE | compile 15 ms');
 	assert.equal(formatBeCoderRunHeading({ status: 'runtime-error', compileMs: 15, runMs: 8, exitCode: 2 }), 'RE (exit code 2) | compile 15 ms | run 8 ms');
+	assert.equal(formatBeCoderRunHeading({ status: 'timed-out', compileMs: 500, runMs: 5000 }), 'TLE | compile 500 ms | run 5000 ms');
+	assert.equal(formatBeCoderRunHeading({ status: 'output-limit', compileMs: 500, runMs: 12 }), 'OLE | compile 500 ms | run 12 ms');
 	assert.equal(formatBeCoderRunHeading({ status: 'cancelled' }), 'Stopped');
 	assert.equal(formatBeCoderRunHeading({ status: 'running' }), 'Running');
 });

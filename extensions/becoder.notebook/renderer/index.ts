@@ -15,7 +15,7 @@ export function activate() {
 			if (item.mime === beCoderNotebookStatusMime) {
 				const attempt = JSON.parse(item.text());
 				const heading = document.createElement('div');
-				const color = attempt.status === 'completed' ? 'var(--vscode-terminal-ansiCyan)' : ['compile-error', 'runtime-error', 'unable-to-start'].includes(attempt.status) ? 'var(--vscode-errorForeground)' : 'var(--vscode-descriptionForeground)';
+				const color = attempt.status === 'completed' ? 'var(--vscode-terminal-ansiCyan)' : ['compile-error', 'runtime-error', 'timed-out', 'output-limit', 'unable-to-start'].includes(attempt.status) ? 'var(--vscode-errorForeground)' : 'var(--vscode-descriptionForeground)';
 				heading.style.cssText = `font-family:var(--vscode-editor-font-family);padding:5px 10px;border-left:3px solid ${color};color:${color};background:var(--vscode-editorWidget-background);`;
 				heading.setAttribute('role', 'status'); heading.textContent = formatBeCoderRunHeading(attempt); element.replaceChildren(heading); return;
 			}

@@ -7,7 +7,7 @@ export const beCoderNotebookType = 'becoder-notebook';
 export const beCoderNotebookInputLanguage = 'becoder-input';
 export const beCoderNotebookStatusMime = 'application/vnd.becoder.notebook.status';
 export function formatBeCoderRunHeading(attempt: { status?: string; compileMs?: number; runMs?: number; exitCode?: number }): string {
-	const states: Record<string, string> = { preparing: 'Preparing', compiling: 'Compiling', running: 'Running', completed: 'OK', 'compile-error': 'CE', 'runtime-error': 'RE', cancelled: 'Stopped', 'unable-to-start': 'Unable to start' };
+	const states: Record<string, string> = { preparing: 'Preparing', compiling: 'Compiling', running: 'Running', completed: 'OK', 'compile-error': 'CE', 'runtime-error': 'RE', 'timed-out': 'TLE', 'output-limit': 'OLE', cancelled: 'Stopped', 'unable-to-start': 'Unable to start' };
 	const status = states[attempt.status ?? ''] ?? 'Preparing';
 	return [status + (attempt.status === 'runtime-error' && attempt.exitCode !== undefined ? ` (exit code ${attempt.exitCode})` : ''), ...(attempt.compileMs === undefined ? [] : [`compile ${Math.round(attempt.compileMs)} ms`]), ...(attempt.runMs === undefined ? [] : [`run ${Math.round(attempt.runMs)} ms`])].join(' | ');
 }

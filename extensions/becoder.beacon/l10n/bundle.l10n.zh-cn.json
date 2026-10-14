@@ -1,4 +1,8 @@
 {
+	"Wait for the current response before adding a selection.": "请等待当前回答结束，再加入选区。",
+	"This selection exceeds the conversation attachment budget.": "此选区超出当前会话的附件容量。",
+	"Editor selection": "编辑器选区",
+	"This page is excluded from Beacon access.": "此页面不允许 Beacon 访问。",
 	"The provider connection timed out. Please retry.": "连接服务商超时，请重试。",
 	"Could not establish a connection to the provider. Check your network or proxy, then retry.": "无法建立与服务商的连接，请检查网络或代理后重试。",
 	"DeepSeek rejected the API key. Please update it.": "DeepSeek 拒绝了当前 API Key，请更新密钥。",
@@ -47,5 +51,21 @@
 	"This provider already has a model with that ID. Edit the existing model instead.": "该服务商已有相同 ID 的模型，请编辑已有模型。",
 	"No models were returned. You can add a model manually.": "没有获取到模型，你可以手动添加。",
 	"This model is unavailable. Enable a chat model and save its provider connection first.": "当前模型不可用，请先启用对话模型并保存服务商连接。",
-	"Check the address, model ID, capabilities and parameter ranges. Use model defaults for unsupported parameters.": "请检查地址、模型 ID、能力与参数范围。不支持的参数请保留模型默认。"
+	"Check the address, model ID, capabilities and parameter ranges. Use model defaults for unsupported parameters.": "请检查地址、模型 ID、能力与参数范围。不支持的参数请保留模型默认。",
+	"Select Beacon workspace": "选择 Beacon 工作区",
+	"Select workspace": "选择工作区",
+	"Untitled chat": "未命名聊天",
+	"Finish the current response, run or save before switching the Beacon workspace.": "请在当前回答、运行或保存结束后切换 Beacon 工作区。",
+	"This chat is already open in another window.": "此聊天已在另一个窗口打开。",
+	"The selected Beacon workspace is unavailable. Restore it or choose a folder again.": "所选 Beacon 工作区不可用，请恢复后重试或重新选择文件夹。",
+	"The workspace directory was replaced. Choose it again before saving.": "工作区目录已被替换，请重新选择后再保存。",
+	"The .beaconWork location is not an ordinary usable directory. Existing files have not been replaced.": ".beaconWork 位置不是普通可用目录，未替换现有文件。",
+	"Save the current chat successfully before changing its context.": "请先成功保存当前聊天，再切换其上下文。",
+	"The saved chat changed. Your local messages are retained; reopen it after resolving the change.": "磁盘中的聊天已变化，已保留本窗口消息；处理冲突后再重新打开。",
+	"Open or start a chat in the current Beacon workspace before asking.": "请先在当前 Beacon 工作区打开或新建聊天，再提问。",
+	"A usable workspace allows Spot or Flood. Without one, only Blackout is available.": "有可用工作区时只能选 Spot 或 Flood；无可用工作区时只能用 Blackout。",
+	"Another window is saving this workspace data. Try again shortly.": "另一个窗口正在保存此工作区的数据，请稍后重试。",
+	"Could not identify local files in this drop. Use Add files or paste an image.": "无法从此次拖入中识别本地文件，请使用“添加文件”或粘贴图片。",
+	"PDF selection": "PDF 选区",
+	"The selected page is no longer available. Select the text again.": "选区页面已不可用，请重新选择文字。"
 }

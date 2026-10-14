@@ -487,6 +487,8 @@ export interface IBrowserViewService {
 
 	/** Execute only the bundled problem parser, in the owning window's view. */
 	parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }>;
+	/** Rendered content of an already loaded view; does not navigate or fetch. */
+	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
 
 	/**
 	 * Clear all storage data for the global browser session

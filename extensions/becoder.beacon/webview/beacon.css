@@ -6,6 +6,11 @@ body { padding: 0; margin: 0; color: var(--vscode-foreground); background: var(-
 html, body, #root, main { height: 100%; }
 main { position: relative; display: flex; flex-direction: column; overflow: hidden; }
 button, textarea { font: inherit; }
+.beacon-workspace { flex-shrink: 0; margin: 8px 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.beacon-workspace > div { display: flex; align-items: center; gap: 8px; }
+.beacon-workspace > div > button { margin-left: auto; }
+.beacon-workspace p { margin: 8px 0; overflow-wrap: anywhere; color: var(--chat-muted); }
+.beacon-workspace select { width: 100%; margin-bottom: 6px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); }
 .attachments { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .draft-attachments { max-height: 164px; overflow: auto; margin-bottom: 10px; }
 .message-attachments { justify-content: flex-end; margin-bottom: 8px; }

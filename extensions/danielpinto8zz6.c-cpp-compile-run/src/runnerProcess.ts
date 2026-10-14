@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
@@ -11,11 +14,13 @@ import { StringDecoder } from 'string_decoder';
 
 import type { BeCoderSource, RunnerSettings } from './compiler';
 import { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
+import { captureCompilationSource, CompilationSourceSnapshot, CompilerPathMapper } from './compilationSnapshot';
 export { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
 import { RunnerPhase } from './runnerLifecycle';
 import { Osc633Filter } from './terminalVisuals';
 import { RunnerPtyProcess } from './runnerPtyProcess';
 import { RunnerInputControl } from './runnerInputControl';
+import type { RuntimeEvidence } from './beaconEvidence';
 
 export type RunnerTimings = {
 	readonly panelReadyMs: number;
@@ -30,6 +35,7 @@ export type RunnerTimings = {
 };
 
 export type RunnerExecutionResult = {
+	readonly sourceSnapshot?: CompilationSourceSnapshot;
 	readonly status: 'completed' | 'compile-error' | 'executable-creation-error' | 'runtime-error' | 'cancelled' | 'unable-to-start' | 'runner-error';
 	readonly exitCode?: number;
 	readonly message?: string;
@@ -63,6 +69,7 @@ export type RunnerExecutionRequest = {
 };
 
 export type RunnerExecutionCallbacks = {
+	readonly evidence?: RuntimeEvidence;
 	readonly write: (text: string) => void;
 	readonly setPhase: (phase: Extract<RunnerPhase, 'compiling' | 'running'>) => void;
 };
@@ -80,7 +87,7 @@ class RunnerUnableToStartError extends Error { }
 
 class ExecutablePublicationError extends Error {
 	constructor(
-		readonly cause: unknown,
+		override readonly cause: unknown,
 		readonly cleanupFailed: boolean
 	) {
 		super(cause instanceof Error ? cause.message : String(cause));
@@ -109,6 +116,7 @@ export class RunnerExecutor {
 	private activePty: RunnerPtyProcess | undefined;
 	private cancellationRequested = false;
 	private executing = false;
+	private activeEvidence: RuntimeEvidence | undefined;
 	private readonly dependencies: RunnerProcessDependencies;
 
 	constructor(
@@ -123,6 +131,7 @@ export class RunnerExecutor {
 			throw new Error('RunnerExecutor accepts only one active request.');
 		}
 		this.executing = true;
+		this.activeEvidence = callbacks.evidence;
 		this.cancellationRequested = false;
 		const requestRoot = path.join(this.sessionRoot, 'runner-sessions', crypto.randomUUID());
 		const temporaryExecutable = path.join(requestRoot, `program-${process.pid}-${crypto.randomUUID()}.exe`);
@@ -141,6 +150,7 @@ export class RunnerExecutor {
 		let cleanupMs = 0;
 		const executableRemoved = false;
 		let cleanupFailed = false;
+		let sourceSnapshot: CompilationSourceSnapshot | undefined;
 
 		try {
 			if (await removePath(request.source.executablePath, false, this.dependencies.rm) === 'failed') {
@@ -164,18 +174,26 @@ export class RunnerExecutor {
 				await fs.promises.writeFile(inputSnapshot, inputData!, { flag: 'wx' });
 			}
 			this.throwIfCancellationRequested();
-			const compilerArguments = buildCompilerArguments(request.source, request.settings, temporaryExecutable);
+			sourceSnapshot = await captureCompilationSource(request.source.path, requestRoot);
+			this.throwIfCancellationRequested();
+			const compilerArguments = buildCompilerArguments({ ...request.source, path: sourceSnapshot.path, originalPath: sourceSnapshot.originalPath }, request.settings, temporaryExecutable);
 			callbacks.setPhase('compiling');
+			callbacks.evidence?.start(sourceSnapshot, { compiler: request.compilerPath, args: compilerArguments, cwd: request.source.directory,
+				input: inputData ? { source: request.inputPath, bytesBase64: inputData.toString('base64'), byteLength: inputData.length } : { source: 'interactive' },
+				programStream: request.ptyDimensions ? 'merged-pty' : 'separate-pipes', localHeadersSnapshotted: false });
 			const compileRequestedAt = Date.now();
 			const compilerResult = await this.runChild(
 				request.compilerPath,
 				compilerArguments,
 				request.source.directory,
 				environment,
-				callbacks.write
+				callbacks.write,
+				undefined,
+				sourceSnapshot
 			);
 			compilerSpawnMs = compilerResult.spawnAt - compileRequestedAt;
 			compileMs = compilerResult.closeAt - compilerResult.spawnAt;
+			callbacks.evidence?.event({ type: 'compiled', exitCode: compilerResult.exitCode, compilerSpawnMs, compileMs });
 			this.throwIfCancellationRequested();
 			if (compilerResult.exitCode !== 0) {
 				status = 'compile-error';
@@ -241,9 +259,12 @@ export class RunnerExecutor {
 			cleanupFailed = !cleanupComplete;
 			cleanupMs = Date.now() - cleanupStartedAt;
 			this.executing = false;
+			this.activeEvidence = undefined;
 		}
+		await callbacks.evidence?.finish({ status, exitCode, message, publishedExecutable, cleanupFailed, compileMs, programRuntimeMs, totalMs: Date.now() - request.requestStartedAt });
 
 		return {
+			sourceSnapshot,
 			status,
 			exitCode,
 			message,
@@ -282,13 +303,16 @@ export class RunnerExecutor {
 
 	writeProgramInput(text: string): boolean {
 		if (this.activePty) {
-			return this.activePty.write(text);
+			const accepted = this.activePty.write(text);
+			if (accepted) { this.activeEvidence?.event({ type: 'input-forwarded', transport: 'pty', text }); }
+			return accepted;
 		}
 		const child = this.activeProgram;
 		if (!child || child.stdin.destroyed || !child.stdin.writable) {
 			return false;
 		}
 		child.stdin.write(text);
+		this.activeEvidence?.event({ type: 'input-forwarded', transport: 'pipe', text });
 		return true;
 	}
 
@@ -326,7 +350,9 @@ export class RunnerExecutor {
 							return;
 						}
 						try {
-							callbacks.write(filter.write(data));
+							const text = filter.write(data);
+							callbacks.evidence?.event({ type: 'stream', phase: 'running', stream: 'merged-pty', text });
+							callbacks.write(text);
 						} catch (error) {
 							callbackError = error;
 							session.kill();
@@ -374,7 +400,8 @@ export class RunnerExecutor {
 		cwd: string,
 		environment: Record<string, string>,
 		write: (text: string) => void,
-		onSpawn?: (child: ChildProcessWithoutNullStreams) => void
+		onSpawn?: (child: ChildProcessWithoutNullStreams) => void,
+		sourceSnapshot?: CompilationSourceSnapshot
 	): Promise<ChildResult> {
 		return new Promise((resolve, reject) => {
 			let spawnAt = Date.now();
@@ -391,11 +418,15 @@ export class RunnerExecutor {
 			const stderrDecoder = new StringDecoder('utf8');
 			const stdoutFilter = new Osc633Filter();
 			const stderrFilter = new Osc633Filter();
+			const stdoutMapper = sourceSnapshot ? new CompilerPathMapper(sourceSnapshot) : undefined;
+			const stderrMapper = sourceSnapshot ? new CompilerPathMapper(sourceSnapshot) : undefined;
+			const observe = (stream: 'stdout' | 'stderr', text: string) => this.activeEvidence?.event({ type: 'stream', phase: sourceSnapshot ? 'compiling' : 'running', stream, text });
 			child.stdin.on('error', () => undefined);
-			child.stdout.on('data', (chunk: Buffer) => write(toTerminalText(stdoutFilter.write(stdoutDecoder.write(chunk)))));
-			child.stderr.on('data', (chunk: Buffer) => write(toTerminalText(stderrFilter.write(stderrDecoder.write(chunk)))));
+			child.stdout.on('data', (chunk: Buffer) => { const text = stdoutFilter.write(stdoutDecoder.write(chunk)); observe('stdout', text); write(toTerminalText(stdoutMapper ? stdoutMapper.write(text) : text)); });
+			child.stderr.on('data', (chunk: Buffer) => { const text = stderrFilter.write(stderrDecoder.write(chunk)); observe('stderr', text); write(toTerminalText(stderrMapper ? stderrMapper.write(text) : text)); });
 			child.once('spawn', () => {
 				spawnAt = Date.now();
+				this.activeEvidence?.event({ type: 'process-spawned', phase: sourceSnapshot ? 'compiling' : 'running', at: spawnAt });
 				if (this.cancellationRequested) {
 					void this.dependencies.terminate(child);
 					return;
@@ -410,6 +441,7 @@ export class RunnerExecutor {
 				}
 			});
 			child.once('error', error => {
+				this.activeEvidence?.event({ type: 'process-start-error', phase: sourceSnapshot ? 'compiling' : 'running', message: error.message });
 				if (settled) {
 					return;
 				}
@@ -420,8 +452,11 @@ export class RunnerExecutor {
 				reject(error);
 			});
 			child.once('close', exitCode => {
-				write(toTerminalText(stdoutFilter.write(stdoutDecoder.end()) + stdoutFilter.end()));
-				write(toTerminalText(stderrFilter.write(stderrDecoder.end()) + stderrFilter.end()));
+				const stdoutEnd = stdoutFilter.write(stdoutDecoder.end()) + stdoutFilter.end();
+				const stderrEnd = stderrFilter.write(stderrDecoder.end()) + stderrFilter.end();
+				observe('stdout', stdoutEnd); observe('stderr', stderrEnd);
+				write(toTerminalText(stdoutMapper ? stdoutMapper.write(stdoutEnd) + stdoutMapper.end() : stdoutEnd));
+				write(toTerminalText(stderrMapper ? stderrMapper.write(stderrEnd) + stderrMapper.end() : stderrEnd));
 				if (settled) {
 					return;
 				}
@@ -613,7 +648,7 @@ function toTerminalText(text: string): string {
 	return text.replace(/(^|[^\r])\n/g, '$1\r\n');
 }
 
-async function terminateProcessTree(child: ChildProcessWithoutNullStreams): Promise<void> {
+export async function terminateProcessTree(child: ChildProcessWithoutNullStreams): Promise<void> {
 	if (!child.pid || child.exitCode !== null) {
 		return;
 	}

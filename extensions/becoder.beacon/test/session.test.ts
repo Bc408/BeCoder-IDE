@@ -20,7 +20,7 @@ suite('Beacon default TextMate syntax', () => {
 		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
 		try {
 			const scopes = [...new Set(Object.values(languages).map(language => language.scope))];
-			assert.ok(scopes.length > 200, 'Preserve all previously supported fence languages');
+			assert.ok(scopes.length > 200, 'Load the declared local grammar assets');
 			for (const scope of scopes) {
 				const grammar = await registry.loadGrammar(scope);
 				assert.ok(grammar, scope);
@@ -177,6 +177,11 @@ suite('Beacon shared history', () => {
 });
 
 suite('Beacon math delimiters', () => {
+	test('streaming math preserves indented code and following prose', () => {
+		for (const source of ['    echo $HOME', '\techo $HOME\n\nNext paragraph.', '    \\(literal\n\nNext paragraph.']) {
+			assert.equal(normalizeMath(source, true), source);
+		}
+	});
 	test('normalizes TeX inline/display math while preserving dollars and ordinary brackets', () => {
 		assert.equal(normalizeMath('A \\(x^2\\) B'), 'A $x^2$ B');
 		assert.equal(normalizeMath('\\[x^2\\]'), '\n\n$$\nx^2\n$$\n\n');

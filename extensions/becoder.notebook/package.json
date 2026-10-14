@@ -1,0 +1,143 @@
+{
+	"name": "notebook",
+	"publisher": "becoder",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"license": "GPL-3.0-or-later",
+	"engines": {
+		"vscode": "^1.130.0"
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"main": "./dist/extension.cjs",
+	"l10n": "./l10n",
+	"activationEvents": [
+		"onLanguage:c",
+		"onLanguage:cpp"
+	],
+	"extensionDependencies": [
+		"vscode.ipynb"
+	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": false
+	},
+	"contributes": {
+		"configuration": {
+			"title": "%displayName%",
+			"properties": {
+				"becoder.notebook.pasteImagesAsAttachments.enabled": {
+					"type": "boolean",
+					"scope": "resource",
+					"default": true,
+					"markdownDescription": "%pasteImagesAsAttachments%"
+				}
+			}
+		},
+		"languages": [{ "id": "becoder-input", "aliases": ["%input%"], "extensions": [] }],
+		"notebooks": [
+			{
+				"type": "becoder-notebook",
+				"displayName": "BeCoder NoteBook",
+				"selector": [
+					{
+						"filenamePattern": "*.bcnb"
+					},
+					{
+						"filenamePattern": "*.bcnb-backup"
+					}
+				],
+				"priority": "default"
+			}
+		],
+		"commands": [
+			{
+				"command": "becoder.notebook.settings",
+				"title": "%settings%",
+				"category": "BeCoder Notebook",
+				"icon": "$(settings-gear)"
+			},
+			{
+				"command": "becoder.notebook.new",
+				"title": "%new%",
+				"shortTitle": "%newShort%",
+				"category": "%create%"
+			},
+			{
+				"command": "becoder.notebook.createAssociated",
+				"title": "%createAssociated%"
+			},
+			{
+				"command": "becoder.notebook.openAssociated",
+				"title": "%openAssociated%"
+			},
+			{
+				"command": "becoder.notebook.addInput",
+				"title": "%addInput%",
+				"icon": "$(add)",
+				"shortTitle": "%input%"
+			},
+			{
+				"command": "becoder.notebook.renameInput",
+				"title": "%renameInput%",
+				"icon": "$(edit)"
+			}
+		],
+		"notebookRenderer": [
+			{
+				"id": "becoder.notebook.stream",
+				"displayName": "BeCoder Notebook Output",
+				"entrypoint": "./dist/renderer.js",
+				"requiresMessaging": "never",
+				"mimeTypes": [
+					"application/vnd.becoder.notebook.status",
+					"application/vnd.becoder.notebook.stream"
+				]
+			}
+		],
+		"menus": {
+			"file/newFile": [{ "command": "becoder.notebook.new", "group": "notebook" }],
+			"editor/title": [
+				{
+					"command": "becoder.notebook.createAssociated",
+					"when": "resourceScheme == file && resourceLangId =~ /^(c|cpp)$/ && !becoder.notebook.hasAssociated",
+					"group": "navigation@3"
+				},
+				{
+					"command": "becoder.notebook.openAssociated",
+					"when": "resourceScheme == file && resourceLangId =~ /^(c|cpp)$/ && becoder.notebook.hasAssociated",
+					"group": "navigation@3"
+				}
+			],
+			"notebook/toolbar": [
+				{
+					"command": "becoder.notebook.settings",
+					"when": "notebookType == becoder-notebook",
+					"group": "notebookSettings@1"
+				},
+				{
+					"command": "becoder.notebook.addInput",
+					"when": "notebookType == becoder-notebook && notebookEditable",
+					"group": "navigation/add@30"
+				}
+			],
+			"notebook/cell/title": [
+				{
+					"command": "becoder.notebook.renameInput",
+					"when": "notebookType == becoder-notebook && notebookCellExecutable && notebookEditable",
+					"group": "inline@4"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
+		"build": "node build.mjs",
+		"test": "node --test dist-test/model.test.cjs",
+		"vscode:prepublish": "npm run typecheck && npm run build"
+	}
+}

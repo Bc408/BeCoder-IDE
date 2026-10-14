@@ -1,0 +1,27 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"skipLibCheck": true,
+		"lib": [
+			"ES2024",
+			"DOM"
+		],
+		"typeRoots": [
+			"../../node_modules/@types"
+		],
+		"types": [
+			"node",
+			"vscode-notebook-renderer"
+		]
+	},
+	"exclude": [
+		"test/coreOutputFixture.ts"
+	],
+	"include": [
+		"src/**/*.ts",
+		"renderer/**/*.ts",
+		"test/**/*.ts",
+		"../../src/vscode-dts/vscode.d.ts"
+	]
+}

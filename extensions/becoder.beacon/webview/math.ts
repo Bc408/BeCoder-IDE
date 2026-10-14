@@ -40,6 +40,11 @@ function closeOpenMath(source: string): string {
 				index += line[0].length;
 				continue;
 			}
+			if (!fence && !opening && /^( {4}|\t)/.test(source.slice(index))) {
+				const line = source.slice(index).match(/^[^\n\r]*(?:\r\n|\n|\r|$)/)![0];
+				index += line.length;
+				continue;
+			}
 		}
 		if (fence) { index++; continue; }
 		if (source[index] === '`') {

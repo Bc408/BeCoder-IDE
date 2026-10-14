@@ -14,6 +14,8 @@ export class RunnerInputControl {
 	private buffer = '';
 	private started = false;
 	private exitCode: number | undefined;
+	private duration: number | undefined;
+	get runMs(): number | undefined { return this.duration; }
 	private failure: Error | undefined;
 	private settle: () => void = () => undefined;
 	private readonly ended = new Promise<void>(resolve => this.settle = resolve);
@@ -72,7 +74,9 @@ export class RunnerInputControl {
 					this.onStarted(message.pid);
 					this.socket?.write('G');
 				} else if (message.type === 'exit' && this.started && this.exitCode === undefined && Number.isInteger(message.code) && message.code >= 0 && message.code <= 0xFFFFFFFF) {
+					if (message.runMs !== undefined && (!Number.isFinite(message.runMs) || message.runMs < 0)) { throw new Error('Invalid Runner program duration.'); }
 					this.exitCode = message.code;
+					this.duration = message.runMs;
 				} else if (message.type === 'error' && typeof message.stage === 'string' && Number.isInteger(message.code)) {
 					throw new Error(`Runner input helper failed (${message.stage}, Windows error ${message.code}).`);
 				} else {

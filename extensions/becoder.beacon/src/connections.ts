@@ -75,7 +75,7 @@ export class Connections implements vscode.Disposable {
 		const profile = this.data.providers[provider];
 		const model = profile.models.find(item => item.id === selection?.model);
 		const choices = (Object.keys(providers) as ProviderId[]).flatMap(id => this.data.providers[id].models.filter(item => item.enabled && ['chat', 'unknown'].includes(resolveCapabilities(id, this.data.providers[id].baseURL, item.id, item.discovered, item.settings).purpose)).map(item => ({ provider: id, id: item.id, name: item.name })));
-		const snapshot = { provider, baseURL: profile.baseURL, model: model?.id ?? '', displayName: model?.name, parameters: model?.parameters ?? {}, modelSettings: model?.settings, capabilities: resolveCapabilities(provider, profile.baseURL, model?.id ?? '', model?.discovered, model?.settings), models: [], choices, revision: this.revision, keyConfigured: !!this.keys[provider], loading: this.pending || !!this.refreshing, error: this.error };
+		const snapshot = { provider, baseURL: profile.baseURL, model: model?.id ?? '', displayName: model?.name, parameters: model?.parameters ?? {}, modelSettings: model?.settings, capabilities: resolveCapabilities(provider, profile.baseURL, model?.id ?? '', model?.discovered, model?.settings), choices, revision: this.revision, keyConfigured: !!this.keys[provider], loading: this.pending || !!this.refreshing, error: this.error };
 		this.cached = { stamp, snapshot: structuredClone(snapshot) };
 		return snapshot;
 	}
@@ -186,13 +186,13 @@ export class Connections implements vscode.Disposable {
 	private async writeKey(provider: ProviderId, key: string | undefined): Promise<void> {
 		if (key) { await this.context.secrets.store(secretName(provider), key); } else { await this.context.secrets.delete(secretName(provider)); }
 	}
-	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean) {
+	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean, context?: import('./contextTools').ContextAccess, notebooks?: import('./notebookTools').NotebookAccess) {
 		if (!this.configured) { throw new Error('model-unavailable'); }
 		const state = this.snapshot;
 		const model = this.data.providers[state.provider].models.find(item => item.id === state.model)!;
 		validateModel(state.provider, state.baseURL, model);
 		const connection: Connection = structuredClone({ provider: state.provider, baseURL: state.baseURL, model: state.model, parameters: state.parameters, capabilities: state.capabilities, modelSettings: state.modelSettings, apiKey: this.keys[state.provider] });
-		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }), files };
+		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }, context, notebooks), files };
 	}
 	dispose(): void { this.disposed = true; this.controller.abort(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
 }

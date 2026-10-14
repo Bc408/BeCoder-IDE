@@ -1,0 +1,14 @@
+{
+	"displayName": ".bcnb Support",
+	"settings": "Settings",
+	"pasteImagesAsAttachments": "Enable pasting images as attachments into Markdown cells in .bcnb notebooks. Layout uses the native Notebook settings: `#notebook.compactView#`, `#notebook.insertToolbarLocation#` and `#notebook.cellToolbarLocation#`.",
+	"description": "Independent learning notebooks with user-initiated C/C++ execution.",
+	"new": "New BeCoder Notebook",
+	"newShort": "BeCoder Notebook",
+	"create": "Create",
+	"createAssociated": "Create Associated Notebook",
+	"openAssociated": "Open Associated Notebook",
+	"addInput": "Add Input Cell",
+	"input": "input",
+	"renameInput": "Rename Input"
+}

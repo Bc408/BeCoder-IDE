@@ -25,11 +25,9 @@ export class AttachmentError extends Error {
 	constructor(readonly code: 'permission' | 'source' | 'read' | 'image' | 'budget' | 'busy', readonly file = '') { super(code); }
 }
 
-export function checkAttachmentSource(permission: FilePermission, source: AttachmentSource): void {
-	// Explicitly pasted bytes are user input, never a grant to read a local path.
-	if (source === 'clipboard') { return; }
-	if (permission === 'none') { throw new AttachmentError('permission'); }
-	if (permission === 'workspace' && source !== 'internal') { throw new AttachmentError('source'); }
+export function checkAttachmentSource(_permission: FilePermission, source: AttachmentSource): void {
+	// A real drop/picker is a one-time user material grant, independent of free file access.
+	if (!['clipboard', 'internal', 'external', 'picker'].includes(source)) { throw new AttachmentError('source'); }
 }
 
 function validImage(contents: string, mediaType: string): boolean {

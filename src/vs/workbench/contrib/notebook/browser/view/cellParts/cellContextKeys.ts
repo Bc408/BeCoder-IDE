@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, DisposableStore } from '../../../../../../base/common/lifecycle.js';
@@ -13,8 +16,9 @@ import { CellContentPart } from '../cellPart.js';
 import { CodeCellViewModel } from '../../viewModel/codeCellViewModel.js';
 import { MarkupCellViewModel } from '../../viewModel/markupCellViewModel.js';
 import { NotebookCellExecutionState } from '../../../common/notebookCommon.js';
-import { NotebookCellExecutionStateContext, NOTEBOOK_CELL_EDITABLE, NOTEBOOK_CELL_EDITOR_FOCUSED, NOTEBOOK_CELL_EXECUTING, NOTEBOOK_CELL_EXECUTION_STATE, NOTEBOOK_CELL_FOCUSED, NOTEBOOK_CELL_HAS_OUTPUTS, NOTEBOOK_CELL_INPUT_COLLAPSED, NOTEBOOK_CELL_LINE_NUMBERS, NOTEBOOK_CELL_MARKDOWN_EDIT_MODE, NOTEBOOK_CELL_OUTPUT_COLLAPSED, NOTEBOOK_CELL_RESOURCE, NOTEBOOK_CELL_TYPE, NOTEBOOK_CELL_HAS_ERROR_DIAGNOSTICS } from '../../../common/notebookContextKeys.js';
+import { NOTEBOOK_CELL_EXECUTABLE, NotebookCellExecutionStateContext, NOTEBOOK_CELL_EDITABLE, NOTEBOOK_CELL_EDITOR_FOCUSED, NOTEBOOK_CELL_EXECUTING, NOTEBOOK_CELL_EXECUTION_STATE, NOTEBOOK_CELL_FOCUSED, NOTEBOOK_CELL_HAS_OUTPUTS, NOTEBOOK_CELL_INPUT_COLLAPSED, NOTEBOOK_CELL_LINE_NUMBERS, NOTEBOOK_CELL_MARKDOWN_EDIT_MODE, NOTEBOOK_CELL_OUTPUT_COLLAPSED, NOTEBOOK_CELL_RESOURCE, NOTEBOOK_CELL_TYPE, NOTEBOOK_CELL_HAS_ERROR_DIAGNOSTICS } from '../../../common/notebookContextKeys.js';
 import { INotebookExecutionStateService, NotebookExecutionType } from '../../../common/notebookExecutionStateService.js';
+import { beCoderNotebookType, isBeCoderInputCell } from '../../../../becoder/common/beCoderNotebook.js';
 
 export class CellContextKeyPart extends CellContentPart {
 	private cellContextKeyManager: CellContextKeyManager;
@@ -36,6 +40,7 @@ export class CellContextKeyPart extends CellContentPart {
 export class CellContextKeyManager extends Disposable {
 
 	private cellType!: IContextKey<'code' | 'markup'>;
+	private cellExecutable!: IContextKey<boolean>;
 	private cellEditable!: IContextKey<boolean>;
 	private cellFocused!: IContextKey<boolean>;
 	private cellEditorFocused!: IContextKey<boolean>;
@@ -62,6 +67,7 @@ export class CellContextKeyManager extends Disposable {
 
 		this._contextKeyService.bufferChangeEvents(() => {
 			this.cellType = NOTEBOOK_CELL_TYPE.bindTo(this._contextKeyService);
+			this.cellExecutable = NOTEBOOK_CELL_EXECUTABLE.bindTo(this._contextKeyService);
 			this.cellEditable = NOTEBOOK_CELL_EDITABLE.bindTo(this._contextKeyService);
 			this.cellFocused = NOTEBOOK_CELL_FOCUSED.bindTo(this._contextKeyService);
 			this.cellEditorFocused = NOTEBOOK_CELL_EDITOR_FOCUSED.bindTo(this._contextKeyService);
@@ -92,10 +98,14 @@ export class CellContextKeyManager extends Disposable {
 		this.element = element;
 
 		if (!element) {
+			this.cellExecutable.reset();
 			return;
 		}
 
 		this.elementDisposables.add(element.onDidChangeState(e => this.onDidChangeState(e)));
+		const updateExecutable = () => this.cellExecutable.set(this.notebookEditor.textModel?.viewType !== beCoderNotebookType || isBeCoderInputCell(element.model.metadata));
+		this.elementDisposables.add(element.model.onDidChangeMetadata(updateExecutable));
+		updateExecutable();
 
 		if (element instanceof CodeCellViewModel) {
 			this.elementDisposables.add(element.onDidChangeOutputs(() => this.updateForOutputs()));

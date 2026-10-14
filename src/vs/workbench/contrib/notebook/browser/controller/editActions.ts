@@ -37,6 +37,7 @@ import { INotebookKernelService } from '../../common/notebookKernelService.js';
 import { ICellRange } from '../../common/notebookRange.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { ILanguageDetectionService } from '../../../../services/languageDetection/common/languageDetectionWorkerService.js';
+import { beCoderNotebookType, beCoderNotebookInputLanguage } from '../../../becoder/common/beCoderNotebook.js';
 
 const CLEAR_ALL_CELLS_OUTPUTS_COMMAND_ID = 'notebook.clearAllCellsOutputs';
 const EDIT_CELL_COMMAND_ID = 'notebook.cell.edit';
@@ -469,7 +470,7 @@ registerAction2(class ChangeCellLanguageAction extends NotebookCellAction<ICellR
 		}
 
 		const providerLanguages = new Set([
-			...languages,
+			...(context.notebookEditor.textModel.viewType === beCoderNotebookType ? ['cpp', 'c', beCoderNotebookInputLanguage] : languages),
 			'markdown'
 		]);
 
@@ -511,7 +512,7 @@ registerAction2(class ChangeCellLanguageAction extends NotebookCellAction<ICellR
 		};
 
 		const picks: QuickPickInput[] = [
-			autoDetectMode,
+			...(context.notebookEditor.textModel.viewType === beCoderNotebookType ? [] : [autoDetectMode]),
 			{ type: 'separator', label: localize('languagesPicks', "languages (identifier)") },
 			...topItems,
 			{ type: 'separator' },
@@ -583,6 +584,10 @@ registerAction2(class DetectCellLanguageAction extends NotebookCellAction {
 });
 
 async function setCellToLanguage(languageId: string, context: IChangeCellContext) {
+	const becoder = context.notebookEditor.textModel.viewType === beCoderNotebookType;
+	if (becoder && !['c', 'cpp', 'markdown', beCoderNotebookInputLanguage].includes(languageId)) { return; }
+	if (becoder && context.cell.language === languageId) { return; }
+	const cellIndex = context.notebookEditor.getCellIndex(context.cell);
 	if (languageId === 'markdown' && context.cell?.language !== 'markdown') {
 		const idx = context.notebookEditor.getCellIndex(context.cell);
 		await changeCellToKind(CellKind.Markup, { cell: context.cell, notebookEditor: context.notebookEditor, ui: true }, 'markdown', Mimes.markdown);
@@ -599,6 +604,14 @@ async function setCellToLanguage(languageId: string, context: IChangeCellContext
 			[{ editType: CellEditType.CellLanguage, index, language: languageId }],
 			true, undefined, () => undefined, undefined, !context.notebookEditor.isReadOnly
 		);
+	}
+	if (becoder) {
+		const metadata = context.notebookEditor.textModel.cells[cellIndex].metadata;
+		const data = { ...(metadata.becoder as Record<string, unknown> | undefined) };
+		delete data.attempt;
+		if (languageId === beCoderNotebookInputLanguage) { data.role = 'input'; data.name ??= 'input'; }
+		else { delete data.role; delete data.name; }
+		context.notebookEditor.textModel.applyEdits([{ editType: CellEditType.Metadata, index: cellIndex, metadata: { ...metadata, becoder: data } }, { editType: CellEditType.Output, index: cellIndex, outputs: [] }], true, undefined, () => undefined, undefined, true);
 	}
 }
 

@@ -2,21 +2,21 @@
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bundledLanguagesInfo } from 'shiki';
+import { languageNames } from '@shikijs/langs';
 
 const root = import.meta.dirname;
 const shared = { absWorkingDir: root, bundle: true, minify: true, metafile: true, logLevel: 'info', legalComments: 'linked' };
-// Keep existing fence languages, but prefer the grammars actually shipped in
-// BeCoder. Both sets use the same incremental TextMate renderer and token theme.
+// Grammar assets only; rendering uses BeCoder's TextMate worker and token theme.
 const grammarByScope = new Map();
 const languages = {};
 const injections = {};
-for (const language of bundledLanguagesInfo) {
-	const { default: grammars } = await language.import();
+for (const id of languageNames) {
+	const { default: grammars } = await import(`@shikijs/langs/${id}`);
 	for (const grammar of grammars) { grammarByScope.set(grammar.scopeName, grammar); }
 	// The entry grammar is identified by its language name, not dependency order.
-	const entry = { id: language.id, label: language.name, scope: (grammars.find(grammar => grammar.name === language.id) ?? grammars.at(-1)).scopeName };
-	for (const alias of [language.id, ...(language.aliases ?? [])]) { languages[alias.toLowerCase()] = entry; }
+	const grammar = grammars.find(grammar => grammar.name === id) ?? grammars.at(-1);
+	const entry = { id, label: grammar.displayName ?? id, scope: grammar.scopeName };
+	for (const alias of [id, ...(grammar.aliases ?? [])]) { languages[alias.toLowerCase()] = entry; }
 }
 const grammarExtensions = [];
 for (const name of fs.readdirSync(path.join(root, '..')).sort()) {
@@ -51,6 +51,7 @@ fs.copyFileSync(path.join(root, '../../node_modules/vscode-oniguruma/release/oni
 fs.copyFileSync(path.join(root, '../becoder.shared/LICENSE'), path.join(root, 'dist/HoverLicense.txt'));
 await build({ ...shared, entryPoints: ['test/session.test.ts'], outfile: 'dist-test/session.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [syntaxAssets] });
 await build({ ...shared, entryPoints: ['test/files.test.ts'], outfile: 'dist-test/files.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/context.test.ts'], outfile: 'dist-test/context.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/models.test.ts'], outfile: 'dist-test/models.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/requestRecovery.test.ts'], outfile: 'dist-test/requestRecovery.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/web.test.ts'], outfile: 'dist-test/web.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
@@ -84,7 +85,7 @@ for (const [directory, pkg] of [...packages].sort((a, b) => a[1].name.localeComp
 	const files = fs.readdirSync(directory).filter(file => /^(license|licence|copying|notice)([.-]|$)/i.test(file) && fs.statSync(path.join(directory, file)).isFile());
 	notices.push(`\n${pkg.name}@${pkg.version} (${pkg.license ?? 'See license'})\nhttps://registry.npmjs.org/${pkg.name}/-/${pkg.name.split('/').at(-1)}-${pkg.version}.tgz\n`);
 	if (!files.length) {
-		const fallback = pkg.name === '@ai-sdk/provider-utils' ? 'licenses/ai-elements.txt' : ['rehype-katex', 'remark-math'].includes(pkg.name) ? 'licenses/remark-math.txt' : undefined;
+		const fallback = pkg.name === '@ai-sdk/provider-utils' ? 'licenses/ai-elements.txt' : pkg.name === 'remark-math' ? 'licenses/remark-math.txt' : undefined;
 		if (!fallback) { throw new Error(`Missing bundled license: ${pkg.name}`); }
 		notices.push(fs.readFileSync(path.join(root, fallback), 'utf8'));
 	}

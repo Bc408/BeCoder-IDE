@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationTokenSource } from '../../../../../base/common/cancellation.js';
@@ -16,6 +19,7 @@ import { INotebookExecutionService, ICellExecutionParticipant } from '../../comm
 import { INotebookCellExecution, INotebookExecutionStateService } from '../../common/notebookExecutionStateService.js';
 import { INotebookKernelHistoryService, INotebookKernelService } from '../../common/notebookKernelService.js';
 import { INotebookLoggingService } from '../../common/notebookLoggingService.js';
+import { beCoderNotebookType, isBeCoderInputCell } from '../../../becoder/common/beCoderNotebook.js';
 
 
 export class NotebookExecutionService implements INotebookExecutionService, IDisposable {
@@ -34,7 +38,7 @@ export class NotebookExecutionService implements INotebookExecutionService, IDis
 
 	async executeNotebookCells(notebook: INotebookTextModel, cells: Iterable<NotebookCellTextModel>, contextKeyService: IContextKeyService): Promise<void> {
 		const cellsArr = Array.from(cells)
-			.filter(c => c.cellKind === CellKind.Code);
+			.filter(c => c.cellKind === CellKind.Code && (notebook.viewType !== beCoderNotebookType || isBeCoderInputCell(c.metadata)));
 		if (!cellsArr.length) {
 			return;
 		}

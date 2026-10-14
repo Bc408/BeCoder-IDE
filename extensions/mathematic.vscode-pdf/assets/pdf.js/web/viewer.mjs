@@ -26387,6 +26387,10 @@ class VSCodeLinkService extends PDFLinkService {
   #vscode;
   #resourceRoot;
 
+  postBeCoderMessage(message) {
+    this.#vscode.postMessage(message);
+  }
+
   constructor(vscode, resourceRoot, ...args) {
     super(...args);
     this.#vscode = vscode;

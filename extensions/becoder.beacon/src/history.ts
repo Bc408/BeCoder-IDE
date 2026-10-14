@@ -55,7 +55,7 @@ export function readHistory(value: unknown): HistoryData {
 			if (message?.toolResults !== undefined && (!Array.isArray(message.toolResults) || message.role !== 'assistant' || message.toolResults.some(result => !result || typeof result.id !== 'string' || !result.id || typeof result.path !== 'string' || result.path.length > 4096 || !result.input || !['read', 'list', 'find', 'search'].includes(result.input.operation) || typeof result.input.path !== 'string' || !result.output || typeof result.output.ok !== 'boolean' || typeof result.output.path !== 'string' || result.output.path.length > 4096 || (result.output.contents !== undefined && (typeof result.output.contents !== 'string' || Buffer.byteLength(result.output.contents, 'utf8') > 8 * 1024 * 1024)) || (result.output.kind === 'image' && !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(result.output.mediaType ?? '')) || (result.output.error !== undefined && typeof result.output.error !== 'string')))) { throw new Error('invalid-history'); }
 			if ((message?.createdAt !== undefined && (!Number.isFinite(message.createdAt) || message.createdAt < 0 || message.createdAt > 8640000000000000)) || (message?.durationMs !== undefined && (!Number.isFinite(message.durationMs) || message.durationMs < 0))) { throw new Error('invalid-history'); }
 			if (!message || !Number.isSafeInteger(message.id) || message.id <= previous || !['user', 'assistant'].includes(message.role) || !['complete', 'streaming', 'stopped', 'error'].includes(message.status) || typeof message.text !== 'string') { throw new Error('invalid-history'); }
-			if (message.activities !== undefined && (!Array.isArray(message.activities) || message.activities.some(activity => !activity || typeof activity.id !== 'string' || !activity.id || activity.id.length > 256 || !['read', 'list', 'find', 'search', 'web-search', 'web-fetch'].includes(activity.type) || typeof activity.path !== 'string' || activity.path.length > 4096 || !['running', 'complete', 'error', 'stopped'].includes(activity.status) || (activity.error !== undefined && !['unavailable', 'rate-limit', 'timeout', 'invalid-response', 'invalid-input', 'budget'].includes(activity.error))))) { throw new Error('invalid-history'); }
+			if (message.activities !== undefined && (!Array.isArray(message.activities) || message.activities.some(activity => !activity || typeof activity.id !== 'string' || !activity.id || activity.id.length > 256 || !['read', 'list', 'find', 'search', 'web-search', 'web-fetch', 'notebook-edit'].includes(activity.type) || typeof activity.path !== 'string' || activity.path.length > 4096 || !['running', 'complete', 'error', 'stopped'].includes(activity.status) || (activity.error !== undefined && !['unavailable', 'rate-limit', 'timeout', 'invalid-response', 'invalid-input', 'budget'].includes(activity.error))))) { throw new Error('invalid-history'); }
 			previous = message.id;
 		}
 	}
@@ -63,7 +63,7 @@ export function readHistory(value: unknown): HistoryData {
 	return structuredClone(data);
 }
 
-/** One live request per window, with a shared installation history. */
+/** One live request per window. The supplied binding determines storage ownership. */
 export class ChatHistory {
 	readonly session: ChatSession;
 	private data: HistoryData;
@@ -85,8 +85,12 @@ export class ChatHistory {
 		}
 	}
 
-	get snapshot(): Snapshot & { activeId: string; history: HistoryItem[]; saveFailed: boolean } {
-		return { ...this.session.snapshot, activeId: this.data.activeId, history: this.data.conversations.map(({ id, title, updatedAt, workspace }) => ({ id, title, updatedAt, workspace })).sort((a, b) => b.updatedAt - a.updatedAt), saveFailed: this.saveFailed };
+	get snapshot(): Snapshot & { activeId: string; history: HistoryItem[]; saveFailed: boolean; persisting: boolean } {
+		return { ...this.session.snapshot, activeId: this.data.activeId, history: this.data.conversations.map(({ id, title, updatedAt, workspace }) => ({ id, title, updatedAt, workspace })).sort((a, b) => b.updatedAt - a.updatedAt), saveFailed: this.saveFailed, persisting: !!(this.timer || this.pending || this.writing) };
+	}
+
+	get currentConversation(): Conversation | undefined {
+		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId));
 	}
 
 	private capture(snapshot: Snapshot): void {
@@ -98,6 +102,7 @@ export class ChatHistory {
 			this.data.activeId = active.id;
 		}
 		if (active) {
+			if (!active.title && snapshot.messages.length) { active.title = (snapshot.messages[0].text || snapshot.messages[0].attachments?.map(item => item.name).join(', ') || '').replace(/\s+/g, ' ').slice(0, 80); }
 			active.messages = snapshot.messages.map(message => {
 				if (message.status !== 'streaming' || message.activeStartedAt === undefined) { return message; }
 				const saved = { ...message, durationMs: (message.durationMs ?? 0) + Math.max(0, Date.now() - message.activeStartedAt) };

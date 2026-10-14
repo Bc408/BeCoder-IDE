@@ -12,14 +12,31 @@ import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contex
 import { InputFocusedContext } from '../../../../../platform/contextkey/common/contextkeys.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { insertCell } from './cellOperations.js';
+import { insertCell, insertCellAtIndex } from './cellOperations.js';
+import { beCoderNotebookType, beCoderNotebookInputLanguage } from '../../../becoder/common/beCoderNotebook.js';
+import { generateUuid } from '../../../../../base/common/uuid.js';
 import { INotebookActionContext, NotebookAction } from './coreActions.js';
 import { NOTEBOOK_CELL_LIST_FOCUSED, NOTEBOOK_EDITOR_EDITABLE } from '../../common/notebookContextKeys.js';
-import { CellViewModel } from '../viewModel/notebookViewModelImpl.js';
+import { CellViewModel, NotebookViewModel } from '../viewModel/notebookViewModelImpl.js';
 import { CellKind, NotebookSetting } from '../../common/notebookCommon.js';
 import { INotebookKernelHistoryService } from '../../common/notebookKernelService.js';
 
 const INSERT_CODE_CELL_ABOVE_COMMAND_ID = 'notebook.cell.insertCodeCellAbove';
+
+registerAction2(class InsertBeCoderInput extends NotebookAction {
+	constructor() {
+		super({ id: 'becoder.notebook.insertInputBelow', title: localize('becoder.insertInput', 'Add Input Cell'), precondition: ContextKeyExpr.and(NOTEBOOK_EDITOR_EDITABLE, ContextKeyExpr.equals('notebookType', beCoderNotebookType)) });
+	}
+	async runWithContext(_accessor: ServicesAccessor, context: INotebookActionContext): Promise<void> {
+		const editor = context.notebookEditor;
+		if (!editor.hasModel() || editor.textModel.viewType !== beCoderNotebookType || editor.isReadOnly) { return; }
+		const index = context.cell ? editor.getCellIndex(context.cell) + 1 : editor.getFocus().end;
+		const cell = insertCellAtIndex(editor.getViewModel() as NotebookViewModel, index, '', beCoderNotebookInputLanguage, CellKind.Code, { becoder: { id: generateUuid(), role: 'input', name: 'input' } }, [], true, true);
+		await editor.focusNotebookCell(cell, 'editor');
+	}
+});
+MenuRegistry.appendMenuItem(MenuId.NotebookCellBetween, { command: { id: 'becoder.notebook.insertInputBelow', title: '$(add) ' + localize('becoder.input', 'input'), tooltip: localize('becoder.insertInput', 'Add Input Cell') }, group: 'inline', order: 2, when: ContextKeyExpr.and(NOTEBOOK_EDITOR_EDITABLE, ContextKeyExpr.equals('notebookType', beCoderNotebookType), ContextKeyExpr.notEquals('config.notebook.experimental.insertToolbarAlignment', 'left')) });
+MenuRegistry.appendMenuItem(MenuId.NotebookCellBetween, { command: { id: 'becoder.notebook.insertInputBelow', title: localize('becoder.input', 'input'), icon: Codicon.add, tooltip: localize('becoder.insertInput', 'Add Input Cell') }, group: 'inline', order: 2, when: ContextKeyExpr.and(NOTEBOOK_EDITOR_EDITABLE, ContextKeyExpr.equals('notebookType', beCoderNotebookType), ContextKeyExpr.equals('config.notebook.experimental.insertToolbarAlignment', 'left')) });
 const INSERT_CODE_CELL_BELOW_COMMAND_ID = 'notebook.cell.insertCodeCellBelow';
 const INSERT_CODE_CELL_ABOVE_AND_FOCUS_CONTAINER_COMMAND_ID = 'notebook.cell.insertCodeCellAboveAndFocusContainer';
 const INSERT_CODE_CELL_BELOW_AND_FOCUS_CONTAINER_COMMAND_ID = 'notebook.cell.insertCodeCellBelowAndFocusContainer';

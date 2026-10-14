@@ -19,8 +19,9 @@ test('acknowledges a real startup before accepting the program exit code', async
 		socket.write('{"type":"started","pid":42}\n');
 		assert.strictEqual(String((await acknowledged)[0]), 'G');
 		assert.strictEqual(pid, 42);
-		socket.end('{"type":"exit","code":125}\n');
+		socket.end('{"type":"exit","code":125,"runMs":12.5}\n');
 		assert.strictEqual(await control.result(), 125);
+		assert.strictEqual((control as RunnerInputControl & { runMs?: number }).runMs, 12.5);
 	} finally { socket.destroy(); await control.dispose(); }
 });
 

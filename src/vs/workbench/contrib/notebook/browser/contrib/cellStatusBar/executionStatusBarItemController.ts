@@ -21,6 +21,8 @@ import { INotebookCellExecution, INotebookExecutionStateService, NotebookExecuti
 import { INotebookService } from '../../../common/notebookService.js';
 import { IMarkdownString } from '../../../../../../base/common/htmlContent.js';
 
+import { beCoderNotebookType } from '../../../../becoder/common/beCoderNotebook.js';
+
 export function formatCellDuration(duration: number, showMilliseconds: boolean = true): string {
 	if (showMilliseconds && duration < 1000) {
 		return `${duration}ms`;
@@ -132,6 +134,7 @@ class ExecutionStateCellStatusBarItem extends Disposable {
 	 *	Returns undefined if there should be no change, and an empty array if all items should be removed.
 	 */
 	private _getItemsForCell(): INotebookCellStatusBarItem[] | undefined {
+		if (this._notebookViewModel.notebookDocument.viewType === beCoderNotebookType) { return []; }
 		const runState = this._executionStateService.getCellExecution(this._cell.uri);
 
 		// Show the execution spinner for a minimum time
@@ -253,6 +256,7 @@ class TimerCellStatusBarItem extends Disposable {
 	}
 
 	private async _update() {
+		if (this._notebookViewModel.notebookDocument.viewType === beCoderNotebookType) { return; }
 		let timerItem: INotebookCellStatusBarItem | undefined;
 		const runState = this._executionStateService.getCellExecution(this._cell.uri);
 		const state = runState?.state;

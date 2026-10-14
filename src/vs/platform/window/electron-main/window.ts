@@ -7,7 +7,6 @@ import electron from 'electron';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { Event } from '../../../base/common/event.js';
 import { IDisposable } from '../../../base/common/lifecycle.js';
-import { URI } from '../../../base/common/uri.js';
 import { ISerializableCommandAction } from '../../action/common/action.js';
 import { NativeParsedArgs } from '../../environment/common/argv.js';
 import { FocusMode, IApplicationBadge } from '../../native/common/native.js';
@@ -47,8 +46,6 @@ export interface IBaseWindow extends IDisposable {
 }
 
 export interface ICodeWindow extends IBaseWindow {
-
-	readonly iconPath?: URI;
 
 	readonly onWillLoad: Event<ILoadEvent>;
 	readonly onDidSignalReady: Event<void>;

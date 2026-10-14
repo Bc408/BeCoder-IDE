@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { VSBuffer } from '../../../../../base/common/buffer.js';
@@ -8,6 +11,9 @@ import { Emitter } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { ICellOutput, IOutputDto, IOutputItemDto, compressOutputItemStreams } from '../notebookCommon.js';
 import { isTextStreamMime } from '../../../../../base/common/mime.js';
+import { beCoderNotebookStreamMime } from '../../../becoder/common/beCoderNotebook.js';
+
+const isNotebookStream = (mime: string) => isTextStreamMime(mime) || mime === beCoderNotebookStreamMime;
 
 export class NotebookCellOutputTextModel extends Disposable implements ICellOutput {
 
@@ -67,7 +73,7 @@ export class NotebookCellOutputTextModel extends Disposable implements ICellOutp
 
 	private trackBufferLengths() {
 		this.outputs.forEach(output => {
-			if (isTextStreamMime(output.mime)) {
+			if (isNotebookStream(output.mime)) {
 				if (!this.versionedBufferLengths[output.mime]) {
 					this.versionedBufferLengths[output.mime] = {};
 				}
@@ -90,7 +96,7 @@ export class NotebookCellOutputTextModel extends Disposable implements ICellOutp
 	}
 
 	private optimizeOutputItems() {
-		if (this.outputs.length > 1 && this.outputs.every(item => isTextStreamMime(item.mime))) {
+		if (this.outputs.length > 1 && this.outputs.every(item => isNotebookStream(item.mime))) {
 			// Look for the mimes in the items, and keep track of their order.
 			// Merge the streams into one output item, per mime type.
 			const mimeOutputs = new Map<string, Uint8Array[]>();

@@ -27,11 +27,13 @@ export interface FileOutput {
 }
 export type FileTool = (input: FileInput, signal: AbortSignal) => Promise<FileOutput>;
 export interface FileRoot { name: string; path: string }
+export interface FileAccessOptions { protectedRoots?: string[]; suppliedFiles?: string[] }
 
 const chunkBytes = 128 * 1024;
 const responseBytes = 8 * 1024 * 1024;
 const imageBytes = 4 * 1024 * 1024;
 const protectedPart = /^(?:\.git|\.ssh|\.aws|\.azure|\.kube|\.gnupg|\.npmrc|\.pypirc|\.netrc|\.htpasswd|id_rsa|id_ed25519|credentials|secrets?|cookies|login data|web data|local state|state\.vscdb(?:.*)|keychains?|vault)(?:$|\.)|^\.env(?:\.|$)|\.(?:pem|key|p12|pfx|p8|kdbx)$/i;
+export const isProtectedFilePath = (value: string): boolean => value.split(/[\\/]/).some(part => protectedPart.test(part));
 
 function checkPath(value: string): void {
 	if (!value || value.length > 4096 || /[\0<>"|?*]/.test(value) || /^(?:\\\\[?.]\\|\/\/\?|[a-z]:[^\\/])/i.test(value) || /:/.test(value.replace(/^[a-z]:/i, ''))) { throw new Error('invalid-file-path'); }
@@ -43,7 +45,9 @@ export function safeFileError(error: unknown): string {
 	const code = error instanceof Error ? error.message : '';
 	const messages: Record<string, string> = {
 		'files-disabled': 'Local file access is disabled for this response.',
-		'no-workspace': 'No local workspace folder is open.',
+		'no-workspace': 'No usable Beacon workspace is selected.',
+		'beacon-assets': 'Beacon assets are isolated. Use the current conversation material entry instead.',
+		'not-supplied-file': 'This capture is limited to the files supplied by the user.',
 		'invalid-file-path': 'Specify an ordinary file or directory path, without device paths or alternate streams.',
 		'workspace-folder-required': 'Prefix a relative path with the workspace folder name.',
 		'outside-workspace': 'The actual file target is outside the authorized workspace.',
@@ -61,7 +65,12 @@ export function safeFileError(error: unknown): string {
 export class FileTools {
 	private used = 0;
 	private readonly roots: Promise<FileRoot[]>;
-	constructor(readonly permission: FilePermission, roots: FileRoot[], private readonly openText: (file: string) => string | undefined | Promise<string | undefined> = () => undefined) {
+	private readonly protectedRoots: Promise<string[]>;
+	private readonly suppliedFiles: Promise<string[]> | undefined;
+	constructor(readonly permission: FilePermission, roots: FileRoot[], private readonly openText: (file: string) => string | undefined | Promise<string | undefined> = () => undefined, options: FileAccessOptions = {}) {
+		const canonical = async (files: string[]) => Promise.all(files.map(async file => { try { return await fs.realpath(file); } catch { return path.resolve(file); } }));
+		this.protectedRoots = canonical(options.protectedRoots ?? []);
+		this.suppliedFiles = options.suppliedFiles ? canonical(options.suppliedFiles) : undefined;
 		this.roots = permission === 'none' ? Promise.resolve([]) : Promise.all(roots.map(async root => {
 			try { return { ...root, path: await fs.realpath(root.path) }; } catch { return undefined; }
 		})).then(roots => roots.filter((root): root is FileRoot => root !== undefined));
@@ -70,6 +79,7 @@ export class FileTools {
 		signal.throwIfAborted();
 		if (this.permission === 'none') { throw new Error('files-disabled'); }
 		checkPath(input);
+		if (!this.suppliedFiles && input.split(/[\\/]/).some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('beacon-assets'); }
 		const roots = await this.roots;
 		let target = input;
 		if (!path.isAbsolute(target)) {
@@ -84,8 +94,12 @@ export class FileTools {
 			target = path.resolve(root.path, target);
 		}
 		checkPath(target);
+		if (!this.suppliedFiles && target.split(/[\\/]/).some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('beacon-assets'); }
 		const real = await fs.realpath(target);
 		checkPath(real);
+		if (this.suppliedFiles) {
+			if (!(await this.suppliedFiles).includes(real)) { throw new Error('not-supplied-file'); }
+		} else if (real.split(/[\\/]/).some(part => part.toLowerCase() === '.beaconwork') || (await this.protectedRoots).some(root => within(real, root))) { throw new Error('beacon-assets'); }
 		if (this.permission === 'workspace' && !roots.some(root => within(real, root.path))) { throw new Error('outside-workspace'); }
 		signal.throwIfAborted();
 		return real;
@@ -96,6 +110,7 @@ export class FileTools {
 	}
 	readonly execute: FileTool = async (input, signal) => {
 		try {
+			if (this.suppliedFiles && input.operation !== 'read') { throw new Error('not-supplied-file'); }
 			if (!['read', 'list', 'find', 'search'].includes(input.operation) || (input.offset !== undefined && (!Number.isSafeInteger(input.offset) || input.offset < 0)) || (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > chunkBytes)) || (['find', 'search'].includes(input.operation) && (!input.query?.trim() || input.query.length > 256))) { throw new Error('invalid-file-input'); }
 			if (this.used >= responseBytes) { throw new Error('file-budget'); }
 			const file = await this.resolve(input.path, signal);

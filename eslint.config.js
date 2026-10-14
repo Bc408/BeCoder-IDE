@@ -158,6 +158,11 @@ export default defineConfig(
 	},
 	{
 		files: [
+			'src/vs/platform/beacon/**/*.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/{beaconEvidence,compilationSnapshot,notebookProcess}.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{beaconEvidence,compilationSnapshot,notebookProcess}.test.ts',
+			'extensions/becoder.notebook/**/*.ts',
+			'extensions/becoder.notebook/build.mjs',
 			'src/vs/workbench/browser/parts/editor/becoder*.ts',
 			'src/vs/workbench/contrib/becoder/**/*.ts',
 			'src/vs/workbench/test/browser/parts/editor/becoder*.ts',
@@ -174,6 +179,39 @@ export default defineConfig(
 					' *--------------------------------------------------------------------------------------------'
 				]
 			]
+		}
+	},
+	{
+		files: [
+			'src/vs/code/electron-main/app.ts',
+			'src/vs/platform/window/common/window.ts',
+			'src/vs/platform/windows/electron-main/{windows,windowsMainService,windowsStateHandler}.ts',
+			'src/vs/platform/windows/test/electron-main/windowsStateHandler.test.ts',
+			'src/vs/workbench/workbench.desktop.main.ts',
+			'src/vs/workbench/contrib/notebook/browser/view/renderers/cellRenderer.ts',
+			'src/vs/workbench/contrib/notebook/browser/viewModel/codeCellViewModel.ts',
+			'src/vs/workbench/contrib/notebook/browser/viewModel/cellOutputTextHelper.ts',
+			'src/vs/workbench/contrib/notebook/common/notebookEditorInput.ts',
+			'src/vs/workbench/contrib/notebook/common/notebookContextKeys.ts',
+			'src/vs/workbench/contrib/notebook/common/model/notebookCellOutputTextModel.ts',
+			'src/vs/workbench/contrib/notebook/browser/controller/executeActions.ts',
+			'src/vs/workbench/contrib/notebook/browser/controller/cellOperations.ts',
+			'src/vs/workbench/contrib/notebook/browser/view/cellParts/cellContextKeys.ts',
+			'src/vs/workbench/contrib/notebook/browser/services/notebookExecutionServiceImpl.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/compile-run-manager.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/{compilation,runnerProcess,extension}.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{runnerProcess,compilerApi}.test.ts',
+		],
+		rules: {
+			'header/header': ['error', 'block', [
+				'---------------------------------------------------------------------------------------------',
+				' *  Copyright (c) Microsoft Corporation. All rights reserved.',
+				' *  Licensed under the MIT License. See License.txt in the project root for license information.',
+				' *---------------------------------------------------------------------------------------------',
+				' *  Modifications Copyright (c) 2026 BeCoder contributors.',
+				' *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.',
+				' *--------------------------------------------------------------------------------------------'
+			]]
 		}
 	},
 	{
@@ -230,6 +268,12 @@ export default defineConfig(
 		files: ['extensions/mathematic.vscode-pdf/src/extension.js', 'extensions/mathematic.vscode-pdf/assets/main.mjs'],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright 2021 Mathematic Inc)(?=[\\s\\S]*Apache License, Version 2\\.0)[\\s\\S]*$' }]
+		}
+	},
+	{
+		files: ['extensions/mathematic.vscode-pdf/src/selectionBridge.js', 'extensions/mathematic.vscode-pdf/assets/selection.mjs', 'extensions/mathematic.vscode-pdf/test/selection.test.cjs', 'extensions/mathematic.vscode-pdf/test/selection-dom.test.mjs'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\) BeCoder contributors\\.)(?=[\\s\\S]*Apache License, Version 2\\.0)[\\s\\S]*$' }]
 		}
 	},
 	{

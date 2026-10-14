@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bundledLanguagesInfo } from 'shiki';
+import { languageNames } from '@shikijs/langs';
 
 // Production browser bundle, local resources and rendering snapshots only.
 const root = path.resolve(import.meta.dirname, '..');
@@ -29,7 +29,7 @@ try {
 	page.on('pageerror', error => errors.push(error.message));
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	const publish = (text, status = 'complete') => page.evaluate(({ text, status }) => window.postMessage({ type: 'snapshot', configured: true, busy: status === 'streaming', messages: [{ id: 100, role: 'assistant', text, reasoning: '', activities: [], status, createdAt: Date.now() }] }, '*'), { text, status });
-	const languages = new Set(bundledLanguagesInfo.map(language => language.id));
+	const languages = new Set(languageNames);
 	for (const name of fs.readdirSync(path.join(root, '..'))) {
 		const manifest = path.join(root, '..', name, 'package.json');
 		if (!fs.existsSync(manifest)) { continue; }

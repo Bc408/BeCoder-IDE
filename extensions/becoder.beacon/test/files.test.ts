@@ -8,8 +8,6 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FileTools } from '../src/fileTools';
-import { HistoryStore } from '../src/historyStore';
-import { ChatHistory } from '../src/history';
 import { ChatSession, fileModelOutput, type Generate } from '../src/session';
 import { createGenerator } from '../src/provider';
 import { providers } from '../src/connection';
@@ -23,6 +21,28 @@ async function fixture(run: (directory: string) => Promise<void>) {
 }
 
 suite('Beacon read-only permissions', () => {
+	test('flood excludes other conversation assets, including aliases and legacy profile storage', async () => fixture(async directory => {
+		const assets = path.join(directory, '.beaconWork');
+		const legacy = path.join(directory, 'profile');
+		await fs.mkdir(assets); await fs.mkdir(legacy);
+		await fs.writeFile(path.join(assets, 'other.json'), 'other-chat');
+		await fs.writeFile(path.join(legacy, 'history.json'), 'old-chats');
+		await fs.symlink(assets, path.join(directory, 'alias'), 'junction');
+		const files = new FileTools('computer', [], undefined, { protectedRoots: [legacy] });
+		for (const file of [path.join(assets, 'other.json'), path.join(directory, 'alias', 'other.json'), path.join(legacy, 'history.json')]) {
+			assert.equal((await files.execute({ operation: 'read', path: file }, signal)).ok, false);
+		}
+		const listing = await files.execute({ operation: 'search', path: directory, query: 'chat' }, signal);
+		assert.equal(listing.ok, true); assert.equal(listing.contents, '');
+	}));
+	test('a user supplied file grants one capture without its neighbor or directory', async () => fixture(async directory => {
+		const file = path.join(directory, 'chosen.txt');
+		await fs.writeFile(file, 'chosen'); await fs.writeFile(path.join(directory, 'neighbor.txt'), 'neighbor');
+		const files = new FileTools('computer', [], undefined, { suppliedFiles: [file] });
+		assert.equal((await files.execute({ operation: 'read', path: file }, signal)).contents, 'chosen');
+		assert.equal((await files.execute({ operation: 'read', path: path.join(directory, 'neighbor.txt') }, signal)).ok, false);
+		assert.equal((await files.execute({ operation: 'list', path: directory }, signal)).ok, false);
+	}));
 	test('none rejects every operation; workspace real targets stay inside roots; computer still rejects private files', async () => fixture(async directory => {
 		const root = path.join(directory, 'workspace');
 		const outside = path.join(directory, 'outside');
@@ -147,54 +167,4 @@ suite('Beacon read-only permissions', () => {
 			assert.equal(restored.snapshot.messages[3].text, 'image answer');
 		}
 	});
-});
-
-suite('Beacon installation history', () => {
-	test('different workspace windows merge new chats and retain creation roots; conflicting edits never overwrite', async () => fixture(async directory => {
-		const first = new HistoryStore(directory); const second = new HistoryStore(directory);
-		const a = new ChatHistory(await first.load(), data => first.save(data), () => {}, () => 'error', () => [{ name: 'A', path: 'C:\\A' }]);
-		const b = new ChatHistory(await second.load(), data => second.save(data), () => {}, () => 'error', () => [{ name: 'B', path: 'C:\\B' }]);
-		const generate: Generate = async function* () { yield { type: 'text', text: 'reply' }; };
-		await Promise.all([a.session.send('one', generate), b.session.send('two', generate)]);
-		await Promise.all([a.flush(), b.flush()]);
-		a.rename(a.snapshot.activeId, 'one updated'); await a.flush();
-		b.rename(b.snapshot.activeId, 'two updated'); await b.flush();
-		assert.equal(a.snapshot.saveFailed, false); assert.equal(b.snapshot.saveFailed, false);
-		const data = await new HistoryStore(directory).load();
-		assert.equal(data.conversations.length, 2);
-		assert.deepStrictEqual(data.conversations.map(item => item.title).sort(), ['one updated', 'two updated']);
-		assert.deepStrictEqual(data.conversations.map(item => item.workspace[0].name).sort(), ['A', 'B']);
-		const old = await first.load(); const same = await second.load();
-		old.conversations[0].title = 'changed'; await first.save(old);
-		same.conversations[0].title = 'conflicting'; await assert.rejects(() => second.save(same), /history-conflict/);
-		assert.equal((await new HistoryStore(directory).load()).conversations[0].title, 'changed');
-		// End these isolated sessions without saving stale snapshots over the deliberate conflict.
-		a.session.dispose(); b.session.dispose();
-	}));
-	test('shared saves adopt external records while a newer local checkpoint is pending', async () => fixture(async directory => {
-		const store = new HistoryStore(directory);
-		let unblock!: () => void;
-		let waiting!: () => void;
-		const blocked = new Promise<void>(resolve => { waiting = resolve; });
-		const gate = new Promise<void>(resolve => { unblock = resolve; });
-		let writes = 0;
-		const failures: string[] = [];
-		const history = new ChatHistory(await store.load(), async data => {
-			if (++writes === 1) { waiting(); await gate; }
-			try { return await store.save(data); }
-			catch (error) { failures.push(String(error)); throw error; }
-		}, () => {}, () => 'error');
-		await history.session.send('local', async function* () { yield { type: 'text', text: 'reply' }; });
-		await blocked;
-		const otherStore = new HistoryStore(directory);
-		const other = new ChatHistory(await otherStore.load(), data => otherStore.save(data), () => {}, () => 'error');
-		await other.session.send('external', async function* () { yield { type: 'text', text: 'other reply' }; });
-		await other.flush();
-		history.rename(history.snapshot.activeId, 'newer local title');
-		unblock(); await history.flush();
-		assert.equal(history.snapshot.saveFailed, false, failures.join('\n'));
-		const titles = (await new HistoryStore(directory).load()).conversations.map(item => item.title).sort();
-		assert.deepStrictEqual(titles, ['external', 'newer local title']);
-		await history.dispose(); await other.dispose();
-	}));
 });

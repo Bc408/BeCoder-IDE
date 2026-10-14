@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { Iterable } from '../../../../../base/common/iterator.js';
@@ -15,17 +18,19 @@ import { MenuId, MenuRegistry, registerAction2 } from '../../../../../platform/a
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
-import { insertCell } from './cellOperations.js';
+import { insertCell, insertCellAtIndex } from './cellOperations.js';
 import { CELL_TITLE_CELL_GROUP_ID, CellToolbarOrder, INotebookActionContext, INotebookCellActionContext, INotebookCellToolbarActionContext, INotebookCommandContext, NOTEBOOK_EDITOR_WIDGET_ACTION_WEIGHT, NotebookAction, NotebookCellAction, NotebookMultiCellAction, cellExecutionArgs, getContextFromActiveEditor, getContextFromUri, parseMultiCellExecutionArgs } from './coreActions.js';
 import { CellEditState, CellFocusMode, EXECUTE_CELL_COMMAND_ID, IActiveNotebookEditor, ICellViewModel, IFocusNotebookCellOptions, ScrollToRevealBehavior } from '../notebookBrowser.js';
 import * as icons from '../notebookIcons.js';
 import { CellKind, NotebookSetting } from '../../common/notebookCommon.js';
-import { NOTEBOOK_CELL_EXECUTING, NOTEBOOK_CELL_EXECUTION_STATE, NOTEBOOK_CELL_LIST_FOCUSED, NOTEBOOK_CELL_TYPE, NOTEBOOK_HAS_RUNNING_CELL, NOTEBOOK_HAS_SOMETHING_RUNNING, NOTEBOOK_INTERRUPTIBLE_KERNEL, NOTEBOOK_IS_ACTIVE_EDITOR, NOTEBOOK_KERNEL_COUNT, NOTEBOOK_KERNEL_SOURCE_COUNT, NOTEBOOK_LAST_CELL_FAILED, NOTEBOOK_MISSING_KERNEL_EXTENSION } from '../../common/notebookContextKeys.js';
+import { NOTEBOOK_CELL_EXECUTABLE, NOTEBOOK_CELL_EXECUTING, NOTEBOOK_CELL_EXECUTION_STATE, NOTEBOOK_CELL_LIST_FOCUSED, NOTEBOOK_CELL_TYPE, NOTEBOOK_HAS_RUNNING_CELL, NOTEBOOK_HAS_SOMETHING_RUNNING, NOTEBOOK_INTERRUPTIBLE_KERNEL, NOTEBOOK_IS_ACTIVE_EDITOR, NOTEBOOK_KERNEL_COUNT, NOTEBOOK_KERNEL_SOURCE_COUNT, NOTEBOOK_LAST_CELL_FAILED, NOTEBOOK_MISSING_KERNEL_EXTENSION } from '../../common/notebookContextKeys.js';
 import { NotebookEditorInput } from '../../common/notebookEditorInput.js';
 import { INotebookExecutionStateService } from '../../common/notebookExecutionStateService.js';
 import { IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { CodeCellViewModel } from '../viewModel/codeCellViewModel.js';
+import { beCoderNotebookType, isBeCoderInputCell } from '../../../becoder/common/beCoderNotebook.js';
+import { NotebookViewModel } from '../viewModel/notebookViewModelImpl.js';
 
 const EXECUTE_NOTEBOOK_COMMAND_ID = 'notebook.execute';
 const CANCEL_NOTEBOOK_COMMAND_ID = 'notebook.cancelExecution';
@@ -43,6 +48,7 @@ const REVEAL_LAST_FAILED_CELL = 'notebook.revealLastFailedCell';
 // If this changes, update getCodeCellExecutionContextKeyService to match
 export const executeCondition = ContextKeyExpr.and(
 	NOTEBOOK_CELL_TYPE.isEqualTo('code'),
+	NOTEBOOK_CELL_EXECUTABLE.isEqualTo(true),
 	ContextKeyExpr.or(
 		ContextKeyExpr.greater(NOTEBOOK_KERNEL_COUNT.key, 0),
 		ContextKeyExpr.greater(NOTEBOOK_KERNEL_SOURCE_COUNT.key, 0),
@@ -583,7 +589,9 @@ registerAction2(class ExecuteCellInsertBelow extends NotebookCellAction {
 		const languageService = accessor.get(ILanguageService);
 		const newFocusMode = context.cell.focusMode === CellFocusMode.Editor ? 'editor' : 'container';
 
-		const newCell = insertCell(languageService, context.notebookEditor, idx, context.cell.cellKind, 'below');
+		const newCell = context.notebookEditor.textModel.viewType === beCoderNotebookType && isBeCoderInputCell(context.cell.model.metadata)
+			? insertCellAtIndex(context.notebookEditor.getViewModel() as NotebookViewModel, idx + 1, '', 'plaintext', CellKind.Code, { becoder: { role: 'input', name: 'input' } }, [], true, true)
+			: insertCell(languageService, context.notebookEditor, idx, context.cell.cellKind, 'below');
 		if (newCell) {
 			await context.notebookEditor.focusNotebookCell(newCell, newFocusMode);
 		}

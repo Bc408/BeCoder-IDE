@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as net from 'net';
 import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
-import type { CompilationPlan } from './toolchain';
+import type { CompilationPlan, CompilationSourceSnapshot, RuntimeEvidence } from './toolchain';
 import { ImportedProblem } from './problem';
 import { judgeSample, SampleExecution, SampleVerdict } from './judge';
 
@@ -23,6 +23,7 @@ export interface ExecutionPreferences {
 export interface CheckerRun extends SampleExecution { readonly command: string }
 
 export interface CphExecutionOptions {
+	readonly evidence?: () => RuntimeEvidence | undefined;
 	readonly prepareCompilation: (source: string, output: string, session: string) => Promise<CompilationPlan> | CompilationPlan;
 	readonly dataRoot: string;
 	/** Build-time helper; its inherited stdout/stderr stay separate pipes here. */
@@ -36,6 +37,7 @@ export interface CphExecutionOptions {
 }
 
 export interface JudgeRun {
+	readonly sourceSnapshot?: CompilationSourceSnapshot;
 	readonly compile: SampleExecution;
 	readonly samples: readonly { readonly result: SampleExecution; readonly verdict: SampleVerdict; readonly checkerRun?: CheckerRun }[];
 }
@@ -56,7 +58,10 @@ export class CphExecutor {
 		const controller = new AbortController();
 		this.controller = controller;
 		let session: string | undefined;
+		let evidence: RuntimeEvidence | undefined;
+		let outcome: unknown = { status: 'preparation-failed' };
 		try {
+			problem = structuredClone(problem);
 			const preferences = this.options.preferences?.(sourcePath);
 			const timeout = preferences?.timeOut ?? problem.timeLimit;
 			if (!Number.isInteger(timeout) || timeout < 1 || timeout > 2147483647) { throw new Error('Invalid CPH timeout.'); }
@@ -72,19 +77,30 @@ export class CphExecutor {
 				fs.mkdirSync(toolchain.environment[name], { recursive: true });
 			}
 			this.options.onCompileStarted?.();
-			const compile = await runProcess(toolchain.compiler, [...toolchain.args], path.dirname(sourcePath), toolchain.environment, 120000, controller.signal, true);
+			evidence = this.options.evidence?.();
+			if (toolchain.sourceSnapshot) { evidence?.start(toolchain.sourceSnapshot, { compiler: toolchain.compiler, args: toolchain.args, cwd: path.dirname(sourcePath), problem, preferences, timeout, compileOnly, localHeadersSnapshotted: false, programStream: 'separate-pipes' }); }
+			const rawCompile = await runProcess(toolchain.compiler, [...toolchain.args], path.dirname(sourcePath), toolchain.environment, 120000, controller.signal, true, undefined,
+				(stream, bytes) => evidence?.event({ type: 'stream', phase: 'compiling', stream, bytesBase64: bytes.toString('base64') }));
+			const sourceSnapshot = toolchain.sourceSnapshot;
+			const paths = sourceSnapshot ? [...new Set([sourceSnapshot.path, sourceSnapshot.path.replace(/\\/g, '/')])] : [];
+			const mapPath = (text: string) => paths.reduce((value, from) => value.split(from).join(sourceSnapshot!.originalPath), text);
+			const compile = { ...rawCompile, stdout: mapPath(rawCompile.stdout), stderr: mapPath(rawCompile.stderr) };
+			evidence?.event({ type: 'compiled', exitCode: compile.exitCode, signal: compile.signal, timedOut: compile.timedOut, cancelled: compile.cancelled, outputLimitExceeded: compile.outputLimitExceeded, launchError: compile.launchError, durationMs: compile.durationMs });
 			this.options.onCompileFinished?.();
 			const samples: { result: SampleExecution; verdict: SampleVerdict; checkerRun?: CheckerRun }[] = [];
 			if (compile.exitCode !== 0 || compile.launchError || compile.cancelled || compile.timedOut || compile.outputLimitExceeded) {
-				return { compile, samples };
+				outcome = { status: compile.cancelled ? 'cancelled' : 'compile-error' };
+				return { compile, samples, sourceSnapshot };
 			}
 			if (!fs.statSync(executable).isFile()) { throw new Error('Compiler produced no executable.'); }
-			if (compileOnly) { return { compile, samples }; }
+			if (compileOnly) { outcome = { status: 'compile-only' }; return { compile, samples, sourceSnapshot }; }
 			for (const [index, sample] of problem.tests.entries()) {
 				if (controller.signal.aborted) { break; }
 				const input = path.join(session, 'input');
 				fs.writeFileSync(input, sample.input, 'utf8');
-				const result = await runWithInput(this.options.inputHelper, executable, input, session, toolchain.environment, timeout, controller.signal, () => this.options.onSampleStarted?.(index));
+				const result = await runWithInput(this.options.inputHelper, executable, input, session, toolchain.environment, timeout, controller.signal,
+					() => { evidence?.event({ type: 'sample-started', index, at: Date.now() }); this.options.onSampleStarted?.(index); },
+					(stream, bytes) => evidence?.event({ type: 'stream', phase: 'running', index, stream, bytesBase64: bytes.toString('base64') }));
 				let verdict = judgeSample(sample.output, result);
 				let checkerRun: CheckerRun | undefined;
 				if (preferences?.ignoreSTDERROR === false && result.stderr && (verdict === 'passed' || verdict === 'wrong-answer')) { verdict = 'runtime-error'; }
@@ -105,11 +121,17 @@ export class CphExecutor {
 						: checked.launchError || checked.signal ? 'runtime-error' : checked.exitCode === 0 ? 'passed' : 'wrong-answer';
 				}
 				samples.push({ result, verdict, checkerRun });
+				evidence?.event({ type: 'sample-finished', index, result, verdict, checkerRun });
 				this.options.onSampleFinished?.(index, { result, verdict, checkerRun });
 			}
-			return { compile, samples };
+			outcome = { status: controller.signal.aborted ? 'cancelled' : 'completed', completedSamples: samples.length, requestedSamples: problem.tests.length };
+			return { compile, samples, sourceSnapshot };
+		} catch (error) {
+			outcome = { status: controller.signal.aborted ? 'cancelled' : 'failed', message: error instanceof Error ? error.message : String(error) };
+			throw error;
 		} finally {
 			try {
+				await evidence?.finish(outcome);
 				// Private random request directory; never published to the user project.
 				if (session) { fs.rmSync(session, { recursive: true }); }
 			} finally { this.controller = undefined; }
@@ -120,7 +142,7 @@ export class CphExecutor {
 	dispose(): void { this.disposed = true; this.cancel(); }
 }
 
-async function runProcess(file: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, compiler = false, clockReady?: (reset: (milliseconds: number) => void) => void): Promise<SampleExecution> {
+async function runProcess(file: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, compiler = false, clockReady?: (reset: (milliseconds: number) => void) => void, onOutput?: (stream: 'stdout' | 'stderr', bytes: Buffer) => void): Promise<SampleExecution> {
 	return new Promise(resolve => {
 		let startedAt = Date.now();
 		const child = spawn(file, args, { cwd, env, windowsHide: true, shell: false, stdio: 'pipe' });
@@ -154,6 +176,7 @@ async function runProcess(file: string, args: string[], cwd: string, env: NodeJS
 		});
 		for (const [index, stream] of [child.stdout, child.stderr].entries()) {
 			stream.on('data', (chunk: Buffer) => {
+				onOutput?.(index === 0 ? 'stdout' : 'stderr', chunk);
 				const remaining = outputLimit - sizes[index];
 				if (chunk.length > remaining) { outputLimitExceeded = true; stop(); }
 				if (remaining > 0) {
@@ -178,7 +201,7 @@ async function runProcess(file: string, args: string[], cwd: string, env: NodeJS
 	});
 }
 
-async function runWithInput(helper: string, executable: string, input: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, onStarted: () => void): Promise<SampleExecution> {
+async function runWithInput(helper: string, executable: string, input: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, onStarted: () => void, onOutput?: (stream: 'stdout' | 'stderr', bytes: Buffer) => void): Promise<SampleExecution> {
 	const pipe = `\\\\.\\pipe\\becoder-cph-${process.pid}-${randomUUID()}`;
 	let socket: net.Socket | undefined;
 	let code: number | undefined;
@@ -217,7 +240,7 @@ async function runWithInput(helper: string, executable: string, input: string, c
 	});
 	try {
 		await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(pipe, resolve); });
-		const result = await runProcess(helper, [executable, input, pipe], cwd, env, 15000, signal, false, reset => { resetClock = reset; });
+		const result = await runProcess(helper, [executable, input, pipe], cwd, env, 15000, signal, false, reset => { resetClock = reset; }, onOutput);
 		if (socket) {
 			let timer: NodeJS.Timeout | undefined;
 			try {

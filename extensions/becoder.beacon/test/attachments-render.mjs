@@ -30,7 +30,7 @@ try {
 	page.on('pageerror', error => errors.push(error.message));
 	await page.addInitScript(() => {
 		let counter = 0;
-		let state = { type: 'snapshot', activeId: 'preview-fixture', configured: true, busy: false, permission: 'none', attachments: [], messages: [], history: [], saveFailed: false, historyUnreadable: false, error: '', connection: { provider: 'deepseek', model: 'vision', baseURL: 'https://api.deepseek.com', parameters: {}, keyConfigured: true, loading: false, models: [], error: '', capabilities: { purpose: 'chat', vision: 'supported', tools: 'unsupported', reasoning: 'unsupported' } } };
+		let state = { type: 'snapshot', activeId: 'preview-fixture', viewKey: 'preview::preview-fixture', canSend: true, temporary: true, configured: true, busy: false, permission: 'none', context: { slot: 'preview', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] }, attachments: [], messages: [], history: [], saveFailed: false, historyUnreadable: false, error: '', connection: { provider: 'deepseek', model: 'vision', baseURL: 'https://api.deepseek.com', parameters: {}, keyConfigured: true, loading: false, error: '', capabilities: { purpose: 'chat', vision: 'supported', tools: 'unsupported', reasoning: 'unsupported' } } };
 		const publish = () => window.postMessage({ ...state, attachments: state.attachments.map(item => ({ ...item, contents: '' })), messages: state.messages.map(message => ({ ...message, attachments: message.attachments?.map(item => ({ ...item, contents: '' })) })) }, '*');
 		window.hostMessages = [];
 		window.fixture = { update: patch => { state = { ...state, ...patch }; publish(); }, snapshot: () => state };

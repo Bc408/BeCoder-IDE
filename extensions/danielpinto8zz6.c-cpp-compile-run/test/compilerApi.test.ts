@@ -1,12 +1,16 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
+import * as os from 'os';
 import { createRequire } from 'module';
 import { test } from 'node:test';
 import { buildCompilerArguments } from '../src/compilation';
@@ -34,4 +38,31 @@ test('Runner compiler API reads current shared settings and returns the Run comm
 		assert.ok(plan.environment.PATH.startsWith('C:\\BeCoder\\bin'));
 	}
 	assert.throws(() => api.prepareCompilation('a.py', 'a.exe', 'private'));
+});
+
+test('Runner captured compiler API exposes the exact bytes used by its private plan', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-captured-api-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const source = path.join(root, 'main.cpp');
+	fs.writeFileSync(source, '// V1\n');
+	const entry = path.resolve(__dirname, '../src/extension.js');
+	const nativeRequire = createRequire(entry);
+	const exports: any = {};
+	const disposable = { dispose() { } };
+	new vm.Script(`(function(require,exports){${fs.readFileSync(entry, 'utf8')}\n})`).runInThisContext()((id: string) => {
+		if (id === 'vscode') { return { window: { registerTerminalProfileProvider: () => disposable }, commands: { registerCommand: () => disposable } }; }
+		if (id === './compile-run-manager') { return { CompileRunManager: class { dispose() { } } }; }
+		if (id === './compiler') { return { bundledCompiler: () => 'C:\\BeCoder\\bin\\g++.exe', runnerSettings: (): RunnerSettings => ({ cStandard: 'c17', cppStandard: 'c++20', cFlags: [], cppFlags: [] }) }; }
+		return nativeRequire(id);
+	}, exports);
+	const api = exports.activate({ subscriptions: [] });
+	assert.strictEqual(typeof api.prepareCapturedCompilation, 'function');
+	const plan = await api.prepareCapturedCompilation(source, path.join(root, 'program.exe'), root);
+	fs.writeFileSync(source, '// V2\n');
+	assert.strictEqual(fs.readFileSync(plan.sourceSnapshot.path, 'utf8'), '// V1\n');
+	assert.strictEqual(Buffer.from(plan.sourceSnapshot.bytesBase64, 'base64').toString('utf8'), '// V1\n');
+	assert.strictEqual(plan.sourceSnapshot.originalPath, source);
+	assert.ok(plan.args.includes(plan.sourceSnapshot.path));
+	assert.ok(!plan.args.includes(source));
+	await assert.rejects(api.prepareCapturedCompilation('a.py', 'a.exe', root));
 });

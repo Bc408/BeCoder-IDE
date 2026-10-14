@@ -45,7 +45,7 @@ export interface Message {
 
 export interface ToolActivity {
 	id: string;
-	type: 'read' | 'list' | 'find' | 'search' | 'web-search' | 'web-fetch';
+	type: 'read' | 'list' | 'find' | 'search' | 'web-search' | 'web-fetch' | 'notebook-edit';
 	path: string;
 	status: 'running' | 'complete' | 'error' | 'stopped';
 	error?: WebError;

@@ -9,6 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
+const { randomUUID } = require('crypto');
+const { PDFSelectionBridge } = require('./selectionBridge');
 
 const viewType = 'pdf.view';
 const viewerPath = path.join(__dirname, '..', 'assets', 'pdf.js', 'web', 'viewer.html');
@@ -46,6 +48,7 @@ function sameUri(left, right) {
 class PDFDocument {
 	constructor(uri) {
 		this.uri = uri;
+		this.closed = false;
 		this.disposables = [];
 		this.changeEmitter = new vscode.EventEmitter();
 		this.onDidChange = this.changeEmitter.event;
@@ -63,6 +66,7 @@ class PDFDocument {
 	}
 
 	dispose() {
+		this.closed = true;
 		while (this.disposables.length > 0) {
 			this.disposables.pop()?.dispose();
 		}
@@ -94,13 +98,15 @@ class PDFViewerProvider {
 	constructor(context) {
 		this.extensionRoot = vscode.Uri.file(context.extensionPath);
 		this.webviews = new WebviewCollection();
+		this.selections = new Map();
 	}
 
 	openCustomDocument(uri) {
 		const document = new PDFDocument(uri);
 		document.onDidChange(changedUri => {
 			for (const panel of this.webviews.get(changedUri)) {
-				void panel.webview.postMessage({ action: 'reload' });
+				const bridge = this.selections.get(panel); bridge?.invalidate();
+				void panel.webview.postMessage({ action: 'reload', version: bridge?.version });
 			}
 		});
 		return document;
@@ -108,6 +114,11 @@ class PDFViewerProvider {
 
 	resolveCustomEditor(document, panel) {
 		this.webviews.add(document.uri, panel);
+		let closed = false;
+		const bridge = new PDFSelectionBridge(message => panel.webview.postMessage(message), () => !closed && !document.closed);
+		bridge.id = `pdf:${randomUUID()}`;
+		this.selections.set(panel, bridge);
+		const dispose = panel.onDidDispose(() => { closed = true; bridge.dispose(); this.selections.delete(panel); receive.dispose(); dispose.dispose(); });
 
 		const resourceRoot = vscode.Uri.file(path.dirname(document.uri.fsPath));
 		const webviewResourceRoot = withTrailingSlash(panel.webview.asWebviewUri(resourceRoot));
@@ -116,7 +127,10 @@ class PDFViewerProvider {
 			localResourceRoots: [resourceRoot, this.extensionRoot]
 		};
 		panel.webview.html = this.getHtml(document, panel.webview, resourceRoot);
-		panel.webview.onDidReceiveMessage(async message => {
+		const receive = panel.webview.onDidReceiveMessage(async message => {
+			if (message?.type === 'becoderPdfReady') { bridge.ready(message.version); return; }
+			if (message?.type === 'becoderPdfDocumentReady') { bridge.documentReady(message.version, message.pageCount); return; }
+			if (['becoderPdfSelection', 'becoderPdfPage'].includes(message?.type)) { bridge.receive(message); return; }
 			if (!message || typeof message !== 'object' || typeof message.open !== 'string') {
 				return;
 			}
@@ -136,6 +150,41 @@ class PDFViewerProvider {
 				// Ignore malformed or non-local messages from the webview.
 			}
 		});
+	}
+
+	async captureSelection() {
+		const entry = [...this.selections].find(([panel]) => panel.active && panel.visible);
+		if (!entry) { return undefined; }
+		const [panel, bridge] = entry;
+		const resource = [...this.webviews.entries].find(entry => entry.panel === panel)?.resource;
+		const captured = await bridge.capture();
+		if (!resource || !bridge.current(captured.version) || !panel.active) { throw new Error('pdf-selection-changed'); }
+		return { uri: resource, contents: captured.text, firstPage: captured.firstPage, lastPage: captured.lastPage, isCurrent: () => panel.visible && bridge.current(captured.version) };
+	}
+
+	listPages() {
+		return [...this.selections].filter(([, bridge]) => !bridge.closed && bridge.isOpen()).map(([panel, bridge]) => {
+			const uri = [...this.webviews.entries].find(entry => entry.panel === panel)?.resource;
+			return { id: bridge.id, kind: 'pdf', uri, title: panel.title || 'PDF', version: String(bridge.version), pageCount: bridge.pageCount, ...(!bridge.pageCount ? { reason: 'beacon-page-not-ready' } : {}) };
+		});
+	}
+
+	async readPage(id, version, pageNumber) {
+		const page = this.listPages().find(page => page.id === id);
+		if (!page) { throw new Error('beacon-page-closed'); }
+		if (page.version !== version) { throw new Error('beacon-page-changed'); }
+		const bridge = [...this.selections.values()].find(bridge => bridge.id === id);
+		try {
+			const result = await bridge.readPage(pageNumber);
+			const current = this.listPages().find(page => page.id === id);
+			if (!current) { throw new Error('beacon-page-closed'); }
+			if (current.version !== version) { throw new Error('beacon-page-changed'); }
+			return { ...page, pageNumber, contents: result.text, totalCharacters: result.text.length };
+		} catch (error) {
+			if (error.message === 'pdf-selection-changed') { throw new Error('beacon-page-changed'); }
+			if (error.message === 'pdf-selection-closed') { throw new Error('beacon-page-closed'); }
+			throw error;
+		}
 	}
 
 	resolveAsset(webview, ...segments) {
@@ -179,11 +228,14 @@ class PDFViewerProvider {
 }
 
 function activate(context) {
+	const provider = new PDFViewerProvider(context);
 	context.subscriptions.push(vscode.window.registerCustomEditorProvider(
 		viewType,
-		new PDFViewerProvider(context),
-		{ supportsMultipleEditorsPerDocument: false }
+		provider,
+		{ supportsMultipleEditorsPerDocument: false, webviewOptions: { retainContextWhenHidden: true } }
 	));
+	context.subscriptions.push({ dispose: () => { for (const bridge of provider.selections.values()) { bridge.dispose(); } provider.selections.clear(); } });
+	return { captureSelection: () => provider.captureSelection(), listPages: () => provider.listPages(), readPage: (id, version, pageNumber) => provider.readPage(id, version, pageNumber) };
 }
 
 function deactivate() { }

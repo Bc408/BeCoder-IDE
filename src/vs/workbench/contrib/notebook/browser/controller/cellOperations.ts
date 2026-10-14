@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { IBulkEditService, ResourceEdit, ResourceTextEdit } from '../../../../../editor/browser/services/bulkEditService.js';
@@ -19,6 +22,7 @@ import { cellRangeContains, cellRangesToIndexes, ICellRange } from '../../common
 import { localize } from '../../../../../nls.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
 import { INotebookKernelHistoryService } from '../../common/notebookKernelService.js';
+import { beCoderNotebookType, beCoderNotebookInputLanguage, isBeCoderInputCell } from '../../../becoder/common/beCoderNotebook.js';
 
 export async function changeCellToKind(kind: CellKind, context: INotebookActionContext, language?: string, mime?: string): Promise<void> {
 	const { notebookEditor } = context;
@@ -709,6 +713,13 @@ export function insertCell(
 		if (!supportedLanguages.includes(language)) {
 			// the language no longer exists
 			language = defaultLanguage;
+		}
+		if (viewModel.notebookDocument.viewType === beCoderNotebookType && language === beCoderNotebookInputLanguage) {
+			language = 'cpp';
+			for (let cursor = Math.min(index, viewModel.length - 1); cursor >= 0; cursor--) {
+				const previous = viewModel.cellAt(cursor);
+				if (previous?.cellKind === CellKind.Code && ['c', 'cpp'].includes(previous.language) && !isBeCoderInputCell(previous.model.metadata)) { language = previous.language; break; }
+			}
 		}
 	} else {
 		language = 'markdown';

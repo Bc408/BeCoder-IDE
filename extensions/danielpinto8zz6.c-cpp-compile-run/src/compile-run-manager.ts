@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
@@ -10,6 +13,7 @@ import { BcCommand, formatRunCommand, parseBcCommand, resolveCommandSource } fro
 import { CommandHistory } from './bcLineEditor';
 import { BcTerminal } from './bcTerminal';
 import { BeCoderSource, PreparedSource, RunnerRequestError, bundledCompiler, exactInputPath, prepareActiveSource, prepareCommandSource, runnerSettings } from './compiler';
+import { BeaconEvidence } from './beaconEvidence';
 import { RunnerLifecycle, RunnerPhase } from './runnerLifecycle';
 import { finalizePublishedExecutable, RunnerExecutionResult, RunnerExecutor } from './runnerProcess';
 import { presentRunnerResult } from './runnerPresentation';
@@ -18,6 +22,7 @@ const runnerName = 'BeCoder Runner';
 
 type ActiveRequest = {
 	cancelled: boolean;
+	beaconActivity?: string;
 	exitCode?: number;
 	readonly pseudoterminal: BcTerminal;
 };
@@ -100,9 +105,11 @@ export class CompileRunManager implements vscode.Disposable {
 			return;
 		}
 		try {
+			request.beaconActivity = await this.beginBeaconActivity(vscode.window.activeTextEditor?.document.uri.fsPath);
 			const panelStartedAt = Date.now();
 			terminal.show(false);
 			const prepared = await prepareActiveSource();
+			if (!request.beaconActivity) { request.beaconActivity = await this.beginBeaconActivity(prepared.source.path); }
 			const panelReadyMs = await pseudoterminal.waitForOpen(panelStartedAt);
 			this.throwIfCancelled(request);
 			if (panelReadyMs === undefined) {
@@ -121,6 +128,7 @@ export class CompileRunManager implements vscode.Disposable {
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
+			await this.endBeaconActivity(request);
 			this.finishRequest(request);
 		}
 	}
@@ -158,14 +166,28 @@ export class CompileRunManager implements vscode.Disposable {
 		const requestStartedAt = Date.now();
 		try {
 			const sourcePath = resolveCommandSource(parsed.command.source, pseudoterminal.cwd);
+			request.beaconActivity = await this.beginBeaconActivity(sourcePath);
 			const prepared = await prepareCommandSource(sourcePath);
 			this.throwIfCancelled(request);
 			await this.executeRun(text.trim(), parsed.command, prepared, requestStartedAt, 0, pseudoterminal, request);
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
+			await this.endBeaconActivity(request);
 			this.finishRequest(request);
 		}
+	}
+
+	private async beginBeaconActivity(source: string | undefined): Promise<string | undefined> {
+		if (!source) { return undefined; }
+		try { return await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source }); }
+		catch (error) { this.trace.warn('Beacon activity tracking unavailable', error); return undefined; }
+	}
+
+	private async endBeaconActivity(request: ActiveRequest): Promise<void> {
+		if (!request.beaconActivity) { return; }
+		try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: request.beaconActivity }); }
+		catch (error) { this.trace.warn('Beacon activity release unavailable', error); }
 	}
 
 	private async executeRun(
@@ -194,6 +216,10 @@ export class CompileRunManager implements vscode.Disposable {
 			panelReadyMs,
 			saveMs: prepared.saveMs
 		}, {
+			evidence: new BeaconEvidence(request.beaconActivity, 'runner', (operation, input) => vscode.commands.executeCommand('_becoder.beacon.context', operation, input), error => {
+				this.trace.warn('Beacon run evidence unavailable', error);
+				pseudoterminal.writeError(vscode.l10n.t('Beacon could not save this run evidence. Program execution is unaffected.'));
+			}),
 			write: text => pseudoterminal.writeProcessOutput(text),
 			setPhase: phase => {
 				if (!this.lifecycle.setPhase(phase)) {

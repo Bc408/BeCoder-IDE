@@ -13,6 +13,8 @@ import { Icon } from './Icon';
 import { capabilitySummary, Settings } from './Settings';
 import { resolveCapabilities } from '../src/models';
 import { ResponseActivity } from './ResponseActivity';
+import { Workspace } from './Workspace';
+import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import { Permissions } from './Permissions';
 import { Notifications, type Notification } from './Notifications';
 import { ImagePreview } from './ImagePreview';
@@ -28,7 +30,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
+type State = Snapshot & { context?: IBeaconContext; canSend: boolean; temporary: boolean; viewKey: string; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -65,7 +67,7 @@ function AttachmentCard({ item, remove, busy, preview }: { item: Attachment; rem
 }
 
 function App() {
-	const [state, setState] = useState<State>({ attachments: [], messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, models: [], error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false, permission: 'none', webEnabled: true });
+	const [state, setState] = useState<State>({ canSend: false, temporary: true, viewKey: '', attachments: [], messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false, permission: 'none', webEnabled: true });
 	const [notices, setNotices] = useState<Notification[]>([]);
 	const lastNotice = useRef<number | undefined>(undefined);
 	const dismissNotice = useCallback((id: number) => setNotices(previous => previous.filter(notice => notice.id !== id)), []);
@@ -86,7 +88,7 @@ function App() {
 	const input = useRef<HTMLTextAreaElement>(null);
 	const editInput = useRef<HTMLTextAreaElement>(null);
 	const composing = useRef(false);
-	useEffect(() => { setPreview(undefined); pasteJob.current?.abort(); }, [state.activeId]);
+	useEffect(() => { setPreview(undefined); pasteJob.current?.abort(); }, [state.viewKey]);
 	useEffect(() => () => pasteJob.current?.abort(), []);
 	const openAttachment = (items: Attachment[], item: Attachment, url?: string) => {
 		if (item.kind === 'image') {
@@ -96,9 +98,9 @@ function App() {
 	};
 	useEffect(() => {
 		const listener = (event: MessageEvent) => {
-			if (event.data?.type === 'sendAccepted' && activeRef.current === event.data.activeId) {
+			if (event.data?.type === 'sendAccepted' && activeRef.current === event.data.viewKey) {
 				if (draftRef.current === event.data.text) { draftRef.current = ''; setDraft(''); }
-				drafts.current.set(event.data.conversationId ?? event.data.activeId, draftRef.current);
+				drafts.current.set(event.data.conversationViewKey ?? event.data.viewKey, draftRef.current);
 			}
 			if (event.data?.type === 'snapshot') {
 				const notice = event.data.requestNotice as Notification | undefined;
@@ -106,10 +108,10 @@ function App() {
 					lastNotice.current = notice.id;
 					setNotices(previous => [notice, ...previous].slice(0, 3));
 				}
-				if (typeof event.data.activeId === 'string' && activeRef.current !== event.data.activeId) {
+				if (typeof event.data.viewKey === 'string' && activeRef.current !== event.data.viewKey) {
 					drafts.current.set(activeRef.current, draftRef.current);
-					activeRef.current = event.data.activeId;
-					draftRef.current = drafts.current.get(event.data.activeId) ?? '';
+					activeRef.current = event.data.viewKey;
+					draftRef.current = drafts.current.get(event.data.viewKey) ?? '';
 					setDraft(draftRef.current);
 					setCopied(undefined);
 					setEditing(undefined);
@@ -156,7 +158,7 @@ function App() {
 		const controller = new AbortController();
 		pasteJob.current = controller; setPasting(true);
 		void readClipboardImages(files, controller.signal).then(images => {
-			if (!controller.signal.aborted && activeRef.current === activeId) { api.postMessage({ type: 'pasteImages', images, activeId }); }
+			if (!controller.signal.aborted && activeRef.current === activeId) { api.postMessage({ type: 'pasteImages', images, activeId: state.activeId }); }
 		}).catch(error => {
 			if (!controller.signal.aborted) { api.postMessage({ type: 'attachmentInputError', code: error instanceof Error && error.message === 'budget' ? 'budget' : 'image' }); }
 		}).finally(() => { if (pasteJob.current === controller) { pasteJob.current = undefined; setPasting(false); } });
@@ -164,10 +166,9 @@ function App() {
 	const pausedReply = state.messages.at(-1);
 	const canContinue = pausedReply?.role === 'assistant' && pausedReply.status === 'stopped' && !draft.trim() && !state.attachments.length;
 	const capabilities = state.connection.capabilities ?? resolveCapabilities(state.connection.provider, state.connection.baseURL, state.connection.model, undefined, state.connection.modelSettings);
-	const fileAttachments = state.attachments.filter(item => item.source !== 'clipboard');
-	const blocked = fileAttachments.length && (state.permission === 'none' || (state.permission === 'workspace' && fileAttachments.some(item => item.source !== 'internal'))) ? t('These attachments are not allowed by the current permission. Remove them or change the permission.', '当前权限不允许发送这些附件，请移除附件或切换权限。') : capabilities.vision !== 'supported' && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
+	const blocked = capabilities.vision !== 'supported' && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
 	const send = () => {
-		if (!ready || busy || !state.configured || state.historyUnreadable || blocked || (!draft.trim() && !state.attachments.length && !canContinue)) { return; }
+		if (!ready || busy || !state.canSend || !state.configured || state.historyUnreadable || blocked || (!draft.trim() && !state.attachments.length && !canContinue)) { return; }
 		setPending(true);
 		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id }); return; }
 		api.postMessage({ type: 'send', text: draft });
@@ -191,6 +192,8 @@ function App() {
 			<button onClick={() => api.postMessage({ type: 'settings' })} data-becoder-tooltip={t('Connection settings', '连接设置')} aria-label={t('Connection settings', '连接设置')}><Icon name="settings" /></button>
 			<button disabled={busy || !ready || state.historyUnreadable} onClick={() => { api.postMessage({ type: 'clear' }); setCopied(undefined); }} data-becoder-tooltip={t('New chat', '新聊天')} aria-label={t('New chat', '新聊天')}><Icon name="new" /></button>
 		</div></header>
+		<Workspace context={state.context} busy={busy || state.saveFailed} post={message => api.postMessage(message)} />
+		{!state.canSend && !state.historyUnreadable && <p className="history-notice">{t("Open or start a chat to ask Beacon.", "打开一段聊天，或点击新聊天开始提问。")}</p>}
 		<Notifications notices={notices} latest={state.requestNotice} dismiss={dismissNotice} />
 		{state.historyUnreadable && <div className="history-notice" role="alert">{t('Chat history could not be read. Your saved data has been preserved. Reload the window to try again.', '无法读取聊天记录，已保留原有数据。请重新加载窗口后再试。')}</div>}
 		{state.saveFailed && !state.historyUnreadable && <div className="history-notice" role="alert">{t('Changes have not been saved. Keep this window open and retry.', '更改尚未保存，请保留此窗口并重试。')}<button onClick={() => api.postMessage({ type: 'saveHistory' })}>{t('Retry saving', '重试保存')}</button></div>}
@@ -235,12 +238,12 @@ function App() {
 					if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); send(); }
 				}} />
 				<div className="composer-toolbar">
-					<Permissions permission={state.permission} ready={ready} post={message => api.postMessage(message)} />
-					{state.permission === 'computer' && <button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} data-becoder-tooltip={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="attach" /></button>}
+					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} post={message => api.postMessage(message)} />
+					{<button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} data-becoder-tooltip={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="attach" /></button>}
 					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools === 'supported'} data-becoder-tooltip={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
 					<span className="composer-spacer" aria-hidden="true" />
 					<ModelPicker connection={state.connection} />
-					{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
+					{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
 				</div>
 			</form>
 		</footer>

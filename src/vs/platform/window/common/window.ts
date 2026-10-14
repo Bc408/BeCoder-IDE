@@ -1,9 +1,13 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { VSBuffer } from '../../../base/common/buffer.js';
+import type { IBeaconWindowSelection } from '../../beacon/common/beaconContext.js';
 import { IStringDictionary } from '../../../base/common/collections.js';
 import { PerformanceMark } from '../../../base/common/performance.js';
 import { isMacintosh, isNative, isWeb } from '../../../base/common/platform.js';
@@ -77,7 +81,6 @@ interface IOpenedWindow {
 export interface IOpenedMainWindow extends IOpenedWindow {
 	readonly workspace?: IAnyWorkspaceIdentifier;
 	readonly dirty: boolean;
-	readonly iconPath?: URI;
 }
 
 export interface IOpenedAuxiliaryWindow extends IOpenedWindow {
@@ -414,6 +417,7 @@ export interface IOSConfiguration {
 }
 
 export interface INativeWindowConfiguration extends IWindowConfiguration, NativeParsedArgs, ISandboxConfiguration {
+	beaconSelection?: IBeaconWindowSelection;
 	mainPid: number;
 	handle?: VSBuffer;
 

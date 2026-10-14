@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 
@@ -113,6 +116,8 @@ import './contrib/files/electron-browser/fileActions.contribution.js';
 // CodeEditor Contributions
 import './contrib/codeEditor/electron-browser/codeEditor.contribution.js';
 import './contrib/becoder/electron-browser/beCoderDisplayLanguage.contribution.js';
+import './contrib/becoder/electron-browser/beaconContext.contribution.js';
+import './contrib/becoder/electron-browser/beCoderNotebook.contribution.js';
 
 // Extensions Management
 import './contrib/extensions/electron-browser/extensions.contribution.js';

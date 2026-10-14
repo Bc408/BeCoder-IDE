@@ -6,6 +6,7 @@
 
 import { PDFViewerApplicationOptions } from './pdf.js/web/viewer.mjs';
 import '../dist/hover.js';
+import { installPdfSelectionCapture, installPdfPageReading } from './selection.mjs';
 
 function loadConfig() {
 	const element = document.querySelector('#pdf-view-config');
@@ -16,6 +17,9 @@ function loadConfig() {
 }
 
 const config = loadConfig();
+let version = 0;
+const send = message => window.PDFViewerApplication.pdfLinkService.postBeCoderMessage(message);
+let pageReader;
 
 PDFViewerApplicationOptions.set('defaultUrl', '');
 PDFViewerApplicationOptions.set('disablePreferences', true);
@@ -63,8 +67,13 @@ document.addEventListener('click', event => {
 
 void (async () => {
 	await window.PDFViewerApplication.initializedPromise;
+	installPdfSelectionCapture(document, window, send, () => version);
+	pageReader = installPdfPageReading(window, send, () => version, () => window.PDFViewerApplication.pdfDocument);
+	const openingVersion = version;
 	await window.PDFViewerApplication.open(config);
+	void pageReader.documentLoaded(window.PDFViewerApplication.pdfDocument, openingVersion);
 	await window.PDFViewerApplication.pdfViewer.pagesPromise;
+	if (version === openingVersion) { send({ type: 'becoderPdfReady', version }); }
 	const [, hash] = config.url.split('#');
 	if (hash) {
 		window.PDFViewerApplication.pdfLinkService.setHash(decodeURIComponent(hash));
@@ -75,10 +84,13 @@ window.addEventListener('message', async event => {
 	if (event.origin !== window.origin || event.data?.action !== 'reload') {
 		return;
 	}
+	version = event.data.version; const loadingVersion = version;
 	await window.PDFViewerApplication.initializedPromise;
 	const currentPage = window.PDFViewerApplication.pdfViewer.currentPageNumber;
 	await window.PDFViewerApplication.open(config);
+	void pageReader?.documentLoaded(window.PDFViewerApplication.pdfDocument, loadingVersion);
 	await window.PDFViewerApplication.pdfViewer.pagesPromise;
+	if (version === loadingVersion) { send({ type: 'becoderPdfReady', version }); }
 	window.PDFViewerApplication.pdfViewer.currentPageNumber = Math.min(
 		currentPage,
 		window.PDFViewerApplication.pdfViewer.pagesCount

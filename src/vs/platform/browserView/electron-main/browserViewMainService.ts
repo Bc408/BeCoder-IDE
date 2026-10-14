@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from '../../../base/common/event.js';
-import { Disposable, DisposableMap } from '../../../base/common/lifecycle.js';
+import { combinedDisposable, Disposable, DisposableMap } from '../../../base/common/lifecycle.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { IBrowserViewBounds, IBrowserViewState, IBrowserViewService, IBrowserViewCaptureScreenshotOptions, IBrowserViewFindInPageOptions, BrowserViewCommandId, IBrowserViewOwner, IBrowserViewInfo, IBrowserViewCreatedEvent, IBrowserViewOpenOptions, IBrowserViewCreateOptions, IBrowserViewWindowConfiguration, IBrowserDeviceProfile } from '../common/browserView.js';
 import { clipboard, Menu, MenuItem } from 'electron';
@@ -23,6 +23,7 @@ import { INativeHostMainService } from '../../native/electron-main/nativeHostMai
 import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
 import { promises as fs } from 'fs';
 import { join } from '../../../base/common/path.js';
+import { readBeaconBrowserPage } from '../../beacon/common/beaconBrowserPage.js';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -286,6 +287,17 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			navigation.dispose();
 			closed.dispose();
 		}
+	}
+
+	async readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string> {
+		const view = this._getBrowserView(id);
+		const contents = view.getWebContentsView().webContents;
+		return readBeaconBrowserPage({
+			ownerWindowId: view.owner.mainWindowId,
+			url: () => contents.getURL(), loading: () => contents.isLoading(), closed: () => contents.isDestroyed(),
+			watchChange: listener => combinedDisposable(view.onDidNavigate(listener), view.onDidClose(listener)),
+			read: code => contents.executeJavaScriptInIsolatedWorld(1003, [{ code }])
+		}, windowId, expectedURL);
 	}
 
 	async clearStorage(id: string): Promise<void> {

@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as glob from '../../../../base/common/glob.js';
@@ -33,6 +36,8 @@ import { ITextResourceConfigurationService } from '../../../../editor/common/ser
 import { ICustomEditorLabelService } from '../../../services/editor/common/customEditorLabelService.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { isAbsolute } from '../../../../base/common/path.js';
+import { beCoderNotebookType } from '../../becoder/common/beCoderNotebook.js';
+import { beCoderNotebookLocks } from '../../becoder/common/beCoderNotebookLocks.js';
 
 export interface NotebookEditorInputOptions {
 	startDirty?: boolean;
@@ -78,6 +83,7 @@ export class NotebookEditorInput extends AbstractResourceEditorInput {
 	) {
 		super(resource, preferredResource, labelService, fileService, filesConfigurationService, textResourceConfigurationService, customEditorLabelService);
 		this._defaultDirtyState = !!options.startDirty;
+		if (viewType === beCoderNotebookType) { this._register(beCoderNotebookLocks.onDidChange(uri => { if (uri === this.resource.toString()) { this._onDidChangeCapabilities.fire(); } })); }
 
 		// Automatically resolve this input when the "wanted" model comes to life via
 		// some other way. This happens only once per input and resolve disposes
@@ -130,6 +136,7 @@ export class NotebookEditorInput extends AbstractResourceEditorInput {
 
 	override get capabilities(): EditorInputCapabilities {
 		let capabilities = EditorInputCapabilities.None;
+		if (this.viewType === beCoderNotebookType && beCoderNotebookLocks.isReadonly(this.resource.toString())) { capabilities |= EditorInputCapabilities.Readonly; }
 
 		if (this.resource.scheme === Schemas.untitled) {
 			capabilities |= EditorInputCapabilities.Untitled;

@@ -52,7 +52,9 @@ bool report(HANDLE pipe,const string &message) {
   return WriteFile(pipe,line.data(),(DWORD)line.size(),&written,nullptr) && written==line.size();
 }
 int wmain(int argc,wchar_t **argv) {
-  if (argc!=4) return 125;
+  if (argc!=4 && argc!=5) return 125;
+  bool mergeOutput=argc==5 && wstring(argv[4])==L"--merge-output";
+  if (argc==5 && !mergeOutput) return 125;
   handle control(CreateFileW(argv[3],GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,0,nullptr));
   if (control.value==INVALID_HANDLE_VALUE) return 125;
   auto fail=[&](const char *stage,DWORD code) {
@@ -76,7 +78,7 @@ int wmain(int argc,wchar_t **argv) {
   startup.dwFlags=STARTF_USESTDHANDLES;
   startup.hStdInput=reader;
   startup.hStdOutput=GetStdHandle(STD_OUTPUT_HANDLE);
-  startup.hStdError=GetStdHandle(STD_ERROR_HANDLE);
+  startup.hStdError=mergeOutput?startup.hStdOutput:GetStdHandle(STD_ERROR_HANDLE);
   PROCESS_INFORMATION child{};
   wstring command=L"\""+wstring(argv[1])+L"\"";
   //先挂起并加入作业，避免用户进程在被纳入回收范围前创建子进程。
@@ -111,6 +113,7 @@ int wmain(int argc,wchar_t **argv) {
     WaitForSingleObject(feederThread.value,INFINITE);
     return 125;
   }
+  auto runStarted=chrono::steady_clock::now();
   if (ResumeThread(thread.value)==(DWORD)-1) {
     DWORD code=GetLastError();
     TerminateJobObject(job.value,125);
@@ -118,6 +121,7 @@ int wmain(int argc,wchar_t **argv) {
     return fail("resume",code);
   }
   WaitForSingleObject(process.value,INFINITE);
+  auto runMs=chrono::duration<double,milli>(chrono::steady_clock::now()-runStarted).count();
   DWORD exitCode=125;
   bool gotExit=GetExitCodeProcess(process.value,&exitCode);
   DWORD exitError=GetLastError();
@@ -126,6 +130,6 @@ int wmain(int argc,wchar_t **argv) {
   WaitForSingleObject(feederThread.value,INFINITE);
   if (!gotExit) return fail("exit-code",exitError);
   if (state.error) return fail("feed",state.error);
-  if (!report(control.value,"{\"type\":\"exit\",\"code\":"+to_string(exitCode)+"}")) return 125;
+  if (!report(control.value,"{\"type\":\"exit\",\"code\":"+to_string(exitCode)+",\"runMs\":"+to_string(runMs)+"}")) return 125;
   return (int)exitCode;
 }

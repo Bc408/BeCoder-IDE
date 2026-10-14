@@ -1,4 +1,5 @@
 {
+	"command.askSelection": "询问 Beacon",
 	"description": "Beacon：面向算法竞赛的对话助手。",
 	"open": "打开/关闭 Beacon 侧边栏",
 	"permissions.none": "不读取本地文件；已有会话上下文继续保留。",

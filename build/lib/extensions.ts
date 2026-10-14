@@ -49,6 +49,7 @@ export const excludedForOIDistribution = new Set([
 export const prebuiltOIDistributionExtensions = new Set([
 	'becoder.beacon',
 	'becoder.cph',
+	'becoder.notebook',
 	'MS-CEINTL.vscode-language-pack-zh-hans',
 	'adpyke.codesnap',
 	'danielpinto8zz6.c-cpp-compile-run',

@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { IClipboardService } from '../../../../../platform/clipboard/common/clipboardService.js';
@@ -9,6 +12,8 @@ import { NotebookTextModel } from '../../common/model/notebookTextModel.js';
 import { IOutputItemDto } from '../../common/notebookCommon.js';
 import { isTextStreamMime } from '../../../../../base/common/mime.js';
 import { ICellOutputViewModel, ICellViewModel } from '../notebookBrowser.js';
+import { beCoderNotebookStreamMime } from '../../../becoder/common/beCoderNotebook.js';
+import { removeAnsiEscapeCodes } from '../../../../../base/common/strings.js';
 
 interface Error {
 	name: string;
@@ -102,6 +107,7 @@ export function getOutputText(mimeType: string, buffer: IOutputItemDto, shortErr
 			// just use raw text
 		}
 	}
+	if (mimeType === beCoderNotebookStreamMime) { return removeAnsiEscapeCodes(decoder.decode(buffer.data.buffer)); }
 
 	return text.trim();
 }
@@ -129,6 +135,7 @@ export async function copyCellOutput(mimeType: string | undefined, outputViewMod
 }
 
 export const TEXT_BASED_MIMETYPES = [
+	beCoderNotebookStreamMime,
 	'text/latex',
 	'text/html',
 	'application/vnd.code.notebook.error',

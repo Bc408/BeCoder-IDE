@@ -1,11 +1,15 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import electron, { Display, Rectangle } from 'electron';
 import { Color } from '../../../base/common/color.js';
 import { Event } from '../../../base/common/event.js';
+import type { IBeaconWindowSelection } from '../../beacon/common/beaconContext.js';
 import { join } from '../../../base/common/path.js';
 import { IProcessEnvironment, isLinux, isMacintosh, isWindows } from '../../../base/common/platform.js';
 import { URI } from '../../../base/common/uri.js';
@@ -23,6 +27,7 @@ import { ICodeWindow, IWindowState, WindowMode, defaultWindowState } from '../..
 export const IWindowsMainService = createDecorator<IWindowsMainService>('windowsMainService');
 
 export interface IWindowsMainService {
+	updateBeaconWindowSelection(windowId: number, selection: IBeaconWindowSelection): void;
 
 	readonly _serviceBrand: undefined;
 

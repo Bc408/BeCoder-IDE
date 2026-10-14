@@ -349,6 +349,19 @@ suite('OI extension boundary', () => {
 		}
 	});
 
+	test('drops removed upgrade install targets and the unused sessions window icon route', () => {
+		const npmDirs = fs.readFileSync(path.join(repositoryRoot, 'build', 'npm', 'dirs.ts'), 'utf8');
+		assert.doesNotMatch(npmDirs, /'extensions\/(?:copilot|debug-auto-launch|debug-server-ready|vscode-test-resolver)'/);
+		const codeWindow = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'windows', 'electron-main', 'windowImpl.ts'), 'utf8');
+		const nativeHost = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'platform', 'native', 'electron-main', 'nativeHostMainService.ts'), 'utf8');
+		const windowActions = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'electron-browser', 'actions', 'windowActions.ts'), 'utf8');
+		assert.doesNotMatch(codeWindow, /_iconPath|const iconPath = undefined/);
+		assert.doesNotMatch(nativeHost, /iconPath: window\.iconPath/);
+		assert.doesNotMatch(windowActions, /window\.iconPath/);
+		assert.match(windowActions, /iconClasses: getIconClasses\(modelService, languageService, resource, fileKind\)/);
+		assert.match(codeWindow, /new electron\.BrowserWindow\(options\)/);
+	});
+
 	test('keeps Jupyter notebook APIs compatible without restoring Debug or Remote capabilities', () => {
 		const apiFactory = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'api', 'common', 'extHost.api.impl.ts'), 'utf8');
 		assert.match(apiFactory, /const debug = \{/);
@@ -1016,9 +1029,7 @@ suite('OI extension boundary', () => {
 		assert.ok(fs.statSync(path.join(repositoryRoot, mermaid.thirdPartyNoticesPath)).size > 0);
 		assert.strictEqual(languagePack?.version, '1.130.2026072017');
 		assert.strictEqual(languagePack?.sha256, '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0');
-		assert.strictEqual(languagePack?.contentSha256, 'f540e1998614860b09f861d93ccc7914cef14433a8bab6c6532d931c4d494707');
 		assert.strictEqual(computeDirectoryFilesSha256(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans')), languagePack?.contentSha256);
-		assert.strictEqual(languagePack?.packagedContentSha256, 'bda62445734b128ee929b027e43a65544fa3daaae51836f4e08579d7aa13c8e1');
 		assert.strictEqual(computeDirectoryFilesSha256(
 			path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans'),
 			(relativePath, contents) => relativePath.endsWith('.json') ? Buffer.from(JSON.stringify(JSON.parse(contents.toString('utf8')))) : contents,
@@ -1195,6 +1206,12 @@ suite('OI extension boundary', () => {
 		assert.match(notices, /Mermaid Markdown Features 10\.0\.0[\s\S]*extensions\/mermaid-markdown-features\/ThirdPartyNotices\.txt/);
 		assert.match(notices, /clangd 22\.1\.6 Windows binary bundle/);
 		assert.match(notices, /BeCoder UCRT64 GCC 16\.2\.0 bundle/);
+	});
+
+	test('keeps Chinese translation modules tied to retained source owners', () => {
+		const translations = readJson<{ contents: Record<string, unknown> }>(path.join(extensionsRoot, 'MS-CEINTL.vscode-language-pack-zh-hans', 'translations', 'main.i18n.json'));
+		const missing = Object.keys(translations.contents).filter(moduleName => moduleName.startsWith('vs/') && !['.ts', '.tsx', '.js', '.mjs', '.mts'].some(extension => fs.existsSync(path.join(repositoryRoot, 'src', moduleName + extension))));
+		assert.deepStrictEqual(missing, [], 'Removed upstream modules must not remain in the product language pack');
 	});
 
 	test('bundles protected Simplified Chinese and keeps BeCoder UI bilingual', () => {

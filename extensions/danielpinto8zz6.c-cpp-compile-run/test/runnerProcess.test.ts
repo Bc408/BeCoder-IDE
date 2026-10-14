@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -23,6 +26,76 @@ const settings: RunnerSettings = {
 };
 
 suite('Runner process boundary', () => {
+	test('observes compile attempt, separate compiler streams and failure without a model', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-runner-evidence-'));
+		try {
+			const source = sourceAt(path.join(root, 'main.cpp'));
+			const compilerPath = path.join(root, 'g++.exe');
+			fs.writeFileSync(source.path, '// V1\n'); fs.writeFileSync(compilerPath, 'fake');
+			const observations: { kind: string; value: any }[] = [];
+			let spawns = 0;
+			const executor = new RunnerExecutor(path.join(root, 'sessions'), {
+				spawn: ((_file: string) => {
+					spawns++;
+					const child = new FakeChild();
+					process.nextTick(() => {
+						child.emit('spawn'); child.stdout.write('compiler stdout'); child.stderr.write('compiler stderr'); child.close(1);
+					});
+					return child as unknown as ChildProcessWithoutNullStreams;
+				}) as typeof spawn
+			});
+			const callbacks = {
+				write: (): void => undefined, setPhase: (): void => undefined,
+				evidence: {
+					start: (snapshot: unknown, metadata: unknown) => { observations.push({ kind: 'start', value: { snapshot, metadata, spawns } }); },
+					event: (value: unknown) => { observations.push({ kind: 'event', value }); },
+					finish: async (value: unknown) => { observations.push({ kind: 'finish', value }); }
+				}
+			};
+			const result = await executor.execute(requestFor(source, compilerPath), callbacks);
+			assert.strictEqual(result.status, 'compile-error');
+			assert.strictEqual(observations[0]?.kind, 'start');
+			assert.strictEqual(observations[0].value.spawns, 0);
+			assert.strictEqual(observations[0].value.snapshot.sha256, result.sourceSnapshot!.sha256);
+			assert.ok(observations.some(item => item.value?.stream === 'stdout' && item.value.text === 'compiler stdout'));
+			assert.ok(observations.some(item => item.value?.stream === 'stderr' && item.value.text === 'compiler stderr'));
+			assert.strictEqual(observations.at(-1)?.kind, 'finish');
+			assert.strictEqual(observations.at(-1)?.value.status, 'compile-error');
+		} finally { fs.rmSync(root, { recursive: true, force: true }); }
+	});
+	test('compiles captured source even when the original changes at the compile boundary', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-source-binding-'));
+		try {
+			const source = sourceAt(path.join(root, 'main.cpp'));
+			const compilerPath = path.join(root, 'g++.exe');
+			fs.writeFileSync(source.path, '// captured V1\n');
+			fs.writeFileSync(compilerPath, 'fake compiler');
+			let compiledPath = '';
+			let compiledContent = '';
+			const executor = new RunnerExecutor(path.join(root, 'sessions'), {
+				spawn: ((_file: string, args: readonly string[]) => {
+					const child = new FakeChild();
+					compiledPath = args[args.indexOf('-o') - 1];
+					compiledContent = fs.readFileSync(compiledPath, 'utf8');
+					process.nextTick(() => { child.emit('spawn'); child.close(1); });
+					return child as unknown as ChildProcessWithoutNullStreams;
+				}) as typeof spawn
+			});
+			const result = await executor.execute(requestFor(source, compilerPath), {
+				write: () => undefined,
+				setPhase: () => fs.writeFileSync(source.path, '// later V2\n')
+			});
+			assert.strictEqual(result.status, 'compile-error');
+			assert.strictEqual(compiledContent, '// captured V1\n');
+			assert.notStrictEqual(compiledPath, source.path);
+			assert.strictEqual(path.basename(compiledPath), 'main.cpp');
+			assert.strictEqual(fs.readFileSync(source.path, 'utf8'), '// later V2\n');
+			assert.strictEqual(fs.existsSync(compiledPath), false);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	test('builds the fixed compiler command and rejects path or linker controls', () => {
 		const source = sourceAt('D:\\contest\\main.cpp');
 		assert.deepStrictEqual(buildCompilerArguments(source, settings, 'D:\\contest\\main.exe'), [

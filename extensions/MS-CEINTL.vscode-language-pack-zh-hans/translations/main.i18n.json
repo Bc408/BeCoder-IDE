@@ -1590,9 +1590,6 @@
 			"parameterHintsPreviousIcon": "“显示上一个参数”提示的图标。",
 			"previous": "上一步"
 		},
-		"vs/editor/contrib/inlineCompletions/browser/model/renameSymbolProcessor": {
-			"rename": "重命名"
-		},
 		"vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/components/gutterIndicatorMenu": {
 			"gotoAndAccept": "转到/接受",
 			"reject": "拒绝",
@@ -2712,16 +2709,6 @@
 		"vs/platform/quickinput/browser/tree/quickTree": {
 			"quickInputBox.ariaLabel": "在此输入可缩小结果范围。"
 		},
-		"vs/platform/remoteTunnel/common/remoteTunnel": {
-			"remoteTunnelLog": "远程隧道服务"
-		},
-		"vs/platform/remoteTunnel/node/remoteTunnelService": {
-			"remoteTunnelService.authorizing": "正在以 {0} 的身份连接({1})",
-			"remoteTunnelService.building": "正在从源生成 CLI",
-			"remoteTunnelService.openTunnel": "正在打开隧道",
-			"remoteTunnelService.openTunnelWithName": "正在打开隧道 {0}",
-			"remoteTunnelService.serviceInstallFailed": "未能安装隧道即服务，从会话开始..."
-		},
 		"vs/platform/request/common/request": {
 			"electronFetch": "控制是否应启用对 Electron 而不是 Node.js 的 fetch 实现的使用。所有本地扩展都将获得用于全局提取 API 的 Electron 提取实现。",
 			"fetchAdditionalSupport": "控制是否应扩展 Node.js 提取实现并提供额外支持。启用相应的设置时，当前将添加代理支持 ({1}) 和系统证书 ({2})。在 [remote development](https://aka.ms/vscode-remote) 禁用 {0} 设置时，可在本地设置和远程设置中单独配置此设置。",
@@ -3315,28 +3302,6 @@
 			"workspaceOpenedDetail": "已在另一个窗口打开工作区。请先关闭该窗口，然后重试。",
 			"workspaceOpenedMessage": "无法保存工作区“{0}”"
 		},
-		"vs/server/node/remoteExtensionHostAgentCli": {
-			"remotecli": "远程 CLI"
-		},
-		"vs/server/node/serverEnvironmentService": {
-			"acceptLicenseTerms": "如果已设置，则用户接受服务器许可条款，并将在没有用户提示的情况下启用服务器。",
-			"connection-token": "必须包含在所有请求中的机密。",
-			"connection-token-file": "包含连接令牌的文件的路径。",
-			"default-folder": "未在浏览器 URL 中指定输入时要打开的工作区文件夹。已针对当前工作目录解析相对或绝对路径。",
-			"default-workspace": "未在浏览器 URL 中指定输入时要打开的工作区。已针对当前工作目录解析相对或绝对路径。",
-			"host": "服务器应侦听的主机名或 IP 地址。如果未设置，则默认为 “localhost”。",
-			"port": "服务器应侦听的端口。如果传递了 0，则会选取一个随机的空闲端口。如果传递了采用 num-num 格式的范围，则将从范围中选择(包含结束)空闲端口。",
-			"reconnection-grace-time": "替代重新连接宽限期窗口(秒)。默认值为 10800 秒(3 小时)。",
-			"server-base-path": "提供 Web UI 和代码服务器的路径。默认为 “/”。`",
-			"serverDataDir": "指定保存服务器数据的目录。",
-			"socket-path": "服务器要侦听的套接字文件的路径。",
-			"start-server": "安装或卸载扩展时启动服务器。将与 “install-extension”、“install-builtin-extension” 和 “uninstall-extension” 结合使用。",
-			"telemetry-level": "设置初始遥测级别。有效级别为: “off”、 crash”、“error” 和 “all”。如果未指定，服务器将在客户端连接之前发送遥测数据，然后将使用客户端遥测设置。将此项设置为 “off” 等效于 --disable-telemetry",
-			"without-connection-token": "在没有连接令牌的情况下运行。仅当通过其他方式保护连接时才使用此项。"
-		},
-		"vs/server/node/serverServices": {
-			"remoteExtensionLog": "服务器"
-		},
 		"vs/code/electron-main/app": {
 			"cancel": "否(&&N)",
 			"confirmOpenDetail": "如果你未发起此请求，则可能表示有人试图攻击你的系统。除非你采取了明确操作来发起此请求，否则应按“否”",
@@ -3391,9 +3356,6 @@
 			"loginWith": "使用 {0} 登录",
 			"no": "否",
 			"yes": "是"
-		},
-		"vs/workbench/api/browser/mainThreadCLICommands": {
-			"cannot be installed": "无法安装“{0}”扩展，因为它被声明为不在此安装程序中运行。"
 		},
 		"vs/workbench/api/browser/mainThreadComments": {
 			"commentsViewIcon": "查看备注视图的图标。"
@@ -3460,10 +3422,6 @@
 		},
 		"vs/workbench/api/browser/mainThreadTask": {
 			"task.label": "{0}: {1}"
-		},
-		"vs/workbench/api/browser/mainThreadTunnelService": {
-			"remote.tunnel.openTunnel": "扩展 {0} 具有转发端口 {1}。需要以超级用户身份运行，才能在本地使用端口 {2}。",
-			"remote.tunnelsView.elevationButton": "使用端口 {0} 作为 Sudo…"
 		},
 		"vs/workbench/api/browser/mainThreadUriOpeners": {
 			"openerFailedMessage": "无法使用 \"{0}\" 打开 uri: {1}",
@@ -3638,10 +3596,6 @@
 		},
 		"vs/workbench/api/common/extHostTerminalService": {
 			"launchFail.idMissingOnExtHost": "在扩展主机上找不到 ID 为 {0} 的终端"
-		},
-		"vs/workbench/api/common/extHostTunnelService": {
-			"tunnelPrivacy.private": "专用",
-			"tunnelPrivacy.public": "公共"
 		},
 		"vs/workbench/api/common/extHostWorkspace": {
 			"updateerror": "扩展“{0}”未能更新工作区文件夹: {1}"
@@ -5823,47 +5777,6 @@
 		"vs/workbench/contrib/accessibilitySignals/browser/openDiffEditorAnnouncement": {
 			"openDiffEditorAnnouncement": "差异编辑器"
 		},
-		"vs/workbench/contrib/audioCues/browser/audioCues.contribution": {
-			"audioCues.clear": "在清除功能（例如终端、调试控制台或输出通道）时播放声音。当禁用此功能时，aria 警报将宣布“已清除”。",
-			"audioCues.debouncePositionChanges": "是否应停用位置更改",
-			"audioCues.diffLineDeleted": "当焦点移到可访问差异查看器下的已删除行或下一/上一个更改时播放声音。",
-			"audioCues.diffLineInserted": "当焦点移到可访问差异查看器下的已插入行或下一/上一个更改时播放声音。",
-			"audioCues.diffLineModified": "当焦点移到可访问差异查看器下的已修改行或下一/上一个更改时播放声音。",
-			"audioCues.enabled.auto": "附加屏幕阅读器时，启用音频提示。",
-			"audioCues.enabled.off": "禁用音频提示。",
-			"audioCues.enabled.on": "启用音频提示。",
-			"audioCues.format": "在格式化文件或笔记本时播放声音。另请参阅 {0}",
-			"audioCues.format.always": "每次文件格式化(包括将其设置为在保存、键入、粘贴或运行单元格时格式化)时播放音频提示。",
-			"audioCues.format.never": "从不播放音频提示。",
-			"audioCues.format.userGesture": "在用户显式保存文件时播放音频提示。",
-			"audioCues.lineHasBreakpoint": "当有效行具有断点时播放声音。",
-			"audioCues.lineHasError": "当有效行出现错误时播放声音。",
-			"audioCues.lineHasFoldedArea": "当有效行具有可展开的折叠区域时播放声音。",
-			"audioCues.lineHasInlineSuggestion": "当有效行具有内联建议时播放声音。",
-			"audioCues.lineHasWarning": "当有效行出现警告时播放声音。",
-			"audioCues.noInlayHints": "尝试读取包含无内嵌提示的内嵌提示的行时播放声音。",
-			"audioCues.notebookCellCompleted": "在成功完成笔记本单元格执行时播放声音。",
-			"audioCues.notebookCellFailed": "在笔记本单元格执行失败时播放声音。",
-			"audioCues.onDebugBreak": "当调试程序在断点上停止时播放声音。",
-			"audioCues.save": "保存文件时播放声音。另请参阅 {0}",
-			"audioCues.save.always": "每次保存文件(包括自动保存)时播放音频提示。",
-			"audioCues.save.never": "从不播放音频提示。",
-			"audioCues.save.userGesture": "在用户显式保存文件时播放音频提示。",
-			"audioCues.taskCompleted": "任务完成时播放声音。",
-			"audioCues.taskFailed": "任务失败时播放声音(非零退出代码)。",
-			"audioCues.terminalCommandFailed": "当终端命令失败时播放声音(非零退出代码)。",
-			"audioCues.terminalQuickFix": "当终端快速修复可用时播放声音。",
-			"audioCues.volume": "音频提示音量百分比(0-100)。"
-		},
-		"vs/workbench/contrib/audioCues/browser/commands": {
-			"accessibility.alert.help": "帮助：列出警报",
-			"alerts.help.placeholder": "检查并配置警报的状态",
-			"alerts.help.settings": "启用/禁用音频提示",
-			"audioCues.help": "帮助: 列出音频提示",
-			"audioCues.help.placeholder": "选择要播放的音频提示",
-			"audioCues.help.settings": "启用/禁用音频提示",
-			"disabled": "已禁用"
-		},
 		"vs/workbench/contrib/authentication/browser/actions/manageAccountPreferencesForExtensionAction": {
 			"accounts": "帐户",
 			"currentAccount": "当前帐户",
@@ -6083,12 +5996,6 @@
 			"browser.permissions.state.default": "{0} (默认)",
 			"browser.permissions.title": "{0} 的权限"
 		},
-		"vs/workbench/contrib/browserView/electron-browser/features/browserRemoteFeatures": {
-			"browser.connectedLocally.file": "文件 URL 在本地提供，不通过远程连接提供。",
-			"browser.connectedLocally.generic": "本地连接",
-			"browser.connectedRemotely": "已通过远程连接",
-			"browser.enableRemoteProxy": "启用后，远程工作区中的浏览器请求将通过远程连接进行代理。这允许网页访问远程主机上可用的资源。"
-		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserSearchFeatures": {
 			"browser.search.engine.none": "无",
 			"browser.searchEngine": "控制从集成浏览器的地址栏搜索 Web 时使用的搜索引擎。选择“无”以禁用搜索。"
@@ -6136,115 +6043,6 @@
 		"vs/workbench/contrib/browserView/electron-browser/features/webContentsViewRendererFeature": {
 			"browser.overlayPauseDetail.notification": "关闭通知以继续使用浏览器。",
 			"browser.overlayPauseHeading.notification": "因通知而暂停"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/browserToolHelpers": {
-			"browser.blockedByPolicy": "已被网络域策略阻止",
-			"browser.element": "元素",
-			"browser.open.alreadyOpen": "已打开: {0}"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/browserTools.contribution": {
-			"browserContext.label": "浏览器页面",
-			"browserToolSet.description": "打开集成浏览器页面并进行交互"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/clickBrowserTool": {
-			"browser.click.invocation": "正在 {1} 中单击 {0}",
-			"browser.click.invocation.middle": "正在 {1} 中中键单击 {0}",
-			"browser.click.invocation.right": "正在 {1} 中右键单击 {0}",
-			"browser.click.past": "已在 {1} 中单击 {0}",
-			"browser.click.past.middle": "已在 {1} 中中键单击 {0}",
-			"browser.click.past.right": "已在 {1} 中右键单击 {0}",
-			"browser.dblClick.invocation": "正在 {1} 中双击 {0}",
-			"browser.dblClick.past": "已在 {1} 中双击 {0}",
-			"clickBrowserTool.displayName": "单击元素",
-			"clickBrowserTool.userDescription": "单击浏览器页面中的元素"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/dragElementTool": {
-			"browser.drag.invocation": "正在 {2} 中将 {0} 拖动到 {1}",
-			"browser.drag.past": "已在 {2} 中将 {0} 拖动到 {1}",
-			"dragElementTool.displayName": "拖动元素",
-			"dragElementTool.userDescription": "将元素拖动到另一个元素上"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/handleDialogBrowserTool": {
-			"browser.handleDialog.invocation": "正在 {0} 中处理对话框",
-			"browser.handleDialog.past": "已在 {0} 中处理对话框",
-			"handleDialogBrowserTool.displayName": "处理对话框",
-			"handleDialogBrowserTool.userDescription": "响应浏览器页面中的对话框"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/hoverElementTool": {
-			"browser.hover.invocation": "正在 {1} 中将鼠标悬停在 {0} 上",
-			"browser.hover.past": "已在 {1} 中将鼠标悬停在 {0} 上",
-			"hoverElementTool.displayName": "将鼠标悬停在元素上",
-			"hoverElementTool.userDescription": "将鼠标悬停在浏览器页面中的元素上"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/navigateBrowserTool": {
-			"browser.goBack.invocation": "正在 {0} 中向后导航",
-			"browser.goBack.past": "已在 {0} 中向后导航",
-			"browser.goForward.invocation": "正在 {0} 中向前导航",
-			"browser.goForward.past": "已在 {0} 中向前导航",
-			"browser.navigate.confirmMessage": "这会将浏览器导航到 {0}，并允许代理访问其内容。",
-			"browser.navigate.confirmTitle": "是否导航浏览器?",
-			"browser.navigate.invocation": "正在 {1} 中导航到 {0}",
-			"browser.navigate.past": "已在 {1} 中导航到 {0}",
-			"browser.reload.invocation": "正在重新加载 {0}",
-			"browser.reload.past": "已重新加载 {0}",
-			"navigateBrowserTool.displayName": "导航页面",
-			"navigateBrowserTool.userDescription": "导航或重新加载浏览器页面"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/openBrowserTool": {
-			"browser.open.confirmMessage": "这将在集成浏览器中打开 {0}。代理将能够读取其内容并进行交互。",
-			"browser.open.confirmTitle": "是否打开浏览器页面?",
-			"browser.open.invocation": "正在于 {0} 打开浏览器页面",
-			"browser.open.newPageOption": "否，在 {0} 打开新页面",
-			"browser.open.past": "已在 {0} 打开浏览器页面",
-			"browser.open.prompt.invocation": "提示用户共享浏览器标签页",
-			"browser.open.prompt.past": "已提示用户共享浏览器标签页",
-			"browser.open.result": "已打开 {0}",
-			"browser.open.shareExistingOption": "是，共享 \"{0}\" - {1}",
-			"browser.open.shareQuestion.message": "共享现有浏览器标签页？",
-			"browser.open.shareQuestion.title": "共享浏览器标签页",
-			"browser.open.sharedResult": "用户共享 {0}",
-			"openBrowserTool.displayName": "打开浏览器页面",
-			"openBrowserTool.userDescription": "在集成浏览器中打开 URL"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/readBrowserTool": {
-			"browser.read.invocation": "正在读取 {0}",
-			"browser.read.past": "读取 {0}",
-			"readBrowserTool.displayName": "读取页面",
-			"readBrowserTool.userDescription": "读取浏览器页面的内容"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/runPlaywrightCodeTool": {
-			"browser.runCode.confirmDisclaimer": "继续操作前，请确保你信任该代码。",
-			"browser.runCode.confirmTitle": "是否运行 Playwright 代码?",
-			"browser.runCode.invocation": "正在运行 Playwright 代码...",
-			"browser.runCode.past": "已运行 Playwright 代码",
-			"browser.runCode.waitInvocation": "正在等待 Playwright 代码完成...",
-			"browser.runCode.waitPast": "已等待 Playwright 代码",
-			"runPlaywrightCodeTool.displayName": "运行 Playwright 代码",
-			"runPlaywrightCodeTool.userDescription": "对浏览器页面运行 Playwright 代码片段"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/screenshotBrowserTool": {
-			"browser.screenshot.invocation": "正在捕获浏览器屏幕截图",
-			"browser.screenshot.invocation.element": "正在捕获 {0} 的屏幕截图",
-			"browser.screenshot.past": "已捕获浏览器屏幕截图",
-			"browser.screenshot.past.element": "已捕获 {0} 的屏幕截图",
-			"screenshotBrowserTool.displayName": "屏幕截图页面",
-			"screenshotBrowserTool.userDescription": "捕获浏览器页面的屏幕截图"
-		},
-		"vs/workbench/contrib/browserView/electron-browser/tools/typeBrowserTool": {
-			"browser.pressKey.invocation": "正在 {1} 中按下键 `{0}`",
-			"browser.pressKey.invocation.element": "正在 {2} 中的 {1} 内按下键 `{0}`",
-			"browser.pressKey.past": "已在 {1} 中按下键 `{0}`",
-			"browser.pressKey.past.element": "已在 {2} 中的 {1} 内按下键 `{0}`",
-			"browser.type.invocation": "正在 {0} 中键入文本",
-			"browser.type.invocation.element": "正在 {1} 中的 {0} 内键入文本",
-			"browser.type.past": "已在 {0} 中键入文本",
-			"browser.type.past.element": "已在 {1} 中的 {0} 内键入文本",
-			"browser.typeAndSubmit.invocation": "在 {0} 中键入文本并按 Enter",
-			"browser.typeAndSubmit.invocation.element": "在 {1} 的 {0} 中键入文本并按 Enter",
-			"browser.typeAndSubmit.past": "已在 {0} 中键入文本并按 Enter",
-			"browser.typeAndSubmit.past.element": "已在 {1} 的 {0} 中键入文本并按 Enter",
-			"typeBrowserTool.displayName": "在页面中键入",
-			"typeBrowserTool.userDescription": "在浏览器页面中键入文本或按下键"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/widgets/browserUrlBarWidget": {
 			"browser.goTo": "转到 {0}",
@@ -6895,12 +6693,6 @@
 			"customEditors priority": "优先级",
 			"customEditors view type": "视图类型"
 		},
-		"vs/workbench/contrib/deprecatedExtensionMigrator/browser/deprecatedExtensionMigrator.contribution": {
-			"bracketPairColorizer.notification": "扩展“括号对着色器”已禁用，因为它已被弃用。",
-			"bracketPairColorizer.notification.action.enableNative": "启用本机括号对着色",
-			"bracketPairColorizer.notification.action.showMoreInfo": "详细信息",
-			"bracketPairColorizer.notification.action.uninstall": "卸载扩展"
-		},
 		"vs/workbench/contrib/dropOrPasteInto/browser/commands": {
 			"configureDefaultDrop.label": "配置首选删除操作...",
 			"configureDefaultPaste.label": "配置首选粘贴操作..."
@@ -6911,101 +6703,9 @@
 			"pasteKind": "粘贴编辑的种类标识符。",
 			"pastePreferredDescription": "配置粘贴内容时要使用的首选编辑类型。\r\n\r\n这是编辑种类的已排序列表。将使用首选种类的第一个可用编辑。"
 		},
-		"vs/workbench/contrib/editSessions/browser/editSessions.contribution": {
-			"autoResumeWorkingChanges": "控制是否为当前工作区自动继续存储在云中的可用工作更改。",
-			"autoResumeWorkingChanges.off": "从不尝试从云中继续工作更改。",
-			"autoResumeWorkingChanges.onReload": "在窗口重新加载时自动从云中继续可用的工作更改。",
-			"autoStoreWorkingChanges": "正在存储当前工作更改...",
-			"autoStoreWorkingChanges.off": "从不尝试在云中自动存储工作更改。",
-			"autoStoreWorkingChanges.onShutdown": "在窗口关闭时自动将当前工作更改存储在云中。",
-			"autoStoreWorkingChangesDescription": "控制是否为当前工作区自动将可用工作更改存储在云中。此设置在 Web 中无效。",
-			"check for pending cloud changes": "检查挂起的云更改",
-			"checkingForWorkingChanges": "检查挂起的云更改...",
-			"client too old": "请升级到较新版本的 {0} 以从云中恢复工作更改。",
-			"cloudChangesPartialMatchesEnabled": "控制是否显示与当前会话部分匹配的云更改。",
-			"continue edit session in local folder": "在本地文件夹中打开",
-			"continue with cloud changes": "选择是否将工作更改带上。",
-			"continue working on": "继续处理...",
-			"continueEditSession.openLocalFolder.title.v2": "选择要继续在其中工作的本地文件夹",
-			"continueEditSessionExtPoint": "提供用于在其他环境中继续当前编辑会话的选项",
-			"continueEditSessionExtPoint.command": "要执行的命令的标识符。必须在 'commands'-section 中声明该命令，并返回一个 URI，表示可以继续执行当前编辑会话的其他环境。",
-			"continueEditSessionExtPoint.description": "选项的文档页面的 URL 或返回此 URL 的命令。",
-			"continueEditSessionExtPoint.group": "此项所属的组。",
-			"continueEditSessionExtPoint.qualifiedName": "此项的完全限定名称，用于在菜单中显示。",
-			"continueEditSessionExtPoint.remoteGroup": "此项在远程指示器中所属的组。",
-			"continueEditSessionExtPoint.when": "此条件必须为 true 才能显示此项。",
-			"continueEditSessionItem.builtin": "内置",
-			"continueEditSessionItem.openInLocalFolder.v2": "在本地文件夹中打开",
-			"continueEditSessionPick.title.v2": "选择开发环境以继续在以下位置处理 {0}",
-			"continueOn.installAdditional": "安装其他开发环境选项",
-			"continueOnCloudChanges": "控制在使用“继续工作”时是否提示用户将工作更改存储在云中。",
-			"continueOnCloudChanges.off": "除非用户已启用云更改，否则请勿通过“继续工作”将工作更改存储在云中。",
-			"continueOnCloudChanges.promptForAuth": "通过“继续工作”，提示用户登录以在云中存储工作更改。",
-			"continueWorkingOn.existingLocalFolder": "继续在现有本地文件夹中工作",
-			"editSessionPartialMatch": "你在此工作区的云中有待处理的工作更改。是否要恢复它们?",
-			"learnMoreTooltip": "了解详细信息",
-			"no cloud changes": "没有从云中恢复的更改。",
-			"no cloud changes for ref": "无法从云中恢复 ID {0} 的更改。",
-			"no working changes to store": "已跳过在云中存储工作更改，因为没有要存储的编辑。",
-			"payload failed": "无法存储工作更改。",
-			"payload too large": "你的工作更改超出了大小限制，无法存储。",
-			"resume": "继续",
-			"resume cloud changes": "从序列化数据继续更改",
-			"resume edit session warning 1": "从云中恢复工作更改将覆盖 {0}。是否要继续?",
-			"resume edit session warning many": "从云中恢复工作更改将覆盖以下 {0} 文件。是否要继续?",
-			"resume failed": "无法从云中恢复工作更改。",
-			"resume latest cloud changes": "从云恢复最新更改",
-			"resuming working changes window": "正在恢复工作更改...",
-			"show cloud changes": "显示云更改",
-			"show log": "显示日志",
-			"store working changes": "正在存储工作更改...",
-			"store working changes in cloud": "在云中存储工作更改",
-			"store your working changes": "正在存储工作更改...",
-			"storing working changes": "正在存储工作更改...",
-			"with cloud changes": "是，继续并进行工作更改",
-			"without cloud changes": "否，继续但不进行工作更改"
-		},
-		"vs/workbench/contrib/editSessions/browser/editSessionsStorageService": {
-			"choose account placeholder": "选择要在云中存储工作更改的帐户",
-			"choose account read placeholder": "选择要从云中还原工作更改的帐户",
-			"delete all cloud changes": "从云中删除所有存储的数据。",
-			"others": "其他",
-			"reset auth.v3": "关闭云更改...",
-			"sign in": "打开云更改...",
-			"sign in badge": "打开云更改... (1)",
-			"sign in using account": "使用 {0} 登录",
-			"sign out of cloud changes clear data prompt": "是否要禁用在云中存储工作更改?",
-			"signed in": "已登录"
-		},
-		"vs/workbench/contrib/editSessions/browser/editSessionsViews": {
-			"cloud changes": "云更改",
-			"compare changes": "比较更改",
-			"confirm delete all": "是否确定要从云中永久删除所有存储的更改?",
-			"confirm delete all detail": " 无法撤消此操作。",
-			"confirm delete detail.v2": " 无法撤消此操作。",
-			"confirm delete.v2": "是否确定要使用 ref {0} 永久删除工作更改?",
-			"local copy": "本地副本",
-			"noStoredChanges": "云中没有要显示的已存储更改。\r\n{0}",
-			"open file": "打开文件",
-			"storeWorkingChangesTitle": "存储工作更改",
-			"workbench.editSessions.actions.delete.v2": "删除工作更改",
-			"workbench.editSessions.actions.deleteAll": "从云中删除所有工作更改",
-			"workbench.editSessions.actions.resume.v2": "继续工作更改",
-			"workbench.editSessions.actions.store.v2": "存储工作更改"
-		},
-		"vs/workbench/contrib/editSessions/common/editSessions": {
-			"cloud changes": "云更改",
-			"editSessionViewIcon": "云更改视图的视图图标。"
-		},
-		"vs/workbench/contrib/editSessions/common/editSessionsLogService": {
-			"cloudChangesLog": "云更改"
-		},
 		"vs/workbench/contrib/emmet/browser/actions/expandAbbreviation": {
 			"expandAbbreviationAction": "Emmet: 展开缩写",
 			"miEmmetExpandAbbreviation": "Emmet: 展开缩写(&&X)"
-		},
-		"vs/workbench/contrib/experiments/browser/experiments.contribution": {
-			"workbench.enableExperiments": "从 Microsoft 联机服务中获取要进行的实验。"
 		},
 		"vs/workbench/contrib/extensions/browser/abstractRuntimeExtensionsEditor": {
 			"copy id": "复制 ID ({0})",
@@ -7686,11 +7386,6 @@
 			"extensionsInputName": "正在运行的扩展",
 			"runtimeExtensionEditorLabelIcon": "运行时扩展编辑器标签的图标。"
 		},
-		"vs/workbench/contrib/extensions/common/searchExtensionsTool": {
-			"searchExtensionsTool.displayName": "搜索扩展",
-			"searchExtensionsTool.noInput": "请提供要搜索的类别、关键字或 ID。",
-			"searchExtensionsTool.userDescription": "搜索 VS Code 扩展"
-		},
 		"vs/workbench/contrib/extensions/electron-browser/extensionProfileService": {
 			"profilingExtensionHost": "分析扩展主机",
 			"profilingExtensionHostTime": "分析扩展主机({0} 秒)",
@@ -7753,29 +7448,6 @@
 			"selectOpenerDefaultLabel": "在默认浏览器中打开",
 			"selectOpenerDefaultLabel.web": "在新浏览器窗口中打开",
 			"selectOpenerPlaceHolder": "你希望以何种方式打开: {0}"
-		},
-		"vs/workbench/contrib/feedback/browser/feedback": {
-			"character left": "剩余字符",
-			"characters left": "剩余字符",
-			"close": "关闭",
-			"feedbackTextInput": "告诉我们您的反馈意见",
-			"frownCaption": "负面反馈情绪",
-			"label.sendASmile": "通过 Tweet 向我们发送反馈。",
-			"other ways to contact us": "联系我们的其他方式",
-			"patchedVersion1": "安装已损坏。",
-			"patchedVersion2": "如果提交了 bug，请指定此项。",
-			"request a missing feature": "请求缺失功能",
-			"sentiment": "您的体验如何?",
-			"showFeedback": "在状态栏中显示反馈图标",
-			"smileCaption": "正面反馈情绪",
-			"submit a bug": "提交 bug",
-			"tell us why": "告诉我们原因?",
-			"tweet": "推文",
-			"tweetFeedback": "Tweet 反馈"
-		},
-		"vs/workbench/contrib/feedback/browser/feedbackStatusbarItem": {
-			"status.feedback": "Tweet 反馈",
-			"status.feedback.name": "反馈"
 		},
 		"vs/workbench/contrib/files/browser/editors/binaryFileEditor": {
 			"binaryFileEditor": "二进制文件查看器"
@@ -8287,162 +7959,6 @@
 			"ReplInputAriaLabelHelpNoKb": "有关详细信息，请运行“打开辅助功能帮助”命令.",
 			"disableHint": " 在设置中切换 {0} 以禁用此提示。",
 			"emptyHintText": "按 {0} 执行。"
-		},
-		"vs/workbench/contrib/interactiveEditor/browser/interactiveEditorActions": {
-			"accept": "发出请求",
-			"actions.interactiveSession.accessibiltyHelpEditor": "交互式会话编辑器辅助功能帮助",
-			"apply1": "接受更改",
-			"apply2": "接受",
-			"arrowDown": "光标向下",
-			"arrowUp": "光标向上",
-			"cancel": "取消",
-			"cat": "交互式编辑器",
-			"contractMessage": "协定消息",
-			"copyRecordings": "(开发人员)将 Exchange 写入剪贴板",
-			"discard": "放弃",
-			"discardMenu": "放弃...",
-			"expandMessage": "展开消息",
-			"feedback.helpful": "有用",
-			"feedback.unhelpful": "无用",
-			"focus": "聚焦输入",
-			"label": "'{0}' 和 {1} 跟进({2})",
-			"nextFromHistory": "历史记录中的下一个",
-			"previousFromHistory": "历史记录中的上一个",
-			"stop": "停止请求",
-			"toggleDiff": "切换差异",
-			"toggleDiff2": "显示内联差异",
-			"undo.clipboard": "放弃到剪贴板",
-			"undo.newfile": "放弃到新文件"
-		},
-		"vs/workbench/contrib/interactiveEditor/browser/interactiveEditorController": {
-			"create.fail.detail": "请查阅错误日志，稍后重试。",
-			"default.placeholder": "提问",
-			"default.placeholder.history": "{0} ({1}，{2} (针对历史记录))",
-			"empty": "无结果，请优化输入并重试",
-			"err.apply": "无法应用更改。",
-			"err.discard": "无法放弃更改。",
-			"thinking": "思考中...",
-			"welcome.1": "AI 生成的代码可能不正确"
-		},
-		"vs/workbench/contrib/interactiveEditor/browser/interactiveEditorStrategies": {
-			"lines.0": "未更改任何内容",
-			"lines.1": "已更改 1 行",
-			"lines.N": "已更改 {0} 行"
-		},
-		"vs/workbench/contrib/interactiveEditor/browser/interactiveEditorWidget": {
-			"aria-label": "交互式编辑器输入",
-			"interactiveEditor.accessibilityHelp": "交互式编辑器输入，使用 {0} 来获取交互式编辑器辅助功能帮助。",
-			"interactiveSessionInput.accessibilityHelpNoKb": "交互式编辑器输入，运行交互式编辑器辅助功能帮助命令了解详细信息。",
-			"modified": "已修改",
-			"original": "原始版本"
-		},
-		"vs/workbench/contrib/interactiveEditor/common/interactiveEditor": {
-			"editMode": "配置是将在交互式编辑器中创建的更改直接应用到文档还是先预览它们。",
-			"editMode.live": "更改直接应用到文档，但可通过内联差异突出显示。结束会话将保留更改。",
-			"editMode.livePreview": "更改直接应用到文档，但可通过内联差异或并排差异在视觉上突出显示。结束会话将保留更改。",
-			"editMode.preview": "仅预览更改，但需要通过“应用”按钮接受这些更改。结束会话将放弃更改。",
-			"interactiveEditor.border": "交互式编辑器小组件的边框颜色",
-			"interactiveEditor.regionHighlight": "当前交互区域的背景突出显示。必须是透明的。",
-			"interactiveEditor.shadow": "交互式编辑器小组件的阴影颜色",
-			"interactiveEditorDidEdit": "交互式编辑器是否更改了任何代码",
-			"interactiveEditorDiff": "交互式编辑器是否显示更改差异",
-			"interactiveEditorDiff.inserted": "交互式编辑器输入中已插入文本的背景色",
-			"interactiveEditorDiff.removed": "交互式编辑器输入中已删除文本的背景色",
-			"interactiveEditorDocumentChanged": "文档是否已同时更改",
-			"interactiveEditorEmpty": "交互式编辑器输入是否为空",
-			"interactiveEditorFocused": "是否聚焦交互式编辑器输入",
-			"interactiveEditorHasActiveRequest": "交互式编辑器是否有活动请求",
-			"interactiveEditorHasProvider": "交互式编辑器的提供程序是否存在",
-			"interactiveEditorHasStashedSession": "交互式编辑器是否已保留会话以进行快速还原",
-			"interactiveEditorInnerCursorFirst": "迭代活动编辑器输入的光标是否在第一行",
-			"interactiveEditorInnerCursorLast": "迭代活动编辑器输入的光标是否在最后一行",
-			"interactiveEditorInput.background": "交互式编辑器输入的背景色",
-			"interactiveEditorInput.border": "交互式编辑器输入的边框颜色",
-			"interactiveEditorInput.focusBorder": "聚焦时交互式编辑器输入的边框颜色",
-			"interactiveEditorInput.placeholderForeground": "交互式编辑器输入占位符的前景色",
-			"interactiveEditorLastFeedbackKind": "提供的最后一种反馈",
-			"interactiveEditorMarkdownMessageCropState": "交互式编辑器消息是否裁剪还是展开",
-			"interactiveEditorOuterCursorPosition": "外部编辑器的光标位于交互式编辑器输入的上方还是下方",
-			"interactiveEditorResponseType": "当前交互式编辑器会话的最后一个响应类型是什么",
-			"interactiveEditorVisible": "交互式编辑器输入是否可见"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/actions/interactiveSessionActions": {
-			"actions.ineractiveSession.acceptInput": "交互式会话接受输入",
-			"actions.interactiveSession.focus": "聚焦交互式会话",
-			"interactiveSession.category": "交互式会话",
-			"interactiveSession.clear.label": "清除",
-			"interactiveSession.clearHistory.label": "清除输入历史记录",
-			"interactiveSession.focusInput.label": "聚焦输入",
-			"interactiveSession.history.label": "显示历史记录",
-			"interactiveSession.open": "打开编辑器({0})"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/actions/interactiveSessionCodeblockActions": {
-			"interactive.copyCodeBlock.label": "复制",
-			"interactive.insertCodeBlock.label": "在光标处插入",
-			"interactive.insertIntoNewFile.label": "插入到新文件中",
-			"interactive.runInTerminal.label": "在终端中运行"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/actions/interactiveSessionCopyActions": {
-			"interactive.copyAll.label": "全部复制",
-			"interactive.copyItem.label": "复制"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/actions/interactiveSessionExecuteActions": {
-			"interactive.cancel.label": "取消",
-			"interactive.submit.label": "提交"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/actions/interactiveSessionTitleActions": {
-			"interactive.voteDown.label": "投反对票",
-			"interactive.voteUp.label": "投赞成票"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/contrib/interactiveSessionInputEditorContrib": {
-			"interactive.input.placeholderNoCommands": "提问",
-			"interactive.input.placeholderWithCommands": "提问或键入主题的 \"/\""
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSession.contribution": {
-			"interactiveSession": "交互式会话",
-			"interactiveSession.editor.fontFamily": "控制交互式会话中的字体系列。",
-			"interactiveSession.editor.fontSize": "控制交互式会话中的字号(以像素为单位)。",
-			"interactiveSession.editor.fontWeight": "控制交互式会话中的字体粗细。",
-			"interactiveSession.editor.lineHeight": "控制交互式会话中的行高(以像素为单位)。使用 0 根据字号计算行高。",
-			"interactiveSession.editor.wordWrap": "控制是否应在交互式会话中换行。"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSessionContributionServiceImpl": {
-			"vscode.extension.contributes.interactiveSession": "为交互式会话提供程序做出贡献",
-			"vscode.extension.contributes.interactiveSession.icon": "此交互式会话提供程序的图标。",
-			"vscode.extension.contributes.interactiveSession.id": "此交互式会话提供程序的唯一标识符。",
-			"vscode.extension.contributes.interactiveSession.label": "此交互式会话提供程序的显示名称。",
-			"vscode.extension.contributes.interactiveSession.when": "条件必须为 true 才能启用此交互式会话提供程序。"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSessionEditorInput": {
-			"interactiveSessionEditorName": "交互式会话"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSessionInputPart": {
-			"interactiveSessionInput": "交互式会话输入"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSessionListRenderer": {
-			"interactiveSession": "交互式会话"
-		},
-		"vs/workbench/contrib/interactiveSession/browser/interactiveSessionWidget": {
-			"clear": "清除会话"
-		},
-		"vs/workbench/contrib/interactiveSession/common/interactiveSessionColors": {
-			"interactive.requestBackground": "交互式请求的背景色。",
-			"interactive.requestBorder": "交互式请求的边框颜色。"
-		},
-		"vs/workbench/contrib/interactiveSession/common/interactiveSessionContextKeys": {
-			"hasInteractiveSessionProvider": "注册某些交互式会话提供程序时为 True。",
-			"inInteractiveInput": "当焦点位于交互式输入中时为 true，否则为 false。",
-			"inInteractiveSession": "当焦点位于交互式会话小组件中时为 true，否则为 false。",
-			"interactiveInputHasText": "当交互式输入包含文本时为 True。",
-			"interactiveSessionRequestInProgress": "当前请求仍在进行时为 True。",
-			"interactiveSessionResponseHasProviderId": "当提供程序已向此响应分配 ID 时为 True。",
-			"interactiveSessionResponseVote": "对响应投赞成票后，其设置为 \"up\"。投反对票时，设置为 \"down\"。否则为空字符串。"
-		},
-		"vs/workbench/contrib/interactiveSession/common/interactiveSessionServiceImpl": {
-			"emptyResponse": "提供程序返回了 null 响应"
-		},
-		"vs/workbench/contrib/interactiveSession/common/interactiveSessionViewModel": {
-			"thinking": "思考中"
 		},
 		"vs/workbench/contrib/issue/browser/baseIssueReporterService": {
 			"acknowledge": "确认版本收讫",
@@ -9482,6 +8998,8 @@
 			"unfold.cell": "展开单元格"
 		},
 		"vs/workbench/contrib/notebook/browser/controller/insertCellActions": {
+			"becoder.insertInput": "添加输入单元格",
+			"becoder.input": "输入",
 			"notebookActions.insertCodeCellAbove": "在上方插入代码单元格",
 			"notebookActions.insertCodeCellAboveAndFocusContainer": "在上方插入代码单元格和焦点容器",
 			"notebookActions.insertCodeCellAtTop": "在顶部添加代码单元格",
@@ -9895,12 +9413,6 @@
 		"vs/workbench/contrib/notebook/common/notebookEditorInput": {
 			"vetoAutoExtHostRestart": "为 '{0}' 提供的扩展笔记本仍处于打开状态，否则会关闭。",
 			"vetoExtHostRestart": "无法保存为 '{0}' 提供的扩展笔记本。"
-		},
-		"vs/workbench/contrib/offline/browser/offline.contribution": {
-			"offline": "网络似乎处于脱机状态，某些功能可能不可用。",
-			"statusBarOfflineBackground": "工作台脱机时的状态栏背景色。状态栏显示在窗口底部",
-			"statusBarOfflineBorder": "工作台脱机时用来与侧边栏和编辑器区分的状态栏边框颜色。状态栏显示在窗口底部。",
-			"statusBarOfflineForeground": "工作台脱机时的状态栏前景色。状态栏显示在窗口底部"
 		},
 		"vs/workbench/contrib/onboarding/browser/onboarding.contribution": {
 			"onboarding.developerMode": "Map of onboarding scenario/tour id to whether developer mode is enabled for it. When enabled for a scenario, that onboarding tour ignores usage-based eligibility checks (such as how many sessions you have started), previously persisted shown state, and any linked experiment (so it is shown even if the experiment is not running or you are in the control group). It does not override the {0} setting. The tour is still shown at most once per window session, so reload the window to show it again.",
@@ -10492,254 +10004,6 @@
 			"restartExtensionHost.reason": "正在更改工作区文件夹",
 			"restartWeb": "重载(&&R)"
 		},
-		"vs/workbench/contrib/remote/browser/explorerViewItems": {
-			"switchRemote.label": "切换远程"
-		},
-		"vs/workbench/contrib/remote/browser/remote": {
-			"connectionLost": "连接中断",
-			"pickRemoteExtension": "选择要打开的 URL",
-			"reconnectNow": "立即重新连接",
-			"reconnectionPermanentFailure": "无法重新连接。请重新加载窗口。",
-			"reconnectionRunning": "已断开连接。正在尝试重新连接…",
-			"reconnectionWaitMany": "正在尝试在 {0} 秒内重新连接...",
-			"reconnectionWaitOne": "正在尝试在 {0} 秒内重新连接...",
-			"reloadWindow": "重新加载窗口",
-			"reloadWindow.dialog": "重新加载窗口(&&R)",
-			"remote.explorer": "远程资源管理器",
-			"remote.help": "帮助和反馈",
-			"remote.help.documentation": "阅读文档",
-			"remote.help.getStarted": "入门",
-			"remote.help.issues": "审查问题",
-			"remote.help.report": "报告问题",
-			"remotehelp": "远程帮助"
-		},
-		"vs/workbench/contrib/remote/browser/remoteConnectionHealth": {
-			"allow": "允许(&&A)",
-			"arm32ServerDeprecation.banner": "已弃用对 32 位 ARM 远程服务器的支持，并将在 {0} 的未来版本中移除。",
-			"arm32ServerDeprecationBannerLearnMore": "了解详细信息",
-			"learnMore": "了解详细信息(&&L)",
-			"remember": "不再显示",
-			"remoteBannerDoNotShowAgainThisVersion": "在 v{0} 中不再显示",
-			"unsupportedGlibcBannerLearnMore": "了解详细信息",
-			"unsupportedGlibcWarning": "你即将连接到不受 {0} 支持的 OS 版本。",
-			"unsupportedGlibcWarning.banner": "你已连接到不受 {0} 支持的 OS 版本。"
-		},
-		"vs/workbench/contrib/remote/browser/remoteExplorer": {
-			"1forwardedPort": "1 个转发的端口",
-			"nForwardedPorts": "{0} 个转发的端口",
-			"noRemoteNoPorts": "没有转发的端口。转发端口以通过 Internet 访问本地运行的服务。\r\n[转发端口]({0})",
-			"ports": "端口",
-			"remote.autoForwardPortsSource.fallback": "已自动转发超过 20 个端口。在设置中，基于 `process` 的自动端口转发已切换为 `hybrid`。可能不再检测到某些端口。",
-			"remote.autoForwardPortsSource.fallback.showPortSourceSetting": "显示设置",
-			"remote.autoForwardPortsSource.fallback.switchBack": "撤消",
-			"remote.forwardedPorts.statusbarTextNone": "未转发端口",
-			"remote.forwardedPorts.statusbarTooltip": "转发的端口: {0}",
-			"remote.tunnelsView.automaticForward": "在端口 {1} 上运行的应用程序 {0} 可用。  ",
-			"remote.tunnelsView.elevationButton": "使用端口 {0} 作为 Sudo…",
-			"remote.tunnelsView.elevationMessage": "你需要以超级用户身份运行，才能在本地使用端口 {0}。",
-			"remote.tunnelsView.makePublic": "设为公开",
-			"remote.tunnelsView.notificationLink2": "[查看所有转发端口]({0})",
-			"remoteNoPorts": "没有转发的端口。转发端口以在本地访问正在运行的服务。\r\n[转发端口]({0})",
-			"status.forwardedPorts": "转发的端口"
-		},
-		"vs/workbench/contrib/remote/browser/remoteIcons": {
-			"copyAddressIcon": "“复制本地地址”操作的图标。",
-			"documentationIcon": "远程资源管理器视图中的文档图标。",
-			"feedbackIcon": "远程资源管理器视图中的反馈图标。",
-			"forwardPortIcon": "“前进”操作的图标。",
-			"forwardedPortWithProcessIcon": "具有正在运行的进程的转发端口图标。",
-			"forwardedPortWithoutProcessIcon": "没有正在运行的进程的转发端口图标。",
-			"getStartedIcon": "远程资源管理器视图中的入门图标。",
-			"labelPortIcon": "“标记端口”操作的图标。",
-			"openBrowserIcon": "“打开浏览器”操作的图标。",
-			"openPreviewIcon": "“打开预览”操作的图标。",
-			"portIcon": "表示一个远程端口的图标。",
-			"portsViewIcon": "查看远程端口视图的图标。",
-			"privatePortIcon": "表示一个私有远程端口的图标。",
-			"remoteExplorerViewIcon": "查看远程资源管理器视图的图标。",
-			"reportIssuesIcon": "远程资源管理器视图中的“报告问题”图标。",
-			"reviewIssuesIcon": "远程资源管理器视图中的“审阅问题”图标。",
-			"stopForwardIcon": "“停止转发”操作的图标。"
-		},
-		"vs/workbench/contrib/remote/browser/remoteIndicator": {
-			"closeRemoteConnection.title": "关闭远程连接",
-			"closeVirtualWorkspace.title": "关闭远程工作区",
-			"disconnectedFrom": "已与 {0} 断开连接",
-			"host.open": "正在打开远程...",
-			"host.reconnecting": "正在重新连接到 {0}…",
-			"host.tooltip": "正在 {0} 上编辑",
-			"miCloseRemote": "关闭远程连接(&&M)",
-			"networkStatusHighLatencyTooltip": "网络似乎具有高延迟(上一次{0}毫秒，{1}毫秒平均值)，某些功能可能响应缓慢。",
-			"networkStatusOfflineTooltip": "网络似乎处于脱机状态，某些功能可能不可用。",
-			"noHost.tooltip": "打开远程窗口",
-			"reloadWindow": "重新加载窗口",
-			"remote.category": "远程",
-			"remote.close": "关闭远程连接",
-			"remote.install": "安装远程开发拓展",
-			"remote.showExtensionRecommendations": "启用后，远程扩展建议将显示在“远程指示器”菜单中。",
-			"remote.showMenu": "显示远程菜单",
-			"remote.startActions.help": "了解详细信息",
-			"remote.startActions.install": "安装",
-			"remote.startActions.installingExtension": "正在安装扩展... ",
-			"remoteActions": "选择选项以打开远程窗口",
-			"remoteHost": "远程主机",
-			"retry": "重试",
-			"unknownSetupError": "设置 {0} 时出错。是否要重试?",
-			"workspace.tooltip": "正在 {0} 上编辑",
-			"workspace.tooltip2": "对于位于虚拟文件系统上的资源，某些[功能不可用]({0})。"
-		},
-		"vs/workbench/contrib/remote/browser/tunnelFactory": {
-			"tunnelPrivacy.private": "专用",
-			"tunnelPrivacy.public": "公用"
-		},
-		"vs/workbench/contrib/remote/browser/tunnelView": {
-			"portWithRunningProcess.foreground": "具有关联的正在运行的进程的端口图标颜色。",
-			"portsLink.followLinkAlt": "Alt + 单击",
-			"portsLink.followLinkAlt.mac": "Option + 单击",
-			"portsLink.followLinkCmd": "Cmd + 单击",
-			"portsLink.followLinkCtrl": "Ctrl + 单击",
-			"remote.tunnel": "端口",
-			"remote.tunnel.changeLocalPort": "更改本地地址端口",
-			"remote.tunnel.changeLocalPortNumber": "本地端口 {0} 不可用。已改用端口号 {1}",
-			"remote.tunnel.close": "停止转发端口",
-			"remote.tunnel.closeNoPorts": "当前未转发端口。尝试运行{0}命令",
-			"remote.tunnel.closePlaceholder": "选择停止转发的端口",
-			"remote.tunnel.copyAddressCommandPalette": "复制转发的端口地址",
-			"remote.tunnel.copyAddressInline": "复制本地地址",
-			"remote.tunnel.copyAddressPlaceholdter": "选择转发的端口",
-			"remote.tunnel.forward": "转发端口",
-			"remote.tunnel.forwardError": "无法转发{0}: {1}。主机可能不可用，或者远程端口可能已被转发",
-			"remote.tunnel.forwardErrorProvided": "无法转发 {0}:{1}。{2}",
-			"remote.tunnel.forwardItem": "转发端口",
-			"remote.tunnel.forwardPrompt": "端口号或地址(例如 3000 或 10.10.10.10:2000)。",
-			"remote.tunnel.label": "设置端口标签",
-			"remote.tunnel.open": "在浏览器中打开",
-			"remote.tunnel.openCommandPalette": "在浏览器中打开端口",
-			"remote.tunnel.openCommandPaletteNone": "当前没有转发端口。若要开始，请打开端口视图。",
-			"remote.tunnel.openCommandPalettePick": "选择要打开的端口",
-			"remote.tunnel.openCommandPaletteView": "打开端口视图…",
-			"remote.tunnel.openPreview": "在编辑器中预览",
-			"remote.tunnel.protocolHttp": "HTTP",
-			"remote.tunnel.protocolHttps": "HTTPS",
-			"remote.tunnel.tooltipCandidate": "远程端口 {0}:{1} 未转发。",
-			"remote.tunnel.tooltipForwarded": "远程端口 {0}:{1} 已转发到本地地址 {2}。",
-			"remote.tunnel.tooltipName": "标记为 {0} 的端口。",
-			"remote.tunnelView.alreadyForwarded": "端口已被转发",
-			"remote.tunnelView.inlineElevationMessage": "可能需要 sudo",
-			"remote.tunnelsView.addPort": "添加端口",
-			"remote.tunnelsView.changePort": "新的本地端口",
-			"remote.tunnelsView.input": "按 Enter 键确认，或按 Esc 键取消。",
-			"remote.tunnelsView.labelPlaceholder": "端口标签",
-			"remote.tunnelsView.portNumberToHigh": "端口号必须大于等于 0 且小于 {0}。",
-			"remote.tunnelsView.portNumberValid": "转发的端口应为数字或主机:端口。",
-			"remote.tunnelsView.portShouldBeNumber": "本地端口应为数字。",
-			"tunnel.addressColumn.label": "转发地址",
-			"tunnel.addressColumn.tooltip": "转发端口所在的地址。",
-			"tunnel.focusContext": "“端口”视图是否具有焦点。",
-			"tunnel.iconColumn.notRunning": "没有正在运行的进程。",
-			"tunnel.iconColumn.running": "端口有正在运行的进程。",
-			"tunnel.originColumn.label": "源",
-			"tunnel.originColumn.tooltip": "转发端口的来源。可以是扩展、用户转发、静态转发或自动转发。",
-			"tunnel.portColumn.label": "端口",
-			"tunnel.portColumn.tooltip": "转发端口的标签和远程端口号。",
-			"tunnel.privacyColumn.label": "可见性",
-			"tunnel.privacyColumn.tooltip": "转发端口的可用性。",
-			"tunnel.processColumn.label": "正在运行的进程",
-			"tunnel.processColumn.tooltip": "正在使用该端口的进程的命令行。",
-			"tunnelContext.privacyMenu": "端口可见性",
-			"tunnelContext.protocolMenu": "更改端口协议",
-			"tunnelPrivacy.private": "专用",
-			"tunnelPrivacy.unknown": "未知",
-			"tunnelView": "隧道视图",
-			"tunnelView.runningProcess.inacessable": "流程信息不可用"
-		},
-		"vs/workbench/contrib/remote/common/remote.contribution": {
-			"invalidWorkspaceDetail": "请选择另一个工作区以打开。",
-			"invalidWorkspaceMessage": "工作区不存在",
-			"invalidWorkspacePrimary": "打开工作区(&&O)...",
-			"pauseSocketWriting": "连接: 暂停套接字写入",
-			"remote": "远程",
-			"remote.autoForwardPortFallback": "自动转发端口且 `remote.autoForwardPortsSource` 默认设置为 `process` 时将触发从 `process` 切换到 `hybrid` 的自动转发端口数。设置为 `0` 可禁用回退。如果尚未配置 `remote.autoForwardPortsFallback`，但配置了 `remote.autoForwardPortsSource`，`remote.autoForwardPortsFallback` 将被视为如同设置为 `0`。",
-			"remote.autoForwardPorts": "启用后，将检测到新的正在运行的进程，并自动转发其侦听的端口。禁用此设置将不会阻止转发所有端口。即使禁用，扩展将仍然能够导致端口被转发，并且打开某些 URL 仍将导致端口被转发。另请参阅 {0}。",
-			"remote.autoForwardPortsSource": "设置当 {0} 为 true 时自动从其转发端口的源。当 {0} 为 false 时，{1} 将用于查找有关已转发的端口的信息。在 Windows 和 Mac 远程设备上，“process”和“hybrid”选项不起作用，系统将使用“output”。",
-			"remote.autoForwardPortsSource.hybrid": "通过读取终端和调试输出发现端口时，端口将自动转发。并非所有使用端口的进程都将打印到集成终端或调试控制台，因此某些端口将丢失。通过监视侦听该端口的进程以终止，端口将为“未转发”。",
-			"remote.autoForwardPortsSource.output": "通过读取终端和调试输出发现端口时，将自动转发该端口。并非所有使用端口的进程都将打印到集成终端或调试控制台，因此某些端口将丢失。根据输出转发的端口将不会被“取消转发”，除非重载或用户在“端口”视图中关闭该端口。",
-			"remote.autoForwardPortsSource.process": "通过监视包含端口的已启动进程发现端口时，将自动转发该端口。",
-			"remote.defaultExtensionsIfInstalledLocally.invalidFormat": "扩展标识符的格式必须为 “publisher.name”。",
-			"remote.defaultExtensionsIfInstalledLocally.markdownDescription": "连接到远程时要安装的扩展列表(已在本地安装)。",
-			"remote.extensionKind": "覆盖扩展的类型。\"ui\" 扩展在本地计算机上安装和运行，而 \"workspace\" 扩展则在远程计算机上运行。通过使用此设置重写扩展的默认类型，可指定是否应在本地或远程安装和启用该扩展。",
-			"remote.forwardOnClick": "控制从终端和调试控制台打开具有端口的本地 URL 时是否转发它。",
-			"remote.localPortHost": "指定将用于端口转发的本地主机名。",
-			"remote.portsAttributes": "设置在转发特定端口号时应用的属性。例如:\r\n\r\n```\r\n\"3000\": {\r\n  \"label\": \"Application\"\r\n},\r\n\"40000-55000\": {\r\n  \"onAutoForward\": \"ignore\"\r\n},\r\n\".+\\\\/server.js\": {\r\n \"onAutoForward\": \"openPreview\"\r\n}\r\n```",
-			"remote.portsAttributes.defaults": "对于未从设置 {0} 中获得属性的所有端口，设置其上应用的默认属性。例如: \r\n\r\n```\r\n{\r\n  \"onAutoForward\": \"ignore\"\r\n}\r\n```",
-			"remote.portsAttributes.elevateIfNeeded": "在转发此端口时，自动提示提升(如果需要)。如果本地端口是特权端口，则需要提升。",
-			"remote.portsAttributes.ignore": "此端口不会自动转发。",
-			"remote.portsAttributes.label": "将在此端口的 UI 中显示的标签。",
-			"remote.portsAttributes.labelDefault": "应用程序",
-			"remote.portsAttributes.notify": "在自动转发端口时显示通知。",
-			"remote.portsAttributes.onForward": "定义在为自动转发发现端口时发生的操作",
-			"remote.portsAttributes.openBrowser": "在自动转发端口时打开浏览器。根据你的设置，可能会打开嵌入式浏览器。",
-			"remote.portsAttributes.openBrowserOnce": "自动转发端口时打开浏览器，但仅在会话期间第一次转发端口时打开。这可能会打开嵌入式浏览器，具体取决于你的设置。",
-			"remote.portsAttributes.openPreview": "自动转发端口时，在同一窗口中打开预览。",
-			"remote.portsAttributes.patternError": "必须是一个端口号、端口号范围或正则表达式。",
-			"remote.portsAttributes.port": "端口、端口范围(例如 \"40000-55000\")、主机和端口(例如 \"db:1234\")或正则表达式(例如 \".+\\\\/server.js\")。对于端口号或端口范围，属性将应用于该端口号或端口号范围。使用正则表达式的属性将应用于其关联流程命令行与表达式匹配的端口。",
-			"remote.portsAttributes.protocol": "转发此端口时要使用的协议。",
-			"remote.portsAttributes.requireLocalPort": "如果为 true，则将显示一个模式对话框，指示所选的本地端口是否不用于转发。",
-			"remote.portsAttributes.silent": "在自动转发此端口时，不显示任何通知，也不执行任何操作。",
-			"remote.restoreForwardedPorts": "还原您在工作区中转发的端口。",
-			"triggerReconnect": "连接: 触发器重新连接",
-			"ui": "UI 扩展类型。在远程窗口中，只有在本地计算机上可用时，才会启用此类扩展。",
-			"workspace": "工作区扩展类型。在远程窗口中，仅在远程上可用时启用此类扩展。"
-		},
-		"vs/workbench/contrib/remote/electron-browser/remote.contribution": {
-			"remote": "远程",
-			"remote.actions.closeUnusedPorts": "关闭未使用的转发端口",
-			"remote.category": "远程",
-			"remote.downloadExtensionsLocally": "启用后，扩展将本地下载并安装在远程上。",
-			"wslFeatureInstalled": "平台是否安装了 WSL 功能"
-		},
-		"vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution": {
-			"accountPreference.placeholder": "登录帐户以启用远程访问",
-			"action.copyToClipboard": "将浏览器链接复制到剪贴板",
-			"action.doNotShowAgain": "不再显示",
-			"action.showExtension": "显示扩展",
-			"enable": "启用(&&E)",
-			"initialize.progress.title": "[正在查找远程隧道](command:{0})",
-			"manage.placeholder": "选择要调用的命令",
-			"manage.showLog": "显示日志",
-			"manage.title.attached": "已为 {0} 启用远程隧道访问(已在外部启动)",
-			"manage.title.off": "未启用远程隧道访问",
-			"manage.title.orunning": "已为 {0} 启用远程隧道访问",
-			"manage.tunnelName": "更改隧道名称",
-			"others": "其他",
-			"progress.turnOn.failed": "无法启用远程隧道访问。有关详细信息，请查看远程隧道服务日志。",
-			"progress.turnOn.final": "现在，可以通过安全隧道 [{0}](command:{4}) 随时随地访问此计算机。要通过其他计算机进行连接，请使用生成的 [{1}]({2})链接，或者在桌面或 Web 中使用 [{6}]({7})扩展。可以通过“VS Code 帐户”菜单 [配置](command:{3}) 或 [关闭](command:{5})此访问权限。",
-			"recommend.remoteExtension": "隧道 \"{0}\" 可用于远程访问。{1} 扩展可用于连接到该隧道。",
-			"remoteTunnel.actions.configure": "配置隧道名称...",
-			"remoteTunnel.actions.copyToClipboard": "将浏览器 URI 复制到剪贴板",
-			"remoteTunnel.actions.learnMore": "Tunnel 入门",
-			"remoteTunnel.actions.manage.connecting": "远程隧道访问正在连接",
-			"remoteTunnel.actions.manage.on.v2": "远程隧道访问已启用",
-			"remoteTunnel.actions.showLog": "显示远程隧道服务日志",
-			"remoteTunnel.actions.turnOff": "关闭远程隧道访问...",
-			"remoteTunnel.actions.turnOn": "打开远程隧道访问...",
-			"remoteTunnel.category": "远程隧道",
-			"remoteTunnel.serviceInstallFailed": "作为服务安装失败，我们已回退到运行此会话的隧道。有关详细信息，请参阅 [error log](command:{0})。",
-			"remoteTunnel.turnOff.confirm": "是否要关闭远程隧道访问?",
-			"remoteTunnel.turnOffAttached.confirm": "是否要关闭远程隧道访问? 这也将停止在外部启动的服务。",
-			"remoteTunnelAccess.machineName": "远程隧道访问注册名。如果未设置，则使用主机名。",
-			"remoteTunnelAccess.machineNameRegex": "名称只能由字母、数字、下划线和短划线组成。不得以短划线开头。",
-			"remoteTunnelAccess.preventSleep": "启用远程隧道访问时，防止计算机进入休眠。",
-			"sign in using account": "使用 {0} 登录",
-			"signed in": "已登录",
-			"startTunnel.progress.title": "[正在启动远程隧道](command:{0})",
-			"tunnel.enable.placeholder": "选择要如何启用访问权限",
-			"tunnel.enable.service": "作为服务安装",
-			"tunnel.enable.service.description": "每次登录时运行",
-			"tunnel.enable.session": "启用此会话",
-			"tunnel.enable.session.description": "每当打开时 {0} 运行",
-			"tunnel.preview": "远程隧道目前为预览版。请使用“帮助: 报告问题”命令报告任何问题。"
-		},
 		"vs/workbench/contrib/sash/browser/sash.contribution": {
 			"sashHoverDelay": "控制视图/编辑器之间拖动区域的悬停反馈延迟(以毫秒为单位)。",
 			"sashSize": "控制视图/编辑器之间拖动区域的反馈区域大小(以像素为单位)。如果你认为很难使用鼠标调整视图的大小，请将该值调大。"
@@ -11298,13 +10562,6 @@
 			"remindLater": "稍后提醒我",
 			"surveyQuestion": "是否介意参加快速反馈调查?",
 			"takeSurvey": "参加调查"
-		},
-		"vs/workbench/contrib/surveys/browser/survey.contribution": {
-			"openSurvey": "打开调查",
-			"survey.help.overview": "你正在填写调查表。使用 Tab 键可在问题和选项之间移动。",
-			"survey.help.select": "在问题中，可使用方向键在选项之间移动，并按空格键或 Enter 进行选择。",
-			"survey.help.submit": "按 Tab 跳转到“提交”按钮，然后在回答完必填问题后按 Enter。附加问题可选答。",
-			"surveyEditorPaneTitle": "调查"
 		},
 		"vs/workbench/contrib/surveys/browser/surveyEditorInput": {
 			"surveyIcon": "调查编辑器的图标。"
@@ -12283,9 +11540,6 @@
 			"workbench.action.terminal.scrollToNextCommand": "滚动到下一条命令",
 			"workbench.action.terminal.scrollToPreviousCommand": "滚动到上一条命令",
 			"workbench.action.terminal.sizeToContentWidthInstance": "将大小切换为内容宽度"
-		},
-		"vs/workbench/contrib/terminal/electron-browser/terminalRemote": {
-			"workbench.action.terminal.newLocal": "新建集成终端(本地)"
 		},
 		"vs/workbench/contrib/terminalContrib/accessibility/browser/terminal.accessibility.contribution": {
 			"workbench.action.terminal.accessibleBufferGoToNextCommand": "可访问的缓冲区转到下一命令",
@@ -13470,21 +12724,6 @@
 			"no backups": "本地备份文件夹不存在",
 			"open": "打开文件夹"
 		},
-		"vs/workbench/contrib/watermark/browser/watermark": {
-			"tips.enabled": "启用后，当没有打开编辑器时将显示水印提示。",
-			"watermark.findInFiles": "在文件中查找",
-			"watermark.newUntitledFile": "新的无标题文本文件",
-			"watermark.openFile": "打开文件",
-			"watermark.openFileFolder": "打开文件或文件夹",
-			"watermark.openFolder": "打开文件夹",
-			"watermark.openRecent": "打开最近的文件",
-			"watermark.quickAccess": "转到文件",
-			"watermark.showCommands": "显示所有命令",
-			"watermark.showSettings": "显示设置",
-			"watermark.startDebugging": "开始调试",
-			"watermark.toggleFullscreen": "切换全屏",
-			"watermark.toggleTerminal": "切换终端"
-		},
 		"vs/workbench/contrib/webview/browser/webview.contribution": {
 			"copy": "复制",
 			"cut": "剪切",
@@ -13542,12 +12781,6 @@
 		},
 		"vs/workbench/contrib/webviewPanel/browser/webviewPanel.contribution": {
 			"webview.editor.label": "Web 视图编辑器"
-		},
-		"vs/workbench/contrib/welcomeDialog/browser/welcomeDialog.contribution": {
-			"workbench.welcome.dialog": "启用后，编辑器中会显示欢迎小组件"
-		},
-		"vs/workbench/contrib/welcomeDialog/browser/welcomeWidget": {
-			"dialogClose": "关闭对话框"
 		},
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted": {
 			"acessibleViewHint": "在无障碍视图中检查此项({0})。\r\n",
@@ -13616,11 +12849,6 @@
 			"workbench.welcomePage.preferReducedMotion": "启用后，减少欢迎页中的移动。",
 			"workbench.welcomePage.walkthroughs.openOnInstall": "启用后，扩展的演练将在安装扩展时打开。",
 			"workspacePlatform": "当前工作区的平台，在远程或无服务器上下文中可能不同于 UI 的平台"
-		},
-		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedAccessibleView": {
-			"gettingStarted.description": "描述: {0}",
-			"gettingStarted.step": "{0}\r\n{1}",
-			"gettingStarted.title": "标题: {0}"
 		},
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedColors": {
 			"walkthrough.stepTitle.foreground": "每个演练步骤标题的前景色",
@@ -13821,18 +13049,6 @@
 			"HighContrastLight": "浅色高对比度",
 			"dark": "深色现代",
 			"light": "浅色现代"
-		},
-		"vs/workbench/contrib/welcomeOverlay/browser/welcomeOverlay": {
-			"hideWelcomeOverlay": "隐藏界面概述",
-			"welcomeOverlay": "用户界面概览",
-			"welcomeOverlay.commandPalette": "查找并运行所有命令",
-			"welcomeOverlay.explorer": "文件资源管理器",
-			"welcomeOverlay.extensions": "管理扩展",
-			"welcomeOverlay.notifications": "显示通知",
-			"welcomeOverlay.problems": "查看错误和警告",
-			"welcomeOverlay.search": "跨文件搜索",
-			"welcomeOverlay.terminal": "切换集成终端",
-			"welcomeOverlayBackground": "welcomeOverlay 背景色。"
 		},
 		"vs/workbench/contrib/welcomeViews/common/newFile.contribution": {
 			"Built-In": "内置",
@@ -14426,10 +13642,6 @@
 			"local": "本地",
 			"remote": "远程"
 		},
-		"vs/workbench/services/extensionManagement/electron-browser/remoteExtensionManagementService": {
-			"notFoundCompatibleDependency": "无法安装“{0}”扩展，因为它与当前 {1} 版本不兼容(版本 {2})。",
-			"notFoundReleaseExtension": "由于 '{0}' 扩展没有发布版本，因此无法安装。"
-		},
 		"vs/workbench/services/extensionRecommendations/common/workspaceExtensionsConfig": {
 			"select for add": "将扩展建议添加到",
 			"select for remove": "从以下位置删除扩展建议",
@@ -14623,35 +13835,10 @@
 			"unableToOpenExternalWorkspace": "浏览器阻止打开“{0}”的新选项卡或窗口。按“重试”以重试。",
 			"unableToOpenWindowDetail": "请在 [浏览器设置]({0})中允许此网站的弹出窗口。"
 		},
-		"vs/workbench/services/hover/browser/hoverWidget": {
-			"hoverhint": "按住 {0} 键将鼠标悬停"
-		},
 		"vs/workbench/services/integrity/electron-browser/integrityService": {
 			"integrity.dontShowAgain": "不再显示",
 			"integrity.moreInformation": "更多信息",
 			"integrity.prompt": "{0} 安装似乎损坏。请重新安装。"
-		},
-		"vs/workbench/services/issue/browser/issueTroubleshoot": {
-			"I cannot reproduce": "我无法重现",
-			"Stop": "停止",
-			"This is Bad": "我可以重现",
-			"ask to download insiders": "请尝试下载并重现{0}预览体验成员中的问题。",
-			"ask to reproduce issue": "请尝试重现{0}预览体验成员中的问题，并确认问题是否存在。",
-			"bad": "我可以重现",
-			"detail.start": "问题疑难解答过程有助于确定问题的原因。问题可能是由配置不当、扩展或 {0} 本身引起的。\r\n\r\n在此过程中，窗口会不断重载。每次都必须确认是否仍看到此问题。",
-			"download insiders": "下载{0}预览体验成员",
-			"empty.profile": "问题疑难解答处于活动状态，并且已将配置暂时重置为默认值。检查是否仍可以重现问题，然后从这些选项中进行选择。",
-			"good": "我无法重现",
-			"issue is in core": "问题疑难解答已确定该问题与{0}有关。",
-			"issue is with configuration": "问题疑难解答已确定此问题是由配置导致的。请使用“导出配置文件”命令导出配置来报告问题，并共享问题报告中的文件。",
-			"msg": "&&排查问题",
-			"profile.extensions.disabled": "问题疑难解答处于活动状态，并暂时禁用了所有已安装的扩展。检查是否仍可以重现问题，然后从这些选项中进行选择。",
-			"report anyway": "仍然报告问题",
-			"stop": "停止",
-			"title.stop": "停止排查问题",
-			"troubleshoot issue": "排查问题",
-			"troubleshootIssue": "排查问题...",
-			"use insiders": "这可能意味着问题已解决，将在即将发布的版本中可用。你可以安全地使用{0}预览体验成员，直到新的稳定版本可用。"
 		},
 		"vs/workbench/services/keybinding/browser/keybindingService": {
 			"invalid.keybindings": "无效的“contributes.{0}”: {1}",
@@ -14811,28 +13998,6 @@
 			"progress.title2": "[{0}]: {1}",
 			"progress.title3": "[{0}] {1}: {2}",
 			"status.progress": "进度消息"
-		},
-		"vs/workbench/services/remote/common/remoteExplorerService": {
-			"RemoteHelpInformationExtPoint": "为远程提供帮助信息",
-			"RemoteHelpInformationExtPoint.documentation": "项目文档页面的 URL 或返回此 URL 的命令",
-			"RemoteHelpInformationExtPoint.feedback": "项目反馈报告器的 URL 或返回 URL 的命令",
-			"RemoteHelpInformationExtPoint.feedback.deprecated": "请改用 {0}",
-			"RemoteHelpInformationExtPoint.getStarted": "项目入门页的 URL 或返回 URL 的命令，或项目扩展提供的演练 ID",
-			"RemoteHelpInformationExtPoint.issues": "项目问题列表的 URL 或返回 URL 的命令",
-			"RemoteHelpInformationExtPoint.reportIssue": "向项目的问题报告器返回 URL 的 URL 或命令",
-			"getStartedWalkthrough.id": "要打开的“入门”演练的 ID。"
-		},
-		"vs/workbench/services/remote/common/tunnelModel": {
-			"remote.localPortMismatch.single": "无法使用本地端口 {0} 转发到远程端口 {1}。\r\n\r\n当已存在使用本地端口 {0} 的其他进程时，通常会发生这种情况。\r\n\r\n已改为使用端口号 {2}。",
-			"tunnel.forwardedPortsViewEnabled": "“端口”视图是否已启用。",
-			"tunnel.source.auto": "自动转发",
-			"tunnel.source.user": "用户转发",
-			"tunnel.staticallyForwarded": "静态转发"
-		},
-		"vs/workbench/services/remote/electron-browser/remoteAgentService": {
-			"connectionError": "无法连接到远程扩展主机服务器 (错误: {0})",
-			"devTools": "打开开发人员工具",
-			"directUrl": "在浏览器中打开"
 		},
 		"vs/workbench/services/request/electron-browser/requestService": {
 			"network": "网络"
@@ -15293,12 +14458,6 @@
 			"resetViewLocation": "重置位置",
 			"show view": "显示 {0}",
 			"toggle view": "切换 {0}"
-		},
-		"vs/workbench/services/voiceRecognition/electron-sandbox/workbenchVoiceRecognitionService": {
-			"voiceTranscription": "语音听录",
-			"voiceTranscriptionError": "语音听录失败: {0}",
-			"voiceTranscriptionGettingReady": "正在准备麦克风...",
-			"voiceTranscriptionRecording": "正在从麦克风录制..."
 		},
 		"vs/workbench/services/workingCopy/common/fileWorkingCopyManager": {
 			"confirmMakeWriteable": "“{0}”已标记为只读。是否仍要保存?",

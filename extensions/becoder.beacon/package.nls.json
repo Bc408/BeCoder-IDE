@@ -1,4 +1,5 @@
 {
+	"command.askSelection": "Ask Beacon",
 	"description": "Beacon: conversations for competitive programming.",
 	"open": "Toggle Beacon Sidebar",
 	"permissions.none": "No local file access. Existing conversation context remains available.",

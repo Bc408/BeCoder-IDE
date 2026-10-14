@@ -1,9 +1,14 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
+import { generateUuid } from '../../../base/common/uuid.js';
+import type { IBeaconWindowSelection } from '../../beacon/common/beaconContext.js';
 import { app, BrowserWindow, WebContents, shell } from 'electron';
 import { addUNCHostToAllowlist } from '../../../base/node/unc.js';
 import { hostname, release, arch } from 'os';
@@ -62,6 +67,7 @@ import { ResourceSet } from '../../../base/common/map.js';
 type RestoreWindowsSetting = 'preserve' | 'all' | 'folders' | 'one' | 'none';
 
 interface IOpenBrowserWindowOptions {
+	readonly beaconSelection?: IBeaconWindowSelection;
 	readonly userEnv?: IProcessEnvironment;
 	readonly cli?: NativeParsedArgs;
 
@@ -119,7 +125,12 @@ interface IFilesToOpen {
 	filesToWait?: IPathsToWaitFor;
 }
 
+interface IBeaconEmptyWindowBackupInfo extends IEmptyWindowBackupInfo {
+	readonly beaconSelection?: IBeaconWindowSelection;
+}
+
 interface IPathToOpen<T = IEditorOptions> extends IPath<T> {
+	readonly beaconSelection?: IBeaconWindowSelection;
 
 	/**
 	 * The workspace to open
@@ -289,7 +300,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		const workspacesToOpen: IWorkspacePathToOpen[] = [];
 		const untitledWorkspacesToRestore: IWorkspacePathToOpen[] = [];
 
-		const emptyWindowsWithBackupsToRestore: IEmptyWindowBackupInfo[] = [];
+		const emptyWindowsWithBackupsToRestore: IBeaconEmptyWindowBackupInfo[] = [];
 
 		let filesToOpen: IFilesToOpen | undefined;
 		let maybeOpenEmptyWindow = false;
@@ -318,7 +329,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 				}
 				filesToOpen.filesToOpenOrCreate.push(path);
 			} else if (path.backupPath) {
-				emptyWindowsWithBackupsToRestore.push({ backupFolder: basename(path.backupPath) });
+				emptyWindowsWithBackupsToRestore.push({ backupFolder: basename(path.backupPath), beaconSelection: path.beaconSelection });
 			} else {
 				maybeOpenEmptyWindow = true; // depends on other parameters such as `forceEmpty` and how many windows have opened already
 			}
@@ -456,7 +467,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		openConfig: IOpenConfiguration,
 		workspacesToOpen: IWorkspacePathToOpen[],
 		foldersToOpen: ISingleFolderWorkspacePathToOpen[],
-		emptyToRestore: IEmptyWindowBackupInfo[],
+		emptyToRestore: IBeaconEmptyWindowBackupInfo[],
 		maybeOpenEmptyWindow: boolean,
 		filesToOpen: IFilesToOpen | undefined,
 		foldersToAdd: ISingleFolderWorkspacePathToOpen[],
@@ -548,11 +559,11 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		}
 
 		// Handle workspaces to open (instructed and to restore)
-		const allWorkspacesToOpen = distinct(workspacesToOpen, workspace => workspace.workspace.id); // prevent duplicates
+		const allWorkspacesToOpen = distinct(workspacesToOpen, workspace => `${workspace.workspace.id}:${workspace.beaconSelection?.slot ?? ''}`).sort((a, b) => Number(!!b.beaconSelection) - Number(!!a.beaconSelection)); // restore slots before unqualified open requests
 		if (allWorkspacesToOpen.length > 0) {
 
 			// Check for existing instances
-			const windowsOnWorkspace = coalesce(allWorkspacesToOpen.map(workspaceToOpen => findWindowOnWorkspaceOrFolder(this.getWindows(), workspaceToOpen.workspace.configPath)));
+			const windowsOnWorkspace = coalesce(allWorkspacesToOpen.filter(workspace => !workspace.beaconSelection).map(workspaceToOpen => findWindowOnWorkspaceOrFolder(this.getWindows(), workspaceToOpen.workspace.configPath)));
 			if (windowsOnWorkspace.length > 0) {
 				const windowOnWorkspace = windowsOnWorkspace[0];
 				const filesToOpenInWindow = filesToOpen;
@@ -565,9 +576,18 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 
 			// Open remaining ones
 			for (const workspaceToOpen of allWorkspacesToOpen) {
+				if (workspaceToOpen.beaconSelection) {
+					if (this.getWindows().some(window => window.config?.beaconSelection?.slot === workspaceToOpen.beaconSelection!.slot)) { continue; }
+					addUsedWindow(await this.doOpenFolderOrWorkspace(openConfig, workspaceToOpen, true, filesToOpen), !!filesToOpen);
+					openFolderInNewWindow = true;
+					continue;
+				}
 				if (windowsOnWorkspace.some(window => window.openedWorkspace && window.openedWorkspace.id === workspaceToOpen.workspace.id)) {
 					continue; // ignore folders that are already open
 				}
+				const restoredWindow = allWorkspacesToOpen.some(candidate => candidate.beaconSelection && candidate.workspace.id === workspaceToOpen.workspace.id)
+					? findWindowOnWorkspaceOrFolder(this.getWindows(), workspaceToOpen.workspace.configPath) : undefined;
+				if (restoredWindow) { addUsedWindow(this.doOpenFilesInExistingWindow(openConfig, restoredWindow, filesToOpen), !!filesToOpen); continue; }
 
 				const filesToOpenInWindow = filesToOpen;
 
@@ -579,11 +599,11 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		}
 
 		// Handle folders to open (instructed and to restore)
-		const allFoldersToOpen = distinct(foldersToOpen, folder => extUriBiasedIgnorePathCase.getComparisonKey(folder.workspace.uri)); // prevent duplicates
+		const allFoldersToOpen = distinct(foldersToOpen, folder => `${extUriBiasedIgnorePathCase.getComparisonKey(folder.workspace.uri)}:${folder.beaconSelection?.slot ?? ''}`).sort((a, b) => Number(!!b.beaconSelection) - Number(!!a.beaconSelection));
 		if (allFoldersToOpen.length > 0) {
 
 			// Check for existing instances
-			const windowsOnFolderPath = coalesce(allFoldersToOpen.map(folderToOpen => findWindowOnWorkspaceOrFolder(this.getWindows(), folderToOpen.workspace.uri)));
+			const windowsOnFolderPath = coalesce(allFoldersToOpen.filter(folder => !folder.beaconSelection).map(folderToOpen => findWindowOnWorkspaceOrFolder(this.getWindows(), folderToOpen.workspace.uri)));
 			if (windowsOnFolderPath.length > 0) {
 				const windowOnFolderPath = windowsOnFolderPath[0];
 				const filesToOpenInWindow = filesToOpen;
@@ -596,9 +616,18 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 
 			// Open remaining ones
 			for (const folderToOpen of allFoldersToOpen) {
+				if (folderToOpen.beaconSelection) {
+					if (this.getWindows().some(window => window.config?.beaconSelection?.slot === folderToOpen.beaconSelection!.slot)) { continue; }
+					addUsedWindow(await this.doOpenFolderOrWorkspace(openConfig, folderToOpen, true, filesToOpen), !!filesToOpen);
+					openFolderInNewWindow = true;
+					continue;
+				}
 				if (windowsOnFolderPath.some(window => isSingleFolderWorkspaceIdentifier(window.openedWorkspace) && extUriBiasedIgnorePathCase.isEqual(window.openedWorkspace.uri, folderToOpen.workspace.uri))) {
 					continue; // ignore folders that are already open
 				}
+				const restoredWindow = allFoldersToOpen.some(candidate => candidate.beaconSelection && extUriBiasedIgnorePathCase.isEqual(candidate.workspace.uri, folderToOpen.workspace.uri))
+					? findWindowOnWorkspaceOrFolder(this.getWindows(), folderToOpen.workspace.uri) : undefined;
+				if (restoredWindow) { addUsedWindow(this.doOpenFilesInExistingWindow(openConfig, restoredWindow, filesToOpen), !!filesToOpen); continue; }
 
 				const filesToOpenInWindow = filesToOpen;
 
@@ -682,7 +711,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		return { windowToUse: undefined, forceNewWindow };
 	}
 
-	private doOpenEmpty(openConfig: IOpenConfiguration, forceNewWindow: boolean, filesToOpen: IFilesToOpen | undefined, emptyWindowBackupInfo?: IEmptyWindowBackupInfo): Promise<ICodeWindow> {
+	private doOpenEmpty(openConfig: IOpenConfiguration, forceNewWindow: boolean, filesToOpen: IFilesToOpen | undefined, emptyWindowBackupInfo?: IBeaconEmptyWindowBackupInfo): Promise<ICodeWindow> {
 		this.logService.trace('windowsManager#doOpenEmpty', { restore: !!emptyWindowBackupInfo, filesToOpen, forceNewWindow });
 
 		const resolved = this.resolveContextWindow(openConfig, forceNewWindow);
@@ -696,6 +725,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			filesToOpen,
 			windowToUse: resolved.windowToUse,
 			emptyWindowBackupInfo,
+			beaconSelection: emptyWindowBackupInfo?.beaconSelection,
 			forceProfile: openConfig.forceProfile,
 			forceTempProfile: openConfig.forceTempProfile
 		});
@@ -712,6 +742,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 
 		return this.openInBrowserWindow({
 			workspace: folderOrWorkspace.workspace,
+			beaconSelection: folderOrWorkspace.beaconSelection,
 			userEnv: openConfig.userEnv,
 			cli: openConfig.cli,
 			initialStartup: openConfig.initialStartup,
@@ -928,7 +959,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 					if (lastSessionWindow.workspace) {
 						const pathToOpen = await this.resolveOpenable({ workspaceUri: lastSessionWindow.workspace.configPath }, { rejectTransientWorkspaces: true /* https://github.com/microsoft/vscode/issues/119695 */ });
 						if (isWorkspacePathToOpen(pathToOpen)) {
-							return pathToOpen;
+							return { ...pathToOpen, beaconSelection: lastSessionWindow.beaconSelection };
 						}
 					}
 
@@ -936,15 +967,19 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 					else if (lastSessionWindow.folderUri) {
 						const pathToOpen = await this.resolveOpenable({ folderUri: lastSessionWindow.folderUri });
 						if (isSingleFolderWorkspacePathToOpen(pathToOpen)) {
-							return pathToOpen;
+							return { ...pathToOpen, beaconSelection: lastSessionWindow.beaconSelection };
 						}
 					}
 
 					// Empty window, potentially editors open to be restored
 					else if (restoreWindowsSetting !== 'folders' && lastSessionWindow.backupPath) {
-						return { backupPath: lastSessionWindow.backupPath };
+						return { backupPath: lastSessionWindow.backupPath, beaconSelection: lastSessionWindow.beaconSelection };
 					}
 
+					// Keep this restored window's independent Beacon choice when its editor folder disappeared.
+					if (lastSessionWindow.beaconSelection && lastSessionWindow.backupPath) {
+						return { backupPath: lastSessionWindow.backupPath, beaconSelection: lastSessionWindow.beaconSelection };
+					}
 					return undefined;
 				}));
 
@@ -1346,6 +1381,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			isPortable: this.environmentMainService.isPortable,
 
 			windowId: -1,	// Will be filled in by the window once loaded later
+			beaconSelection: options.beaconSelection ?? window?.config?.beaconSelection ?? { slot: generateUuid(), mode: 'spot' },
 
 			mainPid: process.pid,
 
@@ -1612,6 +1648,13 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 
 	getWindowById(windowId: number): ICodeWindow | undefined {
 		return this.windows.get(windowId);
+	}
+
+	updateBeaconWindowSelection(windowId: number, selection: IBeaconWindowSelection): void {
+		const window = this.getWindowById(windowId);
+		if (!window?.config) { throw new Error('beacon-window-closed'); }
+		window.config.beaconSelection = { ...selection };
+		this.windowsStateHandler.saveWindowsState();
 	}
 
 	getWindowByWebContents(webContents: WebContents): ICodeWindow | undefined {

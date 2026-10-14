@@ -15,7 +15,9 @@ import { stripVTControlCharacters } from 'util';
 import type { CompilationPlan } from '../src/toolchain';
 
 // The owning Runner test compilation must precede this suite.
-const { buildCompilerArguments, privateRunnerEnvironment } = require(path.resolve('extensions/danielpinto8zz6.c-cpp-compile-run/out-test/src/compilation.js'));
+const runnerTestRoot = path.resolve(process.env.BECODER_RUNNER_TEST_ROOT ?? 'extensions/danielpinto8zz6.c-cpp-compile-run/out-test/src');
+const { buildCompilerArguments, privateRunnerEnvironment } = require(path.join(runnerTestRoot, 'compilation.js'));
+const { captureCompilationSource } = require(path.join(runnerTestRoot, 'compilationSnapshot.js'));
 const compilerRoot = path.resolve(process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? '../VSCode-win32-x64/data/toolchains/ucrt64');
 const settings = { cStandard: 'c17', cppStandard: 'c++20', cFlags: [], cppFlags: [] };
 function prepareCompilation(source: string, output: string, session: string, standard = 'c++20'): CompilationPlan {
@@ -29,6 +31,40 @@ const problem: ImportedProblem = {
 	interactive: false, tests: [{ input: '21', output: '42' }, { input: '', output: 'EOF' }, { input: '125', output: '250' }],
 	batch: { id: 'probe', size: 1 }, input: { type: 'stdin' }, output: { type: 'stdout' }, testType: 'single'
 };
+
+test('CPH bound source survives original edits and remains available after session cleanup', { timeout: 110000 }, async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-bound-source-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const source = path.join(root, 'main.cpp');
+	fs.writeFileSync(source, '#include<bits/stdc++.h>\nusing namespace std;\nint main() {\n  return 0;\n}\n');
+	const observations: { type: string; value: any }[] = [];
+	const options = {
+		dataRoot: path.join(root, 'sessions'), inputHelper: 'unused-in-compile-only',
+		evidence: () => ({
+			start: (snapshot: unknown, value: unknown) => { observations.push({ type: 'start', value: { snapshot, metadata: value } }); },
+			event: (value: unknown) => { observations.push({ type: 'event', value }); },
+			finish: async (value: unknown) => { observations.push({ type: 'finish', value }); }
+		}),
+		prepareCompilation: async (original: string, output: string, session: string) => {
+			const sourceSnapshot = await captureCompilationSource(original, session);
+			const plan = prepareCompilation(sourceSnapshot.path, output, session);
+			return { ...plan, args: buildCompilerArguments({ path: sourceSnapshot.path, originalPath: original, language: 'cpp' }, settings, output), sourceSnapshot };
+		},
+		onCompileStarted: () => fs.writeFileSync(source, '#error later_version\n')
+	};
+	const executor = new CphExecutor(options);
+	t.after(() => executor.dispose());
+	const result = await executor.judge(problem, source, true);
+	assert.strictEqual(result.compile.exitCode, 0, result.compile.stderr);
+	assert.strictEqual(result.sourceSnapshot!.originalPath, source);
+	assert.match(Buffer.from(result.sourceSnapshot!.bytesBase64, 'base64').toString('utf8'), /return 0;/);
+	assert.strictEqual(fs.existsSync(result.sourceSnapshot!.path), false);
+	assert.strictEqual(fs.readFileSync(source, 'utf8'), '#error later_version\n');
+	assert.strictEqual(observations[0]?.type, 'start');
+	assert.strictEqual(observations[0].value.snapshot.sha256, result.sourceSnapshot!.sha256);
+	assert.strictEqual(observations[0].value.metadata.problem.tests.length, problem.tests.length);
+	assert.strictEqual(observations.at(-1)?.type, 'finish');
+});
 
 test('external Python checker receives input and actual output, reports logs and cleans sessions', { timeout: 110000 }, async t => {
 	const application = path.resolve('../VSCode-win32-x64');

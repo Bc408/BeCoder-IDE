@@ -1,12 +1,15 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
 import type { BeCoderSource, RunnerSettings } from './compiler';
 
-export function buildCompilerArguments(source: Pick<BeCoderSource, 'path' | 'language'>, settings: RunnerSettings, outputPath: string): readonly string[] {
+export function buildCompilerArguments(source: Pick<BeCoderSource, 'path' | 'language'> & { readonly originalPath?: string }, settings: RunnerSettings, outputPath: string): readonly string[] {
 	const standard = source.language === 'c' ? settings.cStandard : settings.cppStandard;
 	const allowedStandards = source.language === 'c' ? ['c11', 'c17', 'c23'] : ['c++11', 'c++14', 'c++17', 'c++20', 'c++23'];
 	if (!allowedStandards.includes(standard)) {
@@ -24,6 +27,11 @@ export function buildCompilerArguments(source: Pick<BeCoderSource, 'path' | 'lan
 		'-fdiagnostics-color=always',
 		// Load the PCH before any parsed declarations; the second include supplies debug on fallback.
 		...(source.language === 'cpp' ? ['-include', 'bits/stdc++.h', '-include', 'bits/debugger.h'] : []),
+		...(source.originalPath ? [
+			'-iquote', path.dirname(source.originalPath),
+			`-ffile-prefix-map=${path.dirname(source.path)}=${path.dirname(source.originalPath)}`,
+			`-ffile-prefix-map=${path.dirname(source.path).replace(/\\/g, '/')}=${path.dirname(source.originalPath)}`
+		] : []),
 		source.path,
 		'-o',
 		outputPath

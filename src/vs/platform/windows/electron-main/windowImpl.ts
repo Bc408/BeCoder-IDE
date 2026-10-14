@@ -669,9 +669,6 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 
 export class CodeWindow extends BaseWindow implements ICodeWindow {
 
-	private readonly _iconPath: URI | undefined;
-	get iconPath(): URI | undefined { return this._iconPath; }
-
 	//#region Events
 
 	private readonly _onWillLoad = this._register(new Emitter<ILoadEvent>());
@@ -782,11 +779,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 				v8CacheOptions: this.environmentMainService.useCodeCache ? 'bypassHeatCheck' : 'none'
 			};
 			const options = instantiationService.invokeFunction(defaultBrowserWindowOptions, this.windowState, undefined, webPreferences);
-			const iconPath = undefined;
-			if (iconPath) {
-				options.icon = iconPath;
-			}
-			this._iconPath = iconPath ? URI.file(iconPath) : undefined;
 
 			// Create the browser window
 			mark('code/willCreateCodeBrowserWindow');

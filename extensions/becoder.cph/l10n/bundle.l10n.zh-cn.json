@@ -25,5 +25,6 @@
 	"Compilation did not complete successfully.\n{0}": "编译未成功完成。\n{0}",
 	"{0} / {1} samples passed.": "{0} / {1} 个样例通过。",
 	"CPH request failed: {0}": "CPH 请求失败：{0}",
-	"BeCoder Runner compiler is unavailable.": "BeCoder Runner 编译接口不可用。"
+	"BeCoder Runner compiler is unavailable.": "BeCoder Runner 编译接口不可用。",
+	"Beacon could not save this run evidence: {0}": "Beacon 未能保存本次运行证据：{0}"
 }

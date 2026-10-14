@@ -79,6 +79,9 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.beacon\UPSTREAM.md',
 	'resources\app\extensions\becoder.beacon\licenses\ai-elements.txt',
 	'resources\app\extensions\becoder.cph\package.json',
+	'resources\app\extensions\becoder.notebook\package.json',
+	'resources\app\extensions\becoder.notebook\dist\extension.cjs',
+	'resources\app\extensions\becoder.notebook\LICENSE',
 	'resources\app\extensions\becoder.cph\LICENSE',
 	'resources\app\extensions\becoder.cph\ThirdPartyNotices.txt',
 	'resources\app\extensions\becoder.cph\companion\LICENSE',
@@ -854,8 +857,8 @@ if ($electronComponent.version -ne '43.7.3' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne 'f540e1998614860b09f861d93ccc7914cef14433a8bab6c6532d931c4d494707' -or
-	$languagePackComponent.packagedContentSha256 -ne 'bda62445734b128ee929b027e43a65544fa3daaae51836f4e08579d7aa13c8e1') {
+	$languagePackComponent.contentSha256 -ne '8435eb0aaeb22e3b21baf12a632f34ee8783277d772ef90740f7c9e7342ecc6f' -or
+	$languagePackComponent.packagedContentSha256 -ne 'fd0f4673efb956ca2b469363037e573bf34239ecb59f218335cf1c97efe00905') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

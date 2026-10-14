@@ -1,10 +1,14 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import electron from 'electron';
 import { Disposable } from '../../../base/common/lifecycle.js';
+import { restoreBeaconWindowSelection, IBeaconWindowSelection } from '../../beacon/common/beaconContext.js';
 import { isMacintosh } from '../../../base/common/platform.js';
 import { extUriBiasedIgnorePathCase } from '../../../base/common/resources.js';
 import { URI } from '../../../base/common/uri.js';
@@ -18,6 +22,7 @@ import { defaultWindowState, ICodeWindow, IWindowState as IWindowUIState, Window
 import { isSingleFolderWorkspaceIdentifier, isWorkspaceIdentifier, IWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 
 export interface IWindowState {
+	beaconSelection?: IBeaconWindowSelection;
 	readonly windowId?: number;
 	workspace?: IWorkspaceIdentifier;
 	folderUri?: URI;
@@ -42,6 +47,7 @@ interface ISerializedWindowsState {
 }
 
 interface ISerializedWindowState {
+	readonly beaconSelection?: IBeaconWindowSelection;
 	readonly workspaceIdentifier?: { id: string; configURIPath: string };
 	readonly folder?: string;
 	readonly backupPath?: string;
@@ -143,7 +149,7 @@ export class WindowsStateHandler extends Disposable {
 		this.saveWindowsState();
 	}
 
-	private saveWindowsState(): void {
+	saveWindowsState(): void {
 
 		// TODO@electron workaround for Electron not being able to restore
 		// multiple (native) fullscreen windows on the same display at once
@@ -256,6 +262,7 @@ export class WindowsStateHandler extends Disposable {
 
 	private toWindowState(window: ICodeWindow): IWindowState {
 		return {
+			...(window.config?.beaconSelection ? { beaconSelection: { ...window.config.beaconSelection } } : {}),
 			windowId: window.id,
 			workspace: isWorkspaceIdentifier(window.openedWorkspace) ? window.openedWorkspace : undefined,
 			folderUri: isSingleFolderWorkspaceIdentifier(window.openedWorkspace) ? window.openedWorkspace.uri : undefined,
@@ -295,6 +302,12 @@ export class WindowsStateHandler extends Disposable {
 
 		// Restore state unless we are running extension tests
 		if (!configuration.extensionTestsPath) {
+			// Restore the actual window slot before falling back to editor-folder geometry.
+			if (configuration.beaconSelection) {
+				const slot = configuration.beaconSelection.slot;
+				const state = [...this.state.openedWindows, ...(this.state.lastActiveWindow ? [this.state.lastActiveWindow] : [])].find(window => window.beaconSelection?.slot === slot);
+				if (state) { return state.uiState; }
+			}
 
 			// extension development host Window - load from stored settings if any
 			if (!!configuration.extensionDevelopmentPath && this.state.lastPluginDevelopmentHostWindow) {
@@ -446,6 +459,8 @@ export function restoreWindowsState(data: ISerializedWindowsState | undefined): 
 
 function restoreWindowState(windowState: ISerializedWindowState): IWindowState {
 	const result: IWindowState = { uiState: windowState.uiState };
+	const beaconSelection = restoreBeaconWindowSelection(windowState.beaconSelection);
+	if (beaconSelection) { result.beaconSelection = beaconSelection; }
 	if (windowState.backupPath) {
 		result.backupPath = windowState.backupPath;
 	}
@@ -471,6 +486,7 @@ export function getWindowsStateStoreData(windowsState: IWindowsState): IWindowsS
 
 function serializeWindowState(windowState: IWindowState): ISerializedWindowState {
 	return {
+		...(windowState.beaconSelection ? { beaconSelection: { ...windowState.beaconSelection } } : {}),
 		workspaceIdentifier: windowState.workspace && { id: windowState.workspace.id, configURIPath: windowState.workspace.configPath.toString() },
 		folder: windowState.folderUri?.toString(),
 		backupPath: windowState.backupPath,

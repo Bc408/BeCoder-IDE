@@ -175,9 +175,14 @@ extensions/becoder.gcc-diagnostics/test/editorDiagnostics.cjs
 extensions/becoder.gcc-diagnostics/test/realCompiler.cjs
 extensions/becoder.gcc-diagnostics/test/runEditorDiagnostics.cjs
 extensions/mathematic.vscode-pdf/src/extension.js
+extensions/mathematic.vscode-pdf/src/selectionBridge.js
+extensions/mathematic.vscode-pdf/assets/selection.mjs
+extensions/mathematic.vscode-pdf/test/selection.test.cjs
+extensions/mathematic.vscode-pdf/test/selection-dom.test.mjs
 extensions/mathematic.vscode-pdf/assets/main.mjs
 extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerGuiLaunch.cjs
 extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerInputProbe.cjs
 extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerPtyProbe.cjs
 extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerValidation.cjs
 extensions/danielpinto8zz6.c-cpp-compile-run/test/runnerWithInputIntegration.cjs
+extensions/becoder.notebook/build.mjs

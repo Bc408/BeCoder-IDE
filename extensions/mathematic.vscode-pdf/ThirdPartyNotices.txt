@@ -26,3 +26,14 @@ assets/pdf.js/web/standard_fonts/LICENSE_FOXIT
 BeCoder's shared product hover helper is distributed under MIT. Its full license
 is in dist/HoverLicense.txt. Only toolbar, sidebar and dialog title descriptions
 use this helper; the PDF.js document annotation UI is unchanged.
+
+BeCoder selection integration uses the existing PDF.js text layer and the existing
+VS Code host/link service. The narrow postBeCoderMessage method, DOM selection
+owner and host version/request bridge are BeCoder modifications under Apache-2.0.
+PDF.js licensing and its upstream source/version listed above remain unchanged.
+
+BeCoder's open-page context integration reuses the same host bridge and PDF.js
+PDFDocumentProxy.getDownloadInfo/getPage/getTextContent APIs. Per-page text joins
+follow PDFViewer.getAllText's string, EOL and null-character handling. Document
+readiness/version checks and the extension API are BeCoder Apache-2.0 adaptations;
+no additional PDF loader, parser, OCR library or dependency is bundled.

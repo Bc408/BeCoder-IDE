@@ -36,6 +36,83 @@ async function until(condition: () => boolean) {
 }
 
 suite('Beacon attachments', () => {
+	test('late PDF selections are discarded after workspace switches or page closure', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as { busy: boolean; attachments: Attachment[] };
+		let start!: () => void; let finish!: () => void; const started = new Promise<void>(resolve => { start = resolve; }); const held = new Promise<void>(resolve => { finish = resolve; });
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			mock.extensions.getExtension = () => ({ activate: async () => ({ captureSelection: async () => { start(); await held; return { uri: mock.Uri.file(path.join(directory, 'missing.pdf')).toString(), contents: 'old selection', isCurrent: () => true }; } }) });
+			const request = mock.commands.executeCommand('becoder.beacon.askPdfSelection'); await started;
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy); finish(); await request;
+			assert.equal(snapshot().attachments.length, 0); assert.equal(mock.beaconConversations.size, 0);
+			mock.extensions.getExtension = () => ({ activate: async () => ({ captureSelection: async () => ({ uri: mock.Uri.file(path.join(directory, 'missing.pdf')).toString(), contents: 'closed', isCurrent: () => false }) }) });
+			await mock.commands.executeCommand('becoder.beacon.askPdfSelection'); assert.equal(snapshot().attachments.length, 0);
+		} finally { finish(); await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
+	for (const selected of [true, false]) {
+		test(`PDF selection joins the ${selected ? 'workspace' : 'blackout'} draft without sending or opening the file`, async () => fixture(async directory => {
+			const context = mock.reset(directory); const view = mock.makeView();
+			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as { activeId: string; canSend: boolean; busy: boolean; attachments: Attachment[]; messages: unknown[] };
+			try {
+				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+				if (selected) { view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy); }
+				mock.extensions.getExtension = () => ({ activate: async () => ({ captureSelection: async () => ({ uri: mock.Uri.file(path.join(directory, 'missing.pdf')).toString(), contents: ' selected problem\ntext ', isCurrent: () => true }) }) });
+				await mock.commands.executeCommand('becoder.beacon.askPdfSelection');
+				assert.equal(snapshot().attachments.length, 1); assert.equal(snapshot().messages.length, 0); assert.equal(snapshot().canSend, true);
+				assert.equal(snapshot().attachments[0].contents, '', 'UI summaries do not carry attachment bodies');
+				assert.equal(mock.beaconConversations.size, selected ? 1 : 0);
+				view.receive({ type: 'openAttachment', id: snapshot().attachments[0].id }); await until(() => mock.textPreviews.length === 1);
+				assert.equal(mock.textPreviews[0].content, ' selected problem\ntext '); assert.equal(mock.commandCalls.some(call => call.id === 'vscode.open'), false);
+			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+		}));
+	}
+	for (const selected of [true, false]) {
+		test(`selection starts a usable draft ${selected ? 'in the selected workspace' : 'in temporary blackout'} without sending`, async () => fixture(async directory => {
+			const context = mock.reset(directory); const view = mock.makeView();
+			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as { activeId: string; canSend: boolean; busy: boolean; attachments: Attachment[]; messages: unknown[] };
+			try {
+				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+				if (selected) { view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy); assert.equal(mock.beaconConversations.size, 0); }
+				const document = { uri: mock.Uri.file(path.join(directory, 'missing.cpp')), isClosed: false, getText: () => 'dirty selected code' };
+				mock.window.activeTextEditor = { selection: { isEmpty: false }, document };
+				await mock.commands.executeCommand('becoder.beacon.askSelection');
+				assert.equal(snapshot().canSend, true);
+				assert.equal(snapshot().attachments.length, 1); assert.equal(snapshot().messages.length, 0);
+				assert.equal(mock.beaconConversations.size, selected ? 1 : 0);
+				const active = snapshot().activeId;
+				await mock.commands.executeCommand('becoder.beacon.askSelection');
+				assert.equal(snapshot().activeId, active); assert.equal(snapshot().attachments.length, 2);
+				view.receive({ type: 'openAttachment', id: snapshot().attachments[0].id }); await until(() => mock.textPreviews.length === 1);
+				assert.deepStrictEqual(mock.textPreviews[0], { content: 'dirty selected code', language: 'plaintext' });
+				assert.equal(mock.commandCalls.some(call => call.id === 'vscode.open'), false, 'Selection preview must not open its backing file');
+			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+		}));
+	}
+	test('a context change during an in-flight refresh is observed before the refresh retires', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as { configured: boolean; context: { busy: boolean } };
+		let release: () => void = () => { }; let entered: () => void = () => { };
+		const held = new Promise<void>(resolve => { release = resolve; });
+		const started = new Promise<void>(resolve => { entered = resolve; });
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
+			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
+			let hold = true;
+			mock.commandHandlers.set('_becoder.beacon.context', async (operation, input) => {
+				const result = await native(operation, input);
+				if (operation === 'context' && hold) { hold = false; entered(); await held; }
+				return result;
+			});
+			mock.beaconContext.busy = true;
+			const first = mock.commands.executeCommand('_becoder.beacon.contextChanged'); await started;
+			mock.beaconContext.busy = false;
+			const second = mock.commands.executeCommand('_becoder.beacon.contextChanged');
+			release(); await Promise.all([first, second]);
+			assert.equal(snapshot().context.busy, false);
+		} finally { release(); await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
 	test('pasted image bytes work in every permission without authorizing a filesystem path', async () => {
 		const captured = captureClipboardImages([{ name: 'screenshot.png', contents: png, mediaType: 'image/png', path: 'private.png', source: 'internal' }]);
 		assert.equal(captured[0].source, 'clipboard'); assert.equal(captured[0].path, 'clipboard:' + captured[0].id);
@@ -49,11 +126,12 @@ suite('Beacon attachments', () => {
 		assert.throws(() => captureClipboardImages([{ contents: 'bad', mediaType: 'image/png' }]), AttachmentError);
 		assert.throws(() => captureClipboardImages([{ contents: png, mediaType: 'image/svg+xml' }]), AttachmentError);
 		assert.throws(() => captureClipboardImages(Array.from({ length: 65 }, () => ({ contents: png, mediaType: 'image/png' }))), AttachmentError);
-		await assert.rejects(readAttachments([...captured, { path: 'disk.cpp', source: 'internal' }], 'none', never, signal), AttachmentError);
+		const supplied = await readAttachments([...captured, { path: 'disk.cpp', source: 'internal' }], 'none', async input => ({ ok: true, path: input.path, kind: 'text', contents: 'explicit-file' }), signal);
+		assert.equal(supplied[1].contents, 'explicit-file');
 		const large = Buffer.concat([Buffer.from(png, 'base64'), Buffer.alloc(3 * 1024 * 1024)]).toString('base64');
 		assert.throws(() => captureClipboardImages([{ contents: large, mediaType: 'image/png' }, { contents: large, mediaType: 'image/png' }]), AttachmentError);
 	});
-	test('actual host pastes, previews and sends clipboard images under none; history restores captured bytes', async () => fixture(async directory => {
+	test('actual host supports temporary blackout and persists explicit workspace chats with captured image bytes', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const originalFetch = globalThis.fetch; const bodies: unknown[] = [];
 		globalThis.fetch = async (_url, options) => { bodies.push(JSON.parse(String(options?.body))); return response(); };
@@ -76,31 +154,38 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'send', text: '' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
 			assert.equal(bodies.length, 1); assert.ok(JSON.stringify(bodies[0]).includes('data:image/png;base64,' + png));
 			assert.equal(snapshot().attachments.length, 0);
+			assert.equal(mock.beaconConversations.size, 0, 'Temporary messages never acquire a persistent root');
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy);
+			assert.equal(snapshot().messages.length, 0, 'Workspace selection does not migrate the temporary conversation');
+			view.receive({ type: 'clear' }); await until(() => !!mock.beaconContext.activeId && !snapshot().busy);
+			view.receive({ type: 'pasteImages', activeId: snapshot().activeId, images: [{ mediaType: 'image/png', contents: png }] });
+			view.receive({ type: 'send', text: 'saved' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
 			await deactivate();
-			const saved = readHistory(JSON.parse(await fs.readFile(path.join(directory, 'storage/history.json'), 'utf8')));
-			assert.equal(saved?.conversations[0].messages[0].attachments?.[0].contents, png);
-			assert.equal(saved?.conversations[0].messages[0].attachments?.[0].source, 'clipboard');
+			const saved = [...mock.beaconConversations.values()][0];
+			const restored = readHistory({ version: 1, activeId: saved.data.id, conversations: [saved.data] });
+			assert.equal(restored.conversations[0].messages[0].attachments?.[0].contents, png);
+			assert.equal(restored.conversations[0].messages[0].attachments?.[0].source, 'clipboard');
+			await assert.rejects(fs.stat(path.join(directory, 'storage/history.json')), { code: 'ENOENT' });
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
-	test('ordinary attachment preview uses the internal editor and rejects forged IDs, revoked permissions and missing files', async () => fixture(async directory => {
+	test('user attachment preview opens the editor in blackout and rejects forged IDs and missing files', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const file = path.join(directory, 'main.cpp'); await fs.writeFile(file, 'int main() {}');
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; attachments: Attachment[]; requestNotice?: { id: number } };
 		try {
 			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
-			view.receive({ type: 'openAttachment', id: 'forged', path: file }); assert.equal(mock.commandCalls.length, 0);
+			view.receive({ type: 'openAttachment', id: 'forged', path: file }); assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 0);
 			view.drop({ uris: [mock.Uri.file(file)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			const id = snapshot().attachments[0].id; view.receive({ type: 'openAttachment', id });
 			await until(() => mock.commandCalls.some(call => call.id === 'vscode.open'));
 			const opened = mock.commandCalls.find(call => call.id === 'vscode.open')!;
 			assert.equal((opened.args[0] as { fsPath: string }).fsPath, file); assert.deepStrictEqual(opened.args[1], { preview: true, preserveFocus: true });
 			await mock.workspace.getConfiguration().update('filePermission', 'none');
-			view.receive({ type: 'openAttachment', id }); await until(() => !!snapshot().requestNotice);
-			assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 1);
+			view.receive({ type: 'openAttachment', id }); await until(() => mock.commandCalls.filter(call => call.id === 'vscode.open').length === 2);
 			await mock.workspace.getConfiguration().update('filePermission', 'workspace'); await fs.unlink(file);
 			const previous = view.messages.length; view.receive({ type: 'openAttachment', id }); await until(() => view.messages.length > previous);
-			assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 1);
+			assert.equal(mock.commandCalls.filter(call => call.id === 'vscode.open').length, 2);
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
 	}));
 	test('native origin cannot be claimed by a synthetic gesture or an unrelated/mixed drop', () => {
@@ -111,11 +196,13 @@ suite('Beacon attachments', () => {
 		assert.equal(drag.source(true, ['file:///same.cpp', 'file:///other.cpp']), 'external');
 		drag.end(); assert.equal(drag.source(true, ['file:///same.cpp']), 'external');
 	});
-	test('none rejects all sources before reading; workspace refuses Explorer and picker even for the same file', async () => {
-		const never = async () => { assert.fail('Unauthorized file was read'); };
-		for (const source of ['internal', 'external', 'picker'] as const) { await assert.rejects(readAttachments([{ path: 'same.cpp', source }], 'none', never, signal), AttachmentError); }
-		for (const source of ['external', 'picker'] as const) { await assert.rejects(readAttachments([{ path: 'same.cpp', source }], 'workspace', never, signal), AttachmentError); }
-		await assert.rejects(readAttachments([{ path: 'same.cpp', source: 'internal' }, { path: 'same.cpp', source: 'external' }], 'workspace', never, signal), AttachmentError);
+	test('real user file sources are captured in all modes without granting free file access', async () => {
+		for (const permission of ['none', 'workspace', 'computer'] as const) {
+			for (const source of ['internal', 'external', 'picker'] as const) {
+				const captured = await readAttachments([{ path: 'same.cpp', source }], permission, async input => ({ ok: true, path: input.path, kind: 'text', contents: 'supplied' }), signal);
+				assert.equal(captured[0].contents, 'supplied');
+			}
+		}
 	});
 	test('real targets, private files, editor buffers, binary excerpts and malformed images use the authorized reader', async () => fixture(async directory => {
 		const root = path.join(directory, 'workspace'); await fs.mkdir(root);
@@ -170,7 +257,7 @@ suite('Beacon attachments', () => {
 		await restored.session.send('followup', next); assert.equal(restored.snapshot.messages.at(-1)?.status, 'complete');
 		await history.dispose(); await restored.dispose();
 	});
-	test('actual host rejects forged drop messages, checks picker downgrades, preserves failed drafts and captures latest editor data', async () => fixture(async directory => {
+	test('actual host captures drops once, keeps picker grants across modes and preserves failed drafts', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const file = path.join(directory, 'main.cpp'); await fs.writeFile(file, 'disk');
 		const image = path.join(directory, 'image.png'); await fs.writeFile(image, Buffer.from(png, 'base64'));
@@ -183,15 +270,11 @@ suite('Beacon attachments', () => {
 			mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
 			view.receive({ type: 'drop', source: 'internal', paths: [file] }); assert.equal(snapshot().attachments.length, 0);
-			view.drop({ uris: [mock.Uri.file(file)], source: 'external' }); await until(() => !snapshot().busy); assert.equal(snapshot().attachments.length, 0);
-			view.drop({ uris: [mock.Uri.file(file)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
+			view.drop({ uris: [mock.Uri.file(file)], source: 'external' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			mock.workspace.textDocuments = [{ uri: mock.Uri.file(file), isClosed: false, getText: () => 'latest unsaved editor' }];
 			await mock.workspace.getConfiguration().update('filePermission', 'none'); await until(() => snapshot().configured);
-			view.receive({ type: 'send', text: 'keep draft' }); await until(() => !snapshot().busy);
-			assert.equal(snapshot().attachments.length, 1); assert.equal(snapshot().messages.length, 0); assert.equal(bodies.length, 0);
-			await mock.workspace.getConfiguration().update('filePermission', 'workspace'); await until(() => snapshot().configured);
 			view.receive({ type: 'send', text: 'look' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
-			assert.ok(JSON.stringify(bodies).includes('latest unsaved editor')); assert.equal(snapshot().attachments.length, 0);
+			assert.ok(JSON.stringify(bodies).includes('disk')); assert.ok(!JSON.stringify(bodies).includes('latest unsaved editor')); assert.equal(snapshot().attachments.length, 0);
 			assert.equal(snapshot().messages[0].attachments?.[0].contents, '', 'Streaming snapshots do not repeatedly transfer attachment bytes');
 			view.drop({ uris: [mock.Uri.file(image)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			await mock.selectModel('deepseek-chat'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-chat');
@@ -203,7 +286,7 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'addFiles' }); assert.equal(snapshot().busy, true);
 			await mock.workspace.getConfiguration().update('filePermission', 'workspace');
 			choose([mock.Uri.file(file)]); await until(() => !snapshot().busy);
-			assert.equal(snapshot().attachments.length, 0, 'Picker cannot retain a revoked grant');
+			assert.equal(snapshot().attachments.length, 1, 'Explicit file selection is independent of free filesystem permission');
 			view.drop({ uris: [mock.Uri.file(file)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			const previousMessages = JSON.stringify(snapshot().messages);
 			view.receive({ type: 'send', text: 'cancel before model' });

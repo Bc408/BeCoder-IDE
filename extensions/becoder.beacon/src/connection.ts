@@ -30,7 +30,6 @@ export interface ConnectionState {
 	capabilities?: ModelCapabilities;
 	modelSettings?: ModelSettings;
 	keyConfigured: boolean;
-	models: ModelInfo[];
 	loading: boolean;
 	error: string;
 	displayName?: string;

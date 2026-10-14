@@ -1,0 +1,7 @@
+src/**
+renderer/**
+test/**
+dist-test/**
+tsconfig*.json
+build.mjs
+**/*.map

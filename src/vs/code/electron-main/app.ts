@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { app, BrowserWindow, desktopCapturer, Details, globalShortcut, GPUFeatureStatus, powerMonitor, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
@@ -38,6 +41,8 @@ import { IEncryptionMainService } from '../../platform/encryption/common/encrypt
 import { EncryptionMainService } from '../../platform/encryption/electron-main/encryptionMainService.js';
 import { ipcBrowserViewChannelName } from '../../platform/browserView/common/browserView.js';
 import { BrowserViewMainService, IBrowserViewMainService } from '../../platform/browserView/electron-main/browserViewMainService.js';
+import { BeaconContextMainService } from '../../platform/beacon/electron-main/beaconContextMainService.js';
+import { beaconContextChannel, IBeaconContextService } from '../../platform/beacon/common/beaconContext.js';
 import { NativeParsedArgs } from '../../platform/environment/common/argv.js';
 import { IEnvironmentMainService } from '../../platform/environment/electron-main/environmentMainService.js';
 import { isLaunchedFromCli } from '../../platform/environment/node/argvHelper.js';
@@ -1100,6 +1105,7 @@ export class CodeApplication extends Disposable {
 
 		// Browser View
 		services.set(IBrowserViewMainService, new SyncDescriptor(BrowserViewMainService, undefined, false /* proxied to other processes */));
+		services.set(IBeaconContextService, new SyncDescriptor(BeaconContextMainService, undefined, false));
 
 		// Keyboard Layout
 		services.set(IKeyboardLayoutMainService, new SyncDescriptor(KeyboardLayoutMainService));
@@ -1255,6 +1261,8 @@ export class CodeApplication extends Disposable {
 		const browserViewChannel = ProxyChannel.fromService(accessor.get(IBrowserViewMainService), disposables);
 		mainProcessElectronServer.registerChannel(ipcBrowserViewChannelName, browserViewChannel);
 		sharedProcessClient.then(client => client.registerChannel(ipcBrowserViewChannelName, browserViewChannel));
+		const beaconChannel = ProxyChannel.fromService(accessor.get(IBeaconContextService), disposables);
+		mainProcessElectronServer.registerChannel(beaconContextChannel, beaconChannel);
 
 		// Signing
 		const signChannel = ProxyChannel.fromService(accessor.get(ISignService), disposables);

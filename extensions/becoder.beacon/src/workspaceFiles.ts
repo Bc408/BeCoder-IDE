@@ -5,13 +5,13 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { FileTools, type FilePermission, type FileRoot } from './fileTools';
+import { FileTools, type FileAccessOptions, type FilePermission, type FileRoot } from './fileTools';
 
 export function currentFileRoots(): FileRoot[] {
 	return (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === 'file').map(folder => ({ name: folder.name, path: folder.uri.fsPath }));
 }
 
-export function createFileTools(permission: FilePermission, roots = currentFileRoots()): FileTools {
+export function createFileTools(permission: FilePermission, roots = currentFileRoots(), options: FileAccessOptions = {}): FileTools {
 	return new FileTools(permission, roots, async file => {
 		// Resolve aliases when reading, so documents opened during a response also
 		// include unsaved edits. FileTools has already authorized the actual target.
@@ -20,5 +20,5 @@ export function createFileTools(permission: FilePermission, roots = currentFileR
 			try { if (await fs.realpath(document.uri.fsPath) === file) { return document.getText(); } } catch { /* An editor file may have been removed. */ }
 		}
 		return undefined;
-	});
+	}, options);
 }

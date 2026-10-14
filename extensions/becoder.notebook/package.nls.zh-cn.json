@@ -1,0 +1,14 @@
+{
+	"displayName": ".bcnb 支持",
+	"settings": "设置",
+	"pasteImagesAsAttachments": "启用将图像作为附件粘贴到 .bcnb 笔记的 Markdown 单元格。布局复用原生 Notebook 设置：`#notebook.compactView#`、`#notebook.insertToolbarLocation#` 和 `#notebook.cellToolbarLocation#`。",
+	"description": "可独立编写并由用户主动运行 C/C++ 的学习笔记。",
+	"new": "新建 BeCoder Notebook",
+	"newShort": "BeCoder Notebook",
+	"create": "创建",
+	"createAssociated": "新建关联的Notebook",
+	"openAssociated": "打开关联的Notebook",
+	"addInput": "添加输入单元格",
+	"input": "输入",
+	"renameInput": "重命名输入"
+}

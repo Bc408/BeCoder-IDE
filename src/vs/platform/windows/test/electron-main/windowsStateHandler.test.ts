@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -52,6 +55,7 @@ suite('Windows State Storing', () => {
 		assertEqualURI(expected.folderUri, actual.folderUri, message);
 		assertEqualWorkspace(expected.workspace, actual.workspace, message);
 		assert.deepStrictEqual(expected.uiState, actual.uiState, message);
+		assert.deepStrictEqual(expected.beaconSelection, actual.beaconSelection, message);
 	}
 
 	function assertEqualWindowsState(expected: IWindowsState, actual: IWindowsState, message?: string) {
@@ -76,6 +80,16 @@ suite('Windows State Storing', () => {
 	const testFolderURI = URI.file(join(tmpdir(), 'windowStateTest', 'testFolder'));
 
 	const testRemoteFolderURI = URI.parse('foo://bar/c/d');
+
+	test('same editor folder preserves two independent Beacon window selections', () => {
+		const state: IWindowsState = { openedWindows: [
+			{ folderUri: testFolderURI, uiState: getUIState(), beaconSelection: { slot: 'one', root: 'C:\\learning-one', mode: 'spot', identity: 'physical-one' } },
+			{ folderUri: testFolderURI, uiState: getUIState(), beaconSelection: { slot: 'two', root: 'C:\\learning-two', mode: 'flood', identity: 'physical-two' } }
+		] };
+		assertRestoring(state);
+		const restored = restoreWindowsState(getWindowsStateStoreData(state));
+		assert.deepStrictEqual(restored.openedWindows.map(window => window.beaconSelection?.root), ['C:\\learning-one', 'C:\\learning-two']);
+	});
 
 	test('storing and restoring', () => {
 		let windowState: IWindowsState;

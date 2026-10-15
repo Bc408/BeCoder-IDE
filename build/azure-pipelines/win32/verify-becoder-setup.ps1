@@ -52,8 +52,8 @@ function Get-InnoSection {
 $tasksSection = Get-InnoSection -Name 'Tasks'
 $taskEntries = @($tasksSection -split '\r?\n' | Where-Object { $_ -match '^\s*Name:' })
 if ($taskEntries.Count -ne 1 -or
-	$taskEntries[0] -notmatch '^\s*Name:\s*"desktopicon";\s*Description:\s*"\{cm:CreateDesktopShortcut\}";\s*Flags:\s*unchecked\s*$') {
-	throw 'BeCoder Setup must expose exactly one unchecked desktop-shortcut task.'
+	$taskEntries[0] -notmatch '^\s*Name:\s*"desktopicon";\s*Description:\s*"\{cm:CreateDesktopShortcut\}"\s*$') {
+	throw 'BeCoder Setup must expose exactly one desktop-shortcut task, selected by default.'
 }
 
 $iconsSection = Get-InnoSection -Name 'Icons'
@@ -114,7 +114,7 @@ New-Item -ItemType Junction -Path $unicodeJunction -Target $unicodeJunctionTarge
 New-Item -ItemType Junction -Path $longJunction -Target $longJunctionTarget | Out-Null
 
 function Invoke-Setup {
-	param([string]$Target, [string]$LogName, [switch]$AllowDataLoss)
+	param([string]$Target, [string]$LogName, [switch]$AllowDataLoss, [switch]$UseDefaultTasks)
 	$arguments = @(
 		'/VERYSILENT',
 		'/SUPPRESSMSGBOXES',
@@ -124,6 +124,9 @@ function Invoke-Setup {
 	)
 	if ($AllowDataLoss) {
 		$arguments += '/BECODERALLOWDATALOSS=1'
+	}
+	if (-not $UseDefaultTasks) {
+		$arguments += '/TASKS=""'
 	}
 	$process = Start-Process -FilePath $SetupPath -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
 	return $process.ExitCode
@@ -222,8 +225,30 @@ $shortcutsBefore = Get-ShortcutSnapshot
 $registryBefore = Get-RegistryIntegrationSnapshot
 $namedRegistryBefore = Get-BeCoderNamedRegistrySnapshot
 
-if ((Invoke-Setup -Target $installRoot -LogName 'install.log') -ne 0) {
-	throw 'BeCoder Setup failed to install into the isolated verification directory.'
+$stagedProduct = Get-Content -LiteralPath (Join-Path $StagedPackagePath 'resources\app\product.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) ($stagedProduct.nameLong + '.lnk')
+$shortcutExisted = Test-Path -LiteralPath $shortcutPath -PathType Leaf
+$shortcutBackup = if ($shortcutExisted) { [IO.File]::ReadAllBytes($shortcutPath) } else { $null }
+try {
+	if ((Invoke-Setup -Target $installRoot -LogName 'install.log' -UseDefaultTasks) -ne 0) {
+		throw 'BeCoder Setup failed to install into the isolated verification directory.'
+	}
+	if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) {
+		throw 'BeCoder Setup did not create the desktop shortcut with default tasks.'
+	}
+	$shell = New-Object -ComObject WScript.Shell
+	try {
+		$shortcut = $shell.CreateShortcut($shortcutPath)
+		if ($shortcut.TargetPath -ine (Join-Path $installRoot 'BeCoder.exe') -or $shortcut.WorkingDirectory -ine $installRoot) {
+			throw 'The default desktop shortcut does not target the verified installation.'
+		}
+	} finally {
+		if ($shortcut) { [Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null }
+		[Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+	}
+} finally {
+	if ($shortcutExisted) { [IO.File]::WriteAllBytes($shortcutPath, $shortcutBackup) }
+	elseif (Test-Path -LiteralPath $shortcutPath -PathType Leaf) { Remove-Item -LiteralPath $shortcutPath }
 }
 if ((Invoke-Setup -Target $secondInstallRoot -LogName 'second-install.log') -ne 0) {
 	throw 'BeCoder Setup failed to create a second independent installation.'
@@ -344,7 +369,7 @@ $shortcutsAfter = Get-ShortcutSnapshot
 $registryAfter = Get-RegistryIntegrationSnapshot
 $namedRegistryAfter = Get-BeCoderNamedRegistrySnapshot
 if (Compare-Object $shortcutsBefore $shortcutsAfter) {
-	throw 'BeCoder Setup created or removed a desktop or Start-menu shortcut without the explicit desktop-shortcut task.'
+	throw 'BeCoder Setup changed a desktop or Start-menu shortcut after default-shortcut verification and explicit opt-out installs.'
 }
 if (Compare-Object $registryBefore $registryAfter) {
 	throw 'BeCoder Setup changed a monitored Windows integration registry key.'

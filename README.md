@@ -79,7 +79,7 @@ Beyond Beacon's focused conversation and read-only tools, the current product do
 BeCoder is distributed through a Setup installer for 64-bit Windows 10 and later.
 
 1. Run Setup and select a dedicated installation folder. The path must contain only ASCII characters, must be no longer than 70 characters, and cannot be a drive root. The default is `%LOCALAPPDATA%\Programs\BeCoder`.
-2. The optional desktop-shortcut checkbox is off by default. It is not recommended when installing BeCoder on removable storage.
+2. The desktop-shortcut checkbox is selected by default. Clear it if you do not need a shortcut, especially when installing BeCoder on removable storage.
 3. On the first normal launch, BeCoder opens the bundled `coding\helloCoder.cpp` sample. Only this installation-provided onboarding folder is trusted automatically.
 
 The installed BeCoder directory is self-contained and may be moved as a complete directory, including to a removable drive. Separate BeCoder directories keep independent application data and toolchains.
@@ -90,7 +90,7 @@ The application keeps settings, installed extensions, caches, legacy history and
 
 Reinstalling into an existing BeCoder installation replaces its private data, including legacy Beacon history. Back up needed installation data before replacement; profile export is not a complete chat backup. User workspaces and `.beaconWork` outside the installation are not part of Setup replacement.
 
-BeCoder creates no registry-based uninstaller, Start-menu entry, PATH change, file association, protocol registration, service, or startup task. To uninstall it, close BeCoder and delete its complete installation directory. If you explicitly created a desktop shortcut, delete that shortcut separately.
+BeCoder creates no registry-based uninstaller, Start-menu entry, PATH change, file association, protocol registration, service, or startup task. To uninstall it, close BeCoder and delete its complete installation directory. Delete the desktop shortcut separately if you kept that installation option selected.
 
 ## Extensions and Updates
 

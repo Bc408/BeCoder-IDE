@@ -199,9 +199,7 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
 
 		// Restart the extension host: entering a workspace means a new location for
 		// storage and potentially a change in the workspace.rootPath property.
-		else {
-			this.extensionService.startExtensionHosts();
-		}
+		await this.extensionService.startExtensionHosts();
 	}
 }
 

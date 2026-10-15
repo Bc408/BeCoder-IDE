@@ -43,7 +43,17 @@ export type RunnerExecutionResult = {
 	readonly publishedExecutableIdentity?: RunnerExecutableIdentity;
 	readonly executableRemoved: boolean;
 	readonly cleanupFailed: boolean;
+	readonly cleanupIssues?: readonly RunnerCleanupIssue[];
 	readonly timings: RunnerTimings;
+};
+
+export type RunnerCleanupIssue = {
+	readonly target: 'executable' | 'private-artifacts';
+	readonly path: string;
+	readonly stage: 'identity' | 'inspect' | 'delete' | 'verify';
+	readonly code?: string;
+	readonly syscall?: string;
+	readonly message: string;
 };
 
 export type RunnerExecutableIdentity = {
@@ -150,6 +160,7 @@ export class RunnerExecutor {
 		let cleanupMs = 0;
 		const executableRemoved = false;
 		let cleanupFailed = false;
+		const cleanupIssues: RunnerCleanupIssue[] = [];
 		let sourceSnapshot: CompilationSourceSnapshot | undefined;
 
 		try {
@@ -251,7 +262,9 @@ export class RunnerExecutor {
 			this.activeChild = undefined;
 			let cleanupComplete = !publicationCleanupFailed;
 			if (taskArtifactsCreated) {
-				cleanupComplete = await removePath(requestRoot, true, this.dependencies.rm) !== 'failed' && cleanupComplete;
+				cleanupComplete = await removePath(requestRoot, true, this.dependencies.rm, (stage, error) => {
+					cleanupIssues.push(cleanupIssue('private-artifacts', requestRoot, stage, error));
+				}) !== 'failed' && cleanupComplete;
 			}
 			if (this.cancellationRequested) {
 				status = 'cancelled';
@@ -272,6 +285,7 @@ export class RunnerExecutor {
 			publishedExecutableIdentity,
 			executableRemoved,
 			cleanupFailed,
+			cleanupIssues,
 			timings: {
 				panelReadyMs: request.panelReadyMs,
 				saveMs: request.saveMs,
@@ -501,53 +515,73 @@ async function isOrdinaryFile(candidate: string): Promise<boolean> {
 	}
 }
 
-async function isPathAbsent(candidate: string): Promise<boolean> {
-	try {
-		await fs.promises.lstat(candidate);
-		return false;
-	} catch (error) {
-		return (error as NodeJS.ErrnoException).code === 'ENOENT';
-	}
-}
-
 async function removePath(
 	candidate: string,
 	recursive: boolean,
-	rm: typeof fs.promises.rm
+	rm: typeof fs.promises.rm,
+	failed?: (stage: 'inspect' | 'delete' | 'verify', error: unknown) => void
 ): Promise<RemovalResult> {
 	try {
 		await fs.promises.lstat(candidate);
 	} catch (error) {
-		return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'failed';
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') { return 'absent'; }
+		failed?.('inspect', error);
+		return 'failed';
 	}
 	try {
 		await rm(candidate, { recursive, force: true });
-		return await isPathAbsent(candidate) ? 'removed' : 'failed';
-	} catch {
+	} catch (error) {
+		failed?.('delete', error);
+		return 'failed';
+	}
+	try {
+		await fs.promises.lstat(candidate);
+		failed?.('verify', new Error('Build artifact remains after deletion.'));
+		return 'failed';
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') { return 'removed'; }
+		failed?.('verify', error);
 		return 'failed';
 	}
 }
 
 export function finalizePublishedExecutable(result: RunnerExecutionResult, executablePath: string): RunnerExecutionResult {
-	if (!result.publishedExecutable || result.cleanupFailed || result.status === 'cancelled') {
+	if (!result.publishedExecutable || result.executableRemoved || result.status === 'cancelled'
+		|| result.cleanupIssues?.some(issue => issue.target === 'executable')
+		|| (result.cleanupFailed && !result.cleanupIssues?.length)) {
 		return result;
 	}
+	const failed = (stage: RunnerCleanupIssue['stage'], error: unknown): RunnerExecutionResult => ({
+		...result, cleanupFailed: true,
+		cleanupIssues: [...result.cleanupIssues ?? [], cleanupIssue('executable', executablePath, stage, error)]
+	});
 	if (!result.publishedExecutableIdentity) {
-		return { ...result, cleanupFailed: true };
+		return failed('identity', new Error('Executable ownership is unavailable; file preserved.'));
 	}
+	let stage: RunnerCleanupIssue['stage'] = 'identity';
 	try {
 		const currentIdentity = readExecutableIdentitySync(executablePath);
 		if (!sameExecutableIdentity(currentIdentity, result.publishedExecutableIdentity)) {
-			return { ...result, cleanupFailed: true };
+			return failed('identity', new Error('Executable identity changed; file preserved.'));
 		}
+		stage = 'delete';
 		fs.rmSync(executablePath, { force: true });
-		if (fs.existsSync(executablePath)) {
-			return { ...result, cleanupFailed: true };
+		stage = 'verify';
+		try {
+			fs.lstatSync(executablePath);
+			return failed('verify', new Error('Executable remains after deletion.'));
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { throw error; }
 		}
 		return { ...result, executableRemoved: true };
-	} catch {
-		return { ...result, cleanupFailed: true };
+	} catch (error) {
+		return failed(stage, error);
 	}
+}
+
+function cleanupIssue(target: RunnerCleanupIssue['target'], candidate: string, stage: RunnerCleanupIssue['stage'], error: unknown): RunnerCleanupIssue {
+	const detail = error as NodeJS.ErrnoException | undefined;
+	return { target, path: candidate, stage, code: detail?.code, syscall: detail?.syscall, message: error instanceof Error ? error.message : String(error) };
 }
 
 export async function publishExecutable(

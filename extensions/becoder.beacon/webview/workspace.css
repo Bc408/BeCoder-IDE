@@ -3,7 +3,9 @@
 .workspace-sizing { display: block; visibility: hidden; overflow: hidden; white-space: nowrap; padding: 4px 48px 4px 7px; }
 .workspace-picker-shell { position: absolute; z-index: 20; top: 0; right: 0; width: 100%; min-width: 28px; border: 1px solid transparent; border-radius: 15px; transition: width 160ms ease, background-color 100ms ease, border-radius 140ms ease; }
 .workspace-picker.expanded .workspace-picker-shell { width: var(--workspace-width); background: var(--vscode-menu-background, var(--vscode-sideBar-background)); border-color: var(--vscode-widget-border, transparent); }
-.workspace-picker.open .workspace-picker-shell { border-radius: 12px; border-color: var(--control-border); box-shadow: var(--popover-shadow); }
+.workspace-picker.open .workspace-picker-shell { overflow: hidden; border-radius: 12px; border-color: var(--vscode-contrastBorder, var(--control-border)); box-shadow: var(--popover-shadow); }
+.workspace-picker.open .workspace-picker-trigger { border-radius: 0; }
+.workspace-picker.open button:focus-visible { outline-offset: -2px; }
 .workspace-current { display: flex; align-items: center; min-width: 0; min-height: 28px; }
 .workspace-picker .workspace-picker-trigger, .workspace-picker .workspace-add, .workspace-picker .workspace-picker-row > button { font-size: inherit; }
 .workspace-picker .workspace-picker-trigger { display: flex; flex: 1; justify-content: flex-start; width: auto; min-width: 0; max-width: none; height: 28px; min-height: 28px; padding: 4px 7px; gap: 6px; border-radius: 14px; color: var(--vscode-descriptionForeground); }
@@ -30,15 +32,17 @@
 .workspace-remove > svg { width: 13px; height: 13px; }
 .workspace-menu-reveal { display: grid; grid-template-rows: 0fr; visibility: hidden; opacity: 0; transition: grid-template-rows 150ms ease, opacity 100ms ease, visibility 150ms; }
 .workspace-picker.open .workspace-menu-reveal { grid-template-rows: 1fr; visibility: visible; opacity: 1; }
-.workspace-picker .workspace-picker-menu { display: flex; flex-direction: column; position: static; width: auto; min-height: 0; max-height: min(60vh, 420px); padding: 0 4px; overflow: hidden; background: transparent; border: 0; border-radius: 0; box-shadow: none; animation: none; }
-.workspace-picker-list { flex: 1 1 auto; min-height: 0; max-height: min(45vh, 340px); overflow: auto; overscroll-behavior: contain; }
+.workspace-picker .workspace-picker-menu { display: flex; flex-direction: column; position: static; width: auto; min-height: 0; max-height: min(60vh, 420px); padding: 0; overflow: hidden; background: transparent; border: 0; border-radius: 0; box-shadow: none; animation: none; }
+.workspace-picker-list { flex: 1 1 auto; min-height: 0; max-height: min(45vh, 340px); padding: 4px 4px 0; overflow: auto; overscroll-behavior: contain; }
+.workspace-picker-list:empty { display: none; }
 .workspace-picker .workspace-picker-row { display: flex; align-items: center; min-width: 0; border-radius: 8px; animation: none; }
 .workspace-picker .workspace-picker-row > button:first-child { display: flex; flex: 1; min-width: 0; min-height: 30px; padding: 5px 7px; text-align: left; }
 .workspace-picker .workspace-picker-row > button:first-child .workspace-path { display: flex; }
 .workspace-picker .workspace-picker-row:hover { background: var(--vscode-list-hoverBackground); }
-.workspace-picker .workspace-add { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-start; gap: 7px; width: 100%; min-height: 32px; padding: 5px 7px; margin: 3px 0 4px; border-top: 1px solid var(--control-border); border-radius: 0 0 8px 8px; text-align: left; }
+.workspace-picker .workspace-add { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-start; gap: 7px; width: 100%; min-height: 32px; padding: 7px 11px 8px; margin: 0; border: 0; border-radius: 0; text-align: left; }
+.workspace-picker-list:not(:empty) + .workspace-add { margin-top: 4px; border-top: 1px solid var(--control-border); }
 .workspace-picker .workspace-add > svg { width: 14px; height: 14px; }
-.workspace-picker.open .workspace-current { border-bottom: 1px solid var(--control-border); margin-bottom: 3px; }
+.workspace-picker.open .workspace-current { border-bottom: 1px solid var(--control-border); margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
 	.workspace-picker-shell, .workspace-picker-name, .workspace-expanded-label, .workspace-menu-reveal { transition: none; }
 }

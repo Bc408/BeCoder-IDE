@@ -34,25 +34,34 @@ const executableCreationFailed: RunnerFlowFailure = {
 
 const cleanupFailed: RunnerFlowFailure = {
 	title: 'Cleanup Failed',
-	description: 'Could not remove .exe, close the related process and retry'
+	description: 'Some build artifacts could not be cleaned up. See BeCoder Runner Trace for details.'
 };
 
 export function presentRunnerResult(result: RunnerExecutionResult): RunnerPresentation {
-	const showExecutableRemoved = result.executableRemoved && !result.cleanupFailed;
+	const showExecutableRemoved = result.executableRemoved;
+	const issues = result.cleanupIssues;
+	const cleanupFailure = result.cleanupFailed && issues?.length ? {
+		title: 'Cleanup Failed',
+		description: issues.map(issue => {
+			if (issue.target === 'private-artifacts') { return `Temporary build artifacts could not be removed: ${issue.path}`; }
+			if (issue.stage === 'identity') { return `Executable ownership could not be confirmed or the file changed; file preserved: ${issue.path}`; }
+			return `Executable cleanup could not be completed: ${issue.path}`;
+		}).join('\r\n')
+	} : cleanupFailed;
 	switch (result.status) {
 		case 'completed':
-			return { exitCode: 0, outcome: 'run-complete', flowFailure: result.cleanupFailed ? cleanupFailed : undefined, showExecutableRemoved };
+			return { exitCode: 0, outcome: 'run-complete', flowFailure: result.cleanupFailed ? cleanupFailure : undefined, showExecutableRemoved };
 		case 'runtime-error':
-			return { exitCode: result.exitCode ?? 1, outcome: 'runtime-error', flowFailure: result.cleanupFailed ? cleanupFailed : undefined, showExecutableRemoved };
+			return { exitCode: result.exitCode ?? 1, outcome: 'runtime-error', flowFailure: result.cleanupFailed ? cleanupFailure : undefined, showExecutableRemoved };
 		case 'compile-error':
-			return { exitCode: result.exitCode ?? 1, flowFailure: result.cleanupFailed ? cleanupFailed : compilationFailed, showExecutableRemoved };
+			return { exitCode: result.exitCode ?? 1, flowFailure: result.cleanupFailed ? cleanupFailure : compilationFailed, showExecutableRemoved };
 		case 'executable-creation-error':
-			return { exitCode: 1, flowFailure: result.cleanupFailed ? cleanupFailed : executableCreationFailed, showExecutableRemoved };
+			return { exitCode: 1, flowFailure: result.cleanupFailed ? cleanupFailure : executableCreationFailed, showExecutableRemoved };
 		case 'unable-to-start':
 			return { exitCode: 1, flowFailure: unableToStart, showExecutableRemoved };
 		case 'cancelled':
 			return { exitCode: 1, flowFailure: undefined, showExecutableRemoved: false };
 		case 'runner-error':
-			return { exitCode: 1, outcome: 'runner-error', flowFailure: result.cleanupFailed ? cleanupFailed : undefined, showExecutableRemoved };
+			return { exitCode: 1, outcome: 'runner-error', flowFailure: result.cleanupFailed ? cleanupFailure : undefined, showExecutableRemoved };
 	}
 }

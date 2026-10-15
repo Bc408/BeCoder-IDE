@@ -1739,7 +1739,7 @@ suite('OI extension boundary', () => {
 		assert.match(setupScript, /CreateUninstallRegKey=no/);
 		assert.doesNotMatch(setupScript, /^AppId=/m);
 		assert.match(setupScript, /^\[Tasks\]$/m);
-		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"; Flags: unchecked$/m);
+		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"$/m);
 		assert.match(setupScript, /^english\.CreateDesktopShortcut=Create a desktop shortcut \(not recommended when installing BeCoder on removable storage\)$/m);
 		assert.match(setupScript, /^simplifiedChinese\.CreateDesktopShortcut=创建桌面快捷方式（当你正在给可移动存储介质安装 BeCoder 时，不建议勾选）$/m);
 		assert.match(setupScript, /^\[Icons\]$/m);

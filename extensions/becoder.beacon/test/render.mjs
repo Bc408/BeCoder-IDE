@@ -89,11 +89,12 @@ try {
 	assert.ok(await permissions.getByRole('button', { name: /Spot/ }).isDisabled());
 	assert.deepStrictEqual(await permissions.locator('small').allTextContents(), ['当前页面与主动提供材料；不读本地文件', '只读当前 Beacon 工作区', '只读本机与共享目录']);
 	assert.equal(await permissions.locator('.permission-note').textContent(), '敏感文件与其他会话始终隔离，读取内容会发送给所选模型。');
-	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).height), '32px');
-	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).borderRadius), '8px');
+	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).height), '28px');
 	assert.equal(await permissions.evaluate(element => getComputedStyle(element).borderRadius), '12px');
-	assert.ok(await permissions.locator('button').evaluateAll(elements => elements.every(element => parseFloat(getComputedStyle(element).minHeight) >= 48)), 'Permission choices have a consistent touch target');
-	assert.equal(await page.locator('.web-toggle').evaluate(element => getComputedStyle(element).width), '32px');
+	assert.ok(await permissions.locator('button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().height >= 38)), 'Permission choices have a consistent compact click target');
+	assert.equal(await page.locator('.web-toggle').evaluate(element => getComputedStyle(element).width), '28px');
+	assert.deepStrictEqual(await page.locator('.composer-toolbar').evaluate(element => Array.from(element.children).map(child => child.className)), ['add-files', 'web-toggle', 'permission-control', 'composer-spacer', 'model-picker', 'send']);
+	assert.equal(await page.locator('.add-files path').getAttribute('d'), 'M12 4v16M4 12h16');
 	assert.ok(await page.locator('.workspace-header .header-actions > button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().width >= 28)), 'Top-level icon actions keep usable click targets');
 	await page.screenshot({ path: path.join(output, 'permissions-dark.png') });
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fff; --vscode-foreground:#242424; --vscode-descriptionForeground:#666; --vscode-widget-border:#ccc; --vscode-menu-background:#fff; --vscode-list-hoverBackground:#eee; --vscode-focusBorder:#007fd4; --vscode-textLink-foreground:#006ab1; --vscode-editor-background:#fff; } .vscode-dark { --chat-title:#242424; --chat-muted:#666; }' });

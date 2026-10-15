@@ -710,12 +710,15 @@ suite('Runner process boundary', () => {
 				assert.strictEqual(finalized.executableRemoved, false);
 				assert.strictEqual(finalized.cleanupFailed, true);
 				assert.strictEqual(fs.readFileSync(source.executablePath, 'utf8'), 'replacement executable');
+				assert.ok('cleanupIssues' in finalized);
+				assert.ok(Array.isArray(finalized.cleanupIssues));
+				assert.strictEqual(finalized.cleanupIssues[0].stage, 'identity');
 			} finally {
 				fs.rmSync(root, { recursive: true, force: true });
 			}
 		});
 
-	test('preserves the published executable when private artifact cleanup fails', async () => {
+	test('cleans the published executable independently of private artifact cleanup failure', async () => {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-runner-post-run-cleanup-failure-'));
 		try {
 			const compilerPath = path.join(root, 'g++.exe');
@@ -724,9 +727,11 @@ suite('Runner process boundary', () => {
 			fs.writeFileSync(sourcePath, 'int main() {}');
 			const source = sourceAt(sourcePath);
 			const sessionRoot = path.join(root, 'sessions');
+			let failedCleanupPath = '';
 			const rm = (async (candidate: fs.PathLike, options?: fs.RmOptions) => {
 				if (options?.recursive && path.resolve(String(candidate)).startsWith(path.resolve(sessionRoot) + path.sep)) {
-					throw Object.assign(new Error('private cleanup failed'), { code: 'EBUSY' });
+					failedCleanupPath = String(candidate);
+					throw Object.assign(new Error('private cleanup failed'), { code: 'EBUSY', syscall: 'rmdir' });
 				}
 				await fs.promises.rm(candidate, options);
 			}) as typeof fs.promises.rm;
@@ -756,9 +761,36 @@ suite('Runner process boundary', () => {
 			assert.strictEqual(result.executableRemoved, false);
 			assert.strictEqual(result.cleanupFailed, true);
 			assert.strictEqual(fs.readFileSync(source.executablePath, 'utf8'), 'fake executable');
-			assert.strictEqual(finalizePublishedExecutable(result, source.executablePath), result);
-			assert.strictEqual(fs.readFileSync(source.executablePath, 'utf8'), 'fake executable');
+			const finalized = finalizePublishedExecutable(result, source.executablePath);
+			assert.strictEqual(finalized.executableRemoved, true);
+			assert.strictEqual(finalized.cleanupFailed, true);
+			assert.strictEqual(fs.existsSync(source.executablePath), false);
+			assert.ok('cleanupIssues' in finalized);
+			assert.deepStrictEqual(finalized.cleanupIssues, [{ target: 'private-artifacts', path: failedCleanupPath, stage: 'delete', code: 'EBUSY', syscall: 'rmdir', message: 'private cleanup failed' }]);
 		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test('records the native deletion error without deleting again or changing the exit code', async t => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-runner-delete-error-'));
+		const executablePath = path.join(root, 'main.exe');
+		try {
+			const compiled = path.join(root, 'compiled.exe');
+			fs.writeFileSync(compiled, 'request-owned executable');
+			const identity = await publishExecutable(compiled, executablePath);
+			const removal = t.mock.method(require('fs') as typeof fs, 'rmSync', () => { throw Object.assign(new Error('access denied'), { code: 'EPERM', syscall: 'unlink' }); });
+			const finalized = finalizePublishedExecutable({ ...executionResult('runtime-error', true), exitCode: 7, publishedExecutableIdentity: identity }, executablePath);
+			removal.mock.restore();
+			assert.strictEqual(finalized.exitCode, 7);
+			assert.strictEqual(finalized.cleanupFailed, true);
+			assert.strictEqual(fs.readFileSync(executablePath, 'utf8'), 'request-owned executable');
+			assert.ok('cleanupIssues' in finalized);
+			assert.deepStrictEqual(finalized.cleanupIssues, [{ target: 'executable', path: executablePath, stage: 'delete', code: 'EPERM', syscall: 'unlink', message: 'access denied' }]);
+			assert.strictEqual(finalizePublishedExecutable(finalized, executablePath), finalized);
+			assert.strictEqual(fs.readFileSync(executablePath, 'utf8'), 'request-owned executable');
+		} finally {
+			t.mock.restoreAll();
 			fs.rmSync(root, { recursive: true, force: true });
 		}
 	});

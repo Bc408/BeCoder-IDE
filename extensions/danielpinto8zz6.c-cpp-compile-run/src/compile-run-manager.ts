@@ -455,6 +455,7 @@ export class CompileRunManager implements vscode.Disposable {
 			publishedExecutable: result.publishedExecutable,
 			executableRemoved: result.executableRemoved,
 			cleanupFailed: result.cleanupFailed,
+			cleanupIssues: result.cleanupIssues,
 			targetExceeded: typeof result.timings.compileToRunStartMs === 'number' && result.timings.compileToRunStartMs > 2000,
 			...result.timings
 		}));

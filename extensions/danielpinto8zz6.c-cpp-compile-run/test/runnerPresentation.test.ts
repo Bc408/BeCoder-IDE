@@ -52,7 +52,7 @@ suite('Runner presentation', () => {
 			exitCode: 1,
 			flowFailure: {
 				title: 'Cleanup Failed',
-				description: 'Could not remove .exe, close the related process and retry'
+				description: 'Some build artifacts could not be cleaned up. See BeCoder Runner Trace for details.'
 			},
 			showExecutableRemoved: false
 		});
@@ -65,10 +65,30 @@ suite('Runner presentation', () => {
 			outcome: 'runner-error',
 			flowFailure: {
 				title: 'Cleanup Failed',
-				description: 'Could not remove .exe, close the related process and retry'
+				description: 'Some build artifacts could not be cleaned up. See BeCoder Runner Trace for details.'
 			},
 			showExecutableRemoved: false
 		});
+	});
+
+	test('reports private leftovers independently of successful executable removal', () => {
+		const presentation = presentRunnerResult(Object.assign(result('completed', 0, true, true), {
+			cleanupIssues: [{ target: 'private-artifacts', path: 'D:\\cache\\request', stage: 'delete', code: 'EBUSY', syscall: 'rmdir', message: 'busy' }]
+		}));
+		assert.strictEqual(presentation.exitCode, 0);
+		assert.strictEqual(presentation.showExecutableRemoved, true);
+		assert.match(presentation.flowFailure?.description ?? '', /Temporary build artifacts/);
+		assert.ok(presentation.flowFailure?.description.includes('D:\\cache\\request'));
+		assert.ok(!presentation.flowFailure?.description.includes('close the related process'));
+	});
+
+	test('identifies a changed executable without claiming it was locked or removed', () => {
+		const presentation = presentRunnerResult(Object.assign(result('completed', 0, false, true), {
+			cleanupIssues: [{ target: 'executable', path: 'D:\\code\\main.exe', stage: 'identity', message: 'Executable identity changed.' }]
+		}));
+		assert.strictEqual(presentation.showExecutableRemoved, false);
+		assert.match(presentation.flowFailure?.description ?? '', /changed/);
+		assert.ok(presentation.flowFailure?.description.includes('D:\\code\\main.exe'));
 	});
 
 	test('does not vary Runner flow protocol with the workbench locale', () => {

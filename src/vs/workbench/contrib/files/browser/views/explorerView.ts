@@ -1112,13 +1112,7 @@ registerAction2(class extends Action2 {
 			title: nls.localize('createNewFile', "New File..."),
 			f1: false,
 			icon: Codicon.newFile,
-			precondition: CanCreateContext,
-			menu: {
-				id: MenuId.ViewTitle,
-				group: 'navigation',
-				when: ContextKeyExpr.equals('view', VIEW_ID),
-				order: 10
-			}
+			precondition: CanCreateContext
 		});
 	}
 
@@ -1135,13 +1129,7 @@ registerAction2(class extends Action2 {
 			title: nls.localize('createNewFolder', "New Folder..."),
 			f1: false,
 			icon: Codicon.newFolder,
-			precondition: CanCreateContext,
-			menu: {
-				id: MenuId.ViewTitle,
-				group: 'navigation',
-				when: ContextKeyExpr.equals('view', VIEW_ID),
-				order: 20
-			}
+			precondition: CanCreateContext
 		});
 	}
 

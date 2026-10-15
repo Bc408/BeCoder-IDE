@@ -13,6 +13,9 @@ stdin pipe, without terminal echo, closing the pipe at EOF. Its Windows input
 helper is compiled during application packaging and ships ready to run; it is
 never compiled on first launch. Executables are still published beside their
 source files and use the existing completion/cancellation cleanup policy.
+Executable cleanup is independent of temporary build-directory cleanup. Cleanup
+failures identify the retained artifact; BeCoder Runner Trace records the failing
+stage and available filesystem error code. Cancellation still preserves the exe.
 
 The BC panel is a BeCoder-owned pseudoterminal. It is not PowerShell and does not execute arbitrary shell commands. Its accepted command set is `run <source>`, `run <source> -WithInput`, `clear`, and `help`.
 

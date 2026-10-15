@@ -59,7 +59,7 @@ english.CreateDesktopShortcut=Create a desktop shortcut (not recommended when in
 simplifiedChinese.CreateDesktopShortcut=创建桌面快捷方式（当你正在给可移动存储介质安装 BeCoder 时，不建议勾选）
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"
 
 [Files]
 Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

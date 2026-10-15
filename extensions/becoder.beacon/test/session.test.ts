@@ -13,6 +13,21 @@ import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { readFileSync } from 'fs';
 import { createSyntaxRegistry, IncrementalSyntax } from '../webview/syntax';
 import { languages } from 'beacon-syntax-assets';
+import { toolErrorCode, toolErrorMessage } from '../src/toolFeedback';
+
+suite('Beacon safe tool feedback', () => {
+	test('only owned error codes produce feedback; exceptions and inherited object properties are never displayed', () => {
+		for (const [input, expected] of [
+			['beacon-page-changed', 'page-changed'], ['Error: notebook-busy', 'busy'],
+			['notebook-save-failed; edits remain in the native document', 'save-failed'],
+			['Error: private-token C:\\private\\file', 'unavailable'], ['toString', 'unavailable'], ['constructor', 'unavailable']
+		] as const) {
+			const code = toolErrorCode(input); assert.equal(code, expected);
+			assert.equal(toolErrorMessage(code, true).includes('private-token'), false);
+			assert.notEqual(toolErrorMessage(code, true), toolErrorMessage(code, false));
+		}
+	});
+});
 
 suite('Beacon default TextMate syntax', () => {
 	test('every fence language has a working grammar and preserves incremental source exactly', async () => {

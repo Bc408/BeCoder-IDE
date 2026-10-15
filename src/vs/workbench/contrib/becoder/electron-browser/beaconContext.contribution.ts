@@ -16,8 +16,9 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { IBrowserViewService, ipcBrowserViewChannelName } from '../../../../platform/browserView/common/browserView.js';
 import { BeaconWorkbenchPages } from './beaconPages.js';
-import type { IBeaconContext } from '../../../../platform/beacon/common/beaconContextTypes.js';
+import type { IBeaconContext, IBeaconResume } from '../../../../platform/beacon/common/beaconContextTypes.js';
 import { INotebookService } from '../../notebook/common/notebookService.js';
+import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
 
 let pageProvider: BeaconWorkbenchPages | undefined;
 
@@ -25,11 +26,15 @@ let pageProvider: BeaconWorkbenchPages | undefined;
 CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unknown, input: unknown) => {
 	const service = ProxyChannel.toService<IBeaconContextService>(accessor.get(IMainProcessService).getChannel(beaconContextChannel));
 	const windowId = mainWindow.vscodeWindowId;
-	const value = input as { root?: string; source?: string; handle?: string; producer?: 'runner' | 'cph' | 'notebook'; code?: string; events?: unknown[]; sequence?: number; mode?: unknown; busy?: boolean; id?: string; create?: boolean; title?: string; revision?: number; data?: IBeaconConversation; scope?: IBeaconContext; version?: string } | undefined;
+	const value = input as { root?: string; source?: string; handle?: string; producer?: 'runner' | 'cph' | 'notebook'; code?: string; events?: unknown[]; sequence?: number; mode?: unknown; busy?: boolean; id?: string; create?: boolean; title?: string; revision?: number; data?: IBeaconConversation; scope?: IBeaconContext; version?: string; view?: IBeaconResume } | undefined;
 	const pages = () => pageProvider ??= new BeaconWorkbenchPages(accessor.get(IEditorService), accessor.get(IModelService), ProxyChannel.toService<IBrowserViewService>(accessor.get(IMainProcessService).getChannel(ipcBrowserViewChannelName)), service, windowId, accessor.get(INotebookService));
 	switch (operation) {
 		case 'context': return service.getContext(windowId);
+		case 'resume': return service.getResume(windowId);
+		case 'view': if (value?.view) { return service.setView(windowId, value.view); } break;
 		case 'select': if (typeof value?.root === 'string') { return service.selectWorkspace(windowId, value.root); } break;
+		case 'clearWorkspace': return service.clearWorkspace(windowId);
+		case 'removeRecentWorkspace': if (typeof value?.root === 'string') { return service.removeRecentWorkspace(windowId, value.root); } break;
 		case 'mode': if (value?.mode === 'blackout' || value?.mode === 'spot' || value?.mode === 'flood') { return service.setMode(windowId, value.mode); } break;
 		case 'busy': if (typeof value?.busy === 'boolean') { return service.setBusy(windowId, value.busy); } break;
 		case 'beginActivity': if (typeof value?.source === 'string') { return service.beginActivity(windowId, value.source); } break;
@@ -58,6 +63,7 @@ class BeaconContextContribution extends Disposable implements IWorkbenchContribu
 		@IMainProcessService mainProcess: IMainProcessService,
 		@ICommandService commands: ICommandService,
 		@IExtensionService extensions: IExtensionService,
+		@ILifecycleService lifecycle: ILifecycleService,
 		@ILogService log: ILogService
 	) {
 		super();
@@ -71,6 +77,12 @@ class BeaconContextContribution extends Disposable implements IWorkbenchContribu
 		this._register(extensions.onWillStop(event => {
 			if (CommandsRegistry.getCommand('_becoder.beacon.shutdown')) {
 				event.veto(commands.executeCommand('_becoder.beacon.shutdown').then(() => false, error => { log.error('Beacon extension shutdown', error); return false; }), 'Beacon conversation save');
+			}
+		}));
+		// Save while the extension host is still running. onWillShutdown stops hosts concurrently.
+		this._register(lifecycle.onBeforeShutdown(event => {
+			if (CommandsRegistry.getCommand('_becoder.beacon.flush')) {
+				event.veto(commands.executeCommand('_becoder.beacon.flush').then(() => false, error => { log.error('Beacon window save', error); return false; }), 'beacon.drafts');
 			}
 		}));
 		this._register(extensions.onDidChangeExtensionsStatus(ids => {

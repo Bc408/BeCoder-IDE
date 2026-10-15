@@ -5,11 +5,13 @@
 
 // Plain transport DTOs: bundled consumers need no platform services or model SDK.
 export type BeaconMode = 'blackout' | 'spot' | 'flood';
-export interface IBeaconWindowSelection { slot: string; root?: string; mode: 'spot' | 'flood'; identity?: string }
+export type BeaconWorkspaceState = 'none' | 'ready' | 'blackout' | 'unavailable';
+export interface IBeaconWindowSelection { slot: string; root?: string; mode: BeaconMode; identity?: string }
 export interface IBeaconContext {
 	slot: string;
 	root?: string;
 	usable: boolean;
+	workspaceState: BeaconWorkspaceState;
 	mode: BeaconMode;
 	epoch: number;
 	busy: boolean;
@@ -23,8 +25,11 @@ export interface IBeaconConversation {
 	messages: unknown[];
 	error: string;
 	workspace: { name: string; path: string }[];
+	draft?: { text: string; attachments: unknown[] };
+	draftOnly?: boolean;
 	[key: string]: unknown;
 }
+export interface IBeaconResume { screen: 'home' | 'conversation'; id?: string; homeId?: string }
 export interface IBeaconStoredConversation { revision: number; data: IBeaconConversation }
 export interface IBeaconHistoryItem { id: string; title: string; updatedAt: number; revision: number; workspace: { name: string; path: string }[] }
 export type BeaconProducer = 'runner' | 'cph' | 'notebook';

@@ -81,7 +81,7 @@ Timeout:
 Failure stops:
 ```
 
-Do not invent replacement commands during formal execution. If the plan is invalid, report the orchestration failure under the active stop rule and return to preflight only after authorization permits continuation.
+Do not invent replacement commands during formal execution. If the plan is invalid, record the orchestration failure, return to preflight, correct the plan within the authorized scope, and record the revised command before continuation.
 
 ## 7. Maintain a Validation Ledger
 
@@ -120,9 +120,9 @@ Examples:
 
 Once focused reruns pass, execute the required final validation matrix against the final worktree before independent review or build authorization.
 
-## 9. Preserve the Stop Rule
+## 9. Recover Truthfully From Failed Attempts
 
-When a formal validator starts and returns nonzero or times out, stop the remaining formal sequence and report:
+When a formal validator starts and returns nonzero or times out, record:
 
 - the exact command and working directory;
 - the original output;
@@ -131,7 +131,7 @@ When a formal validator starts and returns nonzero or times out, stop the remain
 - which checks remain unexecuted;
 - why build or acceptance readiness cannot yet be claimed.
 
-Do not retry automatically, silently change tools, continue to packaging, or reuse older evidence as current proof.
+During authorized development, diagnose the failure, correct the source, configuration, command, or environment at the appropriate layer, then rerun the smallest affected check. Keep later packaging and acceptance steps blocked until required source checks are green. Do not silently change tools or reuse older evidence as current proof.
 
 ## 10. Lessons From Repeated Failures
 

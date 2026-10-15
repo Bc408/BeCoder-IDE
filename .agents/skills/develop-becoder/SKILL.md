@@ -88,11 +88,11 @@ Before formal validation, read [references/validation-protocol.md](references/va
 - Check nontrivial PowerShell parsing, interpolation, quoting, encoding, and Windows paths before using the command as a formal check.
 - Freeze the planned command list and maintain a validation ledger throughout execution.
 
-An invocation, dependency, shell, or input-enumeration failure is an orchestration failure, not evidence about source correctness. Report it accurately and follow the active stop rule; do not silently substitute another command or count the failed invocation as a completed check.
+An invocation, dependency, shell, or input-enumeration failure is an orchestration failure, not evidence about source correctness. Record it accurately, diagnose it at the correct layer, and correct the command or environment within the authorized scope before rerunning. Do not silently substitute another command or count the failed invocation as a completed check.
 
 ## Validate in Layers
 
-Run the smallest owning checks first and broaden in proportion to risk. Follow exact commands, timeouts, and stop rules in `AGENTS.md`.
+Run the smallest owning checks first and broaden in proportion to risk. Follow exact commands, timeouts, and recovery rules in `AGENTS.md`.
 
 Typical order:
 
@@ -107,15 +107,15 @@ Typical order:
 9. Setup build;
 10. direct Setup verification.
 
-Stop on a nonzero exit or external timeout. Do not automatically retry or continue to packaging. Never use `npm run compile` as TypeScript validation.
+Treat a nonzero exit or external timeout as a failed attempt. Record its evidence, diagnose and repair it within the authorized scope, rerun the affected check, and do not continue to packaging while any required source check remains red. Never use `npm run compile` as TypeScript validation.
 
 After a source fix, rerun the smallest checks invalidated by that fix. Before declaring source validation complete, rerun the final required matrix so its evidence corresponds to the final worktree rather than an earlier intermediate state.
 
 ## Run the Review Loop
 
-Do not start a sub-agent or review thread unless the project owner explicitly requests one. By default, the primary agent performs a separate read-only review pass covering requirement completeness, logic, edge cases, ordinary-feature regressions, code quality, tests, localization, build/package boundaries, and actual runtime evidence.
+Use sub-agents when independent investigation, implementation, or review will improve correctness or speed. Coordinate shared-worktree edits so that only one agent writes a given ownership area at a time. The primary agent also performs a separate read-only review pass covering requirement completeness, logic, edge cases, ordinary-feature regressions, code quality, tests, localization, build/package boundaries, and actual runtime evidence.
 
-When the project owner explicitly requests an independent reviewer, the reviewer must not modify files. Fix concrete findings, then ask the same reviewer to verify again. Continue until no blocking finding remains or the blocker is explicitly documented.
+Review agents are read-only unless the task explicitly assigns them an implementation slice. Fix concrete findings, then re-review and revalidate the affected area until no blocking finding remains or the blocker is explicitly documented.
 
 Do not describe a primary-agent review as independent agent approval, and do not describe an earlier focused review as approval of later closeout changes.
 
@@ -153,7 +153,7 @@ Treat the `Release BeCoder Setup` GitHub Actions workflow as an optional, manual
 - Use only stable `vX.Y.Z` release tags. Do not create alpha, beta, nightly, or legacy `Release-v*` tags unless the project owner establishes a new policy.
 - For the cloud path, dispatch the workflow with the exact version and full accepted `main` commit. The workflow creates the tag and Release only after its source, package, and Setup checks pass.
 - For every authorized Release path, complete the release end to end: write a detailed user-facing release statement organized by applicable Conventional Commit categories, create the tag and Release, upload Setup, and verify the final remote state. Do not stop for a separate wording approval unless the project owner explicitly requests that checkpoint; the project owner may fine-tune the published wording afterward.
-- A failed workflow attempt is not a published release. Diagnose and fix the failure under the validation stop rule, rerun only with the existing cloud-release authorization, and report earlier failed attempts separately from the successful final run.
+- A failed workflow attempt is not a published release. Diagnose and fix the failure within the existing cloud-release authorization, rerun the affected workflow, and report earlier failed attempts separately from the successful final run.
 
 ## Hand Off
 

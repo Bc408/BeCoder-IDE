@@ -7,7 +7,7 @@ import * as path from '../../../base/common/path.js';
 import * as fs from 'fs/promises';
 import { constants, type Stats } from 'fs';
 import { randomUUID } from 'crypto';
-import type { IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation } from '../common/beaconContext.js';
+import type { IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconResume } from '../common/beaconContext.js';
 import { acquireBeaconLease } from './beaconLease.js';
 
 export interface IBeaconWorkspaceBinding { path: string; canonicalPath: string; assetsPath: string; identity: string; rootIdentity: string; assetsIdentity: string }
@@ -20,6 +20,12 @@ const samePath = (left: string, right: string) => process.platform === 'win32' ?
 
 export function checkBeaconIdentifier(id: string): void {
 	if (typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(id)) { throw new Error('beacon-invalid-id'); }
+}
+
+export function checkBeaconResume(value: IBeaconResume): void {
+	if (!value || !['home', 'conversation'].includes(value.screen) || (value.screen === 'conversation' && !value.id) || (value.screen === 'home' && value.id !== undefined)) { throw new Error('beacon-invalid-view'); }
+	if (value.id !== undefined) { checkBeaconIdentifier(value.id); }
+	if (value.homeId !== undefined) { checkBeaconIdentifier(value.homeId); }
 }
 
 export async function prepareBeaconWorkspace(root: string, create: boolean): Promise<IBeaconWorkspaceBinding> {
@@ -125,7 +131,21 @@ export class BeaconStore {
 		return { revision: record.revision, data: record.data };
 	}
 
-	async listHistory(): Promise<IBeaconHistoryItem[]> {
+	async readResume(): Promise<IBeaconResume | undefined> {
+		await this.validate();
+		try {
+			const value = await this.readJson(path.join(this.binding.assetsPath, 'resume.json')) as { version?: number; view?: IBeaconResume };
+			if (value?.version !== 1 || !value.view) { throw new Error('beacon-invalid-view'); }
+			checkBeaconResume(value.view); return value.view;
+		} catch (error) { if (missing(error)) { return undefined; } throw error; }
+	}
+
+	async saveResume(view: IBeaconResume): Promise<void> {
+		checkBeaconResume(view);
+		await this.writeJson([], 'resume.json', { version: 1, view });
+	}
+
+	async listHistory(includeDrafts = false): Promise<IBeaconHistoryItem[]> {
 		let directory: string;
 		try { directory = await this.directory(['conversations'], false); } catch (error) { if (missing(error)) { return []; } throw error; }
 		const result: IBeaconHistoryItem[] = [];
@@ -134,7 +154,7 @@ export class BeaconStore {
 			if (entry.isSymbolicLink()) { throw new Error('beacon-invalid-assets'); }
 			if (!entry.isDirectory()) { continue; }
 			const record = await this.readConversation(entry.name);
-			if (record) { const { id, title, updatedAt, workspace } = record.data; result.push({ id, title, updatedAt, workspace, revision: record.revision }); }
+			if (record && (includeDrafts || record.data.draftOnly !== true)) { const { id, title, updatedAt, workspace } = record.data; result.push({ id, title, updatedAt, workspace, revision: record.revision }); }
 		}
 		return result.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
@@ -142,6 +162,7 @@ export class BeaconStore {
 	async saveConversation(data: IBeaconConversation, revision: number): Promise<IBeaconStoredConversation> {
 		checkBeaconIdentifier(data?.id);
 		if (!Number.isSafeInteger(revision) || revision < 0 || !Array.isArray(data.messages) || typeof data.title !== 'string' || !Number.isFinite(data.updatedAt) || typeof data.error !== 'string') { throw new Error('beacon-invalid-history'); }
+		if ((data.draft !== undefined && (!data.draft || typeof data.draft.text !== 'string' || !Array.isArray(data.draft.attachments))) || (data.draftOnly !== undefined && typeof data.draftOnly !== 'boolean') || (data.draftOnly === true && data.messages.length > 0)) { throw new Error('beacon-invalid-history'); }
 		const release = await acquireBeaconLease(this.binding.identity, `write:${data.id}`);
 		try {
 			const current = await this.readConversation(data.id);

@@ -10,7 +10,8 @@ import { ILogService } from '../../log/common/log.js';
 import { IStateService } from '../../state/node/state.js';
 import { ICodeWindow } from '../../window/electron-main/window.js';
 import { IWindowsMainService } from '../../windows/electron-main/windows.js';
-import { BeaconMode, IBeaconContextService, IBeaconConversation } from '../common/beaconContext.js';
+import { ILifecycleMainService } from '../../lifecycle/electron-main/lifecycleMainService.js';
+import { BeaconMode, IBeaconContextService, IBeaconConversation, IBeaconResume } from '../common/beaconContext.js';
 import { BeaconCoordinator } from '../node/beaconCoordinator.js';
 import type { BeaconProducer, IBeaconContext } from '../common/beaconContextTypes.js';
 
@@ -24,6 +25,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	constructor(
 		@IWindowsMainService private readonly windowsService: IWindowsMainService,
 		@IStateService state: IStateService,
+		@ILifecycleMainService lifecycle: ILifecycleMainService,
 		@ILogService private readonly log: ILogService
 	) {
 		super();
@@ -31,7 +33,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 			getSelection: id => {
 				const configuration = this.windowsService.getWindowById(id)?.config;
 				if (!configuration) { return undefined; }
-				return configuration.beaconSelection ??= { slot: generateUuid(), mode: 'spot' };
+				return configuration.beaconSelection ??= { slot: generateUuid(), mode: 'blackout' };
 			},
 			saveSelection: (id, selection) => this.windowsService.updateBeaconWindowSelection(id, selection),
 			getRecent: () => { const value = state.getItem<unknown>('becoderBeaconRecentRoots'); return Array.isArray(value) ? value.filter((root): root is string => typeof root === 'string' && !!root) : []; },
@@ -39,6 +41,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 			changed: id => this.changed.fire(id)
 		});
 		for (const window of windowsService.getWindows()) { this.watchWindow(window); }
+		this._register(lifecycle.onWillShutdown(event => event.join('beacon.resume', Promise.resolve().then(() => this.coordinator.flushResume()))));
 		this._register(windowsService.onDidOpenWindow(window => this.watchWindow(window)));
 		this._register(windowsService.onDidDestroyWindow(window => {
 			this.watched.get(window.id)?.dispose(); this.watched.delete(window.id);
@@ -53,12 +56,20 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	private watchWindow(window: ICodeWindow): void {
 		if (this.watched.has(window.id)) { return; }
 		const disposables = new DisposableStore();
-		disposables.add(window.onWillLoad(() => { void this.coordinator.closeWindow(window.id).catch(error => this.log.error('Beacon reload release', error)); }));
+		disposables.add(window.onDidClose(() => {
+			void this.coordinator.closeWindow(window.id, true).catch(error => this.log.error('Beacon window resume', error));
+			disposables.dispose(); this.watched.delete(window.id);
+		}));
+		disposables.add(window.onWillLoad(() => { void this.coordinator.resetWindow(window.id).catch(error => this.log.error('Beacon reload release', error)); }));
 		this.watched.set(window.id, disposables);
 	}
 
 	getContext(windowId: number) { return this.coordinator.getContext(windowId); }
+	getResume(windowId: number) { return this.coordinator.getResume(windowId); }
+	setView(windowId: number, view: IBeaconResume) { return this.coordinator.setView(windowId, view); }
 	selectWorkspace(windowId: number, root: string) { return this.coordinator.selectWorkspace(windowId, root); }
+	clearWorkspace(windowId: number) { return this.coordinator.clearWorkspace(windowId); }
+	removeRecentWorkspace(windowId: number, root: string) { return this.coordinator.removeRecentWorkspace(windowId, root); }
 	setMode(windowId: number, mode: BeaconMode) { return this.coordinator.setMode(windowId, mode); }
 	async setBusy(windowId: number, busy: boolean): Promise<void> { this.coordinator.setBusy(windowId, busy); }
 	beginActivity(windowId: number, source: string) { return this.coordinator.beginActivity(windowId, source); }
@@ -76,7 +87,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	consumeRuntime(windowId: number, producer: BeaconProducer, id: string, revision: number, scope: IBeaconContext) { return this.coordinator.consumeRuntime(windowId, producer, id, revision, scope); }
 	readConsumed(windowId: number, materialId: string, scope: IBeaconContext) { return this.coordinator.readConsumed(windowId, materialId, scope); }
 	checkPageAccess(windowId: number, file: string) { return this.coordinator.checkPageAccess(windowId, file); }
-	async resetWindow(windowId: number): Promise<void> { await this.coordinator.closeWindow(windowId); this.changed.fire(windowId); }
+	async resetWindow(windowId: number): Promise<void> { await this.coordinator.resetWindow(windowId); this.changed.fire(windowId); }
 	listHistory(windowId: number) { return this.coordinator.listHistory(windowId); }
 	openConversation(windowId: number, id: string, create?: boolean) { return this.coordinator.openConversation(windowId, id, create); }
 	saveConversation(windowId: number, data: IBeaconConversation, revision: number) { return this.coordinator.saveConversation(windowId, data, revision); }

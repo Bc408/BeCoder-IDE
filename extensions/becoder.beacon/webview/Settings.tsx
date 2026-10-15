@@ -7,8 +7,6 @@ import { Children, cloneElement, isValidElement, useEffect, useRef, useState, ty
 import { normalizeBaseURL, providers, type ModelParameterName, type ProviderId } from '../src/connection';
 import { resolveCapabilities, type CapabilityField, type ModelCapabilities, type ModelSettings } from '../src/models';
 import { parameterPolicy, type ConfiguredModel, type SettingsCommand, type SettingsResult, type SettingsSnapshot } from '../src/modelConfiguration';
-import { Workspace } from './Workspace';
-import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import { Icon } from './Icon';
 
 const zh = document.documentElement.lang.startsWith('zh');
@@ -111,7 +109,6 @@ function ModelForm({ provider, snapshot, model, run, close }: { provider: Provid
 export function Settings({ post }: { post(message: unknown): void }) {
 	const [snapshot, setSnapshot] = useState<SettingsSnapshot>();
 	const [busy, setBusy] = useState(false);
-	const [context, setContext] = useState<IBeaconContext>();
 	const [provider, setProvider] = useState<ProviderId>('deepseek');
 	const [editing, setEditing] = useState<{ model?: ConfiguredModel }>();
 	const [connectionDirty, setConnectionDirty] = useState(false);
@@ -123,7 +120,7 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	const counter = useRef(0);
 	useEffect(() => {
 		const listener = (event: MessageEvent) => {
-			if (event.data?.type === 'settingsSnapshot') { setSnapshot(event.data.settings); setBusy(event.data.busy); setContext(event.data.context); }
+			if (event.data?.type === 'settingsSnapshot') { setSnapshot(event.data.settings); setBusy(event.data.busy); }
 			if (event.data?.type === 'settingsResult') {
 				const value = event.data as SettingsResult;
 				const callback = requests.current.get(value.requestId);
@@ -149,7 +146,6 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	const locked = state.pending || connectionDirty || !!editing;
 	return <main className="settings-page">
 		<header className="settings-header"><div><h1>{t('Beacon Settings', 'Beacon 设置')}</h1><p>{t('Providers, models and generation parameters', '服务商、模型与生成参数')}</p></div><button className="settings-icon" aria-label={t('Open chat', '打开聊天')} onClick={() => post({ type: 'openChat' })}><Icon name="chat" /></button></header>
-		<Workspace context={context} busy={busy} post={post} />
 		<div className="settings-layout"><nav className="provider-list" aria-label={t('Providers', '服务商')}>{(Object.keys(providers) as ProviderId[]).map(id => <button key={id} aria-current={provider === id ? 'page' : undefined} disabled={locked} onClick={() => { setProvider(id); setQuery(''); setConfirm(undefined); setResult(undefined); }}><span className="provider-initial">{providers[id].name[0]}</span><span>{providers[id].name}<small>{state.providers[id].models.length} {t('models', '个模型')}</small></span><span className={`provider-status ${id === 'ollama' || state.keyConfigured[id] ? 'configured' : ''}`} /></button>)}</nav>
 		<div className="settings-content"><div className="settings-provider-title"><h2>{providers[provider].name}</h2>{busy && <span>{t('A response is running · changes apply next time', '正在回复 · 修改下一轮生效')}</span>}</div>
 		{state.error && <div className="settings-feedback failure" role="alert">{state.error}</div>}

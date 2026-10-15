@@ -5,18 +5,76 @@
 
 import { suite, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { BeaconContextClient, withPdfPages } from '../src/context';
 import { ContextTools, redactContext } from '../src/contextTools';
 import { NotebookTools } from '../src/notebookTools';
 import { createGenerator } from '../src/provider';
 import { ChatSession } from '../src/session';
+import { readHistory } from '../src/history';
 import { resolveCapabilities } from '../src/models';
 import type { Connection } from '../src/connection';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 
-const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, mode: 'spot', epoch: 2, busy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
+const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 2, busy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
 
 suite('Beacon native context consumer', () => {
+	test('page provenance pins the complete captured text across redacted range reads', async () => {
+		const raw = 'api_key="private-token";\ncurrent dirty code';
+		const page = { id: 'page', kind: 'text', title: 'main.cpp', uri: 'file:///C:/chosen/main.cpp', version: '2', dirty: true };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : operation === 'pages' ? [page] : { ...page, contents: raw, totalCharacters: raw.length });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		const first = await tools.execute({ operation: 'page', id: 'page', version: '2', limit: 5 }, signal);
+		const next = await tools.execute({ operation: 'page', id: 'page', version: '2', offset: first.nextOffset as number }, signal);
+		const source = first.source;
+		assert.equal(source?.kind, 'page'); assert.equal(source?.id, 'page'); assert.equal(source?.version, '2');
+		assert.equal(source?.origin, page.uri); assert.equal(source?.contentSha256, createHash('sha256').update(raw).digest('hex'));
+		assert.equal(typeof source?.capturedAt, 'number'); assert.deepEqual(next.source, source);
+		assert.equal(first.truncated, true); assert.equal(first.redacted, true); assert.equal(JSON.stringify([first, next]).includes('private-token'), false);
+	});
+	test('runtime provenance survives material rereads and distinguishes material hash from source hash', async () => {
+		const sourceHash = 'a'.repeat(64);
+		const record = { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, sequence: 2, code: 'V1', events: [{ type: 'compile-attempt', sourceSnapshot: { originalPath: 'C:\\chosen\\main.cpp', sha256: sourceHash, complete: false } }] };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : record);
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		const first = await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 3, part: 'code' }, signal);
+		const next = await tools.execute({ operation: 'material', id: record.materialId, part: 'events' }, signal);
+		const source = first.source;
+		assert.equal(source?.kind, 'runtime'); assert.equal(source?.producer, 'runner'); assert.equal(source?.id, 'run'); assert.equal(source?.revision, 3);
+		assert.equal(source?.origin, 'C:\\chosen\\main.cpp'); assert.equal(source?.sourceSha256, sourceHash); assert.equal(source?.partial, true);
+		assert.match(String(source?.contentSha256), /^[a-f0-9]{64}$/); assert.notEqual(source?.contentSha256, sourceHash); assert.deepEqual(next.source, source);
+	});
+	test('SDK context failures retain a safe actionable code in activity and saved history', async () => {
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: 'supported' } };
+		let requests = 0; const session = new ChatSession(() => {}, () => 'error');
+		const generator = createGenerator(async () => connection, async () => {
+			const delta = ++requests === 1 ? { tool_calls: [{ index: 0, id: 'context-failed', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: 'page', version: '2' }) } }] } : { content: 'Please reopen the page.' };
+			return new Response('data: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta: {}, finish_reason: requests === 1 ? 'tool_calls' : 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+		}, 'none', [], false, undefined, {}, { describe: async () => 'test context', execute: async () => ({ ok: false, code: 'beacon-page-closed', error: 'private-token must never enter the activity' }) });
+		await session.send('Explain the page.', generator);
+		assert.equal(session.snapshot.error, '');
+		assert.deepEqual(session.snapshot.messages[1].activities, [{ id: 'context-failed', type: 'read', path: 'page', status: 'error', error: 'page-closed' }]);
+		const history = readHistory({ version: 1, activeId: 'chat', conversations: [{ id: 'chat', title: 'test', updatedAt: 1, error: '', workspace: [], messages: session.snapshot.messages }] });
+		assert.equal(history.conversations[0].messages[1].activities[0].error, 'page-closed');
+		assert.equal(JSON.stringify(history.conversations[0].messages[1].activities).includes('private-token'), false);
+		const missingActivities = structuredClone(history);
+		delete (missingActivities.conversations[0].messages[1] as Partial<typeof session.snapshot.messages[number]>).activities;
+		assert.throws(() => readHistory(missingActivities), /invalid-history/);
+	});
+	test('complete source capture does not hide omitted events or claim an unfinished run is complete', async () => {
+		for (const [events, partial] of [
+			[[{ type: 'partial-event', partial: true }], true],
+			[[], undefined],
+			[[{ type: 'finished', coverage: { truncated: false } }], false],
+			[[{ type: 'finished', coverage: { truncated: true } }], true]
+		] as const) {
+			const record = { id: 'run', materialId: 'runner-run-1', revision: 1, startedAt: 1, sequence: 1, code: 'V1', events: [{ type: 'compile-attempt', sourceSnapshot: { complete: true } }, ...events] };
+			const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : record);
+			await client.refresh();
+			const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1 }, new AbortController().signal);
+			assert.equal(result.source?.partial, partial);
+		}
+	});
 	test('late cancelled begin retains a failed cleanup handle until request retirement', async () => {
 		const controller = new AbortController(); const actions: string[] = []; let cancels = 0;
 		const tools = new NotebookTools(async () => ({ edit: async input => {
@@ -51,7 +109,7 @@ suite('Beacon native context consumer', () => {
 	});
 	test('open PDF uses existing page tool in blackout, isolates page snapshots and checks access before extraction', async () => {
 		let version = '0'; let opened = true; let denied = false; let reads = 0;
-		const scope: IBeaconContext = { slot: 'one', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] };
+		const scope: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
 		const api = {
 			listPages: () => opened ? [{ id: 'pdf:one', kind: 'pdf' as const, uri: 'file:///C:/outside/task.pdf', title: 'task.pdf', version, pageCount: 3 }] : [],
 			readPage: async (_id: string, _version: string, pageNumber: number) => { reads++; return { ...api.listPages()[0], contents: pageNumber === 1 ? 'api_key=private-token\nfirst page' : 'second page', totalCharacters: 20 }; }
@@ -65,7 +123,7 @@ suite('Beacon native context consumer', () => {
 		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
 		const listed = await tools.execute({ operation: 'pages' }, signal); assert.equal((listed.pages as unknown[]).length, 1);
 		assert.equal((await tools.execute({ operation: 'page', id: 'pdf:one', version }, signal)).ok, false);
-		const first = await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 1, limit: 3 }, signal); assert.equal(first.ok, true); assert.equal(first.pageNumber, 1);
+		const first = await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 1, limit: 3 }, signal); assert.equal(first.ok, true); assert.equal(first.pageNumber, 1); assert.equal(first.source?.pageNumber, 1);
 		const all = await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 1 }, signal); assert.equal(String(all.contents).includes('private-token'), false); assert.equal(reads, 1);
 		const second = await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 2 }, signal); assert.equal(second.contents, 'second page'); assert.equal(reads, 2);
 		assert.equal((await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 4 }, signal)).ok, false);
@@ -187,7 +245,7 @@ suite('Beacon native context consumer', () => {
 		assert.equal(session.snapshot.error, ''); assert.equal(reads, 1);
 	});
 	test('blackout reads only actual opened pages; full redaction precedes small range reads', async () => {
-		const state: IBeaconContext = { slot: 'one', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] };
+		const state: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
 		let opened = true; let records = 0;
 		const client = new BeaconContextClient(async operation => {
 			if (operation === 'context') { return state; }
@@ -229,6 +287,21 @@ suite('Beacon native context consumer', () => {
 		assert.equal(client.permission, 'workspace');
 	});
 
+	test('manual Blackout keeps its selected root but binds no workspace assets', async () => {
+		let historyReads = 0;
+		const state: IBeaconContext = { ...selected(), workspaceState: 'blackout', mode: 'blackout', activeId: undefined };
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return state; }
+			if (operation === 'history') { historyReads++; return []; }
+			throw new Error('unexpected-operation');
+		});
+		const binding = await client.bindHistory();
+		assert.deepEqual(client.roots, []);
+		assert.equal(client.permission, 'none');
+		assert.deepEqual(binding.data.conversations, []);
+		assert.equal(historyReads, 0);
+	});
+
 	test('rejects a stale result when permission or workspace changes during reading', async () => {
 		let current = selected();
 		const client = new BeaconContextClient(async () => current);
@@ -265,7 +338,7 @@ suite('Beacon native context consumer', () => {
 		const client = new BeaconContextClient(async operation => { operations.push(operation); return operation === 'context' ? current : []; });
 		assert.equal((await client.bindHistory()).data.activeId, '');
 		assert.equal(operations.includes('open'), false);
-		current = { ...current, usable: false, mode: 'blackout' };
+		current = { ...current, usable: false, workspaceState: 'unavailable', mode: 'blackout' };
 		const temporary = await client.bindHistory();
 		assert.equal(temporary.root, undefined);
 		await temporary.save({ ...temporary.data, activeId: 'temporary', conversations: [] });

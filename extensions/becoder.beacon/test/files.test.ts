@@ -7,7 +7,7 @@ import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { FileTools } from '../src/fileTools';
+import { FileTools, safeFileError } from '../src/fileTools';
 import { ChatSession, fileModelOutput, type Generate } from '../src/session';
 import { createGenerator } from '../src/provider';
 import { providers } from '../src/connection';
@@ -21,6 +21,16 @@ async function fixture(run: (directory: string) => Promise<void>) {
 }
 
 suite('Beacon read-only permissions', () => {
+	test('unknown error names cannot resolve inherited properties instead of a safe message', () => {
+		for (const code of ['toString', 'constructor', 'private-token']) {
+			const message = safeFileError(new Error(code));
+			assert.equal(typeof message, 'string'); assert.equal(message.includes('private-token'), false);
+		}
+	});
+	test('file denial carries an owned reason without exposing a raw exception', async () => {
+		const result = await new FileTools('none', []).execute({ operation: 'read', path: 'C:\\private\\main.cpp' }, signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'protected');
+	});
 	test('flood excludes other conversation assets, including aliases and legacy profile storage', async () => fixture(async directory => {
 		const assets = path.join(directory, '.beaconWork');
 		const legacy = path.join(directory, 'profile');

@@ -410,20 +410,50 @@ suite('Beacon window context and conversation ownership', () => {
 		} finally { await service.dispose(); }
 	}));
 
-	test('enforces mode qualification and preserves a remembered unavailable root', async () => fixture(async root => {
+	test('keeps a valid selected root while Blackout releases its active conversation', async () => fixture(async root => {
 		const { service } = coordinator();
 		try {
 			assert.equal((await service.getContext(1)).mode, 'blackout');
 			await assert.rejects(service.setMode(1, 'flood'));
 			await service.selectWorkspace(1, root);
 			assert.equal((await service.getContext(1)).mode, 'spot');
-			await assert.rejects(service.setMode(1, 'blackout'));
+			await service.openConversation(1, 'one', true);
+			const blackedOut = await service.setMode(1, 'blackout');
+			assert.equal(blackedOut.root, root);
+			assert.equal(blackedOut.usable, true);
+			assert.equal(blackedOut.mode, 'blackout');
+			assert.equal(blackedOut.activeId, undefined);
+			await assert.rejects(service.openConversation(1, 'one'), /workspace/);
+			await service.selectWorkspace(2, root);
+			await service.openConversation(2, 'one');
+			await service.releaseConversation(2);
 			await service.setMode(1, 'flood');
 			await fs.rename(path.join(root, '.beaconWork'), path.join(root, 'unavailable'));
 			const state = await service.getContext(1);
 			assert.equal(state.root, root); assert.equal(state.mode, 'blackout'); assert.equal(state.usable, false);
 			await fs.rename(path.join(root, 'unavailable'), path.join(root, '.beaconWork'));
 			assert.equal((await service.getContext(1)).mode, 'flood');
+		} finally { await service.dispose(); }
+	}));
+
+	test('keeps manual Blackout across roots and moves a cleared root to recents without duplicates', async () => fixture(async parent => {
+		const first = path.join(parent, 'first'); const second = path.join(parent, 'second');
+		await fs.mkdir(first); await fs.mkdir(second);
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, first);
+			await service.setMode(1, 'blackout');
+			const switched = await service.selectWorkspace(1, second);
+			assert.equal(switched.root, second);
+			assert.equal(switched.mode, 'blackout');
+			assert.equal(switched.workspaceState, 'blackout');
+			const cleared = await service.clearWorkspace(1);
+			assert.equal(cleared.root, undefined);
+			assert.equal(cleared.mode, 'blackout');
+			assert.equal(cleared.workspaceState, 'none');
+			assert.deepEqual(cleared.recent, [second, first]);
+			await service.removeRecentWorkspace(1, first);
+			assert.deepEqual((await service.getContext(1)).recent, [second]);
 		} finally { await service.dispose(); }
 	}));
 
@@ -457,6 +487,89 @@ suite('Beacon window context and conversation ownership', () => {
 			await service.openConversation(2, 'one');
 			assert.equal((await service.getContext(2)).activeId, 'one');
 		} finally { await service.dispose(); }
+	}));
+
+	test('draft conversations stay out of history and promote using the same identity', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, root);
+			service.setBusy(1, true);
+			const draft = await service.openConversation(1, 'draft', true);
+			await assert.rejects(service.openConversation(1, 'second-draft', true), /beacon-busy/);
+			service.setBusy(1, false);
+			assert.equal(draft.data.draftOnly, true);
+			await service.saveConversation(1, { ...draft.data, draft: { text: 'pending', attachments: [{ contents: 'snapshot' }] } }, draft.revision);
+			assert.deepEqual(await service.listHistory(1), []);
+			await assert.rejects(service.openConversation(2, 'draft'), /unavailable/);
+			await service.saveConversation(1, { ...conversation('draft'), draftOnly: false }, 2);
+			assert.equal((await service.listHistory(1))[0].id, 'draft');
+		} finally { await service.dispose(); }
+	}));
+
+	test('a deleted released home reference cannot prevent saving the current view', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
+			await service.openConversation(1, 'home', true);
+			await service.openConversation(1, 'detail', true);
+			await service.setView(1, { screen: 'conversation', id: 'detail', homeId: 'home' });
+			await service.deleteConversation(2, 'home');
+			await service.setView(1, { screen: 'conversation', id: 'detail', homeId: 'home' });
+			assert.deepEqual(await service.getResume(1), { screen: 'conversation', id: 'detail', homeId: undefined });
+		} finally { await service.dispose(); }
+	}));
+
+	test('only actual closes publish the last closed view including explicit empty home', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
+			await service.openConversation(1, 'draft', true);
+			await service.setView(1, { screen: 'home', homeId: 'draft' });
+			await service.resetWindow(1);
+			assert.equal(await service.getResume(2), undefined);
+			await service.setView(1, { screen: 'home', homeId: 'draft' });
+			await service.closeWindow(1, true);
+			assert.deepEqual(await service.getResume(2), { screen: 'home', homeId: 'draft' });
+			await service.setView(2, { screen: 'home' });
+			await service.closeWindow(2, true);
+			await service.selectWorkspace(1, root);
+			assert.deepEqual(await service.getResume(1), { screen: 'home' });
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			assert.equal(await store.readConversation('draft'), undefined);
+		} finally { await service.dispose(); }
+	}));
+
+	test('close order wins over delayed completion and protects live and sent conversation drafts', async () => fixture(async root => {
+		const { service } = coordinator();
+		const saveResume = BeaconStore.prototype.saveResume;
+		let unblock!: () => void; let entered!: () => void;
+		const blocked = new Promise<void>(resolve => { unblock = resolve; });
+		const saving = new Promise<void>(resolve => { entered = resolve; });
+		let publications = 0;
+		BeaconStore.prototype.saveResume = async function (view) {
+			if (++publications === 1) { entered(); await blocked; }
+			await saveResume.call(this, view);
+		};
+		try {
+			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
+			await service.openConversation(1, 'first', true); await service.setView(1, { screen: 'home', homeId: 'first' });
+			await service.openConversation(2, 'second', true); await service.setView(2, { screen: 'home', homeId: 'second' });
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			await store.saveConversation({ ...conversation('sent'), draft: { text: 'keep', attachments: [] } }, 0);
+			const first = service.closeWindow(1, true); const second = service.closeWindow(2, true);
+			await saving; assert.equal(publications, 1); unblock();
+			await Promise.all([first, second]);
+			await service.selectWorkspace(1, root);
+			assert.deepEqual(await service.getResume(1), { screen: 'home', homeId: 'second' });
+			assert.equal(await store.readConversation('first'), undefined);
+			assert.ok(await store.readConversation('second'));
+			assert.equal((await store.readConversation('sent'))?.data.draft?.text, 'keep');
+			await service.openConversation(2, 'live', true);
+			await service.setView(1, { screen: 'home' }); await service.closeWindow(1, true);
+			assert.ok(await store.readConversation('live'));
+			await service.setMode(2, 'blackout'); await service.closeWindow(2, true);
+			assert.deepEqual(await store.readResume(), { screen: 'home' });
+		} finally { unblock(); BeaconStore.prototype.saveResume = saveResume; await service.dispose(); }
 	}));
 
 	test('window closure releases conversation occupancy', async () => fixture(async root => {

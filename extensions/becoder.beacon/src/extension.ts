@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { randomBytes, randomUUID } from 'crypto';
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { ChatHistory } from './history';
+import { ChatHistory, type Conversation } from './history';
 import { Connections, connectionError, settingsError } from './connections';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
@@ -18,6 +19,7 @@ import { AttachmentError, attachmentBudget, captureClipboardImages, checkAttachm
 import { ModelCapabilityError } from './models';
 
 const streamSnapshotIntervalMs = 33;
+const sameWorkspacePath = (left: string, right: string) => process.platform === 'win32' ? path.normalize(left).toLowerCase() === path.normalize(right).toLowerCase() : path.normalize(left) === path.normalize(right);
 let shutdown: (() => Promise<void>) | undefined;
 
 export function deactivate(): Promise<void> | undefined { return shutdown?.(); }
@@ -38,26 +40,57 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let history = new ChatHistory(binding.data, binding.save, schedule, describeError);
 	let session = history.session;
 	let temporary = true;
+	let screen: 'home' | 'conversation' = 'home';
+	let generation = 0;
+	let draftTail = Promise.resolve();
+	const pendingWork = new Set<Promise<void>>();
+	const track = (work: Promise<void>): Promise<void> => {
+		const tracked = work.finally(() => pendingWork.delete(tracked)); pendingWork.add(tracked); return tracked;
+	};
+	const interruptedDrafts = new Map<string, { conversation: Conversation; revision?: number }>();
+	const homes = new Map<string, { id?: string; hasDraft: boolean }>();
+	const temporaryDrafts = new Map<string, { text: string; attachments: Attachment[] }>();
 	try {
 		await native.setBusy(false);
 		await native.release();
 		binding = await native.bindHistory();
 		history = new ChatHistory(binding.data, binding.save, schedule, describeError, () => native.roots);
-		session = history.session; temporary = !native.state.usable;
+		session = history.session; temporary = !native.consumingWorkspace;
 	} catch {
 		historyUnreadable = true;
 	}
 	let attachmentJob: AbortController | undefined;
 	let workspaceJob = false;
+	let workspaceSettled = Promise.resolve();
 	const busy = () => session.snapshot.busy || !!attachmentJob || workspaceJob;
 	let nativeBusy: boolean | undefined;
 	let busyTail = Promise.resolve();
 	const syncBusy = () => {
-		const value = session.snapshot.busy || !!attachmentJob || history.snapshot.persisting;
+		// Draft debounce does not disable the composer; navigation explicitly flushes it.
+		const value = session.snapshot.busy || !!attachmentJob;
 		if (value !== nativeBusy) { nativeBusy = value; busyTail = busyTail.then(() => native.setBusy(value)).catch(() => { nativeBusy = undefined; }); }
 	};
-	const drafts = new Map<string, Attachment[]>();
-	const attachments = () => drafts.get(history.snapshot.activeId) ?? [];
+	const viewKey = () => `${native.state.slot}:${native.state.root ?? ''}:${screen}:${generation}`;
+	const draft = () => temporary ? temporaryDrafts.get(native.state.root ?? '') ?? { text: '', attachments: [] } : history.draft;
+	const attachments = () => draft().attachments;
+	const home = () => homes.get(native.state.root ?? '');
+	const recordView = async () => {
+		if (!native.consumingWorkspace) { return; }
+		if (screen === 'home') { homes.set(native.state.root!, { id: history.snapshot.activeId || undefined, hasDraft: !!(draft().text || attachments().length) }); }
+		await native.setView({ screen, id: screen === 'conversation' ? history.snapshot.activeId || undefined : undefined, homeId: home()?.id });
+	};
+	const setDraft = async (text: string, items: Attachment[]) => {
+		if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text, attachments: items }); }
+		else {
+			if (!history.snapshot.activeId && (text.length || items.length)) { await replaceHistory(await native.bindHistory({ id: randomUUID(), create: true })); }
+			history.setDraft(text, items);
+		}
+		await recordView();
+	};
+	const updateDraft = (text: string, expected: string) => {
+		if (text.length > 32000 || expected !== viewKey() || historyUnreadable) { return; }
+		draftTail = draftTail.then(async () => { if (expected !== viewKey()) { return; } await setDraft(text, attachments()); publish(); }).catch(error => attachmentNotice(error));
+	};
 	const connectionLog = vscode.window.createOutputChannel(vscode.l10n.t('Beacon Connections'));
 	context.subscriptions.push(connectionLog);
 	const connections = new Connections(context, schedule, event => connectionLog.appendLine(JSON.stringify(event)));
@@ -65,7 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const readWebEnabled = () => vscode.workspace.getConfiguration('beacon').get<boolean>('webEnabled', true) !== false;
 	let webEnabled = readWebEnabled();
 	let requestNotice: { id: number; text: string } | undefined;
-	const canSend = () => !historyUnreadable && (temporary ? !native.state.usable : !!history.snapshot.activeId && native.state.usable && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId);
+	const canSend = () => !historyUnreadable && (temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
 	const request = async (beforeId = Infinity) => {
 		await native.refresh(); permission = native.permission;
 		if (!canSend()) { throw new Error('beacon-conversation-owner'); }
@@ -81,10 +114,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	shutdown = () => {
 		alive = false;
 		attachmentJob?.abort();
-		drafts.clear();
+		session.stop();
 		connections.dispose();
 		if (timer) { clearTimeout(timer); }
-		return closing ??= (async () => { await history.dispose(); await busyTail; await native.setBusy(false); await native.release(); })();
+		return closing ??= (async () => {
+			await Promise.allSettled([...pendingWork]); await workspaceSettled; await draftTail;
+			try { await recordView(); }
+			finally { await history.dispose(); await busyTail; await native.setBusy(false); await native.release(); }
+		})();
 	};
 	const publish = () => {
 		if (alive) {
@@ -98,7 +135,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (visible.attachments) { visible.attachments = visible.attachments.map(item => ({ ...item, contents: '' })); }
 				return visible;
 			});
-			const message = { type: 'snapshot', ...snapshot, history: native.state.usable ? snapshot.history : [], context: native.state, canSend: canSend(), temporary, viewKey: `${native.state.slot}:${native.state.root ?? ''}:${snapshot.activeId}`, busy: busy(), stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
+			const message = { type: 'snapshot', ...snapshot, screen, history: native.consumingWorkspace ? snapshot.history : [], context: native.state, canSend: canSend(), temporary, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
 			void view?.webview.postMessage(message);
 			if (configurationPanel) {
 				const connection = connections.snapshot;
@@ -120,25 +157,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		return `<!DOCTYPE html><html lang="${vscode.env.language.startsWith('zh') ? 'zh-CN' : 'en'}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:;"><link rel="stylesheet" href="${asset('beacon.css')}"></head><body data-surface="${surface}"><div id="root"></div><script nonce="${nonce}" src="${asset('beacon.js')}"></script></body></html>`;
 	}
 	function receive(message: unknown): void {
+		if (!alive) { return; }
 		if (!message || typeof message !== 'object') { return; }
-		const value = message as { type?: string; root?: string; text?: string; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
+		const value = message as { type?: string; root?: string; text?: string; viewKey?: string; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
 		try { switch (value.type) {
 			case 'ready': publish(); break;
-			case 'send': if (typeof value.text === 'string') { void send(value.text); } break;
+			case 'draft': if (typeof value.text === 'string' && typeof value.viewKey === 'string') { updateDraft(value.text, value.viewKey); } break;
+			case 'send': if (typeof value.text === 'string') { void track(send(value.text)); } break;
 			case 'addFiles': void pickFiles(); break;
 			case 'pasteImages': addClipboardImages(value.images, value.activeId); break;
 			case 'attachmentInputError': if (value.code === 'image' || value.code === 'budget' || value.code === 'busy') { attachmentNotice(new AttachmentError(value.code)); } break;
 			case 'unsupportedDrop': attachmentNotice(new AttachmentError('source')); break;
-			case 'removeAttachment': if (!busy() && typeof value.id === 'string') { drafts.set(history.snapshot.activeId, attachments().filter(item => item.id !== value.id)); publish(); } break;
+			case 'removeAttachment': if (!busy() && typeof value.id === 'string') {
+				if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text: draft().text, attachments: attachments().filter(item => item.id !== value.id) }); publish(); }
+				else { draftTail = draftTail.then(async () => { await setDraft(draft().text, attachments().filter(item => item.id !== value.id)); publish(); }).catch(attachmentNotice); }
+			} break;
 			case 'previewAttachment': {
 				const item = [...attachments(), ...session.snapshot.messages.flatMap(message => message.attachments ?? [])].find(item => item.id === value.id && item.kind === 'image');
 				if (item) { void view?.webview.postMessage({ type: 'attachmentPreview', id: item.id, url: `data:${item.mediaType};base64,${item.contents}` }); }
 				break;
 			}
 			case 'openAttachment': if (typeof value.id === 'string') { void openAttachment(value.id); } break;
-			case 'edit': case 'regenerate': case 'continue': if (typeof value.id === 'number') { void respond(value.type, value.id, value.text); } break;
-			case 'chooseWorkspace': void chooseWorkspace(); break;
-			case 'selectWorkspace': if (typeof value.root === 'string') { void workspaceAction(() => selectWorkspace(value.root!)); } break;
+			case 'edit': case 'regenerate': case 'continue': if (typeof value.id === 'number') { void track(respond(value.type, value.id, value.text)); } break;
+			case 'chooseWorkspace': if (screen === 'home') { void chooseWorkspace(); } break;
+			case 'selectWorkspace': if (screen === 'home' && typeof value.root === 'string') { void workspaceAction(() => selectWorkspace(value.root!)); } break;
+			case 'clearWorkspace': if (screen === 'home') { void workspaceAction(clearWorkspace); } break;
+			case 'removeRecentWorkspace': if (screen === 'home' && typeof value.root === 'string') { void workspaceAction(() => removeRecentWorkspace(value.root!)); } break;
 			case 'setPermission':
 				if (isFilePermission(value.permission)) {
 					void setPermission(value.permission);
@@ -146,12 +190,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				break;
 			case 'setWebEnabled': if (typeof value.enabled === 'boolean') { void setWebEnabled(value.enabled); } break;
 			case 'stop': attachmentJob?.abort(); session.stop(); publish(); break;
-			case 'clear':
-				void workspaceAction(() => openHistory(undefined));
+			case 'back':
+				void workspaceAction(returnHome);
 				break;
-			case 'openHistory': if (typeof value.conversationId === 'string') { void workspaceAction(() => openHistory(value.conversationId)); } break;
-			case 'renameHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, false); } break;
-			case 'deleteHistory': if (typeof value.conversationId === 'string') { void manageHistory(value.conversationId, true); } break;
+			case 'newChat': void workspaceAction(() => screen === 'home' ? clearHome() : returnHome()); break;
+			case 'openHistory': if (screen === 'home' && native.consumingWorkspace && typeof value.conversationId === 'string') { void workspaceAction(() => openHistory(value.conversationId!)); } break;
+			case 'renameHistory': if (screen === 'home' && native.consumingWorkspace && typeof value.conversationId === 'string') { void manageHistory(value.conversationId, false); } break;
+			case 'deleteHistory': if (screen === 'home' && native.consumingWorkspace && typeof value.conversationId === 'string') { void manageHistory(value.conversationId, true); } break;
 			case 'saveHistory': if (!historyUnreadable) { void history.flush(); } break;
 			case 'settings': openSettings(); break;
 			case 'selectModel': void changeSettings(message, view?.webview); break;
@@ -164,9 +209,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		} } catch (error) { attachmentNotice(error); }
 	}
 	async function setPermission(value: FilePermission): Promise<void> {
-		try { await native.setMode(value === 'none' ? 'blackout' : value === 'workspace' ? 'spot' : 'flood'); permission = native.permission; }
-		catch (error) { attachmentNotice(error); }
-		publish();
+		await workspaceAction(async () => {
+			await flushHistory();
+			const wasTemporary = temporary;
+			await native.setMode(value === 'none' ? 'blackout' : value === 'workspace' ? 'spot' : 'flood'); permission = native.permission;
+			if (!native.consumingWorkspace) { await returnHome(); }
+			else if (wasTemporary) { await native.release(); await replaceHistory(await native.bindHistory()); await restoreWorkspace(false); }
+		});
 	}
 	async function flushHistory(): Promise<void> {
 		await history.flush(); syncBusy(); await busyTail;
@@ -174,21 +223,58 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	async function replaceHistory(next: BeaconHistoryBinding): Promise<void> {
 		await history.dispose();
+		const interrupted = history.currentConversation;
+		if (binding.root && interrupted && history.snapshot.saveFailed) {
+			interruptedDrafts.set(`${binding.root}:${interrupted.id}`, { conversation: interrupted, revision: binding.revision });
+			attachmentNotice(new Error('beacon-unsaved-history'));
+		}
 		binding = next;
-		history = new ChatHistory(next.data, next.save, schedule, describeError, () => native.roots);
-		session = history.session; temporary = !next.root; historyUnreadable = false;
-		permission = native.permission; drafts.clear();
+		const key = next.root && next.data.activeId ? `${next.root}:${next.data.activeId}` : undefined;
+		const recovered = key ? interruptedDrafts.get(key) : undefined;
+		const canRecover = recovered && recovered.revision === next.revision;
+		const data = canRecover ? { ...next.data, conversations: next.data.conversations.map(item => item.id === recovered.conversation.id ? recovered.conversation : item) } : next.data;
+		history = new ChatHistory(data, next.save, schedule, describeError, () => native.roots);
+		session = history.session; temporary = !native.consumingWorkspace; historyUnreadable = false;
+		permission = native.permission;
+		if (canRecover) {
+			const pending = history.draft; history.setDraft(pending.text, pending.attachments); await history.flush();
+			if (!history.snapshot.saveFailed) { interruptedDrafts.delete(key!); }
+		}
 	}
 	async function workspaceAction(action: () => Promise<void>): Promise<void> {
-		if (busy()) { publish(); return; }
+		if (!alive || busy()) { publish(); return; }
+		let settled!: () => void;
+		workspaceSettled = new Promise<void>(resolve => { settled = resolve; });
 		workspaceJob = true; publish();
-		try { await flushHistory(); await action(); }
+		try {
+			await draftTail; await flushHistory();
+			await native.refresh();
+			if (native.state.busy) { throw new Error('beacon-busy'); }
+			await recordView(); await action();
+		}
 		catch (error) { attachmentNotice(error); }
-		finally { workspaceJob = false; publish(); }
+		finally { workspaceJob = false; settled(); publish(); }
 	}
 	async function selectWorkspace(root: string): Promise<void> {
+		if (screen !== 'home') { throw new Error('beacon-workspace-home-only'); }
 		await native.select(root);
+		await native.release();
 		await replaceHistory(await native.bindHistory());
+		await restoreWorkspace(false);
+	}
+	async function clearWorkspace(): Promise<void> {
+		await native.clearWorkspace();
+		await replaceHistory(await native.bindHistory());
+		screen = 'home';
+		generation++;
+	}
+	async function removeRecentWorkspace(root: string): Promise<void> {
+		const currentRoot = native.state.root;
+		const clearingCurrent = !!currentRoot && sameWorkspacePath(currentRoot, root);
+		await native.removeRecentWorkspace(root);
+		if (clearingCurrent) { await replaceHistory(await native.bindHistory()); }
+		screen = 'home';
+		if (clearingCurrent) { generation++; }
 	}
 	async function chooseWorkspace(): Promise<void> {
 		await workspaceAction(async () => {
@@ -196,13 +282,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (selected?.[0]?.scheme === 'file') { await selectWorkspace(selected[0].fsPath); }
 		});
 	}
-	async function openHistory(id: string | undefined): Promise<void> {
+	async function openHistory(id: string): Promise<void> {
 		await native.refresh();
-		if (!native.state.usable) {
-			await native.release(); await replaceHistory(await native.bindHistory());
-		} else {
-			await replaceHistory(await native.bindHistory({ id: id ?? randomUUID(), create: !id }));
+		if (!native.consumingWorkspace) { throw new Error('beacon-mode-unavailable'); }
+		await recordView();
+		await replaceHistory(await native.bindHistory({ id }));
+		screen = 'conversation';
+		generation++; await recordView();
+	}
+	async function returnHome(): Promise<void> {
+		await native.release();
+		await replaceHistory(await native.bindHistory());
+		screen = 'home';
+		const id = home()?.id;
+		if (native.consumingWorkspace && id) {
+			try { await replaceHistory(await native.bindHistory({ id })); }
+			catch (error) { if (!(error instanceof Error) || !['conversation-open', 'beacon-missing-conversation'].includes(error.message)) { throw error; } homes.delete(native.state.root!); }
 		}
+		generation++; await recordView();
+	}
+	async function clearHome(): Promise<void> {
+		const current = history.currentConversation;
+		await setDraft('', []); await flushHistory();
+		if (native.consumingWorkspace && current?.draftOnly) { await native.remove(current.id); }
+		if (temporary) { temporaryDrafts.delete(native.state.root ?? ''); }
+		homes.delete(native.state.root ?? '');
+		await native.release(); await replaceHistory(await native.bindHistory());
+		screen = 'home'; generation++; await recordView();
+	}
+	async function restoreWorkspace(details: boolean): Promise<void> {
+		screen = 'home';
+		if (native.consumingWorkspace) {
+			const saved = await native.resume();
+			const root = native.state.root!;
+			const homeId = home()?.id ?? saved?.homeId;
+			if (homeId) {
+				try {
+					await replaceHistory(await native.bindHistory({ id: homeId }));
+					homes.set(root, { id: homeId, hasDraft: !!(draft().text || attachments().length) });
+				} catch (error) {
+					if (!(error instanceof Error) || !['conversation-open', 'beacon-missing-conversation'].includes(error.message)) { throw error; }
+					homes.delete(root);
+				}
+			}
+			if (details && saved?.screen === 'conversation' && saved.id) {
+				await native.release(); await replaceHistory(await native.bindHistory());
+				try { await replaceHistory(await native.bindHistory({ id: saved.id })); screen = 'conversation'; }
+				catch (error) {
+					if (!(error instanceof Error) || !['conversation-open', 'beacon-missing-conversation'].includes(error.message)) { throw error; }
+					// An occupied automatic resume returns to an explicitly blank home.
+					homes.delete(root);
+				}
+			}
+		}
+		generation++; await recordView();
 	}
 	async function respond(kind: string, id: number, text?: string): Promise<void> {
 		if (busy() || !canSend() || !connections.configured) { publish(); return; }
@@ -226,7 +359,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				do {
 					refreshPending = false;
 					await native.refresh(); permission = native.permission;
-					if (!busy() && !history.snapshot.persisting && !history.snapshot.saveFailed && !historyUnreadable && native.state.usable && binding.root === native.state.root) { history.refresh(await native.metadata(history.currentConversation)); }
+					if (!temporary && !native.consumingWorkspace && !busy()) { await returnHome(); }
+					else if (temporary && native.consumingWorkspace && !busy()) { await replaceHistory(await native.bindHistory()); await restoreWorkspace(false); }
+					if (!busy() && !history.snapshot.persisting && !history.snapshot.saveFailed && !historyUnreadable && native.consumingWorkspace && binding.root === native.state.root) { history.refresh(await native.metadata(history.currentConversation)); }
 				} while (refreshPending && alive);
 			} catch (error) { attachmentNotice(error); }
 			finally { refreshing = undefined; publish(); }
@@ -259,7 +394,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			const type = (message as { type?: string }).type;
 			if (type === 'ready') { settingsStamp = ''; publish(); }
 			else if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
-			else if (type === 'chooseWorkspace' || type === 'selectWorkspace') { receive(message); }
 			else { void changeSettings(message, panel.webview); }
 		});
 		const disposed = panel.onDidDispose(() => { received.dispose(); disposed.dispose(); if (configurationPanel === panel) { configurationPanel = undefined; } });
@@ -283,14 +417,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const text = error instanceof AttachmentError ? error.code === 'busy' ? vscode.l10n.t('Pause the response before adding attachments.') : error.code === 'permission' || error.code === 'source' ? vscode.l10n.t('Could not identify local files in this drop. Use Add files or paste an image.') : error.code === 'image' ? vscode.l10n.t('The image is invalid or unsupported. Use PNG, JPEG, WebP or GIF, up to 4 MiB each.') : error.code === 'budget' ? vscode.l10n.t('Attachments exceed the limit: 8 MiB in total, up to 64 files.') : vscode.l10n.t('Could not read attachment {0}. Check its location, permissions and whether it is a private file.', error.file) : describeError(error);
 		requestNotice = { id: Date.now(), text: contextText ?? text }; publish();
 	}
-	function addClipboardImages(images: unknown, activeId: string | undefined): void {
+	async function addClipboardImages(images: unknown, activeId: string | undefined): Promise<void> {
 		if (busy()) { attachmentNotice(new AttachmentError('busy')); return; }
 		if (historyUnreadable || activeId !== history.snapshot.activeId) { publish(); return; }
 		try {
 			const captured = captureClipboardImages(images);
 			const next = [...attachments(), ...captured];
 			if (next.length > 64 || next.reduce((size, item) => size + Buffer.byteLength(item.contents, 'utf8'), 0) > attachmentBudget) { throw new AttachmentError('budget'); }
-			drafts.set(activeId, next); publish();
+			if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text: draft().text, attachments: next }); publish(); }
+			else { draftTail = draftTail.then(async () => { await setDraft(draft().text, next); publish(); }).catch(attachmentNotice); await draftTail; }
 		} catch (error) { attachmentNotice(error); }
 	}
 	async function addResources(uris: readonly vscode.Uri[], source: AttachmentSource): Promise<void> {
@@ -308,7 +443,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			for (const item of captured) { merged.set(item.path, item); }
 			const next = [...merged.values()];
 			if (next.length > 64 || next.reduce((size, item) => size + Buffer.byteLength(item.contents, 'utf8'), 0) > attachmentBudget) { throw new AttachmentError('budget'); }
-			drafts.set(history.snapshot.activeId, next);
+			await draftTail; await setDraft(draft().text, next);
 		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
 		finally { attachmentJob = undefined; publish(); }
 	}
@@ -338,25 +473,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
 		finally { attachmentJob = undefined; publish(); }
 		// Permission may have changed while the native dialog was open.
-		if (alive && !controller.signal.aborted && uris?.length) { await addResources(uris, 'picker'); }
+		if (alive && !controller.signal.aborted && uris?.length) { await track(addResources(uris, 'picker')); }
 	}
 	async function send(text: string): Promise<void> {
 		if (busy() || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
-		const refs = attachments();
-		const activeId = history.snapshot.activeId;
-		const viewKey = `${native.state.slot}:${native.state.root ?? ''}:${activeId}`;
+		const sentViewKey = viewKey();
 		const controller = new AbortController();
 		attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
 		try {
+			const preparing = draftTail.then(async () => {
+				if (native.consumingWorkspace && !history.snapshot.activeId) {
+					await replaceHistory(await native.bindHistory({ id: randomUUID(), create: true }));
+				}
+			});
+			draftTail = preparing.catch(attachmentNotice);
+			await preparing;
+			const refs = attachments();
+			const activeId = history.snapshot.activeId;
 			const next = await request();
 			if (refs.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
 			const captured = structuredClone(refs);
 			controller.signal.throwIfAborted();
 			if (captured.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
+			screen = 'conversation';
+			if (home()?.id === activeId) { homes.delete(native.state.root!); }
+			await draftTail;
+			const remainingText = draft().text === text ? '' : draft().text;
+			const sentAttachments = new Set(captured.map(item => item.id));
+			const remainingAttachments = attachments().filter(item => !sentAttachments.has(item.id));
+			await setDraft(remainingText, remainingAttachments);
 			completion = session.send(text, next.generate, next.source, next.files, captured);
-			drafts.delete(activeId);
-			void view?.webview.postMessage({ type: 'sendAccepted', text, activeId, conversationId: history.snapshot.activeId, viewKey, conversationViewKey: `${native.state.slot}:${native.state.root ?? ''}:${history.snapshot.activeId}` });
+			generation++; await recordView();
+			void view?.webview.postMessage({ type: 'sendAccepted', text, activeId, conversationId: history.snapshot.activeId, viewKey: sentViewKey, conversationViewKey: viewKey() });
 		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
 		finally { attachmentJob = undefined; publish(); }
 		await completion;
@@ -367,7 +516,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		catch { requestNotice = { id: Date.now(), text: vscode.l10n.t('Could not save web access. Please try again.') }; publish(); }
 	}
 	async function manageHistory(id: string, remove: boolean): Promise<void> {
-		if (busy() || historyUnreadable) { return; }
+		if (screen !== 'home' || !native.consumingWorkspace || busy() || historyUnreadable) { return; }
 		const item = history.snapshot.history.find(item => item.id === id);
 		if (!item) { return; }
 		if (remove) {
@@ -396,20 +545,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (!alive || busy() || !selected.isCurrent() || history.snapshot.activeId !== active || native.state.root !== scope.root || native.state.epoch !== scope.epoch) { return; }
 		const contents = redactContext(selected.contents); const previous = attachments();
 		if (Buffer.byteLength(contents) + previous.reduce((total, item) => total + Buffer.byteLength(item.contents), 0) > attachmentBudget || previous.length >= 64) { void vscode.window.showInformationMessage(vscode.l10n.t('This selection exceeds the conversation attachment budget.')); return; }
-		if (native.state.usable && !active) {
-			await workspaceAction(async () => {
-				await native.refresh();
-				if (native.state.root !== scope.root || native.state.epoch !== scope.epoch || history.snapshot.activeId !== active || !selected.isCurrent()) { throw new Error('beacon-context-changed'); }
-				await openHistory(undefined);
-			});
-			if (!alive || !canSend() || busy() || !selected.isCurrent() || native.state.root !== scope.root || native.state.epoch !== scope.epoch) { return; }
-		}
-		const id = randomUUID(); drafts.set(history.snapshot.activeId, [...previous, { id, name: selected.name, path: 'selection:' + uri.toString(), source: 'internal', kind: 'text', contents, truncated: false }]);
+		const id = randomUUID(); const target = viewKey();
+		draftTail = draftTail.then(async () => {
+			if (!alive || target !== viewKey()) { return; }
+			const current = attachments();
+			if (current.length >= 64 || Buffer.byteLength(contents) + current.reduce((total, item) => total + Buffer.byteLength(item.contents), 0) > attachmentBudget) { throw new AttachmentError('budget'); }
+			await setDraft(draft().text, [...current, { id, name: selected.name, path: 'selection:' + uri.toString(), source: 'internal', kind: 'text', contents, truncated: false }]);
+		}).catch(attachmentNotice);
+		await draftTail;
 		await vscode.commands.executeCommand('becoder.beacon.chat.focus'); publish();
 	}
+	try { if (!historyUnreadable) { await restoreWorkspace(true); } } catch { historyUnreadable = true; }
 	context.subscriptions.push(
 		vscode.commands.registerCommand('_becoder.beacon.contextChanged', refreshContext),
 		vscode.commands.registerCommand('_becoder.beacon.shutdown', () => shutdown?.()),
+		vscode.commands.registerCommand('_becoder.beacon.flush', async () => {
+			attachmentJob?.abort(); session.stop();
+			await Promise.allSettled([...pendingWork]); await workspaceSettled; await draftTail;
+			await flushHistory(); await recordView();
+		}),
 		vscode.window.onDidChangeWindowState(async state => {
 			if (state.focused) { await refreshContext(); }
 		}),
@@ -449,7 +603,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				const webview = resolved.webview;
 				webview.html = html(webview);
 				const receiveDisposable = webview.onDidReceiveMessage(receive);
-				const dropDisposable = webview.onDidDropResources?.(event => { void addResources(event.uris, event.isExternal ? 'external' : 'internal'); });
+				const dropDisposable = webview.onDidDropResources?.(event => { void track(addResources(event.uris, event.isExternal ? 'external' : 'internal')); });
 				const disposed = resolved.onDidDispose(() => { receiveDisposable.dispose(); dropDisposable?.dispose(); disposed.dispose(); if (view === resolved) { view = undefined; } });
 				publish();
 			}

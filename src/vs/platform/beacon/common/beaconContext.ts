@@ -5,15 +5,19 @@
 
 import { Event } from '../../../base/common/event.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, BeaconProducer, IBeaconRuntimeItem, IBeaconConsumedRecord } from './beaconContextTypes.js';
-export type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection } from './beaconContextTypes.js';
+import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume, BeaconProducer, IBeaconRuntimeItem, IBeaconConsumedRecord } from './beaconContextTypes.js';
+export type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume } from './beaconContextTypes.js';
 export { beaconContextChannel, beaconContextCommand } from './beaconContextTypes.js';
 export const IBeaconContextService = createDecorator<IBeaconContextService>('beaconContextService');
 export interface IBeaconContextService {
 	readonly _serviceBrand: undefined;
 	readonly onDidChange: Event<number>;
 	getContext(windowId: number): Promise<IBeaconContext>;
+	getResume(windowId: number): Promise<IBeaconResume | undefined>;
+	setView(windowId: number, view: IBeaconResume): Promise<void>;
 	selectWorkspace(windowId: number, root: string): Promise<IBeaconContext>;
+	clearWorkspace(windowId: number): Promise<IBeaconContext>;
+	removeRecentWorkspace(windowId: number, root: string): Promise<IBeaconContext>;
 	setMode(windowId: number, mode: BeaconMode): Promise<IBeaconContext>;
 	setBusy(windowId: number, busy: boolean): Promise<void>;
 	beginActivity(windowId: number, source: string): Promise<string | undefined>;
@@ -43,8 +47,9 @@ export interface IBeaconContextService {
 export function restoreBeaconWindowSelection(value: unknown): IBeaconWindowSelection | undefined {
 	if (!value || typeof value !== 'object') { return undefined; }
 	const selection = value as IBeaconWindowSelection;
-	if (typeof selection.slot !== 'string' || !/^[\w-]{1,128}$/.test(selection.slot) || !['spot', 'flood'].includes(selection.mode)
+	if (typeof selection.slot !== 'string' || !/^[\w-]{1,128}$/.test(selection.slot) || !['blackout', 'spot', 'flood'].includes(selection.mode)
 		|| (selection.root !== undefined && (typeof selection.root !== 'string' || !selection.root || selection.root.includes('\0')))
 		|| (selection.identity !== undefined && typeof selection.identity !== 'string')) { return undefined; }
+	if (selection.root === undefined && selection.mode !== 'blackout') { return undefined; }
 	return { slot: selection.slot, mode: selection.mode, ...(selection.root === undefined ? {} : { root: selection.root }), ...(selection.identity === undefined ? {} : { identity: selection.identity }) };
 }

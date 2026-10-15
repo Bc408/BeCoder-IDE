@@ -30,7 +30,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { context?: IBeaconContext; canSend: boolean; temporary: boolean; viewKey: string; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
+type State = Snapshot & { context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -67,7 +67,7 @@ function AttachmentCard({ item, remove, busy, preview }: { item: Attachment; rem
 }
 
 function App() {
-	const [state, setState] = useState<State>({ canSend: false, temporary: true, viewKey: '', attachments: [], messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false, permission: 'none', webEnabled: true });
+	const [state, setState] = useState<State>({ screen: 'home', canSend: false, temporary: true, viewKey: '', attachments: [], messages: [], busy: false, error: '', configured: false, connection: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: providers.deepseek.model, parameters: {}, keyConfigured: false, loading: true, error: '' }, activeId: '', history: [], saveFailed: false, historyUnreadable: false, permission: 'none', webEnabled: true });
 	const [notices, setNotices] = useState<Notification[]>([]);
 	const lastNotice = useRef<number | undefined>(undefined);
 	const dismissNotice = useCallback((id: number) => setNotices(previous => previous.filter(notice => notice.id !== id)), []);
@@ -75,8 +75,8 @@ function App() {
 	const [draft, setDraft] = useState('');
 	const [now, setNow] = useState(Date.now);
 	const [confirmDelete, setConfirmDelete] = useState<string>();
-	const drafts = useRef(new Map<string, string>());
 	const draftRef = useRef('');
+	const draftPending = useRef(false);
 	const activeRef = useRef('');
 	const [pending, setPending] = useState(false);
 	const [pasting, setPasting] = useState(false);
@@ -100,7 +100,7 @@ function App() {
 		const listener = (event: MessageEvent) => {
 			if (event.data?.type === 'sendAccepted' && activeRef.current === event.data.viewKey) {
 				if (draftRef.current === event.data.text) { draftRef.current = ''; setDraft(''); }
-				drafts.current.set(event.data.conversationViewKey ?? event.data.viewKey, draftRef.current);
+				draftPending.current = false;
 			}
 			if (event.data?.type === 'snapshot') {
 				const notice = event.data.requestNotice as Notification | undefined;
@@ -109,12 +109,15 @@ function App() {
 					setNotices(previous => [notice, ...previous].slice(0, 3));
 				}
 				if (typeof event.data.viewKey === 'string' && activeRef.current !== event.data.viewKey) {
-					drafts.current.set(activeRef.current, draftRef.current);
 					activeRef.current = event.data.viewKey;
-					draftRef.current = drafts.current.get(event.data.viewKey) ?? '';
+					draftRef.current = event.data.draftText ?? '';
+					draftPending.current = false;
 					setDraft(draftRef.current);
 					setCopied(undefined);
 					setEditing(undefined);
+				}
+				else if (typeof event.data.draftText === 'string' && (!draftPending.current || event.data.draftText === draftRef.current)) {
+					draftPending.current = false; draftRef.current = event.data.draftText; setDraft(event.data.draftText);
 				}
 				setState(previous => ({ ...previous, stopping: false, retry: undefined, ...event.data })); setReady(true); setPending(false);
 			}
@@ -146,7 +149,7 @@ function App() {
 		const timer = setTimeout(() => setCopied(undefined), 1800);
 		return () => clearTimeout(timer);
 	}, [copied]);
-	const busy = state.busy || pending || pasting;
+	const busy = state.busy || pending || pasting || !!state.context?.busy;
 	const pasteImages = (event: ClipboardEvent<HTMLTextAreaElement>) => {
 		let files = [...event.clipboardData.files].filter(file => file.type.startsWith('image/'));
 		if (!files.length) { files = [...event.clipboardData.items].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file); }
@@ -173,7 +176,9 @@ function App() {
 		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id }); return; }
 		api.postMessage({ type: 'send', text: draft });
 	};
-	const hasConversation = state.messages.length > 0;
+	const hasConversation = state.screen === 'conversation';
+	const home = state.screen === 'home';
+	const visibleHistory = state.context?.workspaceState === 'ready' ? state.history : [];
 	const failedReply = state.messages.at(-1)?.status === 'error';
 	const temporaryFailure = !!state.messages.at(-1)?.failure;
 	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (capabilities.tools !== 'supported' ? '\n' + t('This model does not have confirmed tool support. Web search is unavailable; check its capabilities in settings.', '当前模型未确认支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
@@ -185,22 +190,21 @@ function App() {
 		const link = (event.target as HTMLElement).closest('a');
 		if (link) { event.preventDefault(); api.postMessage({ type: 'link', url: link.href }); }
 	}}>
-		<header className="workspace-header"><div className="conversation-heading">
-			{hasConversation && <button className="conversation-back" disabled={busy} onClick={() => { api.postMessage({ type: 'clear' }); }} data-becoder-tooltip={t('Back', '返回')} aria-label={t('Back', '返回')}><Icon name="back" /></button>}
-			<span className={`conversation-title ${hasConversation ? '' : 'chats-title'}`}>{state.history.find(item => item.id === state.activeId)?.title || t('Chat', '聊天')}</span>
+		<header className={`workspace-header ${home ? 'home-header' : ''}`}><div className="conversation-heading">
+			{hasConversation && <button className="conversation-back" disabled={busy} onClick={() => { api.postMessage({ type: 'back' }); }} data-becoder-tooltip={t('Back', '返回')} aria-label={t('Back', '返回')}><Icon name="back" /></button>}
+			{!home && <span className="conversation-title">{state.history.find(item => item.id === state.activeId)?.title || t('Chat', '聊天')}</span>}
 		</div><div className="header-actions">
+			{home && <Workspace context={state.context} busy={busy || state.saveFailed} post={message => api.postMessage(message)} />}
 			<button onClick={() => api.postMessage({ type: 'settings' })} data-becoder-tooltip={t('Connection settings', '连接设置')} aria-label={t('Connection settings', '连接设置')}><Icon name="settings" /></button>
-			<button disabled={busy || !ready || state.historyUnreadable} onClick={() => { api.postMessage({ type: 'clear' }); setCopied(undefined); }} data-becoder-tooltip={t('New chat', '新聊天')} aria-label={t('New chat', '新聊天')}><Icon name="new" /></button>
+			<button disabled={busy || !ready || state.historyUnreadable} onClick={() => { api.postMessage({ type: 'newChat' }); setCopied(undefined); }} data-becoder-tooltip={(hasConversation && state.homeHasDraft ? t('Unsent draft', '已有未发送草稿') : t('New chat', '新聊天'))} aria-label={(hasConversation && state.homeHasDraft ? t('Unsent draft', '已有未发送草稿') : t('New chat', '新聊天'))}><Icon name={hasConversation && state.homeHasDraft ? 'file' : 'new'} /></button>
 		</div></header>
-		<Workspace context={state.context} busy={busy || state.saveFailed} post={message => api.postMessage(message)} />
-		{!state.canSend && !state.historyUnreadable && <p className="history-notice">{t("Open or start a chat to ask Beacon.", "打开一段聊天，或点击新聊天开始提问。")}</p>}
 		<Notifications notices={notices} latest={state.requestNotice} dismiss={dismissNotice} />
 		{state.historyUnreadable && <div className="history-notice" role="alert">{t('Chat history could not be read. Your saved data has been preserved. Reload the window to try again.', '无法读取聊天记录，已保留原有数据。请重新加载窗口后再试。')}</div>}
 		{state.saveFailed && !state.historyUnreadable && <div className="history-notice" role="alert">{t('Changes have not been saved. Keep this window open and retry.', '更改尚未保存，请保留此窗口并重试。')}<button onClick={() => api.postMessage({ type: 'saveHistory' })}>{t('Retry saving', '重试保存')}</button></div>}
-		{!hasConversation && state.history.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(state.history)}</section>}
-		<Conversation hidden={!hasConversation && state.history.length > 0}>
+		{home && visibleHistory.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(visibleHistory)}</section>}
+		<Conversation hidden={home && visibleHistory.length > 0}>
 			<ConversationContent conversationId={state.activeId}>
-				{!hasConversation && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Click the settings button in the upper right to configure a provider and select a model.', '点击右上角设置按钮，配置服务商并选择模型后开始。')}</p></div>}
+				{home && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Click the settings button in the upper right to configure a provider and select a model.', '点击右上角设置按钮，配置服务商并选择模型后开始。')}</p></div>}
 				{state.messages.map(message => <article key={message.id} className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
 						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} preview={(item, url) => openAttachment(message.attachments!, item, url)} />)}</div>}
@@ -234,11 +238,11 @@ function App() {
 			<form className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
 				{!!state.attachments.length && <div className="attachments draft-attachments">{state.attachments.map(item => <AttachmentCard key={item.id} item={item} busy={busy} preview={(item, url) => openAttachment(state.attachments, item, url)} remove={() => api.postMessage({ type: 'removeAttachment', id: item.id })} />)}</div>}
 				{blocked && <div className="attachment-warning" role="status">{blocked}</div>}
-				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onPaste={pasteImages} onChange={event => { draftRef.current = event.target.value; setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
+				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onPaste={pasteImages} onChange={event => { draftRef.current = event.target.value; draftPending.current = true; setDraft(event.target.value); api.postMessage({ type: 'draft', text: event.target.value, viewKey: activeRef.current }); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
 					if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); send(); }
 				}} />
 				<div className="composer-toolbar">
-					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} post={message => api.postMessage(message)} />
+				<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} busy={busy} post={message => api.postMessage(message)} />
 					{<button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} data-becoder-tooltip={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="attach" /></button>}
 					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools === 'supported'} data-becoder-tooltip={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
 					<span className="composer-spacer" aria-hidden="true" />
@@ -257,11 +261,13 @@ function ModelPicker({ connection }: { connection: ConnectionState }) {
 	useEffect(() => {
 		if (!open) { return; }
 		const close = (event: PointerEvent) => { if (!node.current?.contains(event.target as Node)) { setOpen(false); } };
+		const otherMenu = (event: Event) => { if ((event as CustomEvent<string>).detail !== 'model') { setOpen(false); } };
 		document.addEventListener('pointerdown', close);
-		return () => document.removeEventListener('pointerdown', close);
+		document.addEventListener('beacon-menu-open', otherMenu);
+		return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('beacon-menu-open', otherMenu); };
 	}, [open]);
 	return <div className="model-picker" ref={node} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setOpen(false); } }} onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); node.current?.querySelector('button')?.focus(); } }}>
-		<button className="model-label" type="button" aria-expanded={open} onClick={() => setOpen(!open)} data-becoder-tooltip={t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}>{connection.displayName || connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
+		<button className="model-label" type="button" aria-expanded={open} onClick={() => { if (!open) { document.dispatchEvent(new CustomEvent('beacon-menu-open', { detail: 'model' })); } setOpen(!open); }} data-becoder-tooltip={t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}>{connection.displayName || connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
 		{open && <div className="model-picker-menu">{connection.choices?.map(model => <button type="button" key={model.provider + ':' + model.id} disabled={connection.loading} onClick={() => { setOpen(false); api.postMessage({ type: 'selectModel', provider: model.provider, id: model.id, revision: connection.revision, requestId: Date.now() }); }}><span>{model.name}<small>{providers[model.provider].name}</small></span>{connection.provider === model.provider && connection.model === model.id && <Icon name="check" />}</button>)}<button type="button" onClick={() => { setOpen(false); api.postMessage({ type: 'settings' }); }}><Icon name="settings" />{t('Manage models', '管理模型')}</button></div>}
 	</div>;
 }

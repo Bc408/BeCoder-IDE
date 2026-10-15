@@ -6,7 +6,8 @@
 import type { ModelMessage } from 'ai';
 import type { FileInput, FileOutput, FileTool } from './fileTools';
 import { replayProtocol, type ProtocolTurn } from './protocol';
-import type { WebSource, WebError } from './webTools';
+import type { WebSource } from './webTools';
+import type { ToolError } from './toolFeedback';
 import { attachmentParts, validAttachments, type Attachment } from './attachments';
 import { RequestRecoveryError, type RequestFailure, type RequestRetry } from './requestRecovery';
 
@@ -48,7 +49,7 @@ export interface ToolActivity {
 	type: 'read' | 'list' | 'find' | 'search' | 'web-search' | 'web-fetch' | 'notebook-edit';
 	path: string;
 	status: 'running' | 'complete' | 'error' | 'stopped';
-	error?: WebError;
+	error?: ToolError;
 }
 
 export interface Snapshot {
@@ -209,7 +210,7 @@ export class ChatSession {
 		if (this.controller || this.disposed) { return; }
 		this.messages = structuredClone(snapshot.messages).map((message): Message => {
 			delete message.activeStartedAt;
-			return { ...message, activities: (message.activities ?? []).map(activity => ({ ...activity, status: activity.status === 'running' ? 'stopped' : activity.status })), status: message.status === 'streaming' ? 'stopped' : message.status };
+			return { ...message, activities: message.activities.map(activity => ({ ...activity, status: activity.status === 'running' ? 'stopped' : activity.status })), status: message.status === 'streaming' ? 'stopped' : message.status };
 		});
 		this.sequence = this.messages.reduce((maximum, message) => Math.max(maximum, message.id), 0);
 		this.error = snapshot.error;

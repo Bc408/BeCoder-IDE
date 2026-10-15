@@ -30,12 +30,91 @@ async function fixture(run: (directory: string) => Promise<void>) {
 function response(text = 'answer') {
 	return new Response('data: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
-async function until(condition: () => boolean) {
+async function until(condition: () => boolean, label = '') {
 	for (let i = 0; i < 200; i++) { if (condition()) { return; } await new Promise(resolve => setTimeout(resolve, 10)); }
-	assert.fail('Expected state did not arrive');
+	assert.fail('Expected state did not arrive' + (label ? ': ' + label : ''));
 }
 
 suite('Beacon attachments', () => {
+	test('workspace text draft survives navigation and restart without becoming history', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; screen: string; activeId: string; history: unknown[]; homeHasDraft: boolean; configured: boolean };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy);
+			view.receive({ type: 'draft', text: 'remember me', viewKey: snapshot().viewKey });
+			await until(() => snapshot().draftText === 'remember me' && !snapshot().busy, 'draft saved');
+			assert.equal(mock.beaconContext.busy, false, 'Draft debounce does not disable navigation or send');
+			await mock.commands.executeCommand('_becoder.beacon.flush');
+			assert.equal([...mock.beaconConversations.values()][0].data.draft?.text, 'remember me', 'Pre-shutdown barrier persists the debounced input');
+			view.receive({ type: 'draft', text: 'still editable after cancelled shutdown', viewKey: snapshot().viewKey });
+			await until(() => snapshot().draftText === 'still editable after cancelled shutdown');
+			view.receive({ type: 'draft', text: 'remember me', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'remember me');
+			assert.equal(snapshot().history.length, 0);
+			const lastView = mock.commandCalls.filter(call => call.id === '_becoder.beacon.context' && call.args[0] === 'view').at(-1)?.args[1] as { view: { screen: string; id?: string; homeId?: string } };
+			assert.deepStrictEqual(lastView.view, { screen: 'home', id: undefined, homeId: snapshot().activeId });
+			assert.equal(mock.beaconConversations.size, 1);
+			assert.equal([...mock.beaconConversations.values()][0].data.draftOnly, true);
+			await deactivate();
+			await activate(context as unknown as vscode.ExtensionContext);
+			const reopened = mock.makeView(); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(reopened); reopened.receive({ type: 'ready' });
+			const restored = () => reopened.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as ReturnType<typeof snapshot>;
+			await until(() => restored()?.draftText === 'remember me', 'draft restored');
+			assert.equal(restored().screen, 'home');
+			reopened.receive({ type: 'newChat' }); await until(() => !restored().busy && restored().draftText === '', 'explicit clear');
+			assert.equal(mock.beaconConversations.size, 0);
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
+	test('home and detail drafts stay separate across navigation, modes and workspace changes', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+		globalThis.fetch = async () => response();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; screen: string; activeId: string; homeHasDraft: boolean; configured: boolean; permission: string; context: { root?: string } };
+		const navigate = async (message: unknown) => { view.receive(message); await until(() => snapshot().busy); await until(() => !snapshot().busy); };
+		const write = async (text: string) => { view.receive({ type: 'draft', text, viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === text); };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			await navigate({ type: 'selectWorkspace', root: directory });
+			view.receive({ type: 'send', text: 'a real chat' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+			const conversationId = snapshot().activeId;
+			await write('detail draft'); await navigate({ type: 'back' });
+			assert.equal(snapshot().draftText, '');
+			await write('home draft'); const homeId = snapshot().activeId;
+			await navigate({ type: 'openHistory', conversationId });
+			assert.equal(snapshot().draftText, 'detail draft'); assert.equal(snapshot().homeHasDraft, true);
+			await navigate({ type: 'newChat' });
+			assert.equal(snapshot().activeId, homeId); assert.equal(snapshot().draftText, 'home draft');
+			await navigate({ type: 'setPermission', permission: 'none' });
+			assert.equal(snapshot().draftText, ''); await write('private temporary');
+			await navigate({ type: 'setPermission', permission: 'workspace' });
+			assert.equal(snapshot().draftText, 'home draft');
+			const second = path.join(directory, 'second'); await fs.mkdir(second);
+			await navigate({ type: 'selectWorkspace', root: second }); assert.equal(snapshot().draftText, '');
+			await write('second root'); await navigate({ type: 'selectWorkspace', root: directory });
+			assert.equal(snapshot().draftText, 'home draft');
+			const staleKey = snapshot().viewKey; await navigate({ type: 'newChat' });
+			view.receive({ type: 'draft', text: 'late old input', viewKey: staleKey });
+			await navigate({ type: 'openHistory', conversationId });
+			assert.equal(snapshot().draftText, 'detail draft'); assert.equal(snapshot().homeHasDraft, false);
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+	}));
+	test('an unavailable root isolates the temporary composer and recovers unsaved input when the same revision returns', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; temporary: boolean; configured: boolean };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy);
+			view.receive({ type: 'draft', text: 'pending before root loss', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'pending before root loss');
+			mock.beaconContext.usable = false; mock.beaconContext.mode = 'blackout'; mock.beaconContext.workspaceState = 'unavailable'; delete mock.beaconContext.activeId;
+			await mock.commands.executeCommand('_becoder.beacon.contextChanged');
+			assert.equal(snapshot().temporary, true); assert.equal(snapshot().draftText, '');
+			mock.beaconContext.usable = true; mock.beaconContext.mode = 'spot'; mock.beaconContext.workspaceState = 'ready';
+			await mock.commands.executeCommand('_becoder.beacon.contextChanged');
+			assert.equal(snapshot().temporary, false); assert.equal(snapshot().draftText, 'pending before root loss');
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
 	test('late PDF selections are discarded after workspace switches or page closure', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as { busy: boolean; attachments: Attachment[] };
@@ -61,7 +140,7 @@ suite('Beacon attachments', () => {
 				await mock.commands.executeCommand('becoder.beacon.askPdfSelection');
 				assert.equal(snapshot().attachments.length, 1); assert.equal(snapshot().messages.length, 0); assert.equal(snapshot().canSend, true);
 				assert.equal(snapshot().attachments[0].contents, '', 'UI summaries do not carry attachment bodies');
-				assert.equal(mock.beaconConversations.size, selected ? 1 : 0);
+				assert.equal(mock.beaconConversations.size, selected ? 1 : 0, 'Only workspace drafts create hidden entities');
 				view.receive({ type: 'openAttachment', id: snapshot().attachments[0].id }); await until(() => mock.textPreviews.length === 1);
 				assert.equal(mock.textPreviews[0].content, ' selected problem\ntext '); assert.equal(mock.commandCalls.some(call => call.id === 'vscode.open'), false);
 			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
@@ -79,7 +158,7 @@ suite('Beacon attachments', () => {
 				await mock.commands.executeCommand('becoder.beacon.askSelection');
 				assert.equal(snapshot().canSend, true);
 				assert.equal(snapshot().attachments.length, 1); assert.equal(snapshot().messages.length, 0);
-				assert.equal(mock.beaconConversations.size, selected ? 1 : 0);
+				assert.equal(mock.beaconConversations.size, selected ? 1 : 0, 'Only workspace drafts create hidden entities');
 				const active = snapshot().activeId;
 				await mock.commands.executeCommand('becoder.beacon.askSelection');
 				assert.equal(snapshot().activeId, active); assert.equal(snapshot().attachments.length, 2);
@@ -135,7 +214,7 @@ suite('Beacon attachments', () => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const originalFetch = globalThis.fetch; const bodies: unknown[] = [];
 		globalThis.fetch = async (_url, options) => { bodies.push(JSON.parse(String(options?.body))); return response(); };
-		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { activeId: string; configured: boolean; attachments: Attachment[] };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { screen: 'home' | 'conversation'; activeId: string; configured: boolean; attachments: Attachment[] };
 		try {
 			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
@@ -155,17 +234,44 @@ suite('Beacon attachments', () => {
 			assert.equal(bodies.length, 1); assert.ok(JSON.stringify(bodies[0]).includes('data:image/png;base64,' + png));
 			assert.equal(snapshot().attachments.length, 0);
 			assert.equal(mock.beaconConversations.size, 0, 'Temporary messages never acquire a persistent root');
+			view.receive({ type: 'newChat' }); await until(() => snapshot().busy); await until(() => !snapshot().busy && snapshot().screen === 'home');
 			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy);
 			assert.equal(snapshot().messages.length, 0, 'Workspace selection does not migrate the temporary conversation');
-			view.receive({ type: 'clear' }); await until(() => !!mock.beaconContext.activeId && !snapshot().busy);
+			view.receive({ type: 'newChat' }); await until(() => snapshot().busy, 'new chat begins'); await until(() => !snapshot().busy && snapshot().screen === 'home', 'new chat returns home');
+			assert.equal(mock.beaconContext.activeId, undefined, 'New chat returns to the clean home without creating an empty persistent conversation');
+			assert.equal(mock.beaconConversations.size, 0);
 			view.receive({ type: 'pasteImages', activeId: snapshot().activeId, images: [{ mediaType: 'image/png', contents: png }] });
-			view.receive({ type: 'send', text: 'saved' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+			view.receive({ type: 'send', text: 'saved' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy, 'persistent send completes');
+			assert.equal(snapshot().screen, 'conversation'); assert.equal(mock.beaconConversations.size, 1, 'The first accepted send creates its durable conversation');
 			await deactivate();
 			const saved = [...mock.beaconConversations.values()][0];
 			const restored = readHistory({ version: 1, activeId: saved.data.id, conversations: [saved.data] });
 			assert.equal(restored.conversations[0].messages[0].attachments?.[0].contents, png);
 			assert.equal(restored.conversations[0].messages[0].attachments?.[0].source, 'clipboard');
 			await assert.rejects(fs.stat(path.join(directory, 'storage/history.json')), { code: 'ENOENT' });
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+	}));
+	test('home owns workspace history and Blackout hides it while releasing the open conversation', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = async () => response();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { screen: 'home' | 'conversation'; canSend: boolean; context: { root?: string; mode: string; workspaceState: string }; activeId: string; history: { id: string }[]; permission: string; configured: boolean };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured === true);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().context.mode === 'spot' && !snapshot().busy);
+			view.receive({ type: 'send', text: 'persist this' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+			assert.equal(mock.beaconConversations.size, 1);
+			view.receive({ type: 'newChat' }); await until(() => snapshot().busy); await until(() => !snapshot().busy && snapshot().screen === 'home');
+			assert.equal(snapshot().history.length, 1);
+			view.receive({ type: 'setPermission', permission: 'none' }); await until(() => snapshot().permission === 'none' && !snapshot().busy);
+			assert.equal(snapshot().context.root, directory); assert.equal(snapshot().context.workspaceState, 'blackout');
+			assert.equal(snapshot().history.length, 0); assert.equal(snapshot().canSend, true); assert.equal(mock.beaconContext.activeId, undefined);
+			view.receive({ type: 'setPermission', permission: 'workspace' }); await until(() => snapshot().permission === 'workspace' && !snapshot().busy);
+			assert.equal(snapshot().history.length, 1, 'Returning to a consuming mode restores the selected workspace history');
+			view.receive({ type: 'openHistory', conversationId: snapshot().history[0].id }); await until(() => snapshot().screen === 'conversation' && !snapshot().busy);
+			view.receive({ type: 'setPermission', permission: 'none' }); await until(() => snapshot().screen === 'home' && snapshot().permission === 'none' && !snapshot().busy);
+			assert.equal(snapshot().history.length, 0); assert.equal(mock.beaconContext.activeId, undefined);
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
 	test('user attachment preview opens the editor in blackout and rejects forged IDs and missing files', async () => fixture(async directory => {
@@ -290,7 +396,7 @@ suite('Beacon attachments', () => {
 			view.drop({ uris: [mock.Uri.file(file)], source: 'internal' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
 			const previousMessages = JSON.stringify(snapshot().messages);
 			view.receive({ type: 'send', text: 'cancel before model' });
-			view.receive({ type: 'clear' }); view.receive({ type: 'stop' }); await until(() => !snapshot().busy);
+			view.receive({ type: 'newChat' }); view.receive({ type: 'stop' }); await until(() => !snapshot().busy);
 			assert.equal(JSON.stringify(snapshot().messages), previousMessages); assert.equal(snapshot().attachments.length, 1); assert.equal(bodies.length, 1);
 			view.receive({ type: 'removeAttachment', id: snapshot().attachments[0].id });
 			await mock.selectModel('deepseek-flash'); await until(() => snapshot().configured && snapshot().connection.model === 'deepseek-flash');

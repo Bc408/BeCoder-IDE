@@ -52,6 +52,7 @@ fs.copyFileSync(path.join(root, '../becoder.shared/LICENSE'), path.join(root, 'd
 await build({ ...shared, entryPoints: ['test/session.test.ts'], outfile: 'dist-test/session.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [syntaxAssets] });
 await build({ ...shared, entryPoints: ['test/files.test.ts'], outfile: 'dist-test/files.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/context.test.ts'], outfile: 'dist-test/context.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/drafts.test.ts'], outfile: 'dist-test/drafts.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/models.test.ts'], outfile: 'dist-test/models.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/requestRecovery.test.ts'], outfile: 'dist-test/requestRecovery.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/web.test.ts'], outfile: 'dist-test/web.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });

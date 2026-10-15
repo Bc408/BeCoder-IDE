@@ -30,15 +30,19 @@ try {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.addInitScript(() => {
-		let state = { type: 'snapshot', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] } };
+		let state = { type: 'snapshot', screen: 'home', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] } };
 		// Produce complete current host snapshots. Individual cases patch fixture state.
 		window.fixtureSnapshot = (patch, origin) => {
 			if (patch.type !== 'snapshot') { window.postMessage(patch, origin); return; }
+			const previousView = state.viewKey;
 			state = { ...state, ...patch };
+			if (patch.screen === undefined && patch.messages !== undefined) { state.screen = patch.messages.length ? 'conversation' : 'home'; }
 			state.viewKey = `${state.context.slot}:${state.context.root ?? ''}:${state.activeId}`;
-			state.temporary = !state.context.usable;
+			if (state.viewKey !== previousView && patch.draftText === undefined) { state.draftText = ''; }
+			state.temporary = !state.context.usable || state.context.mode === 'blackout';
 			window.postMessage(state, origin);
 		};
+		window.fixtureState = () => structuredClone(state);
 		window.acquireVsCodeApi = () => ({ postMessage: message => {
 			(window.messages ??= []).push(message);
 			if (message.type === 'send' && window.acceptSends !== false) { window.postMessage({ type: 'sendAccepted', text: message.text, viewKey: state.viewKey, conversationViewKey: state.viewKey }, '*'); }
@@ -47,12 +51,18 @@ try {
 	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-editor-background:#181b20; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-input-background:#1b1f24; --vscode-input-foreground:#d4d4d4; --vscode-input-placeholderForeground:#8b919a; --vscode-textCodeBlock-background:#171b20; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-button-background:#505965; --vscode-button-foreground:#fff; --vscode-scrollbarSlider-background:#454c57; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: false, busy: false, messages: [] }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', canSend: false, configured: false, busy: false, messages: [] }, '*'));
 	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始。').waitFor();
+	assert.equal(await page.getByText('打开一段聊天，或点击新聊天开始提问。', { exact: true }).count(), 0, 'A clean home screen does not show an obsolete chat-selection warning');
+	assert.equal(await page.getByRole('button', { name: '选择工作区' }).count(), 1, 'The workspace selector appears on the home page');
+	await page.getByRole('button', { name: '选择工作区' }).click();
+	await page.getByRole('dialog', { name: 'Beacon 工作区' }).getByRole('button', { name: '添加新工作区' }).waitFor();
+	assert.equal(await page.getByRole('dialog', { name: 'Beacon 工作区' }).getByRole('button', { name: '添加新工作区' }).count(), 1);
+	await page.keyboard.press('Escape');
 	assert.equal(await page.getByRole('button', { name: '配置 API Key', exact: true }).count(), 0);
 	assert.ok(await page.getByRole('button', { name: '发送', exact: true }).isDisabled());
 	await page.screenshot({ path: path.join(output, 'chat-empty.png') });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: false, messages: [], connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', parameters: {}, keyConfigured: true, loading: false, error: '' } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', canSend: true, configured: true, busy: false, messages: [], connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', parameters: {}, keyConfigured: true, loading: false, error: '' } }, '*'));
 	const webToggle = page.getByRole('button', { name: '联网搜索', exact: true });
 	assert.equal(await webToggle.getAttribute('aria-pressed'), 'true', 'Web search defaults to on');
 	await webToggle.click();
@@ -75,25 +85,68 @@ try {
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', parameters: {}, keyConfigured: true, loading: false, error: '' } }, '*'));
 	await page.getByRole('button', { name: 'Blackout', exact: true }).click();
 	const permissions = page.getByRole('dialog', { name: '文件读取权限', exact: true });
-	assert.equal(await permissions.getByRole('button').count(), 1);
+	assert.equal(await permissions.getByRole('button').count(), 3, 'All three permission modes remain visible');
+	assert.ok(await permissions.getByRole('button', { name: /Spot/ }).isDisabled());
+	assert.deepStrictEqual(await permissions.locator('small').allTextContents(), ['当前页面与主动提供材料；不读本地文件', '只读当前 Beacon 工作区', '只读本机与共享目录']);
+	assert.equal(await permissions.locator('.permission-note').textContent(), '敏感文件与其他会话始终隔离，读取内容会发送给所选模型。');
+	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).height), '32px');
+	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).borderRadius), '8px');
+	assert.equal(await permissions.evaluate(element => getComputedStyle(element).borderRadius), '12px');
+	assert.ok(await permissions.locator('button').evaluateAll(elements => elements.every(element => parseFloat(getComputedStyle(element).minHeight) >= 48)), 'Permission choices have a consistent touch target');
+	assert.equal(await page.locator('.web-toggle').evaluate(element => getComputedStyle(element).width), '32px');
+	assert.ok(await page.locator('.workspace-header .header-actions > button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().width >= 28)), 'Top-level icon actions keep usable click targets');
 	await page.screenshot({ path: path.join(output, 'permissions-dark.png') });
+	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fff; --vscode-foreground:#242424; --vscode-descriptionForeground:#666; --vscode-widget-border:#ccc; --vscode-menu-background:#fff; --vscode-list-hoverBackground:#eee; --vscode-focusBorder:#007fd4; --vscode-textLink-foreground:#006ab1; --vscode-editor-background:#fff; } .vscode-dark { --chat-title:#242424; --chat-muted:#666; }' });
+	await page.locator('body').evaluate(element => element.classList.remove('vscode-dark'));
+	await page.screenshot({ path: path.join(output, 'permissions-light.png') });
+	await page.setViewportSize({ width: 360, height: 1000 });
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Permission controls fit a narrow Beacon sidebar');
+	await page.screenshot({ path: path.join(output, 'permissions-narrow.png') });
+	await page.setViewportSize({ width: 760, height: 1000 });
+	await page.locator('body').evaluate(element => element.classList.add('vscode-dark'));
+	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-widget-border:#343b44; --vscode-menu-background:#21262d; --vscode-list-hoverBackground:#ffffff10; --vscode-focusBorder:#629ad1; --vscode-textLink-foreground:#80bfff; --vscode-editor-background:#181b20; } .vscode-dark { --chat-title:#ccc; --chat-muted:#999a9c; }' });
 	await page.keyboard.press('Escape');
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, mode: 'spot', epoch: 1, busy: false, recent: [] } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, recent: ['D:/fixture'] } }, '*'));
 	await page.getByRole('button', { name: 'Spot', exact: true }).click();
-	assert.equal(await permissions.getByRole('button').count(), 2);
-	assert.equal(await permissions.getByRole('button', { name: /Blackout/ }).count(), 0);
+	assert.equal(await permissions.getByRole('button').count(), 3);
+	assert.equal(await permissions.getByRole('button', { name: /Blackout/ }).count(), 1);
 	await permissions.getByRole('button', { name: /Spot/ }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setPermission', permission: 'workspace' });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace' }, '*'));
 	await page.getByRole('button', { name: 'Spot', exact: true }).waitFor();
+	await page.locator('.workspace-picker-trigger').click();
+	await page.locator('.workspace-picker.open .workspace-current-remove').waitFor();
+	await page.waitForTimeout(220);
+	assert.ok((await page.locator('.workspace-picker-shell').boundingBox()).width >= 280, 'The production selector expands to the available left-hand space');
+	await page.getByRole('dialog', { name: 'Beacon 工作区' }).getByRole('button', { name: '添加新工作区' }).waitFor();
+	await page.screenshot({ path: path.join(output, 'workspace-picker-open.png') });
+	assert.equal(await page.locator('.workspace-picker-row').count(), 0, 'Current workspace is excluded from recents');
+	await page.locator('.workspace-current-remove').click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'clearWorkspace' });
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'none', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'blackout', mode: 'blackout', epoch: 2, busy: false, recent: ['D:/fixture'] }, history: [{ id: 'hidden', title: 'Hidden chat', updatedAt: Date.now() }] }, '*'));
+	assert.equal(await page.evaluate(() => window.fixtureState().context.workspaceState), 'blackout');
+	assert.equal(await page.locator('.history-list').count(), 0, 'Blackout home does not render workspace history');
+	await page.locator('.workspace-picker-trigger.hidden').waitFor();
+	assert.ok(await page.locator('.workspace-picker-trigger.hidden').isVisible());
+	assert.equal(await page.locator('.workspace-picker-trigger.hidden').getAttribute('aria-label'), 'fixture未使用');
+	await page.screenshot({ path: path.join(output, 'workspace-blackout.png') });
+	await page.getByRole('button', { name: 'Blackout', exact: true }).click();
+	const blackoutPermissions = page.getByRole('dialog', { name: '文件读取权限', exact: true });
+	assert.ok(await blackoutPermissions.getByRole('button', { name: /Spot/ }).isEnabled(), 'A valid selected workspace can leave manual Blackout');
+	assert.ok(await blackoutPermissions.getByRole('button', { name: /Flood/ }).isEnabled());
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 3, busy: false, recent: ['D:/fixture'] } }, '*'));
 	await page.getByRole('textbox').fill('解释这段代码');
 	await page.getByRole('textbox').press('Enter');
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码' });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: true, messages: [] }, '*'));
+	assert.ok(await page.getByRole('button', { name: 'Spot', exact: true }).isDisabled(), 'Permission changes are unavailable while a response is running');
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
 	await page.getByRole('button', { name: 'Spot', exact: true }).click();
 	await page.getByRole('dialog', { name: '文件读取权限' }).getByRole('button', { name: /Flood/ }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setPermission', permission: 'computer' });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'computer', requestNotice: { id: 1, text: '权限变更将在下一轮回复中生效。' } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'computer', busy: true, requestNotice: { id: 1, text: '权限变更将在下一轮回复中生效。' } }, '*'));
 	await page.getByRole('status').getByText('权限变更将在下一轮回复中生效。', { exact: true }).waitFor();
 	assert.ok(await page.getByRole('button', { name: '暂停生成', exact: true }).isEnabled());
 	assert.ok(await page.getByRole('button', { name: '新聊天', exact: true }).isDisabled());
@@ -374,7 +427,7 @@ try {
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: 'one', history: [{ id: 'one', title: '代码与泰勒展开式', updatedAt: Date.now() }, { id: 'two', title: '图论学习：最短路与最小生成树的区别', updatedAt: Date.now() - 86400000 }] }, '*'));
 	await page.getByRole('textbox').fill('保留这一条草稿');
 	await page.getByRole('button', { name: '返回', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'clear' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'back' });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: '', messages: [], busy: false }, '*'));
 	await page.locator('.history-list').waitFor();
 	assert.equal(await page.getByRole('button', { name: '聊天记录', exact: true }).count(), 0);
@@ -409,8 +462,16 @@ try {
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'openHistory', conversationId: 'two' });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: 'two', messages: [] }, '*'));
 	await page.waitForFunction(() => document.querySelector('textarea')?.value === '');
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: 'one', messages: [] }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'one', messages: [], draftText: '保留这一条草稿', homeHasDraft: true }, '*'));
 	await page.waitForFunction(() => document.querySelector('textarea')?.value === '保留这一条草稿');
+	await page.getByRole('button', { name: '已有未发送草稿', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'newChat' });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: '', messages: [], draftText: '主页保留的草稿', homeHasDraft: true }, '*'));
+	await page.waitForFunction(() => document.querySelector('textarea')?.value === '主页保留的草稿');
+	await page.getByRole('button', { name: '新聊天', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'newChat' });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', draftText: '', homeHasDraft: false }, '*'));
+	await page.waitForFunction(() => document.querySelector('textarea')?.value === '');
 	const manyChats = Array.from({ length: 60 }, (_, index) => ({ id: 'chat-' + index, title: '历史聊天 ' + index, updatedAt: Date.now() - index * 86400000 }));
 	await page.evaluate(history => window.fixtureSnapshot({ type: 'snapshot', history }, '*'), manyChats);
 	await page.waitForFunction(() => document.querySelectorAll('.history-row').length === 60);
@@ -448,7 +509,7 @@ try {
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'settings' });
 	const stableConversation = await page.locator('.conversation').elementHandle();
 	await page.getByRole('button', { name: '新聊天', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'clear' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'newChat' });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', activeId: '', messages: [], busy: false }, '*'));
 	await page.waitForFunction(() => document.querySelector('.welcome'));
 	assert.ok(await stableConversation?.evaluate(element => element.isConnected), 'Starting a new chat keeps the scroll container mounted to avoid a flash');
@@ -482,6 +543,15 @@ try {
 	await page.evaluate(({ sources }) => window.fixtureSnapshot({ type: 'snapshot', busy: false, messages: [{ id: 91, role: 'assistant', text: '无法核实当前资料。', sources, reasoning: '', activities: [{ id: 'lookup', type: 'web-search', path: 'C++ vector documentation', status: 'error', error: 'rate-limit' }], status: 'stopped', durationMs: 1000 }] }, '*'), { sources: webSources });
 	await page.getByText('搜索服务暂时限流，请稍后再试。', { exact: true }).waitFor();
 	assert.equal(await page.getByText('重新生成回答', { exact: true }).count(), 0);
+	const feedback = [
+		{ id: 'closed', type: 'read', path: 'main.cpp', status: 'error', error: 'page-closed' },
+		{ id: 'save', type: 'notebook-edit', path: 'notes.bcnb', status: 'error', error: 'save-failed' }
+	];
+	await page.evaluate(activities => window.fixtureSnapshot({ type: 'snapshot', busy: false, messages: [{ id: 92, role: 'assistant', text: '', activities, status: 'complete' }] }, '*'), feedback);
+	await page.getByText('页面已关闭，请重新打开后读取。', { exact: true }).waitFor();
+	await page.getByText('修改已应用但未保存，请查看原生笔记编辑器。', { exact: true }).waitFor();
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Tool failure feedback fits the narrow sidebar');
+	await page.locator('.thought').screenshot({ path: path.join(output, 'tool-feedback-zh-760.png') });
 	await page.setViewportSize({ width: 360, height: 1000 });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', connection: { provider: 'ollama', baseURL: 'http://localhost:11434/v1', model: 'unknown-model', parameters: {}, keyConfigured: false, loading: false, error: '' }, webEnabled: true }, '*'));
 	await page.waitForFunction(() => document.querySelector('.web-toggle')?.getAttribute('data-available') === 'false');
@@ -493,8 +563,13 @@ try {
 	await page.waitForSelector('.code-line');
 	await page.screenshot({ path: path.join(output, 'light-360.png') });
 	await page.goto(`http://127.0.0.1:${server.address().port}/english`);
+	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fafafa; --vscode-foreground:#292d33; --vscode-descriptionForeground:#656970; --vscode-input-background:#eee; --vscode-input-foreground:#222; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-widget-border:#ddd; }' });
 	await publishAnswer('Hello.', 'Check the boundary.', 'complete', 18000);
 	await page.getByText('Thought for 18s', { exact: true }).waitFor();
+	await page.evaluate(activities => window.fixtureSnapshot({ type: 'snapshot', busy: false, messages: [{ id: 92, role: 'assistant', text: '', activities, status: 'complete' }] }, '*'), feedback);
+	await page.getByText('The page is closed. Open it again to read its contents.', { exact: true }).waitFor();
+	await page.getByText('The edits were applied but not saved. Check the native Notebook editor.', { exact: true }).waitFor();
+	await page.locator('.thought').screenshot({ path: path.join(output, 'tool-feedback-en-360.png') });
 	await publishAnswer('Partial output.', '', 'stopped', 61000);
 	await page.getByText('Paused after 1m 1s', { exact: true }).waitFor();
 	assert.equal(await page.locator('.running-text').count(), 0);

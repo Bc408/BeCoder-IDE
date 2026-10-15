@@ -31,7 +31,7 @@ Before tests, use the build watch task when available; otherwise run the owning 
 
 - The standard Windows validation sequence is `npm run typecheck-client`, `npm run compile-oi-extensions`, then `npm run gulp vscode-win32-x64-min`.
 - The Codex command runner timeout is external to npm and Gulp. Use a 120-second timeout for type checking and OI extension compilation, and a 300-second (5-minute) timeout for the staged Windows application build.
-- A non-zero exit code or an external timeout is a failed step. Stop the workflow and report the command and output; do not retry automatically or continue to packaging and runtime checks.
+- A non-zero exit code or an external timeout is a failed attempt. Record the exact command, output, and failure class. During project-owner-authorized development, diagnose and correct failures within the authorized scope, then rerun the smallest affected check before resuming the validation sequence. Do not treat a failed or stale attempt as passing evidence, and do not claim package or runtime acceptance until the required final checks succeed.
 - A build-only request authorizes only the requested build and its direct validation. Do not clean caches, delete artifacts, initialize Git, stage files, commit, push, or change user environment variables unless explicitly requested.
 - After a successful staged Windows application build, run the direct package verifier with `-IncludeCompiler $true`, then build and directly verify the BeCoder Setup when the request includes release packaging. Runtime GUI verification is a separate step and must not be claimed from a successful Gulp or Setup build alone.
 - After the requested build succeeds, stop by default. Do not automatically run package verification, build or verify Setup, launch the GUI, review, update documentation, inspect further state, clean files, or perform Git operations unless the same user request explicitly authorizes those follow-up actions.
@@ -54,7 +54,7 @@ Before formal validation, perform a read-only preflight of the complete command 
 - Before adding a file, inspect at least two nearby files in the same ownership area for the correct copyright header, import style, naming, and test conventions.
 - Freeze the command list after preflight and keep a validation ledger containing the exact command, inputs, exit code, failure class, affected later checks, and required reruns.
 
-A missing entry point or dependency, invalid shell syntax, or incorrect input enumeration is a validation-orchestration failure, not a source result. It must not be reported as a source failure or a passing check. Once a formal validator actually starts, any non-zero exit code or external timeout stops the workflow under the existing build rules. Do not improvise a replacement command and silently continue.
+A missing entry point or dependency, invalid shell syntax, or incorrect input enumeration is a validation-orchestration failure, not a source result. It must not be reported as a source failure or a passing check. Once a formal validator actually starts, record any non-zero exit code or external timeout, diagnose it at the correct layer, and repair or revise the validation plan within the authorized scope before rerunning. Do not improvise a replacement command silently or use earlier evidence as proof for changed code.
 
 ## Coding Style & Naming Conventions
 
@@ -66,7 +66,7 @@ Place tests beside the owning component as `*.test.ts`; integration cases use `*
 
 ## Agent Workflow for Difficult Tasks
 
-For difficult tasks, create a plan before development. Do not start a sub-agent or review thread unless the project owner explicitly requests one. Without that request, the primary agent performs a separate read-only review pass covering requirement completeness, logical correctness, edge cases, code quality, test coverage, and actual runtime results. When the project owner explicitly requests a review agent, that reviewer must not modify code; the primary agent addresses its findings and asks the same reviewer to verify again until validation passes or the remaining blocker is clearly documented.
+For difficult tasks, create a plan before development. The primary agent may use sub-agents for independent investigation, implementation, or review when doing so improves correctness or speed. Coordinate shared-worktree changes so that only one agent writes a given ownership area at a time. Review agents remain read-only unless the task explicitly assigns them an implementation slice. The primary agent performs a final read-only review covering requirement completeness, logical correctness, edge cases, code quality, test coverage, and actual runtime results, then addresses concrete findings and revalidates affected checks.
 
 ## Clarification Before Assumptions
 

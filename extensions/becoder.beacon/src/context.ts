@@ -5,12 +5,12 @@
 
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconPage } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
+import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconPage, IBeaconResume } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { FileInput, FileOutput, FilePermission, FileRoot, FileTool } from './fileTools';
 import { readHistory, type Conversation, type HistoryData } from './history';
 
 export type BeaconTransport = <T>(operation: string, input?: unknown) => Promise<T>;
-export interface BeaconHistoryBinding { root?: string; data: HistoryData; save(data: HistoryData): Promise<HistoryData> }
+export interface BeaconHistoryBinding { root?: string; readonly revision?: number; data: HistoryData; save(data: HistoryData): Promise<HistoryData> }
 
 export type BeaconPage = IBeaconPage | (Omit<IBeaconPage, 'kind'> & { kind: 'pdf'; pageCount?: number });
 export interface PdfPageApi {
@@ -52,26 +52,33 @@ export function withPdfPages(native: (operation: string, input?: unknown) => Pro
 }
 
 export class BeaconContextClient {
-	state: IBeaconContext = { slot: 'initial', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] };
+	state: IBeaconContext = { slot: 'initial', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
 	constructor(private readonly transport: (operation: string, input?: unknown) => Promise<unknown>) { }
 	private call<T>(operation: string, input?: unknown): Promise<T> { return this.transport(operation, input) as Promise<T>; }
-	get roots(): FileRoot[] { return this.state.usable && this.state.root ? [{ name: path.basename(this.state.root) || this.state.root, path: this.state.root }] : []; }
+	get consumingWorkspace(): boolean { return this.state.usable && this.state.mode !== 'blackout'; }
+	get roots(): FileRoot[] { return this.consumingWorkspace && this.state.root ? [{ name: path.basename(this.state.root) || this.state.root, path: this.state.root }] : []; }
 	get permission(): FilePermission { return this.state.mode === 'spot' ? 'workspace' : this.state.mode === 'flood' ? 'computer' : 'none'; }
 
 	private accept(value: unknown): IBeaconContext {
 		const state = value as IBeaconContext;
 		if (!state || typeof state.slot !== 'string' || !state.slot || typeof state.usable !== 'boolean' || typeof state.busy !== 'boolean' || !Number.isSafeInteger(state.epoch) || state.epoch < 0
 			|| !Array.isArray(state.recent) || state.recent.some(root => typeof root !== 'string') || (state.root !== undefined && typeof state.root !== 'string')
-			|| (state.usable ? !state.root || !path.isAbsolute(state.root) || !['spot', 'flood'].includes(state.mode) : state.mode !== 'blackout')) { throw new Error('beacon-invalid-context'); }
+			|| !['none', 'ready', 'blackout', 'unavailable'].includes(state.workspaceState)
+			|| (!state.root ? state.usable || state.mode !== 'blackout' || state.workspaceState !== 'none'
+				: !path.isAbsolute(state.root) || (state.usable ? (state.mode === 'blackout' ? state.workspaceState !== 'blackout' : !['spot', 'flood'].includes(state.mode) || state.workspaceState !== 'ready') : state.mode !== 'blackout' || state.workspaceState !== 'unavailable'))) { throw new Error('beacon-invalid-context'); }
 		this.state = structuredClone(state);
 		return this.state;
 	}
 
 	async refresh(): Promise<IBeaconContext> { return this.accept(await this.call('context')); }
 	async select(root: string): Promise<IBeaconContext> { return this.accept(await this.call('select', { root })); }
+	async clearWorkspace(): Promise<IBeaconContext> { return this.accept(await this.call('clearWorkspace')); }
+	async removeRecentWorkspace(root: string): Promise<IBeaconContext> { return this.accept(await this.call('removeRecentWorkspace', { root })); }
 	async setMode(mode: BeaconMode): Promise<IBeaconContext> { return this.accept(await this.call('mode', { mode })); }
 	async setBusy(busy: boolean): Promise<void> { await this.call('busy', { busy }); }
 	async release(): Promise<void> { await this.call('release'); await this.refresh(); }
+	async resume(): Promise<IBeaconResume | undefined> { return this.consumingWorkspace ? this.call('resume') : undefined; }
+	async setView(value: IBeaconResume): Promise<void> { if (this.consumingWorkspace) { await this.call('view', { view: value }); } }
 	captureScope(): IBeaconContext { return structuredClone(this.state); }
 
 	private matches(scope: IBeaconContext): boolean {
@@ -97,20 +104,22 @@ export class BeaconContextClient {
 			return result;
 		} catch {
 			signal.throwIfAborted();
-			return { ok: false, path: input.path, error: 'The Beacon workspace or permission changed during access. Read again under the current context.' };
+			return { ok: false, path: input.path, code: 'context-changed', error: 'The Beacon workspace or permission changed during access. Read again under the current context.' };
 		}
 	}
 
 	async metadata(active?: Conversation): Promise<HistoryData> {
-		if (!this.state.usable) { return readHistory(undefined); }
+		if (!this.consumingWorkspace) { return readHistory(undefined); }
 		const items = await this.call<IBeaconHistoryItem[]>('history');
 		if (!Array.isArray(items)) { throw new Error('beacon-unreadable-history'); }
-		return readHistory({ version: 1, activeId: active?.id ?? '', conversations: items.map(item => active?.id === item.id ? active : { id: item.id, title: item.title, updatedAt: item.updatedAt, messages: [], error: '', workspace: item.workspace }) });
+		const conversations = items.map(item => active?.id === item.id ? active : { id: item.id, title: item.title, updatedAt: item.updatedAt, messages: [], error: '', workspace: item.workspace });
+		if (active && !conversations.some(item => item.id === active.id)) { conversations.push(active); }
+		return readHistory({ version: 1, activeId: active?.id ?? '', conversations });
 	}
 
 	async bindHistory(open?: { id: string; create?: boolean }): Promise<BeaconHistoryBinding> {
 		await this.refresh();
-		if (!this.state.usable) { return { data: readHistory(undefined), save: async data => data }; }
+		if (!this.consumingWorkspace) { return { data: readHistory(undefined), save: async data => data }; }
 		// Read metadata before changing the active conversation: corrupt lists cannot silently close it.
 		await this.metadata();
 		let active: Conversation | undefined;
@@ -126,13 +135,13 @@ export class BeaconContextClient {
 		const id = active?.id;
 		let baseline = active ? JSON.stringify(active) : '';
 		const data = await this.metadata(active);
-		return { root, data, save: async value => {
+		return { root, data, get revision() { return revision; }, save: async value => {
 			if (!id) { if (value.activeId || value.conversations.some(item => item.messages.length)) { throw new Error('beacon-conversation-owner'); } return value; }
 			const changed = value.conversations.find(item => item.id === id);
 			if (!changed || value.activeId !== id) { throw new Error('beacon-conversation-owner'); }
 			if (JSON.stringify(changed) === baseline) { return value; }
 			await this.refresh();
-			if (!this.state.usable || this.state.root !== root || this.state.slot !== slot || this.state.activeId !== id) { throw new Error('beacon-conversation-owner'); }
+			if (!this.consumingWorkspace || this.state.root !== root || this.state.slot !== slot || this.state.activeId !== id) { throw new Error('beacon-conversation-owner'); }
 			const saved = await this.call<IBeaconStoredConversation>('save', { data: changed as IBeaconConversation, revision });
 			const next = readHistory({ version: 1, activeId: id, conversations: [saved.data] }).conversations[0];
 			revision = saved.revision; baseline = JSON.stringify(next);

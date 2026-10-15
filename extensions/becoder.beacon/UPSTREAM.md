@@ -26,6 +26,14 @@ Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` 
 
 No Codex or Trae proprietary code or assets are included.
 
+The 2026-10-14 evidence and feedback review used these fixed references:
+
+- OpenCode `81d57087a44c0ef2fe909e10b6bcfd8c1ddcfdef`, MIT, [core tool architecture](https://github.com/anomalyco/opencode/blob/81d57087a44c0ef2fe909e10b6bcfd8c1ddcfdef/packages/core/src/tool/AGENTS.md): catalog visibility and execution authority have different responsibilities. Beacon retains its existing host boundaries; personal-information network permission is prompt guidance by the project owner's decision.
+- Graphify `fe085cedddde3a18554f8749b230bfe47f3dcce7`, Apache-2.0 with retained MIT components, [provenance and confidence explanation](https://github.com/Graphify-Labs/graphify/blob/fe085cedddde3a18554f8749b230bfe47f3dcce7/docs/how-it-works.md): identify source versions and hashes, distinguish captured facts from model inference. Beacon does not import its graph or confidence-score system.
+- ECC `b92f181b3b748d1abbc2afd94af6aa7d8c8fca29`, MIT, [local observation hooks](https://github.com/affaan-m/ECC/blob/b92f181b3b748d1abbc2afd94af6aa7d8c8fca29/hooks/memory-persistence/README.md): use actual tool outcomes as feedback. Beacon uses its existing SDK protocol, producer events and activity UI.
+
+These are design references. No code, dependencies or assets from these three projects are bundled by this change.
+
 `webview/ImagePreview.tsx` and the clipboard paste route independently implement
 the image overlay and explicit-input behavior observed in Captain Who's
 `ImagePreview.tsx` and `ChatComposer.tsx` at commit

@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { toolErrorCode, type ToolError } from './toolFeedback';
 
 export type FilePermission = 'none' | 'workspace' | 'computer';
 export const isFilePermission = (value: unknown): value is FilePermission => value === 'none' || value === 'workspace' || value === 'computer';
@@ -24,6 +25,7 @@ export interface FileOutput {
 	nextOffset?: number;
 	truncated?: boolean;
 	error?: string;
+	code?: ToolError;
 }
 export type FileTool = (input: FileInput, signal: AbortSignal) => Promise<FileOutput>;
 export interface FileRoot { name: string; path: string }
@@ -58,7 +60,7 @@ export function safeFileError(error: unknown): string {
 		'invalid-file-input': 'Use a nonnegative integer offset, a limit between 1 and 131072, and a nonempty search query.',
 		'not-ordinary-file': 'Only ordinary files and directories can be accessed.'
 	};
-	return messages[code] ?? 'The file could not be accessed. Check the path and operating system permissions.';
+	return Object.hasOwn(messages, code) ? messages[code] : 'The file could not be accessed. Check the path and operating system permissions.';
 }
 
 /** One instance per response: permission, workspace roots and read budget never change mid-stream. */
@@ -119,7 +121,7 @@ export class FileTools {
 			return result;
 		} catch (error) {
 			if (signal.aborted) { throw error; }
-			return { ok: false, path: input.path, error: safeFileError(error) };
+			return { ok: false, path: input.path, code: toolErrorCode(error instanceof Error ? error.message : undefined), error: safeFileError(error) };
 		}
 	};
 	private async read(file: string, input: FileInput, signal: AbortSignal): Promise<FileOutput> {

@@ -3,14 +3,20 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection } from '../common/beaconContext.js';
+import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume } from '../common/beaconContext.js';
 import * as path from '../../../base/common/path.js';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { BeaconStore, checkBeaconIdentifier, prepareBeaconWorkspace } from './beaconStore.js';
+import { BeaconStore, checkBeaconIdentifier, checkBeaconResume, prepareBeaconWorkspace } from './beaconStore.js';
 import { acquireBeaconLease } from './beaconLease.js';
 import type { BeaconProducer, IBeaconConsumedRecord, IBeaconRuntimeItem } from '../common/beaconContextTypes.js';
 import { BeaconNotebookResources } from './beaconNotebookResources.js';
+
+const sameWorkspacePath = (left: string, right: string) => {
+	const a = path.normalize(left);
+	const b = path.normalize(right);
+	return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+};
 
 export interface IBeaconCoordinatorCallbacks {
 	getSelection(id: number): IBeaconWindowSelection | undefined;
@@ -37,6 +43,8 @@ interface IWindowContext {
 /** Owns window state and leases; no model SDK or editor-folder dependency. */
 export class BeaconCoordinator {
 	private readonly windows = new Map<number, IWindowContext>();
+	private readonly views = new Map<number, Map<string, IBeaconResume>>();
+	private resumeTail: Promise<unknown> = Promise.resolve();
 	private readonly runtimeWrites = new Map<string, Promise<void>>();
 	private readonly notebooks: BeaconNotebookResources;
 	private readonly notebookScopes = new Map<string, { window: number; scope: IBeaconContext; creating: boolean; location?: { canonical: string; anchor: string; dev: number; ino: number } }>();
@@ -123,7 +131,7 @@ export class BeaconCoordinator {
 
 	private async refresh(context: IWindowContext): Promise<void> {
 		const previous = context.usable;
-		context.usable = false;
+		context.usable = false; context.store = undefined;
 		if (context.selection.root) {
 			try {
 				const binding = await prepareBeaconWorkspace(context.selection.root, false);
@@ -132,11 +140,16 @@ export class BeaconCoordinator {
 				context.usable = true;
 			} catch { /* Retain the selected root; unavailable roots do not redirect persistence. */ }
 		}
-		if (previous !== context.usable) { context.epoch++; }
+		if (previous !== context.usable) {
+			context.epoch++;
+			if (!context.usable) { await this.release(context); }
+		}
 	}
 
 	private snapshot(context: IWindowContext): IBeaconContext {
-		return { slot: context.selection.slot, root: context.selection.root, usable: context.usable, mode: context.usable ? context.selection.mode : 'blackout', epoch: context.epoch,
+		const mode = context.usable ? context.selection.mode : 'blackout';
+		const workspaceState = !context.selection.root ? 'none' : !context.usable ? 'unavailable' : mode === 'blackout' ? 'blackout' : 'ready';
+		return { slot: context.selection.slot, root: context.selection.root, usable: context.usable, workspaceState, mode, epoch: context.epoch,
 			busy: context.busy || context.activities.size > 0 || context.writes > 0 || context.switching || this.ownsNotebookEdit(context), activeId: context.active?.id, recent: [...this.callbacks.getRecent()] };
 	}
 	private ownsNotebookEdit(context: IWindowContext): boolean { return [...this.notebookOwners].some(([handle, value]) => value.owner === context.resourceOwner && this.notebookScopes.has(handle)); }
@@ -156,6 +169,28 @@ export class BeaconCoordinator {
 		return this.serial(id, false, async context => { await this.refresh(context); return this.snapshot(context); });
 	}
 
+	async getResume(id: number): Promise<IBeaconResume | undefined> {
+		await this.resumeTail;
+		return this.serial(id, false, async context => {
+			const store = await this.store(context);
+			const view = this.views.get(id)?.get(store.binding.identity) ?? await store.readResume();
+			return view ? structuredClone(view) : undefined;
+		});
+	}
+
+	async setView(id: number, view: IBeaconResume): Promise<void> {
+		checkBeaconResume(view);
+		await this.serial(id, false, async context => {
+			const store = await this.store(context);
+			if (view.id && !await store.readConversation(view.id)) { throw new Error('beacon-missing-conversation'); }
+			// A released home draft can be explicitly cleared by another window.
+			if (view.homeId && !await store.readConversation(view.homeId)) { view = { ...view, homeId: undefined }; }
+			let views = this.views.get(id);
+			if (!views) { views = new Map(); this.views.set(id, views); }
+			views.set(store.binding.identity, structuredClone(view));
+		});
+	}
+
 	async selectWorkspace(id: number, root: string): Promise<IBeaconContext> {
 		const current = this.window(id);
 		if (current.busy || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
@@ -168,12 +203,12 @@ export class BeaconCoordinator {
 				await store.listHistory();
 				if (context.busy || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
 				await this.release(context);
-				context.selection = { slot: context.selection.slot, root, mode: 'spot', identity: binding.identity };
+				context.selection = { slot: context.selection.slot, root, mode: context.selection.root ? context.selection.mode : 'spot', identity: binding.identity };
 				context.store = store; context.usable = true; context.epoch++;
 				this.callbacks.saveSelection(id, context.selection);
-				this.callbacks.saveRecent([root, ...this.callbacks.getRecent().filter(value => value !== root)]);
-				this.callbacks.changed(0);
+				this.callbacks.saveRecent([root, ...this.callbacks.getRecent().filter(value => !sameWorkspacePath(value, root))]);
 			} finally { context.switching = false; }
+			this.callbacks.changed(0);
 			return this.snapshot(context);
 		});
 	}
@@ -181,12 +216,42 @@ export class BeaconCoordinator {
 	async setMode(id: number, mode: BeaconMode): Promise<IBeaconContext> {
 		return this.serial(id, false, async context => {
 			await this.refresh(context);
-			if (context.usable ? mode !== 'spot' && mode !== 'flood' : mode !== 'blackout') { throw new Error('beacon-mode-unavailable'); }
-			if (mode !== 'blackout' && context.selection.mode !== mode) {
+			if (!context.usable && mode !== 'blackout') { throw new Error('beacon-mode-unavailable'); }
+			if (context.selection.mode !== mode) {
 				context.selection = { ...context.selection, mode }; context.epoch++;
 				this.callbacks.saveSelection(id, context.selection);
 			}
+			if (mode === 'blackout') { await this.release(context); }
 			this.callbacks.changed(id);
+			return this.snapshot(context);
+		});
+	}
+
+	async clearWorkspace(id: number): Promise<IBeaconContext> {
+		const current = this.window(id);
+		if (current.busy || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
+		return this.serial(id, false, async context => {
+			if (context.busy || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
+			context.switching = true;
+			try {
+				const root = context.selection.root;
+				await this.release(context);
+				context.selection = { slot: context.selection.slot, mode: 'blackout' };
+				context.store = undefined; context.usable = false; context.epoch++;
+				this.callbacks.saveSelection(id, context.selection);
+				if (root) { this.callbacks.saveRecent([root, ...this.callbacks.getRecent().filter(value => !sameWorkspacePath(value, root))]); }
+			} finally { context.switching = false; }
+			this.callbacks.changed(0);
+			return this.snapshot(context);
+		});
+	}
+
+	async removeRecentWorkspace(id: number, root: string): Promise<IBeaconContext> {
+		if (!root || !path.isAbsolute(root) || root.includes('\0')) { throw new Error('beacon-invalid-workspace'); }
+		if (this.window(id).selection.root && sameWorkspacePath(this.window(id).selection.root!, root)) { return this.clearWorkspace(id); }
+		return this.serial(id, false, async context => {
+			this.callbacks.saveRecent(this.callbacks.getRecent().filter(value => !sameWorkspacePath(value, root)));
+			this.callbacks.changed(0);
 			return this.snapshot(context);
 		});
 	}
@@ -249,7 +314,7 @@ export class BeaconCoordinator {
 
 	private async store(context: IWindowContext): Promise<BeaconStore> {
 		await this.refresh(context);
-		if (!context.usable || !context.store) { throw new Error('beacon-workspace-unavailable'); }
+		if (!context.usable || !context.store || context.selection.mode === 'blackout') { throw new Error('beacon-workspace-unavailable'); }
 		return context.store;
 	}
 
@@ -330,7 +395,8 @@ export class BeaconCoordinator {
 	async openConversation(id: number, conversationId: string, create = false): Promise<IBeaconStoredConversation> {
 		checkBeaconIdentifier(conversationId);
 		return this.serial(id, true, async context => {
-			if (context.busy) { throw new Error('beacon-busy'); }
+			// First-send/material capture owns the busy state before it has a conversation.
+			if (context.busy && (!create || context.active)) { throw new Error('beacon-busy'); }
 			const store = await this.store(context);
 			if (context.active?.id === conversationId && context.active.identity === store.binding.identity) {
 				const record = await store.readConversation(conversationId);
@@ -342,7 +408,7 @@ export class BeaconCoordinator {
 				let record = await store.readConversation(conversationId);
 				if (create) {
 					if (record) { throw new Error('beacon-conversation-exists'); }
-					record = await store.saveConversation({ id: conversationId, title: '', updatedAt: Date.now(), messages: [], error: '', workspace: [{ name: path.basename(store.binding.path), path: store.binding.path }] }, 0);
+					record = await store.saveConversation({ id: conversationId, title: '', updatedAt: Date.now(), messages: [], error: '', draftOnly: true, workspace: [{ name: path.basename(store.binding.path), path: store.binding.path }] }, 0);
 				}
 				if (!record) { throw new Error('beacon-missing-conversation'); }
 				await this.release(context);
@@ -399,19 +465,71 @@ export class BeaconCoordinator {
 		this.callbacks.changed(id);
 	}
 
-	async closeWindow(id: number): Promise<void> {
+	/** Extension reload retires resources without pretending that its native window closed. */
+	async resetWindow(id: number): Promise<void> {
+		await this.serial(id, false, async context => {
+			await this.notebooks.reset(context.resourceOwner);
+			for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
+			context.resourceOwner = ++this.nextResourceOwner;
+			context.activities.clear(); context.busy = false; context.epoch++;
+			await this.release(context);
+		});
+	}
+
+	/** Only the real native window close publishes the workspace's default resume target. */
+	async closeWindow(id: number, publish = false): Promise<void> {
 		const context = this.windows.get(id);
 		if (!context) { return; }
+		const view = context.store ? this.views.get(id)?.get(context.store.binding.identity) : undefined;
+		const store = publish && context.usable && context.selection.mode !== 'blackout' ? context.store : undefined;
+		// Reserve the publication order before any asynchronous resource retirement.
+		const previous = this.resumeTail;
+		let complete!: () => void;
+		if (publish) { this.resumeTail = new Promise<void>(resolve => { complete = resolve; }); }
 		this.windows.delete(id);
-		await this.notebooks.reset(context.resourceOwner);
-		for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
-		await context.tail;
-		await this.release(context);
+		try {
+			await this.notebooks.reset(context.resourceOwner);
+			for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
+			await context.tail;
+			await this.release(context);
+			if (publish) {
+				await previous;
+				this.views.delete(id);
+				if (store) {
+					await store.saveResume(view ?? { screen: 'home' });
+					await this.collectDrafts(store);
+				}
+			}
+		} finally { complete?.(); }
+	}
+
+	private async collectDrafts(store: BeaconStore): Promise<void> {
+		const resume = await store.readResume();
+		const referenced = new Set([resume?.id, resume?.homeId]);
+		for (const views of this.views.values()) {
+			const view = views.get(store.binding.identity); if (view) { referenced.add(view.id); referenced.add(view.homeId); }
+		}
+		for (const item of await store.listHistory(true)) {
+			if (referenced.has(item.id)) { continue; }
+			let release: (() => Promise<void>) | undefined;
+			try { release = await acquireBeaconLease(store.binding.identity, `conversation:${item.id}`); }
+			catch (error) { if (error instanceof Error && error.message === 'conversation-open') { continue; } throw error; }
+			try {
+				const record = await store.readConversation(item.id);
+				if (record?.data.draftOnly === true && record.data.messages.length === 0) { await store.deleteConversation(item.id); }
+			} finally { await release(); }
+		}
 	}
 
 	async dispose(): Promise<void> {
+		await this.flushResume();
 		this.disposed = true;
 		await Promise.all([...this.windows.keys()].map(id => this.closeWindow(id)));
 		await this.notebooks.dispose();
+	}
+
+	async flushResume(): Promise<void> {
+		let tail: Promise<unknown>;
+		do { tail = this.resumeTail; await tail; } while (tail !== this.resumeTail);
 	}
 }

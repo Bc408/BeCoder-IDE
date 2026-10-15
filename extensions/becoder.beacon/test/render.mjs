@@ -55,6 +55,16 @@ try {
 	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始。').waitFor();
 	assert.equal(await page.getByText('打开一段聊天，或点击新聊天开始提问。', { exact: true }).count(), 0, 'A clean home screen does not show an obsolete chat-selection warning');
 	assert.equal(await page.getByRole('button', { name: '选择工作区' }).count(), 1, 'The workspace selector appears on the home page');
+	assert.equal(await page.locator('.chats-title').textContent(), '聊天', 'Home has the same secondary heading as the reference');
+	await page.getByRole('button', { name: '选择工作区' }).hover();
+	await page.waitForTimeout(200);
+	assert.equal(await page.locator('.workspace-picker.expanded').count(), 0, 'An unselected workspace does not expand on hover');
+	for (const button of await page.locator('.workspace-header .header-actions > button').all()) {
+		const before = await button.boundingBox();
+		await button.hover();
+		assert.deepEqual(await button.boundingBox(), before, 'Header hover keeps the action size and position stable');
+		assert.equal(await button.evaluate(element => getComputedStyle(element).borderRadius), '50%', 'Header icon hover is circular');
+	}
 	await page.getByRole('button', { name: '选择工作区' }).click();
 	await page.getByRole('dialog', { name: 'Beacon 工作区' }).getByRole('button', { name: '添加新工作区' }).waitFor();
 	assert.equal(await page.getByRole('dialog', { name: 'Beacon 工作区' }).getByRole('button', { name: '添加新工作区' }).count(), 1);
@@ -74,7 +84,68 @@ try {
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setWebEnabled', enabled: true });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', webEnabled: true }, '*'));
 	assert.equal(await page.locator('.model-label').textContent(), 'deepseek-chat');
+	await page.getByRole('button', { name: 'deepseek-chat', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'settings' });
+	assert.equal(await page.locator('.model-picker-menu').count(), 0, 'A model trigger without choices opens settings directly');
+	const composerInput = page.getByRole('textbox', { name: '向 Beacon 提问', exact: true });
+	await composerInput.fill('宽度变化后输入框应重新计算换行高度。'.repeat(18));
+	await page.setViewportSize({ width: 760, height: 1000 });
+	const wideInputHeight = await composerInput.evaluate(element => element.getBoundingClientRect().height);
+	await page.setViewportSize({ width: 220, height: 1000 });
+	await page.waitForFunction(() => {
+		const element = document.querySelector('.composer textarea');
+		return element.getBoundingClientRect().height >= Math.min(element.scrollHeight, 180) - 1;
+	});
+	const narrowInputLayout = await composerInput.evaluate(element => ({ height: element.getBoundingClientRect().height, scrollHeight: element.scrollHeight }));
+	assert.ok(narrowInputLayout.scrollHeight > wideInputHeight, 'A narrower composer creates additional wrapped input content');
+	assert.ok(narrowInputLayout.height >= Math.min(narrowInputLayout.scrollHeight, 180) - 1, 'Composer input height follows wrapping after a sidebar resize');
+	assert.ok(await page.locator('.model-label .model-picker-name').isHidden(), 'Narrow composer collapses the model label text');
+	assert.ok(await page.locator('.permission-trigger > span').isHidden(), 'Narrow composer collapses the permission label text');
+	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Narrow composer does not overflow horizontally');
+	await page.setViewportSize({ width: 760, height: 1000 });
+	await page.waitForFunction(height => document.querySelector('.composer textarea').getBoundingClientRect().height <= height + 1, wideInputHeight);
+	assert.ok(await page.locator('.model-label .model-picker-name').isVisible(), 'Wide composer restores the model label text');
+	assert.ok(await page.locator('.permission-trigger > span').isVisible(), 'Wide composer restores the permission label text');
+	const draftBeforeResize = await composerInput.inputValue();
+	const wideIconSizes = await page.locator('.composer-toolbar > .add-files, .composer-toolbar > .web-toggle, .composer-toolbar > .send').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }));
+	const widePermissionWidth = await page.locator('.permission-trigger').evaluate(element => element.getBoundingClientRect().width);
+	for (const width of [760, 480, 360, 320, 280, 260, 220, 180, 220, 360, 760]) {
+		await page.setViewportSize({ width, height: 1000 });
+		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+		const layout = await page.locator('.composer-toolbar').evaluate(element => {
+			const bounds = element.getBoundingClientRect();
+			const tools = [...element.querySelectorAll(':scope > button, .permission-trigger, .model-label')].map(tool => tool.getBoundingClientRect()).filter(tool => tool.width > 0 && tool.height > 0);
+			return { bounds: { left: bounds.left, right: bounds.right }, tools: tools.map(tool => ({ left: tool.left, right: tool.right, top: tool.top, height: tool.height })), fits: tools.every(tool => tool.left >= bounds.left - 1 && tool.right <= bounds.right + 1), aligned: tools.every(tool => Math.abs(tool.top + tool.height / 2 - tools[0].top - tools[0].height / 2) < 1) };
+		});
+		assert.ok(layout.fits && layout.aligned, `All composer actions fit and share a centerline at ${width}px`);
+		assert.deepStrictEqual(await page.locator('.composer-toolbar > .add-files, .composer-toolbar > .web-toggle, .composer-toolbar > .send').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; })), wideIconSizes, `Composer icon actions keep fixed hit targets at ${width}px`);
+		assert.equal(await page.locator('.permission-trigger').evaluate(element => element.getBoundingClientRect().width), width <= 320 ? 28 : widePermissionWidth, `Permission trigger uses the compact mode at ${width}px`);
+		if (width <= 280) {
+			assert.equal(await page.locator('.model-picker').evaluate(element => getComputedStyle(element).display), 'none', 'The model picker yields space to the primary actions in the narrowest composer');
+		} else {
+			const modelWidth = await page.locator('.model-label').evaluate(element => element.getBoundingClientRect().width);
+			assert.ok(modelWidth >= 72, `Model trigger keeps a stable mode at ${width}px`);
+		}
+		assert.equal(await composerInput.inputValue(), draftBeforeResize, 'Resizing preserves the input draft');
+		await page.locator('footer').screenshot({ path: path.join(output, `composer-draft-dark-${width}.png`) });
+	}
+	await composerInput.fill('');
+	for (const width of [180, 220, 260, 320, 360, 480, 760]) {
+		await page.setViewportSize({ width, height: 1000 });
+		await page.locator('footer').screenshot({ path: path.join(output, `composer-empty-dark-${width}.png`) });
+	}
+	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', displayName: 'Chat model', revision: 7, parameters: {}, keyConfigured: true, choices: [{ provider: 'deepseek', id: 'deepseek-chat', name: 'Chat model' }, { provider: 'ollama', id: 'local', name: 'Local model' }], loading: false, error: '' } }, '*'));
+	await page.getByRole('button', { name: 'Chat model', exact: true }).click();
+	await page.screenshot({ path: path.join(output, 'model-menu-dark-760.png') });
+	await page.keyboard.press('Escape');
+	await page.setViewportSize({ width: 320, height: 1000 });
+	await page.getByRole('button', { name: 'Chat model', exact: true }).click();
+	const narrowModelMenu = await page.locator('.model-picker-menu').evaluate(element => { const box = element.getBoundingClientRect(); return { left: box.left, right: box.right }; });
+	assert.ok(narrowModelMenu.left >= 8 && narrowModelMenu.right <= 312, 'Narrow model menu stays inside the composer safety margins');
+	await page.screenshot({ path: path.join(output, 'model-menu-dark-320.png') });
+	await page.keyboard.press('Escape');
+	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.getByRole('button', { name: 'Chat model', exact: true }).click();
 	await page.getByRole('button', { name: 'Local model Ollama', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'selectModel', provider: 'ollama', id: 'local', revision: 7, requestId: await page.evaluate(() => window.messages.at(-1).requestId) });
@@ -108,6 +179,17 @@ try {
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-widget-border:#343b44; --vscode-menu-background:#21262d; --vscode-list-hoverBackground:#ffffff10; --vscode-focusBorder:#629ad1; --vscode-textLink-foreground:#80bfff; --vscode-editor-background:#181b20; } .vscode-dark { --chat-title:#ccc; --chat-muted:#999a9c; }' });
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, recent: ['D:/fixture'] } }, '*'));
+	for (const width of [220, 320, 480, 760]) {
+		await page.setViewportSize({ width, height: 700 });
+		await page.locator('.workspace-picker-trigger').hover();
+		await page.waitForTimeout(180);
+		const header = await page.locator('.workspace-header').evaluate(element => { const controls = [...element.querySelectorAll('.conversation-heading, .workspace-picker, .header-actions > button')].map(control => control.getBoundingClientRect()); return controls.every((control, index) => control.left >= 0 && control.right <= innerWidth && (index === 0 || control.left >= controls[index - 1].right - 1)); });
+		assert.ok(header, `Home heading and controls have separate bounds at ${width}px`);
+		await page.mouse.move(2, 200);
+		await page.waitForTimeout(180);
+		await page.screenshot({ path: path.join(output, `controls-home-${width}.png`) });
+	}
+	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.getByRole('button', { name: 'Spot', exact: true }).click();
 	assert.equal(await permissions.getByRole('button').count(), 3);
 	assert.equal(await permissions.getByRole('button', { name: /Blackout/ }).count(), 1);
@@ -130,7 +212,7 @@ try {
 	assert.equal(await page.locator('.history-list').count(), 0, 'Blackout home does not render workspace history');
 	await page.locator('.workspace-picker-trigger.hidden').waitFor();
 	assert.ok(await page.locator('.workspace-picker-trigger.hidden').isVisible());
-	assert.equal(await page.locator('.workspace-picker-trigger.hidden').getAttribute('aria-label'), 'fixture未使用');
+	assert.equal(await page.locator('.workspace-picker-trigger.hidden').getAttribute('aria-label'), 'fixture 未使用');
 	await page.screenshot({ path: path.join(output, 'workspace-blackout.png') });
 	await page.getByRole('button', { name: 'Blackout', exact: true }).click();
 	const blackoutPermissions = page.getByRole('dialog', { name: '文件读取权限', exact: true });

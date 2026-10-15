@@ -69,11 +69,13 @@
 			},
 			{
 				"command": "becoder.notebook.createAssociated",
-				"title": "%createAssociated%"
+				"title": "%createAssociated%",
+				"icon": "$(notebook)"
 			},
 			{
 				"command": "becoder.notebook.openAssociated",
-				"title": "%openAssociated%"
+				"title": "%openAssociated%",
+				"icon": "$(notebook)"
 			},
 			{
 				"command": "becoder.notebook.addInput",

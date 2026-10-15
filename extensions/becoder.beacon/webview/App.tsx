@@ -86,6 +86,7 @@ function App() {
 	const [editingDraft, setEditingDraft] = useState('');
 	const [preview, setPreview] = useState<{ items: Attachment[]; index: number; url?: string }>();
 	const input = useRef<HTMLTextAreaElement>(null);
+	const composer = useRef<HTMLFormElement>(null);
 	const editInput = useRef<HTMLTextAreaElement>(null);
 	const composing = useRef(false);
 	useEffect(() => { setPreview(undefined); pasteJob.current?.abort(); }, [state.viewKey]);
@@ -130,9 +131,30 @@ function App() {
 		const timer = setInterval(() => setNow(Date.now()), 60000);
 		return () => clearInterval(timer);
 	}, []);
-	useEffect(() => {
-		if (input.current) { input.current.style.height = 'auto'; input.current.style.height = `${Math.min(input.current.scrollHeight, 180)}px`; }
-	}, [draft]);
+	const resizeInput = useCallback(() => {
+		const textarea = input.current;
+		if (!textarea) { return; }
+		const scrollTop = textarea.scrollTop;
+		textarea.style.height = 'auto';
+		textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+		textarea.scrollTop = scrollTop;
+	}, []);
+	useLayoutEffect(resizeInput, [draft, resizeInput]);
+	useLayoutEffect(() => {
+		const element = composer.current;
+		if (!element) { return; }
+		let width = element.getBoundingClientRect().width;
+		let frame = 0;
+		const observer = new ResizeObserver(() => {
+			const next = element.getBoundingClientRect().width;
+			if (next === width) { return; }
+			width = next;
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(resizeInput);
+		});
+		observer.observe(element);
+		return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+	}, [resizeInput]);
 	useEffect(() => {
 		if (editInput.current) { editInput.current.style.height = 'auto'; editInput.current.style.height = `${Math.min(editInput.current.scrollHeight, 180)}px`; }
 	}, [editing, editingDraft]);
@@ -192,7 +214,7 @@ function App() {
 	}}>
 		<header className={`workspace-header ${home ? 'home-header' : ''}`}><div className="conversation-heading">
 			{hasConversation && <button className="conversation-back" disabled={busy} onClick={() => { api.postMessage({ type: 'back' }); }} data-becoder-tooltip={t('Back', '返回')} aria-label={t('Back', '返回')}><Icon name="back" /></button>}
-			{!home && <span className="conversation-title">{state.history.find(item => item.id === state.activeId)?.title || t('Chat', '聊天')}</span>}
+			<span className={`conversation-title ${home ? 'chats-title' : ''}`}>{home ? t('Chats', '聊天') : state.history.find(item => item.id === state.activeId)?.title || t('Chat', '聊天')}</span>
 		</div><div className="header-actions">
 			{home && <Workspace context={state.context} busy={busy || state.saveFailed} post={message => api.postMessage(message)} />}
 			<button onClick={() => api.postMessage({ type: 'settings' })} data-becoder-tooltip={t('Connection settings', '连接设置')} aria-label={t('Connection settings', '连接设置')}><Icon name="settings" /></button>
@@ -235,7 +257,7 @@ function App() {
 		</Conversation>
 		<footer>
 			{!failedReply && state.error && <div className={temporaryFailure ? 'connection-notice' : 'error'} role="alert">{temporaryFailure && <Icon name="info" />}{state.error}</div>}
-			<form className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
+			<form ref={composer} className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
 				{!!state.attachments.length && <div className="attachments draft-attachments">{state.attachments.map(item => <AttachmentCard key={item.id} item={item} busy={busy} preview={(item, url) => openAttachment(state.attachments, item, url)} remove={() => api.postMessage({ type: 'removeAttachment', id: item.id })} />)}</div>}
 				{blocked && <div className="attachment-warning" role="status">{blocked}</div>}
 				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onPaste={pasteImages} onChange={event => { draftRef.current = event.target.value; draftPending.current = true; setDraft(event.target.value); api.postMessage({ type: 'draft', text: event.target.value, viewKey: activeRef.current }); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {
@@ -258,6 +280,8 @@ function App() {
 function ModelPicker({ connection }: { connection: ConnectionState }) {
 	const [open, setOpen] = useState(false);
 	const node = useRef<HTMLDivElement>(null);
+	const modelName = connection.displayName || connection.model || t('Select a model', '选择模型');
+	const hasChoices = !!connection.choices?.length;
 	useEffect(() => {
 		if (!open) { return; }
 		const close = (event: PointerEvent) => { if (!node.current?.contains(event.target as Node)) { setOpen(false); } };
@@ -267,7 +291,7 @@ function ModelPicker({ connection }: { connection: ConnectionState }) {
 		return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('beacon-menu-open', otherMenu); };
 	}, [open]);
 	return <div className="model-picker" ref={node} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setOpen(false); } }} onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); node.current?.querySelector('button')?.focus(); } }}>
-		<button className="model-label" type="button" aria-expanded={open} onClick={() => { if (!open) { document.dispatchEvent(new CustomEvent('beacon-menu-open', { detail: 'model' })); } setOpen(!open); }} data-becoder-tooltip={t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}>{connection.displayName || connection.model || t('Select a model', '选择模型')}<Icon name="chevron" /></button>
+		<button className="model-label" type="button" aria-label={modelName} aria-expanded={hasChoices ? open : undefined} onClick={() => { if (!hasChoices) { api.postMessage({ type: 'settings' }); return; } if (!open) { document.dispatchEvent(new CustomEvent('beacon-menu-open', { detail: 'model' })); } setOpen(!open); }} data-becoder-tooltip={modelName + '\n' + t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}><span className="model-compact-icon"><Icon name="chat" /></span><span className="model-picker-name">{modelName}</span>{hasChoices && <Icon name="chevron" />}</button>
 		{open && <div className="model-picker-menu">{connection.choices?.map(model => <button type="button" key={model.provider + ':' + model.id} disabled={connection.loading} onClick={() => { setOpen(false); api.postMessage({ type: 'selectModel', provider: model.provider, id: model.id, revision: connection.revision, requestId: Date.now() }); }}><span>{model.name}<small>{providers[model.provider].name}</small></span>{connection.provider === model.provider && connection.model === model.id && <Icon name="check" />}</button>)}<button type="button" onClick={() => { setOpen(false); api.postMessage({ type: 'settings' }); }}><Icon name="settings" />{t('Manage models', '管理模型')}</button></div>}
 	</div>;
 }

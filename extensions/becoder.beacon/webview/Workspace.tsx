@@ -25,24 +25,32 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 	const [open, setOpen] = useState(false);
 	const [hovered, setHovered] = useState(false);
 	const [available, setAvailable] = useState(280);
+	const [statusWidth, setStatusWidth] = useState(28);
 	const container = useRef<HTMLDivElement>(null);
+	const statusSizing = useRef<HTMLSpanElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
 	const keyboard = useRef(false);
 	const positions = useRef(new Map<string, DOMRect>());
 	const animations = useRef<Animation[]>([]);
+	const previousHeight = useRef(0);
 	const current = context?.root;
+	const status = context?.workspaceState === 'unavailable' ? 'error' : current && context?.workspaceState === 'blackout' ? 'hidden' : undefined;
 	const previousRoot = useRef(current);
 	const ready = !!context;
 	const recent = [...new Map((context?.recent ?? []).filter(path => normalize(path) !== normalize(current ?? '')).map(path => [normalize(path), path])).values()];
-	const expanded = hovered || open;
+	const expanded = (!!status && hovered) || open;
 	const disabled = busy || !!context?.busy;
 	const close = () => { setOpen(false); setHovered(false); };
 
 	useEffect(() => {
-		const measure = () => { if (container.current) { setAvailable(Math.max(80, Math.min(420, container.current.getBoundingClientRect().right - 10))); } };
+		const measure = () => {
+			if (container.current) { setAvailable(Math.max(80, Math.min(420, container.current.getBoundingClientRect().right - 10))); }
+			if (statusSizing.current) { setStatusWidth(Math.ceil(statusSizing.current.getBoundingClientRect().width) + 40); }
+		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		if (container.current) { observer.observe(container.current); }
+		if (statusSizing.current) { observer.observe(statusSizing.current); }
 		window.addEventListener('resize', measure);
 		return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
 	}, [ready]);
@@ -66,12 +74,21 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 		animations.current.forEach(animation => animation.cancel());
 		animations.current = [];
 		const next = new Map<string, DOMRect>();
-		container.current?.querySelectorAll<HTMLElement>('[data-workspace-path]').forEach(element => {
-			const path = element.dataset.workspacePath!;
+		const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const shell = container.current?.querySelector<HTMLElement>('.workspace-picker-shell');
+		const height = shell?.getBoundingClientRect().height ?? 0;
+		if (shell && open && previousHeight.current && previousRoot.current && !current && !reducedMotion) {
+			animations.current.push(shell.animate([{ height: `${previousHeight.current}px` }, { height: `${height}px` }], { duration: 210, easing: 'cubic-bezier(.2, .8, .2, 1)' }));
+			const labels = container.current?.querySelector('.workspace-labels');
+			if (labels) { animations.current.push(labels.animate([{ opacity: 0 }, { opacity: 0, offset: .3 }, { opacity: 1 }], { duration: 210 })); }
+		}
+		previousHeight.current = height;
+		container.current?.querySelectorAll<HTMLElement>('[data-workspace-path], .workspace-add').forEach(element => {
+			const path = element.dataset.workspacePath ?? 'add';
 			const rect = element.getBoundingClientRect();
 			next.set(path, rect);
 			const previous = positions.current.get(path);
-			if (open && previous && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			if (open && previous && !reducedMotion) {
 				const dy = previous.top - rect.top;
 				if (Math.abs(dy) > 1) {
 					if (!current && previousRoot.current && path === normalize(previousRoot.current)) {
@@ -80,17 +97,18 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 						const flight = document.createElement('div');
 						flight.className = 'workspace-flight';
 						flight.setAttribute('aria-hidden', 'true');
-						flight.textContent = previousRoot.current;
-						Object.assign(flight.style, { left: `${rect.left + 7}px`, top: `${previous.top}px`, width: `${rect.width - 42}px`, height: `${rect.height}px` });
+						flight.inert = true;
+						flight.append(element.querySelector('button')!.cloneNode(true));
+						Object.assign(flight.style, { left: `${rect.left}px`, top: `${previous.top}px`, width: `${rect.width - 30}px`, height: `${rect.height}px` });
 						document.body.append(flight);
 						element.style.visibility = 'hidden';
-						const animation = flight.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-dy}px)` }], { duration: 190, easing: 'ease-out' });
+						const animation = flight.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-dy}px)` }], { duration: 210, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'both' });
 						const finish = () => { flight.remove(); element.style.visibility = ''; };
 						animation.onfinish = finish;
 						animation.oncancel = finish;
 						animations.current.push(animation);
 					} else {
-						animations.current.push(element.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 190, easing: 'ease-out' }));
+						animations.current.push(element.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 210, easing: 'cubic-bezier(.2, .8, .2, 1)' }));
 					}
 				}
 			}
@@ -100,31 +118,37 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 	}, [current, context?.recent, open]);
 	if (!context) { return null; }
 	const folder = current ? folderName(current) : undefined;
-	const status = context.workspaceState === 'unavailable' ? 'error' : current && context.workspaceState === 'blackout' ? 'hidden' : undefined;
 	const statusText = status === 'error' ? label('has a problem', '出现问题') : status === 'hidden' ? label('unused', '未使用') : '';
-	const title = folder ? status ? `${folder}${zh ? '' : ' '}${statusText}` : current! : label('Choose workspace', '选择工作区');
+	const title = folder ? status ? `${folder} ${statusText}` : current! : label('Choose workspace', '选择工作区');
 	const toggle = () => {
 		if (!open) { document.dispatchEvent(new CustomEvent('beacon-menu-open', { detail: 'workspace' })); }
 		setOpen(!open);
 	};
-	return <div className={`workspace-picker ${expanded ? 'expanded' : ''} ${open ? 'open' : ''} ${status ?? ''}`} ref={container} style={{ '--workspace-width': `${available}px` } as CSSProperties}
+	const clearCurrent = () => {
+		positions.current.clear();
+		container.current?.querySelectorAll<HTMLElement>('[data-workspace-path], .workspace-add').forEach(element => positions.current.set(element.dataset.workspacePath ?? 'add', element.getBoundingClientRect()));
+		previousHeight.current = container.current?.querySelector('.workspace-picker-shell')?.getBoundingClientRect().height ?? 0;
+		post({ type: 'clearWorkspace' });
+	};
+	return <div className={`workspace-picker ${expanded ? 'expanded' : ''} ${open ? 'open' : ''} ${status ?? ''}`} ref={container} style={{ '--workspace-width': `${available}px`, '--workspace-status-width': `${Math.min(available, statusWidth)}px` } as CSSProperties}
 		onPointerEnter={() => setHovered(true)} onPointerLeave={() => { if (!keyboard.current || !container.current?.contains(document.activeElement)) { close(); } }}
 		onPointerDown={() => { keyboard.current = false; }}
 		onFocus={event => { if (event.target.matches(':focus-visible')) { keyboard.current = true; setHovered(true); } }}
 		onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) { keyboard.current = false; close(); } }}
 		onKeyDown={event => { keyboard.current = true; if (event.key === 'Escape') { close(); trigger.current?.focus(); event.stopPropagation(); } else if (event.key === 'ArrowDown' && !open) { event.preventDefault(); toggle(); } }}>
 		<span className="workspace-sizing" aria-hidden="true">{folder ?? label('Choose workspace', '选择工作区')}</span>
+		<span className="workspace-status-sizing" ref={statusSizing} aria-hidden="true">{folder} {statusText}</span>
 		<div className="workspace-picker-shell">
 			<div className="workspace-current" data-workspace-path={current ? normalize(current) : undefined}>
-				<button ref={trigger} className={`workspace-picker-trigger ${status ?? ''}`} type="button" disabled={disabled} aria-expanded={open} aria-haspopup="dialog" aria-label={title} data-becoder-tooltip={expanded && current ? current : title} onClick={toggle}>
-					{status === 'hidden' ? <svg className="workspace-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m5 5 14 14M8 12a4 4 0 0 0 6 3M10 9a4 4 0 0 1 6 3" /></svg> : status === 'error' ? <span className="workspace-error-dot" aria-hidden="true">!</span> : <Icon name="folder" />}
+						<button ref={trigger} className={`workspace-picker-trigger ${status ?? ''}`} type="button" disabled={disabled} aria-expanded={open} aria-haspopup="dialog" aria-label={title} data-becoder-tooltip={current ?? label('Choose workspace', '选择工作区')} onClick={toggle}>
 					<span className="workspace-labels">
 						<span className="workspace-picker-name">{folder ?? label('Choose workspace', '选择工作区')}</span>
-						<span className="workspace-expanded-label">{current ? <Path path={current} /> : <span>{label('Choose workspace', '选择工作区')}</span>}{(status || !current) && <small>{current ? statusText : label('Choose to enable Spot / Flood', '选择后可使用 Spot / Flood')}</small>}</span>
+						<span className="workspace-expanded-label">{current ? <Path path={current} /> : <span>{label('Choose workspace', '选择工作区')}</span>}</span>
+						{status && <span className="workspace-status-label">{folder} {statusText}</span>}
 					</span>
-					<Icon name="chevron" />
+					{!open && (status === 'hidden' ? <svg className="workspace-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m5 5 14 14M8 12a4 4 0 0 0 6 3M10 9a4 4 0 0 1 6 3" /></svg> : status === 'error' ? <span className="workspace-status-icon workspace-error-dot" aria-hidden="true">!</span> : null)}
 				</button>
-				{open && current && <button className="workspace-remove workspace-current-remove" type="button" disabled={disabled} aria-label={label(`Stop using ${current}`, `取消使用当前工作区 ${current}`)} data-becoder-tooltip={label('Stop using this workspace', '取消使用此工作区')} onClick={() => post({ type: 'clearWorkspace' })}><Icon name="close" /></button>}
+				{open && current && <button className="workspace-remove workspace-current-remove" type="button" disabled={disabled} aria-label={label(`Stop using ${current}`, `取消使用当前工作区 ${current}`)} data-becoder-tooltip={label('Stop using this workspace', '取消使用此工作区')} onClick={clearCurrent}><Icon name="close" /></button>}
 			</div>
 			<div className="workspace-menu-reveal" inert={!open} aria-hidden={!open}>
 				<div className="workspace-picker-menu" role="dialog" aria-label={label('Beacon workspaces', 'Beacon 工作区')}>
@@ -134,7 +158,7 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 							<button className="workspace-remove" type="button" disabled={disabled} aria-label={label(`Remove ${path} from recent workspaces`, `从最近工作区移除 ${path}`)} data-becoder-tooltip={label('Remove from list', '从列表移除')} onClick={() => post({ type: 'removeRecentWorkspace', root: path })}><Icon name="close" /></button>
 						</div>)}
 					</div>
-					<button className="workspace-add" type="button" disabled={disabled} onClick={() => { close(); post({ type: 'chooseWorkspace' }); }}><Icon name="plus" />{label('Add workspace', '添加新工作区')}</button>
+					<button className="workspace-add" type="button" disabled={disabled} onClick={() => { close(); post({ type: 'chooseWorkspace' }); }}>{label('Add workspace', '添加新工作区')}</button>
 				</div>
 			</div>
 		</div>

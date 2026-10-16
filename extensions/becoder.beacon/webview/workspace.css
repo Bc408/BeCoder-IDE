@@ -1,5 +1,5 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
-.workspace-picker { position: relative; flex: 0 1 auto; width: max-content; min-width: 28px; max-width: 150px; height: 28px; font-size: 13px; }
+.workspace-picker { position: relative; flex: 0 1 auto; width: max-content; min-width: 28px; max-width: 150px; height: 28px; font-size: 12px; }
 .workspace-sizing { display: block; visibility: hidden; overflow: hidden; white-space: nowrap; padding: 4px 9px; }
 .workspace-status-sizing { position: absolute; visibility: hidden; width: max-content; white-space: nowrap; pointer-events: none; }
 .workspace-picker-shell { position: absolute; z-index: 20; top: 0; right: 0; width: 100%; min-width: 28px; border: 1px solid transparent; border-radius: 14px; transition: width 160ms cubic-bezier(.2, .8, .2, 1), background-color 100ms ease, border-radius 140ms ease; }
@@ -8,10 +8,11 @@
 .workspace-picker.open .workspace-picker-shell { overflow: hidden; border-radius: 16px; box-shadow: var(--popover-shadow); }
 .workspace-picker.open button:focus-visible { outline-offset: -2px; }
 .workspace-current { display: flex; align-items: center; min-width: 0; min-height: 28px; }
-.workspace-picker .workspace-picker-trigger, .workspace-picker .workspace-add, .workspace-picker .workspace-picker-row > button { font-size: 13px; }
-.workspace-picker .workspace-picker-trigger { display: flex; flex: 1; justify-content: flex-start; width: auto; min-width: 0; max-width: none; height: 28px; min-height: 28px; padding: 4px 7px; gap: 6px; border-radius: 999px; color: var(--chat-muted); }
+.workspace-picker .workspace-picker-trigger, .workspace-picker .workspace-add, .workspace-picker .workspace-picker-row > button { font-size: 12px; }
+.workspace-picker .workspace-picker-trigger { display: flex; flex: 1; justify-content: center; width: auto; min-width: 0; max-width: none; height: 28px; min-height: 28px; padding: 4px 7px; gap: 6px; border-radius: 999px; color: var(--chat-muted); }
 .workspace-picker.open .workspace-picker-trigger:hover { background: transparent; }
-.workspace-labels { display: grid; min-width: 0; flex: 1; text-align: left; }
+.workspace-labels { display: grid; min-width: 0; flex: 1; text-align: center; }
+.workspace-picker.open .workspace-labels { text-align: left; }
 .workspace-picker-name, .workspace-expanded-label, .workspace-status-label { grid-area: 1 / 1; min-width: 0; overflow: hidden; white-space: nowrap; transition: opacity 100ms ease; }
 .workspace-picker-name, .workspace-status-label { text-overflow: ellipsis; }
 .workspace-expanded-label { display: flex; align-items: center; opacity: 0; pointer-events: none; }

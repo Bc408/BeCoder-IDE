@@ -1,5 +1,5 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
-:root { color-scheme: light dark; --surface: var(--vscode-sideBar-background); --border: var(--vscode-widget-border, transparent); --chat-title: var(--vscode-foreground); --chat-muted: var(--vscode-descriptionForeground); --control-radius: 8px; --control-border: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); --control-hover: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); --control-selected: color-mix(in srgb, var(--vscode-focusBorder) 12%, var(--surface)); --popover-radius: 12px; --popover-shadow: 0 8px 28px var(--vscode-widget-shadow, #0003); }
+:root { color-scheme: light dark; --surface: var(--vscode-sideBar-background); --border: var(--vscode-widget-border, transparent); --chat-title: var(--vscode-foreground); --chat-muted: var(--vscode-descriptionForeground); --icon-target: 24px; --composer-tool-target: 28px; --icon-size: 16px; --control-radius: 8px; --control-border: color-mix(in srgb, var(--vscode-foreground) 12%, transparent); --control-hover: var(--vscode-list-hoverBackground, color-mix(in srgb, var(--vscode-foreground) 7%, var(--surface))); --control-selected: color-mix(in srgb, var(--vscode-foreground) 5%, transparent); --popover-radius: 12px; --popover-shadow: 0 8px 28px var(--vscode-widget-shadow, #0003); --becoder-hover-radius: 12px; }
 .vscode-dark { --chat-title: #ccc; --chat-muted: #999a9c; }
 * { box-sizing: border-box; }
 body { padding: 0; margin: 0; color: var(--vscode-foreground); background: var(--surface); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size, 13px); }
@@ -39,8 +39,8 @@ button, textarea { font: inherit; }
 .image-preview button:hover { background: #ddd; }
 .image-preview button:focus-visible { outline: 2px solid #f5f5f5; outline-offset: 3px; }
 .attachment-warning { font-size: 12px; color: var(--vscode-descriptionForeground); padding: 0 0 8px; }
-button { color: inherit; background: transparent; border: 1px solid transparent; border-radius: var(--control-radius); padding: 6px 9px; cursor: pointer; transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease; }
-button:hover { background: var(--control-hover); }
+button { color: inherit; background: transparent; border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: var(--control-radius); padding: 6px 9px; cursor: pointer; transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease; }
+button:where(:enabled):hover { background: var(--control-hover); }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
 header { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; flex: 0 0 auto; }
@@ -122,10 +122,10 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .code-language > svg { flex: 0 0 auto; width: 20px; height: 20px; }
 .code-language > span { overflow: hidden; text-overflow: ellipsis; }
 .code-actions { display: flex; flex: 0 0 auto; gap: 2px; align-items: center; }
-.code-toolbar button { display: inline-flex; width: 36px; height: 36px; padding: 0; align-items: center; justify-content: center; color: var(--chat-title); border-radius: 50%; }
-.code-toolbar button:hover, .code-toolbar button[aria-pressed="true"] { color: var(--vscode-foreground); background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); }
+.code-toolbar button { display: inline-flex; width: 28px; height: 28px; padding: 0; align-items: center; justify-content: center; color: var(--chat-muted); border-radius: 50%; }
+.code-toolbar button:hover, .code-toolbar button[aria-pressed="true"] { color: var(--vscode-foreground); background: var(--control-hover); }
 .code-toolbar button:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
-.code-toolbar button svg { width: 18px; height: 18px; }
+.code-toolbar button svg { width: var(--icon-size); height: var(--icon-size); }
 .code-toolbar .code-wrap svg { width: 16px; height: 16px; }
 .code-scroller { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .markdown .code-block pre { width: max-content; min-width: 100%; max-width: none; padding: 14px 16px; margin: 0; overflow: visible; background: transparent; border: 0; border-radius: 0; }
@@ -174,12 +174,12 @@ textarea { min-height: 40px; font-size: 14px; }
 .history-row:hover .history-open time, .history-row:has(:focus-visible) .history-open time, .history-row.confirming .history-open time { opacity: 0; }
 .history-actions { position: absolute; right: 6px; top: 50%; display: flex; align-items: center; transform: translate(3px, -50%); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 30ms linear, transform 40ms ease-out; }
 .history-row:hover .history-actions, .history-row:has(:focus-visible) .history-actions { transform: translate(0, -50%); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-.history-actions button { width: 28px; height: 28px; padding: 4px; border-radius: 50%; color: var(--vscode-descriptionForeground); overflow: hidden; white-space: nowrap; }
+.history-actions button { width: var(--icon-target); height: var(--icon-target); padding: 3px; border-radius: 50%; color: var(--chat-muted); overflow: hidden; white-space: nowrap; }
 .history-actions .history-rename { transition: width 40ms ease-out, padding 40ms ease-out, opacity 25ms linear, transform 40ms ease-out; }
 .history-row.confirming .history-rename { width: 0; padding: 0; opacity: 0; visibility: hidden; transform: scale(.75); pointer-events: none; }
 .history-actions .history-delete { transition: width 45ms ease-out, border-radius 45ms ease-out, color 35ms linear, background-color 35ms linear, transform 45ms ease-out; }
 .history-actions .delete-confirm { width: 48px; border-radius: 16px; color: var(--vscode-errorForeground, #f14c4c); background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 18%, transparent); font-size: 12px; transform: translateX(0); }
-.history-actions svg { width: 15px; height: 15px; }
+.history-actions svg { width: var(--icon-size); height: var(--icon-size); }
 .history-notice { margin: 8px 16px; padding: 10px; line-height: 1.6; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border)); border-radius: 6px; font-size: 12px; }
 .history-notice button { color: var(--vscode-textLink-foreground); }
 .model-parameters { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--vscode-panel-border, var(--border)); }
@@ -202,10 +202,10 @@ textarea { min-height: 40px; font-size: 14px; }
 .settings-link { width: 100%; margin-top: 12px; font-size: 12px; }
 .model-label { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--vscode-foreground); padding: 2px 0; }
 .composer-toolbar .send { flex-shrink: 0; }
-.message-actions { display: flex; align-items: center; gap: 2px; min-height: 26px; margin-top: 4px; color: var(--vscode-descriptionForeground); }
+.message-actions { display: flex; align-items: center; gap: 2px; min-height: var(--icon-target); margin-top: 5px; color: var(--chat-muted); }
 .message-actions time { margin: 0 4px; font-size: 11px; }
-.message-actions button { width: 26px; height: 26px; padding: 4px; color: var(--vscode-descriptionForeground); }
-.message-actions svg { width: 15px; height: 15px; }
+.message-actions button { flex: 0 0 auto; width: var(--icon-target); height: var(--icon-target); padding: 3px; border-radius: 50%; color: var(--chat-muted); }
+.message-actions svg { width: var(--icon-size); height: var(--icon-size); }
 .user-actions { justify-content: flex-end; opacity: 0; visibility: hidden; }
 .user:hover .user-actions, .user:focus-within .user-actions { opacity: 1; visibility: visible; }
 .assistant-actions time { opacity: 0; visibility: hidden; }
@@ -225,7 +225,7 @@ textarea { min-height: 40px; font-size: 14px; }
 .message-edit { width: 100%; min-height: 100px; padding: 12px 14px; border-radius: 22px; background: color-mix(in srgb, var(--vscode-foreground) 5%, var(--surface)); }
 .message-edit textarea { min-height: 40px; max-height: 180px; font-size: 13px; line-height: 1.55; color: var(--vscode-foreground); }
 .message-edit > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.message-edit button { min-height: 28px; padding: 4px 10px; border: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent); border-radius: 11px; font-size: 13px; line-height: 18px; background: var(--surface); }
+.message-edit button { min-height: 28px; padding: 4px 12px; border: 1px solid var(--control-border); border-radius: 999px; font-size: 13px; line-height: 18px; background: transparent; }
 .message-edit button:hover { background: color-mix(in srgb, var(--vscode-foreground) 7%, var(--surface)); }
 .message-edit .edit-submit { color: var(--surface); background: var(--vscode-foreground); border-color: transparent; }
 .message-edit .edit-submit:hover { background: var(--vscode-foreground); filter: brightness(1.08); }
@@ -266,17 +266,15 @@ textarea { min-height: 40px; font-size: 14px; }
 	padding: 0 12px;
 }
 .conversation-heading { display: flex; min-width: 0; align-items: center; gap: 4px; }
-.conversation-back { width: 20px; height: 28px; flex: 0 0 auto; padding: 2px; color: var(--vscode-descriptionForeground); transition: color 120ms ease-out; }
-.conversation-back:hover { background: transparent; }
-.conversation-back:not(:disabled):hover { color: var(--vscode-foreground); }
-.conversation-back svg { width: 14px; height: 14px; transition: filter 120ms ease-out; }
-.conversation-back:not(:disabled):hover svg { filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 45%, transparent)); }
-@media (prefers-reduced-motion: reduce) { .conversation-back, .conversation-back svg { transition: none; } }
-.workspace-header .conversation-title { color: var(--chat-title); font-size: 13px; font-weight: 400; }
+.conversation-back { width: 28px; height: 28px; flex: 0 0 auto; padding: 7px; border-radius: 50%; color: var(--chat-muted); transition: color 120ms ease, background-color 120ms ease; }
+.conversation-back svg { width: 14px; height: 14px; transition: filter 120ms ease; }
+.conversation-back:enabled:hover { color: var(--chat-title); background: transparent; }
+.conversation-back:enabled:hover svg { filter: drop-shadow(0 0 2px color-mix(in srgb, currentColor 45%, transparent)); }
+.workspace-header .conversation-title { color: var(--chat-title); font-size: 12px; font-weight: 400; }
 .workspace-header .chats-title { color: var(--chat-muted); }
 .workspace-header .header-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; align-items: center; gap: 2px; }
-.workspace-header .header-actions > button { flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border-radius: 50%; }
-.workspace-header .header-actions > button svg { width: 16px; height: 16px; }
+.workspace-header .header-actions > button { flex: 0 0 var(--icon-target); width: var(--icon-target); height: var(--icon-target); padding: 0; border-radius: 50%; }
+.workspace-header .header-actions > button svg { width: 15px; height: 15px; }
 .conversation-content { gap: 24px; padding: 0 16px 44px; max-width: 920px; }
 .conversation, footer { font-size: 13px; }
 .message { line-height: 1.7; }
@@ -299,19 +297,13 @@ textarea { min-height: 40px; font-size: 14px; }
 .code-toolbar button { position: relative; }
 .vscode-dark .code-block { background: #181a1e; }
 .vscode-dark .code-toolbar { background: linear-gradient(180deg, #1c1e23, #1c1f24); }
-.vscode-dark .code-toolbar button:hover, .vscode-dark .code-toolbar button[aria-pressed="true"] { background: #282c34; }
 .markdown .code-block pre { padding: 0 16px 8px; font-size: var(--vscode-editor-font-size, 14px); line-height: var(--vscode-editor-line-height, 19px); }
 .markdown .code-block pre code { font-size: inherit; }
 .thought { margin-bottom: 18px; padding-bottom: 6px; border-bottom-color: color-mix(in srgb, var(--vscode-foreground) 9%, transparent); font-size: 13px; }
 .thought-label, .reasoning-details > summary { min-height: 24px; line-height: 24px; }
 .reasoning-details > summary { display: flex; width: fit-content; padding: 0; }
-.message-actions { margin-top: 5px; gap: 4px; }
-.message-actions button { width: 28px; height: 28px; padding: 5px; border-radius: var(--control-radius); }
-.message-actions button:hover { background: color-mix(in srgb, var(--vscode-foreground) 7%, var(--surface)); }
-.message-actions svg { width: 14px; height: 14px; }
 .user-actions { position: absolute; bottom: 0; right: 0; width: max-content; min-height: 26px; margin-top: 0; }
 .message-actions time { flex: 0 0 auto; white-space: nowrap; overflow-wrap: normal; }
-.message-actions button { flex: 0 0 auto; }
 .history-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 16px; font-size: 13px; }
 .conversation[hidden] { display: none; }
 /* Keep the path from bubble to controls inside the message's hover area. */
@@ -322,9 +314,9 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .composer textarea { min-height: 37px; line-height: 1.55; overflow-y: auto; }
 .composer textarea { font-size: 13px; }
 .composer-spacer { flex: 1 1 auto; }
-.composer-toolbar .model-label { display: inline-flex; height: 28px; min-width: 0; max-width: 100%; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; color: var(--chat-muted); font-size: 12px; }
+.composer-toolbar .model-label { display: inline-flex; height: var(--composer-tool-target); min-width: 0; max-width: 100%; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; color: var(--chat-muted); font-size: 12px; }
 .model-label > svg { width: 10px; height: 10px; flex: 0 0 auto; transform: rotate(90deg); }
-.composer-toolbar .send { width: 30px; height: 30px; }
+.composer-toolbar .send { width: 28px; height: 28px; }
 .welcome { padding: 28px 16px; }
 .welcome-mark { margin-bottom: 14px; font-size: 38px; opacity: .24; }
 .welcome p { font-size: 13px; line-height: 1.65; }
@@ -342,12 +334,12 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .composer .send svg:has(path[d="m8 5 11 7-11 7Z"]) { fill: currentColor; stroke-width: 0; }
 
 .permission-control { flex: 0 0 auto; min-width: 0; }
-.composer-toolbar .add-files { flex: 0 0 auto; width: 28px; height: 28px; min-height: 28px; padding: 0; border-radius: 50%; color: var(--chat-muted); }
+.composer-toolbar .add-files { flex: 0 0 auto; width: var(--composer-tool-target); height: var(--composer-tool-target); min-height: var(--composer-tool-target); padding: 0; border-radius: 50%; color: var(--chat-muted); }
 .composer-toolbar .add-files svg { width: 18px; height: 18px; }
-.web-toggle { width: 28px; height: 28px; padding: 5px; flex: 0 0 auto; border-radius: 50%; color: var(--chat-muted); }
+.web-toggle { width: var(--composer-tool-target); height: var(--composer-tool-target); padding: 4px; flex: 0 0 auto; border-radius: 50%; color: var(--chat-muted); }
 .web-toggle svg { width: 16px; height: 16px; }
 .web-toggle[aria-pressed="true"][data-available="true"] { color: var(--vscode-textLink-foreground, var(--chat-title)); background: color-mix(in srgb, var(--vscode-textLink-foreground, var(--chat-title)) 12%, transparent); }
-.web-toggle[aria-pressed="true"][data-available="true"]:hover { background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent); }
+.web-toggle[aria-pressed="true"][data-available="true"]:hover { background: var(--control-hover); }
 .web-sources { margin: 10px 0 6px; font-size: 12px; color: var(--chat-muted); }
 .web-sources summary { display: flex; align-items: center; gap: 6px; width: fit-content; min-height: 24px; cursor: pointer; list-style: none; }
 .web-sources summary::-webkit-details-marker { display: none; }
@@ -360,16 +352,16 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .web-sources a span, .web-sources small { display: block; color: var(--chat-muted); font-size: 11px; }
 .thought-activity > span { min-width: 0; overflow-wrap: anywhere; }
 .thought-activity small { display: block; font-size: 11px; }
-.permission-trigger { min-height: 28px; gap: 5px; padding: 3px 7px; border-radius: 999px; color: var(--chat-muted); font-size: 12px; white-space: nowrap; }
-.permission-trigger svg { flex: 0 0 auto; width: 16px; height: 16px; }
+.permission-trigger { height: var(--composer-tool-target); min-height: var(--composer-tool-target); gap: 5px; padding: 3px 7px; border-radius: 999px; color: var(--chat-muted); font-size: 12px; white-space: nowrap; }
+.permission-trigger svg { flex: 0 0 auto; width: 14px; height: 14px; }
 .permission-trigger svg:last-child { width: 10px; height: 10px; transform: rotate(90deg); }
-/* Two 28px tools and their 6px gaps precede the trigger; clamp its menu to the toolbar. */
-.permission-menu { position: absolute; z-index: 5; bottom: calc(100% + 8px); left: clamp(0px, 62px, calc(100% - 304px)); width: min(304px, 100%); max-height: min(360px, calc(100vh - 100px)); overflow-y: auto; padding: 6px; border: 1px solid var(--vscode-contrastBorder, var(--control-border)); border-radius: var(--popover-radius); color: var(--chat-title); background: var(--vscode-menu-background, var(--surface)); box-shadow: var(--popover-shadow); }
+/* Anchor after the leading tools and gaps; narrow layouts clamp to the toolbar. */
+.permission-menu { position: absolute; z-index: 5; bottom: calc(100% + 8px); left: clamp(0px, calc(2 * var(--composer-tool-target) + 12px), calc(100% - 304px)); width: min(304px, 100%); max-height: min(360px, calc(100vh - 100px)); overflow-y: auto; padding: 6px; border: 1px solid var(--vscode-contrastBorder, var(--control-border)); border-radius: var(--popover-radius); color: var(--chat-title); background: var(--vscode-menu-background, var(--surface)); box-shadow: var(--popover-shadow); }
 .permission-menu-heading { padding: 5px 7px 6px; color: var(--chat-muted); font-size: 11px; font-weight: 600; }
 .permission-menu button { width: 100%; min-height: 38px; justify-content: flex-start; gap: 8px; padding: 4px 7px; text-align: left; border-radius: var(--control-radius); }
-.permission-menu button:hover { background: var(--control-hover); }
+.permission-menu button:enabled:hover { background: var(--control-hover); }
 .permission-menu button[aria-pressed="true"] { background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent); }
-.permission-menu button[aria-pressed="true"]:hover { background: var(--control-hover); }
+.permission-menu button[aria-pressed="true"]:enabled:hover { background: var(--control-hover); }
 .permission-menu button:disabled { opacity: .45; }
 .permission-menu button > svg { flex: 0 0 auto; width: 16px; height: 16px; }
 .permission-menu button > span { flex: 1; min-width: 0; }
@@ -433,14 +425,16 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .connection-hint label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .connection-hint input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--vscode-button-background); }
 .settings-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
-.settings-form-actions button { min-height: 32px; padding: 5px 12px; border-radius: var(--control-radius); background: var(--control-hover); }
+.settings-form-actions button, .settings-section-title > div > button:not(.settings-icon) { min-height: 32px; padding: 5px 12px; border-radius: 999px; background: var(--control-selected); }
+.settings-form-actions button:enabled:hover, .settings-section-title > div > button:not(.settings-icon):enabled:hover { background: var(--control-hover); }
 .settings-form-actions .settings-primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-.settings-primary:hover { filter: brightness(1.1); }
+.settings-form-actions .settings-primary:enabled:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background)); }
 .settings-section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
 .settings-section-title h2 { margin: 0; }
 .settings-section-title > div { display: flex; gap: 6px; align-items: center; }
-.settings-icon { width: 32px; height: 32px; padding: 7px; border-radius: 50%; flex-shrink: 0; color: var(--chat-muted); }
-.settings-icon:hover { background: var(--control-hover); color: var(--chat-title); }
+.settings-icon { width: var(--icon-target); height: var(--icon-target); padding: 3px; border-radius: 50%; flex-shrink: 0; color: var(--chat-muted); }
+.settings-icon svg { width: var(--icon-size); height: var(--icon-size); }
+.settings-icon:enabled:hover { background: var(--control-hover); color: var(--chat-title); }
 .models-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 .models-layout.with-editor { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
 .settings-empty { color: var(--chat-muted); font-size: 13px; line-height: 1.8; }
@@ -469,7 +463,7 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .parameter-value input[type="range"] { padding: 0; border: 0; accent-color: var(--vscode-testing-iconPassed, #36b668); }
 .parameter-value input[type="number"] { width: 110px; flex-shrink: 0; }
 .parameter-value input:only-child { width: 100%; }
-.settings-text-action { padding: 3px 0; color: var(--vscode-textLink-foreground); font-size: 12px; }
+.settings-text-action { padding: 4px 8px; margin-left: -8px; border-radius: 999px; color: var(--vscode-textLink-foreground); font-size: 12px; }
 .settings-feedback { margin-bottom: 14px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .settings-feedback.failure { color: var(--vscode-errorForeground, #f14c4c); }
 .model-picker { position: relative; flex: 0 1 auto; min-width: 72px; max-width: 55%; }
@@ -478,12 +472,12 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 .model-compact-icon { display: none; }
 @container composer (max-width: 300px) {
 	.permission-trigger > span, .permission-trigger > svg:last-child { display: none; }
-	.permission-trigger { width: 28px; height: 28px; padding: 5px; border-radius: 50%; }
+	.permission-trigger { width: var(--composer-tool-target); height: var(--composer-tool-target); padding: 4px; border-radius: 50%; }
 }
 @container composer (max-width: 260px) {
 	.model-label .model-picker-name, .model-label > svg { display: none; }
 	.model-picker { flex: 0 0 28px; min-width: 0; }
-	.composer-toolbar .model-picker .model-label { width: 28px; height: 28px; padding: 5px; border-radius: 50%; }
+	.composer-toolbar .model-picker .model-label { width: var(--composer-tool-target); height: var(--composer-tool-target); padding: 4px; border-radius: 50%; }
 	.model-compact-icon { display: flex; }
 	.model-compact-icon svg { width: 16px; height: 16px; transform: none; }
 }
@@ -491,9 +485,10 @@ footer { padding: 8px 8px 12px; max-width: 920px; }
 	.composer-toolbar { gap: 2px; }
 	.model-picker { display: none; }
 }
-.model-picker-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 5; width: min(280px, calc(100vw - 24px)); max-height: 300px; overflow-y: auto; padding: 6px; background: var(--vscode-menu-background, var(--surface)); border: 1px solid var(--control-border); border-radius: var(--popover-radius); box-shadow: var(--popover-shadow); }
+.model-picker-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 5; width: min(280px, calc(100vw - 24px)); max-height: 300px; overflow-y: auto; padding: 6px; background: var(--vscode-menu-background, var(--surface)); border: 1px solid var(--vscode-contrastBorder, var(--control-border)); border-radius: var(--popover-radius); box-shadow: var(--popover-shadow); }
 .model-picker-menu button { width: 100%; min-height: 36px; gap: 8px; justify-content: flex-start; padding: 6px 8px; text-align: left; border-radius: var(--control-radius); }
 .model-picker-menu button > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.model-picker-menu button > svg { flex: 0 0 auto; width: var(--icon-size); height: var(--icon-size); }
 .model-picker-menu small { display: block; color: var(--chat-muted); font-size: 11px; margin-top: 3px; }
 @container composer (max-width: 500px) {
 	.model-picker-menu { right: -42px; width: min(280px, calc(100vw - 16px)); }

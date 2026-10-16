@@ -74,6 +74,26 @@ try {
 	await page.screenshot({ path: path.join(output, 'chat-empty.png') });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', canSend: true, configured: true, busy: false, messages: [], connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', parameters: {}, keyConfigured: true, loading: false, error: '' } }, '*'));
 	const webToggle = page.getByRole('button', { name: '联网搜索', exact: true });
+	// The reference's cool hover surface follows the theme, including selected web search.
+	await page.setViewportSize({ width: 648, height: 1000 });
+	const referenceTheme = await page.addStyleTag({ content: ':root { --vscode-list-hoverBackground:#292d35; --vscode-sideBar-background:#21252b; --vscode-input-background:#1d1f23; }' });
+	for (const selector of ['.add-files', '.web-toggle', '.permission-trigger', '.model-label']) {
+		const control = page.locator(selector);
+		const bounds = await control.boundingBox();
+		await control.hover();
+		await page.waitForTimeout(130);
+		assert.equal(await control.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(41, 45, 53)', `${selector} uses the theme hover surface`);
+		assert.deepStrictEqual(await control.boundingBox(), bounds, 'Theme hover does not resize or move a composer control');
+		await page.locator('footer').screenshot({ path: path.join(output, `controls-hover-${selector.slice(1)}-dark.png`) });
+	}
+	const lightHoverTheme = await page.addStyleTag({ content: ':root { --vscode-list-hoverBackground:#eee; --vscode-sideBar-background:#fff; --vscode-input-background:#fafafa; --vscode-foreground:#242424; --vscode-descriptionForeground:#666; --vscode-editor-background:#fff; } .vscode-dark { --chat-muted:#666; }' });
+	await page.locator('.add-files').hover();
+	await page.waitForTimeout(130);
+	assert.equal(await page.locator('.add-files').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(238, 238, 238)', 'Composer hover follows a light theme instead of a fixed dark color');
+	await page.locator('footer').screenshot({ path: path.join(output, 'controls-hover-add-files-light.png') });
+	await lightHoverTheme.evaluate(element => element.remove());
+	await referenceTheme.evaluate(element => element.remove());
+	await page.setViewportSize({ width: 760, height: 1000 });
 	assert.equal(await webToggle.getAttribute('aria-pressed'), 'true', 'Web search defaults to on');
 	await webToggle.click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setWebEnabled', enabled: false });
@@ -166,7 +186,7 @@ try {
 	assert.equal(await page.locator('.web-toggle').evaluate(element => getComputedStyle(element).width), '28px');
 	assert.deepStrictEqual(await page.locator('.composer-toolbar').evaluate(element => Array.from(element.children).map(child => child.className)), ['add-files', 'web-toggle', 'permission-control', 'composer-spacer', 'model-picker', 'send']);
 	assert.equal(await page.locator('.add-files path').getAttribute('d'), 'M12 4v16M4 12h16');
-	assert.ok(await page.locator('.workspace-header .header-actions > button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().width >= 28)), 'Top-level icon actions keep usable click targets');
+	assert.ok(await page.locator('.workspace-header .header-actions > button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().width >= 24)), 'Top-level icon actions keep usable click targets');
 	await page.screenshot({ path: path.join(output, 'permissions-dark.png') });
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fff; --vscode-foreground:#242424; --vscode-descriptionForeground:#666; --vscode-widget-border:#ccc; --vscode-menu-background:#fff; --vscode-list-hoverBackground:#eee; --vscode-focusBorder:#007fd4; --vscode-textLink-foreground:#006ab1; --vscode-editor-background:#fff; } .vscode-dark { --chat-title:#242424; --chat-muted:#666; }' });
 	await page.locator('body').evaluate(element => element.classList.remove('vscode-dark'));
@@ -278,6 +298,41 @@ try {
 	await page.evaluate(({ text, createdAt }) => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	await page.getByRole('button', { name: '重新回答', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 2 });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
+	await page.locator('.conversation-back:enabled').waitFor();
+	for (const selector of ['.message-actions button', '.conversation-back', '.code-toolbar button']) {
+		for (const control of await page.locator(selector).all()) {
+			if (!await control.isVisible()) { continue; }
+			const bounds = await control.boundingBox();
+			await control.hover();
+			assert.deepStrictEqual(await control.boundingBox(), bounds, 'Icon hover preserves its target bounds');
+			if (selector === '.conversation-back') {
+				assert.equal(await control.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)', 'Back hover stays transparent');
+				assert.match(await control.locator('svg').evaluate(element => getComputedStyle(element).filter), /drop-shadow/, 'Back hover gives the smaller arrow a subtle glow');
+			} else {
+				assert.equal(await control.evaluate(element => getComputedStyle(element).borderRadius), '50%', `${selector} uses a circular hover surface`);
+				assert.equal(await control.locator('svg').evaluate(element => getComputedStyle(element).filter), 'none', 'Other icon hover does not add a glow');
+			}
+		}
+	}
+	await page.getByRole('button', { name: '重新回答', exact: true }).hover();
+	await page.waitForTimeout(130);
+	await page.locator('.assistant-actions').screenshot({ path: path.join(output, 'controls-message-hover-dark.png') });
+	await page.getByRole('button', { name: '复制回复', exact: true }).hover();
+	await page.waitForTimeout(130);
+	await page.locator('.assistant-actions').screenshot({ path: path.join(output, 'controls-copy-hover-dark.png') });
+	await page.evaluate(() => {
+		document.body.classList.add('vscode-high-contrast');
+		document.documentElement.style.setProperty('--vscode-contrastBorder', '#fff');
+	});
+	await page.getByRole('button', { name: '复制回复', exact: true }).focus();
+	await page.waitForTimeout(130);
+	assert.equal(await page.getByRole('button', { name: '复制回复', exact: true }).evaluate(element => getComputedStyle(element).borderTopColor), 'rgb(255, 255, 255)', 'High contrast icon controls retain an explicit boundary');
+	await page.locator('.assistant-actions').screenshot({ path: path.join(output, 'controls-message-high-contrast.png') });
+	await page.evaluate(() => {
+		document.body.classList.remove('vscode-high-contrast');
+		document.documentElement.style.removeProperty('--vscode-contrastBorder');
+	});
 	await page.evaluate(({ text, createdAt }) => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	for (const width of [760, 360]) {
 		await page.setViewportSize({ width, height: 1000 });
@@ -644,6 +699,9 @@ try {
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fafafa; --vscode-editor-background:#fff; --vscode-foreground:#292d33; --vscode-descriptionForeground:#656970; --vscode-input-background:#eee; --vscode-input-foreground:#222; --vscode-textCodeBlock-background:#f0f1f3; }' });
 	await publishAnswer(text, '检查 $n^2$。', 'complete', 18000);
 	await page.waitForSelector('.code-line');
+	await page.getByRole('button', { name: '重新回答', exact: true }).hover();
+	await page.waitForTimeout(130);
+	await page.locator('.assistant-actions').screenshot({ path: path.join(output, 'controls-message-hover-light.png') });
 	await page.screenshot({ path: path.join(output, 'light-360.png') });
 	await page.goto(`http://127.0.0.1:${server.address().port}/english`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fafafa; --vscode-foreground:#292d33; --vscode-descriptionForeground:#656970; --vscode-input-background:#eee; --vscode-input-foreground:#222; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-widget-border:#ddd; }' });

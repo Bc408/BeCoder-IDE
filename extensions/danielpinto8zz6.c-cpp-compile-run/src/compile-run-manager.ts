@@ -232,7 +232,7 @@ export class CompileRunManager implements vscode.Disposable {
 			settings: runnerSettings(),
 			inputPath,
 			ptyDimensions: pseudoterminal.programDimensions,
-			inputHelperPath: command.withInput ? path.join(this.context.extensionPath, 'dist', 'runner-input.exe') : undefined,
+			inputHelperPath: path.join(this.context.extensionPath, 'dist', 'runner-input.exe'),
 			requestStartedAt,
 			panelReadyMs,
 			saveMs: prepared.saveMs
@@ -242,6 +242,7 @@ export class CompileRunManager implements vscode.Disposable {
 				pseudoterminal.writeError(vscode.l10n.t('Beacon could not save this run evidence. Program execution is unaffected.'));
 			}),
 			write: text => pseudoterminal.writeProcessOutput(text),
+			beforeProgramStart: () => pseudoterminal.writeStatus('Compilation Successful, Running', 'success'),
 			setPhase: phase => {
 				if (!this.lifecycle.setPhase(phase)) {
 					return;
@@ -250,7 +251,6 @@ export class CompileRunManager implements vscode.Disposable {
 				if (phase === 'running') {
 					const { cols, rows } = pseudoterminal.programDimensions;
 					this.executor.resizeProgram(cols, rows);
-					pseudoterminal.writeStatus('Compilation Successful, Running', 'success');
 				}
 			}
 		});

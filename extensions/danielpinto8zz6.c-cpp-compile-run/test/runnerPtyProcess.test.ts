@@ -39,6 +39,33 @@ function dependencies(fake: FakePty): RunnerPtyProcessDependencies {
 	return { spawn: (() => fake) as unknown as RunnerPtyProcessDependencies['spawn'] };
 }
 
+test('ignores a late resize while the exited console is still draining output', () => {
+	class DrainingPty extends FakePty {
+		override resize(): void { throw new Error('Cannot resize a pty that has already exited'); }
+	}
+	const fake = new DrainingPty();
+	let exitCode: number | undefined;
+	const runner = new RunnerPtyProcess({ file: 'program.exe', args: [], cwd: '.', env: {}, cols: 80, rows: 24 }, {
+		onData: () => undefined, onExit: exit => exitCode = exit.exitCode
+	}, dependencies(fake));
+	try {
+		assert.strictEqual(runner.resize(100, 30), false);
+		fake.emitExit(7);
+		assert.strictEqual(exitCode, 7);
+	} finally { runner.dispose(); }
+});
+
+test('does not hide other resize failures in a live console', () => {
+	class BrokenPty extends FakePty {
+		override resize(): void { throw new Error('native resize failed'); }
+	}
+	const runner = new RunnerPtyProcess({ file: 'program.exe', args: [], cwd: '.', env: {}, cols: 80, rows: 24 }, {
+		onData: () => undefined, onExit: () => undefined
+	}, dependencies(new BrokenPty()));
+	try { assert.throws(() => runner.resize(100, 30), /native resize failed/); }
+	finally { runner.dispose(); }
+});
+
 test('releases queued operations when ConPTY connects before producing output', { skip: process.platform !== 'win32' }, () => {
 	class SilentConpty extends FakePty {
 		readonly _socket = new EventEmitter();

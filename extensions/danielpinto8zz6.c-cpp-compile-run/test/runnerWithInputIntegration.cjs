@@ -56,6 +56,7 @@ Module._load = originalLoad;
 			const phases = [];
 			const result = await executor.execute({ ...request, requestStartedAt: Date.now() }, {
 				write: text => { output += text; bc.writeProcessOutput(text); },
+				beforeProgramStart: () => bc.writeStatus('Compilation Successful, Running', 'success'),
 				setPhase: phase => {
 					currentPhase = phase;
 					bc.setPhase(phase);
@@ -65,7 +66,6 @@ Module._load = originalLoad;
 						fs.writeFileSync(inputPath, 'CHANGED');
 					} else {
 						assert.ok(fs.statSync(executable).isFile());
-						bc.writeStatus('Compilation Successful, Running', 'success');
 						if (cancel) { timer = setTimeout(() => executor.cancel(), 200); }
 					}
 				}

@@ -7,8 +7,10 @@ import assert from 'assert';
 import { EventEmitter as NodeEventEmitter } from 'events';
 import Module = require('module');
 import { suite, test } from 'node:test';
+import { Terminal } from '@xterm/headless';
 
 import { CommandHistory } from '../src/bcLineEditor';
+import { TerminalOutputBoundary } from '../src/terminalOutputBoundary';
 import { osc633CommandExecuted, osc633CommandFinished, osc633CommandStart, osc633PromptStart } from '../src/terminalVisuals';
 
 class MockEventEmitter<T> extends NodeEventEmitter {
@@ -35,6 +37,120 @@ const { BcTerminal } = require('../src/bcTerminal') as typeof import('../src/bcT
 (Module as unknown as { _load: (...args: unknown[]) => unknown })._load = originalLoad;
 
 suite('BC pseudoterminal protocol', () => {
+	test('drains a split automatic reply across running and ready phase changes', () => {
+		const replies: string[] = [];
+		const input: string[] = [];
+		let phase: 'compiling' | 'running' | 'ready' = 'compiling';
+		const terminal = new BcTerminal('D:\\demo', new CommandHistory(), {
+			phase: () => phase, submit: () => undefined, cancel: () => undefined,
+			programInput: text => { input.push(text); return true; },
+			terminalResponse: text => replies.push(text), busyAttempt: () => assert.fail('automatic reply'), close: () => undefined
+		});
+		terminal.setPtyInput(true);
+		terminal.handleInput('\x1b[?1;');
+		phase = 'running';
+		terminal.setPhase(phase);
+		terminal.handleInput('2c');
+		assert.deepStrictEqual(replies, ['\x1b[?1;2c']);
+		assert.deepStrictEqual(input, []);
+		terminal.handleInput('\x1b');
+		assert.deepStrictEqual(input, ['\x1b']);
+		terminal.setProgramInputEnabled(false);
+		terminal.handleInput('\x1b[12;');
+		phase = 'ready';
+		terminal.setPhase(phase);
+		terminal.handleInput('9R');
+		assert.deepStrictEqual(replies, ['\x1b[?1;2c', '\x1b[12;9R']);
+		terminal.close();
+	});
+
+	test('routes automatic terminal replies during ordinary Run startup and shutdown', () => {
+		const replies: string[] = [];
+		let busyAttempts = 0;
+		let phase: 'compiling' | 'cancelling' = 'compiling';
+		const terminal = new BcTerminal('D:\\demo', new CommandHistory(), {
+			phase: () => phase, submit: () => undefined, cancel: () => undefined,
+			programInput: () => assert.fail('program has not started'),
+			terminalResponse: text => replies.push(text), busyAttempt: () => busyAttempts++, close: () => undefined
+		});
+		terminal.setPtyInput(true);
+		terminal.handleInput('\x1b[?1;2c');
+		phase = 'cancelling';
+		terminal.handleInput('\x1b[O');
+		assert.deepStrictEqual(replies, ['\x1b[?1;2c', '\x1b[O']);
+		assert.strictEqual(busyAttempts, 0);
+		terminal.close();
+	});
+
+	test('does not mistake bundled ConPTY device replies for WithInput keyboard input', () => {
+		const replies: string[] = [];
+		let busyAttempts = 0;
+		const terminal = new BcTerminal('D:\\demo', new CommandHistory(), {
+			phase: () => 'running', submit: () => undefined, cancel: () => undefined,
+			programInput: () => assert.fail('WithInput must not accept keyboard input'),
+			terminalResponse: text => replies.push(text), busyAttempt: () => busyAttempts++, close: () => undefined
+		});
+		terminal.setPtyInput(true);
+		terminal.setProgramInputEnabled(false);
+		terminal.handleInput('\x1b[?1;');
+		terminal.handleInput('2c\x1b[12;9R');
+		terminal.handleInput('\x1b[>0;276;0c');
+		terminal.handleInput('\x1b[I');
+		terminal.handleInput('\x1b[O');
+		assert.deepStrictEqual(replies, ['\x1b[?1;2c', '\x1b[12;9R', '\x1b[>0;276;0c', '\x1b[I', '\x1b[O']);
+		assert.strictEqual(busyAttempts, 0);
+		terminal.handleInput('123\r');
+		assert.strictEqual(busyAttempts, 1);
+		terminal.close();
+	});
+
+	test('tracks horizontal and line positioning against the rendered terminal cursor', async () => {
+		for (const sequence of ['\x1b[3G', '\x1b[1G', '\x1b[4`', '\x1b[1`', '\x1b[2E', '\x1b[1F', '\x1b[2;3f', '\x1b[0;0H', '\u009b2;4H', '\r\n\x1b[2C', '\r\n\x1b[2a', '\x1b[1D', '\x1b[?25h']) {
+			const rendered = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+			try {
+				const text = 'abcdef' + sequence;
+				const tracker = new TerminalOutputBoundary();
+				let boundary = true;
+				for (const character of text) { boundary = tracker.write(character, boundary); }
+				await new Promise<void>(resolve => rendered.write(text, resolve));
+				assert.strictEqual(boundary, rendered.buffer.active.cursorX === 0, JSON.stringify(sequence));
+			} finally { rendered.dispose(); }
+		}
+	});
+
+	test('separates completion from a prompt restored by a split ConPTY screen repaint', () => {
+		let output = '';
+		const terminal = new BcTerminal('D:\\demo', new CommandHistory(), {
+			phase: () => 'running', submit: () => undefined, cancel: () => undefined,
+			programInput: () => false, busyAttempt: () => undefined, close: () => undefined
+		});
+		terminal.onDidWrite(text => output += text);
+		terminal.open();
+		// ConPTY paints the rest of the viewport before restoring the prompt cursor.
+		for (const chunk of ['\x1b[HMENU\r\nChoose: \x1b[K\r\n\x1b[K', '\x1b[2;', '9H\x1b[?25h']) {
+			terminal.writeProcessOutput(chunk);
+		}
+		const repaint = output;
+		terminal.writeStatus('Run Complete', 'success');
+		assert.ok(output.slice(repaint.length).startsWith('\r\n\x1b[92m'));
+		terminal.close();
+	});
+
+	test('does not add an empty line after a program clears and homes the cursor', () => {
+		let output = '';
+		const terminal = new BcTerminal('D:\\demo', new CommandHistory(), {
+			phase: () => 'running', submit: () => undefined, cancel: () => undefined,
+			programInput: () => false, busyAttempt: () => undefined, close: () => undefined
+		});
+		terminal.onDidWrite(text => output += text);
+		terminal.open();
+		terminal.writeProcessOutput('old text\x1b[2J\x1b[H');
+		const cleared = output;
+		terminal.writeStatus('Run Complete', 'success');
+		assert.ok(output.slice(cleared.length).startsWith('\x1b[92m'));
+		terminal.close();
+	});
+
 	test('does not insert blank lines for split ConPTY startup and trailing ANSI controls', () => {
 		let output = '';
 		const terminal = new BcTerminal('D:\\c++', new CommandHistory(), {
@@ -102,16 +218,17 @@ suite('BC pseudoterminal protocol', () => {
 		terminal.setPtyInput(true);
 		terminal.handleInput('中文\r');
 		terminal.handleInput('\x1b[D');
+		terminal.handleInput('\x1b');
 		terminal.handleInput('\x03');
 		terminal.setDimensions({ columns: 0, rows: 0 });
-		assert.deepStrictEqual(input, ['中文\r', '\x1b[D']);
+		assert.deepStrictEqual(input, ['中文\r', '\x1b[D', '\x1b']);
 		assert.strictEqual(output, '');
 		assert.strictEqual(cancellations, 1);
 		assert.deepStrictEqual(terminal.programDimensions, { cols: 100, rows: 30 });
 		assert.deepStrictEqual(sizes, [[100, 30]]);
 		terminal.setProgramInputEnabled(false);
 		terminal.handleInput('ignored');
-		assert.strictEqual(input.length, 2);
+		assert.strictEqual(input.length, 3);
 		terminal.close();
 	});
 

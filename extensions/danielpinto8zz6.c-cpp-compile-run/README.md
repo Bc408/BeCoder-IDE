@@ -13,6 +13,10 @@ stdin pipe, without terminal echo, closing the pipe at EOF. Its Windows input
 helper is compiled during application packaging and ships ready to run; it is
 never compiled on first launch. Executables are still published beside their
 source files and use the existing completion/cancellation cleanup policy.
+Both actions use the packaged native helper to initialize UTF-8 console input
+and output before starting the program. Run keeps console stdin for interactive
+input and `getch()`. Runner uses the bundled ConPTY host so UTF-8 console reads
+also work on Windows 10; native PowerShell settings are unaffected.
 Executable cleanup is independent of temporary build-directory cleanup. Cleanup
 failures identify the retained artifact; BeCoder Runner Trace records the failing
 stage and available filesystem error code. Cancellation still preserves the exe.

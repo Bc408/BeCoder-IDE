@@ -94,19 +94,25 @@ export class BcTerminal implements vscode.Pseudoterminal {
 			}
 		}
 		const phase = this.callbacks.phase();
-		// ConPTY cursor inheritance queries xterm before launching the helper.
-		// Forward only cursor reports, never keyboard text, to its console input.
-		if (phase !== 'ready' && this.ptyInput && !this.programInputEnabled) {
-			const response = this.pendingTerminalResponse + data;
+		// ConPTY queries xterm during startup and enables focus reporting.
+		// Filter automatic replies when keyboard input is blocked, including
+		// ordinary Run startup/shutdown. Running interactive programs receive
+		// raw input directly, so a lone Escape still reaches getch immediately.
+		// Finish an already buffered reply even if the lifecycle changed phase.
+		if (this.ptyInput && (this.pendingTerminalResponse.length > 0 || (phase !== 'ready' && (phase !== 'running' || !this.programInputEnabled)))) {
+			let response = this.pendingTerminalResponse + data;
 			this.pendingTerminalResponse = '';
-			if (/^\x1b\[\d{1,5};\d{1,5}R$/.test(response)) {
-				this.callbacks.terminalResponse?.(response);
-				return;
+			let reply: RegExpExecArray | null;
+			while ((reply = /^\x1b\[(?:\d{1,5};\d{1,5}R|[?>][\d;]{1,64}c|[IO])/.exec(response))) {
+				this.callbacks.terminalResponse?.(reply[0]);
+				response = response.slice(reply[0].length);
 			}
-			if (response.length < 16 && /^(?:\x1b|\x1b\[\d*(?:;\d*)?)$/.test(response)) {
+			if (!response) { return; }
+			if (response.length < 80 && /^\x1b(?:\[[?>]?[\d;]*)?$/.test(response)) {
 				this.pendingTerminalResponse = response;
 				return;
 			}
+			data = response;
 		}
 		if (phase === 'ready') {
 			if (this.applyLineEditorActions(this.lineEditor.handleInput(data), data.endsWith('\r'))) {

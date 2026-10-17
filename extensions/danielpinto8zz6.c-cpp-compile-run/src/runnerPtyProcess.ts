@@ -44,7 +44,13 @@ const defaultDependencies: RunnerPtyProcessDependencies = {
 				_socket: { once(event: string, callback: () => void): void };
 				_isReady: boolean;
 				_deferreds: Array<{ run(): void }>;
+				_agent: { _conoutSocketWorker: { dispose(): void } };
 			};
+			if ((options as IWindowsPtyForkOptions | undefined)?.useConptyDll) {
+				// beta.15 waits for another data event after kill to dispose its
+				// worker. Natural EOF has no next event and otherwise leaks it.
+				windowsPty._socket.once('close', () => windowsPty._agent._conoutSocketWorker.dispose());
+			}
 			windowsPty._socket.once('ready_datapipe', () => {
 				if (typeof windowsPty._isReady !== 'boolean' || !Array.isArray(windowsPty._deferreds)) {
 					throw new Error('Unexpected node-pty readiness state.');
@@ -94,6 +100,9 @@ export class RunnerPtyProcess implements IDisposable {
 			cols: options.cols,
 			rows: options.rows,
 			useConpty: true,
+			// Windows 10's inbox console corrupts UTF-8 cooked reads (scanf/cin).
+			// Use the already bundled console host, as the native terminal does.
+			useConptyDll: true,
 			conptyInheritCursor: options.inheritCursor ?? false,
 			name: env.TERM ?? 'BeCoder Runner'
 		};
@@ -122,8 +131,17 @@ export class RunnerPtyProcess implements IDisposable {
 		if (this.disposed || this.exited || this.killRequested || !Number.isInteger(cols) || !Number.isInteger(rows) || cols <= 0 || rows <= 0) {
 			return false;
 		}
-		this.pty.resize(cols, rows);
-		return true;
+		try {
+			this.pty.resize(cols, rows);
+			return true;
+		} catch (error) {
+			// node-pty marks its native process exited before draining output and
+			// publishing onExit. A delayed workbench resize can reach that gap.
+			if (error instanceof Error && error.message === 'Cannot resize a pty that has already exited') {
+				return false;
+			}
+			throw error;
+		}
 	}
 
 	kill(): boolean {

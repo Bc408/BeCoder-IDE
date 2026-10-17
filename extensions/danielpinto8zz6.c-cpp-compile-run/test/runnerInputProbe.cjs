@@ -17,7 +17,7 @@ async function main() {
 	const env = { SystemRoot: process.env.SystemRoot, PATH: `${path.dirname(compiler)};${process.env.SystemRoot}\\System32` };
 	const compilation = spawnSync(compiler, ['-O2', '-std=c++20', path.join(__dirname, 'runnerInputFixture.cpp'), '-o', executable], { windowsHide: true, timeout: 120000, encoding: 'utf8', env });
 	assert.strictEqual(compilation.status, 0, compilation.stderr);
-	async function run(label, data, expected = 0, cancel = false, target = executable) {
+	async function run(label, data, expected = 0, cancel = false, target = executable, interactive = false) {
 		const snapshot = path.join(root, 'input.snapshot');
 		fs.writeFileSync(snapshot, data);
 		const terminal = new Terminal({ cols: 100, rows: 30, allowProposedApi: true });
@@ -26,17 +26,19 @@ async function main() {
 		const control = new RunnerInputControl(pid => {
 			childPid = pid;
 			terminal.write('RUNNING\r\n');
+			if (interactive && data.length) { session.write(data.toString('utf8')); }
 			if (cancel) { timer = setTimeout(() => session.kill(), 500); }
 		}, () => session?.kill());
 		await control.listen();
 		try {
 			await new Promise(resolve => {
-				session = new RunnerPtyProcess({ file: helper, args: [target, snapshot, control.pipe], cwd: root, env, cols: 100, rows: 30, inheritCursor: true }, {
+				session = new RunnerPtyProcess({ file: helper, args: [target, interactive ? '--interactive' : snapshot, control.pipe], cwd: root, env, cols: 100, rows: 30, inheritCursor: true }, {
 					onData: text => { output += text; terminal.write(text); },
 					onExit: () => { session.dispose(); resolve(); }
 				});
 				terminal.onData(text => session.write(text));
 				control.armStartupTimeout();
+				if (cancel === 'early') { session.kill(); }
 			});
 			if (cancel) {
 				await control.result().catch(() => undefined);
@@ -78,6 +80,11 @@ async function main() {
 		await run('silent cancellation while feeding', Buffer.concat([Buffer.from('S'), Buffer.alloc(1024 * 1024)]), 0, true);
 		await run('descendant cancellation', Buffer.from('D'), 0, true);
 		await run('launch failure is not program exit', Buffer.alloc(0), 'helper-error', false, path.join(root, 'missing.exe'));
+		await run('interactive real exit code', Buffer.from('E\r'), 7, false, executable, true);
+		await run('interactive silent input cancellation', Buffer.alloc(0), 0, true, executable, true);
+		await run('interactive descendant cancellation', Buffer.from('D\r'), 0, true, executable, true);
+		await run('interactive cancellation before handshake', Buffer.alloc(0), 0, 'early', executable, true);
+		await run('interactive rerun after cancellation', Buffer.from('R\r'), 125, false, executable, true);
 	} finally {
 		fs.rmSync(root, { recursive: true, force: true });
 	}

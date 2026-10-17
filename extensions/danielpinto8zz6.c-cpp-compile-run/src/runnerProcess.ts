@@ -81,6 +81,8 @@ export type RunnerExecutionRequest = {
 export type RunnerExecutionCallbacks = {
 	readonly evidence?: RuntimeEvidence;
 	readonly write: (text: string) => void;
+	/** Publish Runner UI before ConPTY asks the frontend to inherit its cursor. */
+	readonly beforeProgramStart?: () => void;
 	readonly setPhase: (phase: Extract<RunnerPhase, 'compiling' | 'running'>) => void;
 };
 
@@ -177,10 +179,12 @@ export class RunnerExecutor {
 			this.throwIfCancellationRequested();
 			const inputData = request.inputPath ? await fs.promises.readFile(request.inputPath) : undefined;
 			let inputSnapshot: string | undefined;
-			if (request.inputPath && request.ptyDimensions) {
+			if (request.ptyDimensions) {
 				if (!request.inputHelperPath || !await isOrdinaryFile(request.inputHelperPath)) {
 					throw new Error('BeCoder Runner input helper is unavailable.');
 				}
+			}
+			if (request.inputPath && request.ptyDimensions) {
 				inputSnapshot = path.join(requestRoot, 'input.snapshot');
 				await fs.promises.writeFile(inputSnapshot, inputData!, { flag: 'wx' });
 			}
@@ -218,6 +222,7 @@ export class RunnerExecutor {
 				publishedExecutableIdentity = await publishExecutable(temporaryExecutable, request.source.executablePath, this.dependencies);
 				publishedExecutable = true;
 				this.throwIfCancellationRequested();
+				callbacks.beforeProgramStart?.();
 				const processRequestedAt = Date.now();
 				const programResult = request.ptyDimensions
 					? await this.runPty(request, environment, callbacks, inputSnapshot)
@@ -335,25 +340,21 @@ export class RunnerExecutor {
 	}
 
 	private async runPty(request: RunnerExecutionRequest, environment: Record<string, string>, callbacks: RunnerExecutionCallbacks, inputSnapshot?: string): Promise<ChildResult> {
-		let control: RunnerInputControl | undefined;
 		let startedAt = Date.now();
-		if (inputSnapshot) {
-			control = new RunnerInputControl(() => {
-				this.throwIfCancellationRequested();
-				startedAt = Date.now();
-				callbacks.setPhase('running');
-			}, () => this.activePty?.kill());
-		}
+		const control = new RunnerInputControl(() => {
+			this.throwIfCancellationRequested();
+			startedAt = Date.now();
+			callbacks.setPhase('running');
+		}, () => this.activePty?.kill());
 		try {
-			await control?.listen();
+			await control.listen();
 			this.throwIfCancellationRequested();
 			return await new Promise<ChildResult>((resolve, reject) => {
-				const spawnAt = Date.now();
 				const filter = new Osc633Filter();
 				let callbackError: unknown;
 				const session = new RunnerPtyProcess({
-					file: inputSnapshot ? request.inputHelperPath! : request.source.executablePath,
-					args: inputSnapshot ? [request.source.executablePath, inputSnapshot, control!.pipe] : [],
+					file: request.inputHelperPath!,
+					args: [request.source.executablePath, inputSnapshot ?? '--interactive', control.pipe],
 					cwd: request.source.directory,
 					env: environment,
 					inheritCursor: true,
@@ -372,7 +373,7 @@ export class RunnerExecutor {
 							session.kill();
 						}
 					},
-					onExit: async exit => {
+					onExit: async () => {
 						try {
 							session.dispose();
 							if (callbackError) {
@@ -380,8 +381,8 @@ export class RunnerExecutor {
 								return;
 							}
 							callbacks.write(filter.end());
-							const exitCode = control ? await control.result() : exit.exitCode;
-							resolve({ exitCode, spawnAt: control ? startedAt : spawnAt, closeAt: Date.now() });
+							const exitCode = await control.result();
+							resolve({ exitCode, spawnAt: startedAt, closeAt: Date.now() });
 						} catch (error) {
 							reject(error);
 						} finally {
@@ -393,18 +394,14 @@ export class RunnerExecutor {
 				});
 				this.activePty = session;
 				try {
-					if (control) {
-						control.armStartupTimeout();
-					} else {
-						callbacks.setPhase('running');
-					}
+					control.armStartupTimeout();
 				} catch (error) {
 					callbackError = error;
 					session.kill();
 				}
 			});
 		} finally {
-			await control?.dispose();
+			await control.dispose();
 		}
 	}
 

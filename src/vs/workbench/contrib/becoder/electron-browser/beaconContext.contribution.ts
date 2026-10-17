@@ -37,6 +37,8 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'removeRecentWorkspace': if (typeof value?.root === 'string') { return service.removeRecentWorkspace(windowId, value.root); } break;
 		case 'mode': if (value?.mode === 'blackout' || value?.mode === 'spot' || value?.mode === 'flood') { return service.setMode(windowId, value.mode); } break;
 		case 'busy': if (typeof value?.busy === 'boolean') { return service.setBusy(windowId, value.busy); } break;
+		case 'beginRuntimeActivity': return service.beginRuntimeActivity(windowId);
+		case 'endRuntimeActivity': if (typeof value?.handle === 'string') { return service.endRuntimeActivity(windowId, value.handle); } break;
 		case 'beginActivity': if (typeof value?.source === 'string') { return service.beginActivity(windowId, value.source); } break;
 		case 'endActivity': if (typeof value?.handle === 'string') { return service.endActivity(windowId, value.handle); } break;
 		case 'startRuntime': if (typeof value?.handle === 'string' && (value.producer === 'runner' || value.producer === 'cph' || value.producer === 'notebook') && typeof value.source === 'string' && typeof value.code === 'string' && Array.isArray(value.events)) { return service.startRuntime(windowId, value.handle, value.producer, value.source, value.code, value.events); } break;

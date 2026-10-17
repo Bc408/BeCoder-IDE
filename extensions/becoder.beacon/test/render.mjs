@@ -30,12 +30,14 @@ try {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.addInitScript(() => {
-		let state = { type: 'snapshot', screen: 'home', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] } };
+		let state = { type: 'snapshot', screen: 'home', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, responseBusy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] } };
 		// Produce complete current host snapshots. Individual cases patch fixture state.
 		window.fixtureSnapshot = (patch, origin) => {
 			if (patch.type !== 'snapshot') { window.postMessage(patch, origin); return; }
 			const previousView = state.viewKey;
 			state = { ...state, ...patch };
+			if (patch.busy !== undefined && patch.responseBusy === undefined) { state.responseBusy = patch.busy; }
+			if (patch.context !== undefined) { state.context = { runtimeBusy: false, ...patch.context }; }
 			if (patch.screen === undefined && patch.messages !== undefined) { state.screen = patch.messages.length ? 'conversation' : 'home'; }
 			state.viewKey = `${state.context.slot}:${state.context.root ?? ''}:${state.activeId}`;
 			if (state.viewKey !== previousView && patch.draftText === undefined) { state.draftText = ''; }
@@ -73,6 +75,42 @@ try {
 	assert.ok(await page.getByRole('button', { name: '发送', exact: true }).isDisabled());
 	await page.screenshot({ path: path.join(output, 'chat-empty.png') });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', canSend: true, configured: true, busy: false, messages: [], connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', parameters: {}, keyConfigured: true, loading: false, error: '' } }, '*'));
+	// Runtime producers block sending in both persistent and workspace-free sessions.
+	const runtimeDraft = page.getByRole('textbox', { name: '向 Beacon 提问', exact: true });
+	await runtimeDraft.fill('运行结束后由我再次发送');
+	const beforeRuntime = await page.evaluate(() => window.messages.filter(message => ['send', 'stop', 'continue'].includes(message.type)).length);
+	for (const workspace of [false, true]) {
+		for (const activity of ['context', 'runtime']) {
+			await page.evaluate(({ workspace, activity }) => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { slot: 'test', ...(workspace ? { root: 'D:/fixture' } : {}), usable: workspace, workspaceState: workspace ? 'ready' : 'none', mode: workspace ? 'spot' : 'blackout', epoch: 0, busy: activity === 'context', runtimeBusy: activity === 'runtime', recent: [] } }, '*'), { workspace, activity });
+			await page.locator('.send').waitFor();
+			await runtimeDraft.fill('运行结束后由我再次发送');
+			assert.equal(await page.getByRole('button', { name: '暂停生成', exact: true }).count(), 0, 'A producer activity never impersonates an assistant response');
+			const blockedSend = page.getByRole('button', { name: '发送', exact: true });
+			assert.ok(await blockedSend.isDisabled(), 'Producer activity disables the send arrow with or without a workspace');
+			const idleSurface = await blockedSend.evaluate(element => { const style = getComputedStyle(element); return { background: style.backgroundColor, color: style.color, opacity: style.opacity, shadow: style.boxShadow }; });
+			await blockedSend.hover();
+			await page.waitForTimeout(130);
+			assert.deepStrictEqual(await blockedSend.evaluate(element => { const style = getComputedStyle(element); return { background: style.backgroundColor, color: style.color, opacity: style.opacity, shadow: style.boxShadow }; }), idleSurface, 'Disabled send remains matte on hover');
+			await runtimeDraft.press('Enter');
+			await blockedSend.dispatchEvent('click');
+			assert.equal(await page.evaluate(() => window.messages.filter(message => ['send', 'stop', 'continue'].includes(message.type)).length), beforeRuntime, 'Disabled clicks and Enter do not send or queue an action');
+			if (activity === 'runtime') { await page.locator('footer').screenshot({ path: path.join(output, `runtime-send-disabled-${workspace ? 'workspace' : 'no-workspace'}.png`) }); }
+		}
+	}
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: true, responseBusy: true, context: { ...window.fixtureState().context, runtimeBusy: true } }, '*'));
+	await page.getByRole('button', { name: '暂停生成', exact: true }).waitFor();
+	assert.ok(await page.getByRole('button', { name: '暂停生成', exact: true }).isEnabled(), 'An actual assistant response remains pausable while a producer is active');
+	await page.getByRole('button', { name: '暂停生成', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'stop' });
+	const sendsAfterRuntime = await page.evaluate(() => window.messages.filter(message => message.type === 'send').length);
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { ...window.fixtureState().context, busy: false, runtimeBusy: false } }, '*'));
+	await page.getByRole('button', { name: '发送', exact: true }).waitFor();
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'send').length), sendsAfterRuntime, 'Completing runtime work does not automatically send the preserved draft');
+	assert.equal(await runtimeDraft.inputValue(), '运行结束后由我再次发送', 'Runtime activity preserves the draft');
+	await page.getByRole('button', { name: '发送', exact: true }).click();
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '运行结束后由我再次发送' });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] } }, '*'));
 	const webToggle = page.getByRole('button', { name: '联网搜索', exact: true });
 	// The reference's cool hover surface follows the theme, including selected web search.
 	await page.setViewportSize({ width: 648, height: 1000 });

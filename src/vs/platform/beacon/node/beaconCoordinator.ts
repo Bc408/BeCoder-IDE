@@ -33,6 +33,7 @@ interface IWindowContext {
 	usable: boolean;
 	epoch: number;
 	busy: boolean;
+	runtimeActivities: Set<string>;
 	activities: Map<string, { source: string; canonical: string; producer?: BeaconProducer }>;
 	writes: number;
 	switching: boolean;
@@ -123,7 +124,7 @@ export class BeaconCoordinator {
 		if (this.disposed || !selection) { throw new Error('beacon-window-closed'); }
 		let context = this.windows.get(id);
 		if (!context) {
-			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, busy: false, activities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
+			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, busy: false, runtimeActivities: new Set(), activities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
 			this.windows.set(id, context);
 		}
 		return context;
@@ -150,7 +151,7 @@ export class BeaconCoordinator {
 		const mode = context.usable ? context.selection.mode : 'blackout';
 		const workspaceState = !context.selection.root ? 'none' : !context.usable ? 'unavailable' : mode === 'blackout' ? 'blackout' : 'ready';
 		return { slot: context.selection.slot, root: context.selection.root, usable: context.usable, workspaceState, mode, epoch: context.epoch,
-			busy: context.busy || context.activities.size > 0 || context.writes > 0 || context.switching || this.ownsNotebookEdit(context), activeId: context.active?.id, recent: [...this.callbacks.getRecent()] };
+			runtimeBusy: context.runtimeActivities.size > 0, busy: context.busy || context.runtimeActivities.size > 0 || context.activities.size > 0 || context.writes > 0 || context.switching || this.ownsNotebookEdit(context), activeId: context.active?.id, recent: [...this.callbacks.getRecent()] };
 	}
 	private ownsNotebookEdit(context: IWindowContext): boolean { return [...this.notebookOwners].some(([handle, value]) => value.owner === context.resourceOwner && this.notebookScopes.has(handle)); }
 
@@ -193,15 +194,15 @@ export class BeaconCoordinator {
 
 	async selectWorkspace(id: number, root: string): Promise<IBeaconContext> {
 		const current = this.window(id);
-		if (current.busy || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
+		if (current.busy || current.runtimeActivities.size || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
 		return this.serial(id, false, async context => {
-			if (context.busy || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
+			if (context.busy || context.runtimeActivities.size || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
 			context.switching = true;
 			try {
 				const binding = await prepareBeaconWorkspace(root, true);
 				const store = new BeaconStore(binding);
 				await store.listHistory();
-				if (context.busy || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
+				if (context.busy || context.runtimeActivities.size || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
 				await this.release(context);
 				context.selection = { slot: context.selection.slot, root, mode: context.selection.root ? context.selection.mode : 'spot', identity: binding.identity };
 				context.store = store; context.usable = true; context.epoch++;
@@ -229,9 +230,9 @@ export class BeaconCoordinator {
 
 	async clearWorkspace(id: number): Promise<IBeaconContext> {
 		const current = this.window(id);
-		if (current.busy || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
+		if (current.busy || current.runtimeActivities.size || current.activities.size || current.writes || current.switching || this.ownsNotebookEdit(current)) { throw new Error('beacon-busy'); }
 		return this.serial(id, false, async context => {
-			if (context.busy || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
+			if (context.busy || context.runtimeActivities.size || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
 			context.switching = true;
 			try {
 				const root = context.selection.root;
@@ -260,6 +261,16 @@ export class BeaconCoordinator {
 		if (typeof busy !== 'boolean') { throw new Error('beacon-invalid-context'); }
 		const context = this.window(id);
 		if (context.busy !== busy) { context.busy = busy; this.callbacks.changed(id); }
+	}
+
+	/** Runtime occupancy is window-local and does not grant access to persistent evidence. */
+	beginRuntimeActivity(id: number): string {
+		const context = this.window(id); const handle = randomUUID();
+		context.runtimeActivities.add(handle); this.callbacks.changed(id); return handle;
+	}
+	endRuntimeActivity(id: number, handle: string): void {
+		const context = this.window(id);
+		if (context.runtimeActivities.delete(handle)) { this.callbacks.changed(id); }
 	}
 
 	async beginActivity(id: number, source: string): Promise<string | undefined> {
@@ -471,7 +482,7 @@ export class BeaconCoordinator {
 			await this.notebooks.reset(context.resourceOwner);
 			for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
 			context.resourceOwner = ++this.nextResourceOwner;
-			context.activities.clear(); context.busy = false; context.epoch++;
+			context.activities.clear(); context.runtimeActivities.clear(); context.busy = false; context.epoch++;
 			await this.release(context);
 		});
 	}

@@ -394,6 +394,31 @@ suite('Beacon window context and conversation ownership', () => {
 			assert.deepEqual((await service.getContext(1)).recent, [b, a]);
 		} finally { await service.dispose(); }
 	}));
+	test('runtime occupancy is independent of persistence, window ownership and Beacon own busy', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			const first = await service.beginRuntimeActivity(1); const second = await service.beginRuntimeActivity(1);
+			assert.equal((await service.getContext(1)).runtimeBusy, true);
+			assert.equal((await service.getContext(2)).runtimeBusy, false);
+			await assert.rejects(service.selectWorkspace(1, root), /busy/);
+			await service.endRuntimeActivity(2, first);
+			await service.endRuntimeActivity(1, first);
+			assert.equal((await service.getContext(1)).runtimeBusy, true);
+			await service.endRuntimeActivity(1, second);
+			service.setBusy(1, true);
+			assert.equal((await service.getContext(1)).runtimeBusy, false);
+			assert.equal((await service.getContext(1)).busy, true);
+			service.setBusy(1, false); await service.selectWorkspace(1, root); await service.setMode(1, 'blackout');
+			const blackout = await service.beginRuntimeActivity(1);
+			assert.equal((await service.getContext(1)).runtimeBusy, true);
+			await service.resetWindow(1);
+			const replacement = await service.beginRuntimeActivity(1);
+			await service.endRuntimeActivity(1, blackout);
+			assert.equal((await service.getContext(1)).runtimeBusy, true);
+			await service.endRuntimeActivity(1, replacement);
+			assert.equal((await service.getContext(1)).runtimeBusy, false);
+		} finally { await service.dispose(); }
+	}));
 	test('related tasks keep the root busy until every handle finishes; foreign files do not', async () => fixture(async parent => {
 		const a = path.join(parent, 'a'); const b = path.join(parent, 'b'); await fs.mkdir(a); await fs.mkdir(b);
 		const inside = path.join(a, 'source.txt'); const outside = path.join(b, 'source.txt'); await fs.writeFile(inside, 'source'); await fs.writeFile(outside, 'outside');

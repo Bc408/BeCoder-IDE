@@ -1,5 +1,9 @@
 # Beacon
 
+Runner, CPH and Notebook execution activities disable Beacon sending until their necessary cleanup and any applicable evidence persistence finish, including when no Beacon workspace is selected. The composer keeps a muted disabled send arrow; only an actual Beacon response shows Pause. Rejected sends are not queued or replayed. Runtime occupancy is separate from persistence eligibility: a missing workspace does not create persistent evidence assets.
+
+Runner、CPH 和 Notebook 运行活动在必要清理及适用的证据收尾完成前禁止 Beacon 发送，无工作区时也适用。输入区保留暗淡的禁用发送箭头，只有真实 Beacon 回答任务才显示暂停。被拒绝的发送不排队、不补发；运行占用与持久化资格独立，无工作区不创建持久化上下文资产。
+
 `inspectContext` reading results carry one `source` object with the page version or runtime revision/producer, origin, capture time, representation hash and, when available, compiler-source hash. Hashes identify captured evidence before redaction and pagination; they do not prove correctness or completeness. `truncated` describes the returned range; `source.partial` describes known capture omissions and is absent when full coverage is not established. Actionable owned error codes reach the activity UI in English and Chinese; raw exceptions do not. Personal-information network permission is prompt guidance, without an extra host permission ledger or approval gate.
 
 `inspectContext` 阅读结果统一提供 `source`：页面版本或运行 revision/生产者、来源、捕获时间、完整读取表示的哈希与可得的编译源码哈希。哈希标识脱敏/分页前的证据，不证明正确或完整；`truncated` 表示当前返回范围，`source.partial` 表示已知采集缺失，不能确认完整时不提供该标记。已知错误码进入中英文活动反馈，不展示原始异常。联网个人信息许可由 prompt 引导，不额外建立宿主许可凭据或审批门。

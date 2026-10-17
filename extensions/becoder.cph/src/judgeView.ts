@@ -197,7 +197,13 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		this.savingSamples = request.command === 'save';
 		let failed = false;
 		let beaconActivity: string | undefined;
+		let runtimeActivity: string | undefined;
 		try {
+			if (request.command === 'run' || request.command === 'compile') {
+				try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
+				catch (error) { console.warn('Beacon CPH runtime tracking unavailable', error); }
+			}
+
 			if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before running samples.')); }
 			if (request.customCheckerPath !== undefined && typeof request.customCheckerPath !== 'string') { throw new Error(vscode.l10n.t('Invalid sample request.')); }
 			if (typeof request.revision !== 'string' || (request.id !== undefined && !Number.isSafeInteger(request.id))) {
@@ -258,6 +264,10 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			if (beaconActivity) {
 				try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: beaconActivity }); }
 				catch (error) { console.warn('Beacon CPH activity release unavailable', error); }
+			}
+			if (runtimeActivity) {
+				try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endRuntimeActivity', { handle: runtimeActivity }); }
+				catch (error) { console.warn('Beacon CPH runtime release unavailable', error); }
 			}
 			this.busy = false;
 			this.savingSamples = false;

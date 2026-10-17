@@ -15,6 +15,7 @@ export interface IBeaconContext {
 	mode: BeaconMode;
 	epoch: number;
 	busy: boolean;
+	runtimeBusy: boolean;
 	activeId?: string;
 	recent: string[];
 }

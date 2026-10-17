@@ -16,7 +16,7 @@ const configuration = event<{ affectsConfiguration(key: string): boolean }>();
 export const values = new Map<string, unknown>();
 export const controls: { updateError?: Error; secretError?: Error } = {};
 export const commandHandlers = new Map<string, (...args: unknown[]) => unknown>();
-export let beaconContext: IBeaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
+export let beaconContext: IBeaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
 export const beaconConversations = new Map<string, IBeaconStoredConversation>();
 export const beaconResumes = new Map<string, IBeaconResume>();
 export const commandCalls: { id: string; args: unknown[] }[] = [];
@@ -73,7 +73,7 @@ export function reset(directory: string) {
 	data.selection = { provider: 'deepseek', model: 'deepseek-flash' };
 	values.set('modelConfiguration', data); values.set('webEnabled', false); values.set('filePermission', 'workspace');
 	workspace.workspaceFolders = [{ name: 'root', uri: Uri.file(directory) }]; workspace.textDocuments = [];
-	beaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] }; beaconConversations.clear(); beaconResumes.clear();
+	beaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] }; beaconConversations.clear(); beaconResumes.clear();
 	commandHandlers.set('_becoder.beacon.context', (operation, argument) => {
 		const input = argument as { root: string; busy: boolean; mode: IBeaconContext['mode']; id: string; create: boolean; data: IBeaconConversation; revision: number; title: string };
 		const key = (id: string) => `${beaconContext.root}:${id}`;

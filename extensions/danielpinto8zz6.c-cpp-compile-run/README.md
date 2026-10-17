@@ -17,6 +17,10 @@ Executable cleanup is independent of temporary build-directory cleanup. Cleanup
 failures identify the retained artifact; BeCoder Runner Trace records the failing
 stage and available filesystem error code. Cancellation still preserves the exe.
 
+Concurrent Run requests are rejected immediately and are never queued or replayed.
+The final `Executable Program Removed` message is published in the same synchronous
+completion step that releases Runner, after applicable evidence and activity cleanup.
+
 The BC panel is a BeCoder-owned pseudoterminal. It is not PowerShell and does not execute arbitrary shell commands. Its accepted command set is `run <source>`, `run <source> -WithInput`, `clear`, and `help`.
 
 The bundled compiler, child environment, command parser, process cancellation, and command history are private to BeCoder Runner. Native PowerShell remains a separate terminal with the user's normal system environment.

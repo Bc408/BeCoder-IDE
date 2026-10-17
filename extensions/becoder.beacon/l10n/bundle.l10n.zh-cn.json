@@ -67,5 +67,6 @@
 	"Another window is saving this workspace data. Try again shortly.": "另一个窗口正在保存此工作区的数据，请稍后重试。",
 	"Could not identify local files in this drop. Use Add files or paste an image.": "无法从此次拖入中识别本地文件，请使用“添加文件”或粘贴图片。",
 	"PDF selection": "PDF 选区",
-	"The selected page is no longer available. Select the text again.": "选区页面已不可用，请重新选择文字。"
+	"The selected page is no longer available. Select the text again.": "选区页面已不可用，请重新选择文字。",
+	"Wait for the current run to finish before sending to Beacon.": "请等待当前运行任务完成后再向 Beacon 发送。"
 }

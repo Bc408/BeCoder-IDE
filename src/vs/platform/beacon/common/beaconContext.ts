@@ -20,6 +20,8 @@ export interface IBeaconContextService {
 	removeRecentWorkspace(windowId: number, root: string): Promise<IBeaconContext>;
 	setMode(windowId: number, mode: BeaconMode): Promise<IBeaconContext>;
 	setBusy(windowId: number, busy: boolean): Promise<void>;
+	beginRuntimeActivity(windowId: number): Promise<string>;
+	endRuntimeActivity(windowId: number, handle: string): Promise<void>;
 	beginActivity(windowId: number, source: string): Promise<string | undefined>;
 	endActivity(windowId: number, handle: string): Promise<void>;
 	reportNotebooks(windowId: number, files: { file: string; dirty: boolean }[]): Promise<void>;

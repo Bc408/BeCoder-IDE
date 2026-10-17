@@ -23,6 +23,8 @@ const runnerName = 'BeCoder Runner';
 type ActiveRequest = {
 	cancelled: boolean;
 	beaconActivity?: string;
+	runtimeActivity?: string;
+	showExecutableRemoved?: boolean;
 	exitCode?: number;
 	readonly pseudoterminal: BcTerminal;
 };
@@ -105,6 +107,7 @@ export class CompileRunManager implements vscode.Disposable {
 			return;
 		}
 		try {
+			request.runtimeActivity = await this.beginRuntimeActivity();
 			request.beaconActivity = await this.beginBeaconActivity(vscode.window.activeTextEditor?.document.uri.fsPath);
 			const panelStartedAt = Date.now();
 			terminal.show(false);
@@ -128,8 +131,11 @@ export class CompileRunManager implements vscode.Disposable {
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
-			await this.endBeaconActivity(request);
-			this.finishRequest(request);
+			try { await this.endBeaconActivity(request); }
+			finally {
+				try { await this.endRuntimeActivity(request); }
+				finally { this.finishRequest(request); }
+			}
 		}
 	}
 
@@ -165,6 +171,7 @@ export class CompileRunManager implements vscode.Disposable {
 		}
 		const requestStartedAt = Date.now();
 		try {
+			request.runtimeActivity = await this.beginRuntimeActivity();
 			const sourcePath = resolveCommandSource(parsed.command.source, pseudoterminal.cwd);
 			request.beaconActivity = await this.beginBeaconActivity(sourcePath);
 			const prepared = await prepareCommandSource(sourcePath);
@@ -173,9 +180,23 @@ export class CompileRunManager implements vscode.Disposable {
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
-			await this.endBeaconActivity(request);
-			this.finishRequest(request);
+			try { await this.endBeaconActivity(request); }
+			finally {
+				try { await this.endRuntimeActivity(request); }
+				finally { this.finishRequest(request); }
+			}
 		}
+	}
+
+	private async beginRuntimeActivity(): Promise<string | undefined> {
+		try { return await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
+		catch (error) { this.trace.warn('Beacon runtime tracking unavailable', error); return undefined; }
+	}
+
+	private async endRuntimeActivity(request: ActiveRequest): Promise<void> {
+		if (!request.runtimeActivity) { return; }
+		try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endRuntimeActivity', { handle: request.runtimeActivity }); }
+		catch (error) { this.trace.warn('Beacon runtime release unavailable', error); }
 	}
 
 	private async beginBeaconActivity(source: string | undefined): Promise<string | undefined> {
@@ -263,7 +284,7 @@ export class CompileRunManager implements vscode.Disposable {
 				pseudoterminal.writeFlowFailure(presentation.flowFailure.title, presentation.flowFailure.description);
 			}
 			if (presentation.showExecutableRemoved) {
-				pseudoterminal.writeStatus('Executable Program Removed', 'success');
+				request.showExecutableRemoved = true;
 			}
 		});
 		if (!presented) {
@@ -308,6 +329,7 @@ export class CompileRunManager implements vscode.Disposable {
 		this.lifecycle.finish();
 		this.activeRequest = undefined;
 		if (!this.disposed && this.terminals.has(request.pseudoterminal)) {
+			if (request.showExecutableRemoved && !request.cancelled) { request.pseudoterminal.writeStatus('Executable Program Removed', 'success'); }
 			request.pseudoterminal.setPhase('ready');
 			request.pseudoterminal.setProgramInputEnabled(true);
 			request.pseudoterminal.finishCommand(request.exitCode);

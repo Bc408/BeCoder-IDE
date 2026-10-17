@@ -30,7 +30,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
+type State = Snapshot & { responseBusy?: boolean; context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -171,7 +171,7 @@ function App() {
 		const timer = setTimeout(() => setCopied(undefined), 1800);
 		return () => clearTimeout(timer);
 	}, [copied]);
-	const busy = state.busy || pending || pasting || !!state.context?.busy;
+	const busy = state.busy || pending || pasting || !!state.context?.busy || !!state.context?.runtimeBusy;
 	const pasteImages = (event: ClipboardEvent<HTMLTextAreaElement>) => {
 		let files = [...event.clipboardData.files].filter(file => file.type.startsWith('image/'));
 		if (!files.length) { files = [...event.clipboardData.items].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file); }
@@ -253,7 +253,7 @@ function App() {
 					</>}
 				</article>)}
 			</ConversationContent>
-			<ConversationScrollButton label={t('Back to bottom', '回到底部')} streaming={busy} />
+			<ConversationScrollButton label={t('Back to bottom', '回到底部')} streaming={!!state.responseBusy} />
 		</Conversation>
 		<footer>
 			{!failedReply && state.error && <div className={temporaryFailure ? 'connection-notice' : 'error'} role="alert">{temporaryFailure && <Icon name="info" />}{state.error}</div>}
@@ -269,7 +269,7 @@ function App() {
 					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} busy={busy} post={message => api.postMessage(message)} />
 					<span className="composer-spacer" aria-hidden="true" />
 					<ModelPicker connection={state.connection} />
-					{busy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={!ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
+					{state.responseBusy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={busy || !ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
 				</div>
 			</form>
 		</footer>

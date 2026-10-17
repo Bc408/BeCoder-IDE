@@ -36,6 +36,66 @@ async function until(condition: () => boolean, label = '') {
 }
 
 suite('Beacon attachments', () => {
+	for (const newerText of ['unsent question', 'edited while preparing']) {
+	test('a run starting during final draft persistence preserves ' + newerText, async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+		let requests = 0; globalThis.fetch = async () => { requests++; return response(); };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; draftText: string; attachments: Attachment[] };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy);
+			const file = path.join(directory, 'main.cpp'); await fs.writeFile(file, 'int main() {}');
+			view.drop({ uris: [mock.Uri.file(file)], source: 'external' }); await until(() => snapshot().attachments.length === 1 && !snapshot().busy);
+			view.receive({ type: 'draft', text: 'unsent question', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'unsent question');
+			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
+			let started = false;
+			mock.commandHandlers.set('_becoder.beacon.context', (...args: unknown[]) => {
+				if (args[0] === 'view' && !started && snapshot().draftText === newerText) { started = true; mock.beaconContext.runtimeBusy = true; }
+				return native(...args);
+			});
+			view.receive({ type: 'send', text: 'unsent question' });
+			if (newerText !== 'unsent question') { view.receive({ type: 'draft', text: newerText, viewKey: snapshot().viewKey }); }
+			await until(() => started && !snapshot().busy);
+			assert.equal(requests, 0, 'A runtime starting at the final persistence boundary still blocks generation');
+			assert.equal(snapshot().messages.length, 0);
+			assert.equal(snapshot().draftText, newerText);
+			assert.equal(snapshot().attachments.length, 1);
+		} finally { globalThis.fetch = originalFetch; await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
+	}
+	test('actual host rejects stale runtime sends and response actions without replaying them after release', async () => fixture(async directory => {
+		for (const persistent of [false, true]) {
+			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+			let requests = 0;
+			globalThis.fetch = async () => { requests++; return response(); };
+			const snapshots = () => view.messages.filter(message => message.type === 'snapshot');
+			const snapshot = () => snapshots().at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; draftText: string; responseBusy: boolean; context: { runtimeBusy: boolean } };
+			try {
+				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+				if (persistent) { view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy); }
+				view.receive({ type: 'send', text: 'first question' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+				const before = structuredClone(snapshot().messages);
+				view.receive({ type: 'draft', text: 'keep this draft', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'keep this draft');
+				// No contextChanged notification: the displayed snapshot is deliberately stale.
+				mock.beaconContext.runtimeBusy = true;
+				for (const action of [{ type: 'send', text: 'keep this draft' }, { type: 'regenerate', id: before[1].id }, { type: 'continue', id: before[1].id }, { type: 'edit', id: before[0].id, text: 'replacement' }]) {
+					const count = snapshots().length; view.receive(action);
+					await until(() => snapshots().length > count && !snapshot().busy);
+					assert.equal(snapshot().responseBusy, false);
+					assert.deepStrictEqual(snapshot().messages, before);
+					assert.equal(snapshot().draftText, 'keep this draft');
+					assert.equal(requests, 1, 'No blocked action reaches the provider');
+				}
+				mock.beaconContext.runtimeBusy = false;
+				await mock.commands.executeCommand('_becoder.beacon.contextChanged');
+				assert.equal(requests, 1, 'Releasing activity never replays a rejected action');
+				view.receive({ type: 'send', text: 'keep this draft' }); await until(() => snapshot().messages.length === 4 && snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+				assert.equal(requests, 2);
+			} finally { globalThis.fetch = originalFetch; await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+		}
+	}));
 	test('workspace text draft survives navigation and restart without becoming history', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; screen: string; activeId: string; history: unknown[]; homeHasDraft: boolean; configured: boolean };

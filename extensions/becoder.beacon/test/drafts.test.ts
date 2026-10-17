@@ -12,7 +12,7 @@ import type { Attachment } from '../src/attachments';
 
 const attachment: Attachment = { id: 'one', path: 'C:\\chosen\\main.cpp', source: 'picker', name: 'main.cpp', kind: 'text', contents: 'int main() {}', truncated: false };
 const conversation = (): Conversation => ({ id: 'draft-one', title: '', updatedAt: 1, messages: [], error: '', workspace: [], draftOnly: true });
-const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, recent: [] };
+const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
 
 suite('Beacon conversation drafts', () => {
 	test('persists draft attachments and text without exposing an empty conversation in history', async () => {

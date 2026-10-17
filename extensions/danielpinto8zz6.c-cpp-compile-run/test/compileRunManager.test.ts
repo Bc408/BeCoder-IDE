@@ -4,6 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
+import { createRequire } from 'module';
+import { runInNewContext } from 'vm';
+import { RunnerLifecycle } from '../src/runnerLifecycle';
 import { EventEmitter as NodeEventEmitter } from 'events';
 import Module = require('module');
 import { suite, test } from 'node:test';
@@ -155,4 +160,59 @@ function assertClears(pseudoterminal: InstanceType<typeof BcTerminal>): void {
 	pseudoterminal.onDidWrite((value: string) => output += value);
 	pseudoterminal.handleInput('clear\r');
 	assert.ok(output.includes('\x1b[2J\x1b[3J\x1b[H'));
+}
+
+for (const withInput of [false, true]) {
+	test(`Runner ${withInput ? 'Run With Input' : 'Run'} rejects repeats through evidence retirement and unlocks with final output`, async () => {
+		let releaseEvidence!: () => void; let evidenceRetiring!: () => void;
+		const evidence = new Promise<void>(resolve => { releaseEvidence = resolve; });
+		const retiring = new Promise<void>(resolve => { evidenceRetiring = resolve; });
+		const statuses: string[] = []; let executions = 0; let rejected = 0; let runtimeEnds = 0;
+		const source = { path: 'C:\\project\\main.cpp', executablePath: 'C:\\project\\main.exe', language: 'cpp' };
+		const modulePath = path.resolve(__dirname, '../src/compile-run-manager.js');
+		const originalRequire = createRequire(modulePath); const compiled = { exports: {} as any };
+		const api = { workspace: {}, window: { activeTextEditor: { document: { fileName: source.path, uri: { fsPath: source.path } } } }, commands: { executeCommand: async (_command: string, operation: string) => {
+			if (operation === 'beginRuntimeActivity') { return 'runtime'; }
+			if (operation === 'beginActivity') { return 'evidence'; }
+			if (operation === 'endActivity') { evidenceRetiring(); await evidence; }
+			if (operation === 'endRuntimeActivity') { runtimeEnds++; }
+			return undefined;
+		} }, l10n: { t: (text: string) => text } };
+		runInNewContext(fs.readFileSync(modulePath, 'utf8'), { exports: compiled.exports, require: (name: string) => {
+			if (name === 'vscode') { return api; }
+			if (name === './compiler') { return { prepareActiveSource: async () => ({ source, saveMs: 0 }), exactInputPath: async () => 'input', bundledCompiler: () => 'g++', runnerSettings: () => ({}) }; }
+			if (name === './runnerProcess') { return { finalizePublishedExecutable: (result: unknown) => result }; }
+			if (name === './runnerPresentation') { return { presentRunnerResult: () => ({ outcome: 'run-complete', exitCode: 0, showExecutableRemoved: true }) }; }
+			if (name === './bcTerminal') { return {}; }
+			return originalRequire(name);
+		} });
+		const manager = Object.create(compiled.exports.CompileRunManager.prototype);
+		const terminal = { cwd: 'C:\\project', waitForOpen: async () => 0, echoCommand() {}, setPhase() {}, setProgramInputEnabled() {}, setPtyInput() {}, finishCommand() {}, performWhileOpen: (run: () => void) => { run(); return true; }, writeStatus: (status: string) => {
+			statuses.push(status);
+			if (status === 'Executable Program Removed') { assert.equal(manager.lifecycle.busy, false); assert.equal(runtimeEnds, executions); }
+		} };
+		Object.assign(manager, { context: { extensionPath: '' }, history: { record() {} }, lifecycle: new RunnerLifecycle(), terminals: new Map([[terminal, {}]]), trace: { warn() {} }, executor: { execute: async () => { executions++; return { status: 'completed' }; } }, ensureTerminal: () => ({ terminal: { show() {} }, pseudoterminal: terminal }), traceResult() {}, rejectBusy: () => { rejected++; } });
+		const first = manager.run(withInput); await retiring;
+		assert.equal(statuses.includes('Executable Program Removed'), false);
+		await Promise.all([manager.run(false), manager.run(true), manager.run(false)]);
+		assert.equal(rejected, 3); assert.equal(executions, 1);
+		releaseEvidence(); await first;
+		assert.equal(statuses.at(-1), 'Executable Program Removed');
+		await manager.run(withInput); assert.equal(executions, 2); assert.equal(rejected, 3);
+		// Release failures, including an unavailable log channel, must still retire the local request.
+		manager.endRuntimeActivity = async () => { runtimeEnds++; throw new Error('release tracking failed'); };
+		await assert.rejects(manager.run(withInput), /release tracking failed/);
+		assert.equal(manager.lifecycle.busy, false);
+		manager.endRuntimeActivity = async () => { runtimeEnds++; };
+		manager.executor.execute = async () => { manager.activeRequest.cancelled = true; return { status: 'cancelled' }; };
+		const beforeCancellation = statuses.length;
+		await manager.run(withInput);
+		assert.equal(statuses.length, beforeCancellation);
+		assert.equal(manager.lifecycle.busy, false);
+		manager.executor.execute = async () => { throw new Error('execution failed'); };
+		manager.handleRequestError = () => { };
+		await manager.run(withInput);
+		assert.equal(manager.lifecycle.busy, false);
+		assert.equal(statuses.length, beforeCancellation);
+	});
 }

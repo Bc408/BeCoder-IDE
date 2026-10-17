@@ -52,7 +52,7 @@ export function withPdfPages(native: (operation: string, input?: unknown) => Pro
 }
 
 export class BeaconContextClient {
-	state: IBeaconContext = { slot: 'initial', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
+	state: IBeaconContext = { slot: 'initial', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
 	constructor(private readonly transport: (operation: string, input?: unknown) => Promise<unknown>) { }
 	private call<T>(operation: string, input?: unknown): Promise<T> { return this.transport(operation, input) as Promise<T>; }
 	get consumingWorkspace(): boolean { return this.state.usable && this.state.mode !== 'blackout'; }
@@ -61,7 +61,7 @@ export class BeaconContextClient {
 
 	private accept(value: unknown): IBeaconContext {
 		const state = value as IBeaconContext;
-		if (!state || typeof state.slot !== 'string' || !state.slot || typeof state.usable !== 'boolean' || typeof state.busy !== 'boolean' || !Number.isSafeInteger(state.epoch) || state.epoch < 0
+		if (!state || typeof state.slot !== 'string' || !state.slot || typeof state.usable !== 'boolean' || typeof state.busy !== 'boolean' || typeof state.runtimeBusy !== 'boolean' || !Number.isSafeInteger(state.epoch) || state.epoch < 0
 			|| !Array.isArray(state.recent) || state.recent.some(root => typeof root !== 'string') || (state.root !== undefined && typeof state.root !== 'string')
 			|| !['none', 'ready', 'blackout', 'unavailable'].includes(state.workspaceState)
 			|| (!state.root ? state.usable || state.mode !== 'blackout' || state.workspaceState !== 'none'
@@ -71,6 +71,10 @@ export class BeaconContextClient {
 	}
 
 	async refresh(): Promise<IBeaconContext> { return this.accept(await this.call('context')); }
+	async refreshForRequest(): Promise<void> {
+		await this.refresh();
+		if (this.state.runtimeBusy) { throw new Error('beacon-runtime-busy'); }
+	}
 	async select(root: string): Promise<IBeaconContext> { return this.accept(await this.call('select', { root })); }
 	async clearWorkspace(): Promise<IBeaconContext> { return this.accept(await this.call('clearWorkspace')); }
 	async removeRecentWorkspace(root: string): Promise<IBeaconContext> { return this.accept(await this.call('removeRecentWorkspace', { root })); }

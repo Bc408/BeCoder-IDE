@@ -16,9 +16,22 @@ import { resolveCapabilities } from '../src/models';
 import type { Connection } from '../src/connection';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 
-const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 2, busy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
+const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 2, busy: false, runtimeBusy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
 
 suite('Beacon native context consumer', () => {
+	test('request admission refreshes runtime activity without mistaking its own preparation for a run', async () => {
+		let running = false;
+		const client = new BeaconContextClient(async () => ({ ...selected(), busy: true, runtimeBusy: running }));
+		await client.refreshForRequest();
+		running = true;
+		await assert.rejects(client.refreshForRequest(), /beacon-runtime-busy/);
+		running = false;
+		await client.refreshForRequest();
+	});
+	test('request admission blocks running producers even without a persistent workspace', async () => {
+		const client = new BeaconContextClient(async () => ({ slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: true, runtimeBusy: true, recent: [] }));
+		await assert.rejects(client.refreshForRequest(), /beacon-runtime-busy/);
+	});
 	test('page provenance pins the complete captured text across redacted range reads', async () => {
 		const raw = 'api_key="private-token";\ncurrent dirty code';
 		const page = { id: 'page', kind: 'text', title: 'main.cpp', uri: 'file:///C:/chosen/main.cpp', version: '2', dirty: true };
@@ -109,7 +122,7 @@ suite('Beacon native context consumer', () => {
 	});
 	test('open PDF uses existing page tool in blackout, isolates page snapshots and checks access before extraction', async () => {
 		let version = '0'; let opened = true; let denied = false; let reads = 0;
-		const scope: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
+		const scope: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
 		const api = {
 			listPages: () => opened ? [{ id: 'pdf:one', kind: 'pdf' as const, uri: 'file:///C:/outside/task.pdf', title: 'task.pdf', version, pageCount: 3 }] : [],
 			readPage: async (_id: string, _version: string, pageNumber: number) => { reads++; return { ...api.listPages()[0], contents: pageNumber === 1 ? 'api_key=private-token\nfirst page' : 'second page', totalCharacters: 20 }; }
@@ -245,7 +258,7 @@ suite('Beacon native context consumer', () => {
 		assert.equal(session.snapshot.error, ''); assert.equal(reads, 1);
 	});
 	test('blackout reads only actual opened pages; full redaction precedes small range reads', async () => {
-		const state: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, recent: [] };
+		const state: IBeaconContext = { slot: 'one', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
 		let opened = true; let records = 0;
 		const client = new BeaconContextClient(async operation => {
 			if (operation === 'context') { return state; }

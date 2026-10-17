@@ -72,6 +72,8 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	removeRecentWorkspace(windowId: number, root: string) { return this.coordinator.removeRecentWorkspace(windowId, root); }
 	setMode(windowId: number, mode: BeaconMode) { return this.coordinator.setMode(windowId, mode); }
 	async setBusy(windowId: number, busy: boolean): Promise<void> { this.coordinator.setBusy(windowId, busy); }
+	async beginRuntimeActivity(windowId: number): Promise<string> { return this.coordinator.beginRuntimeActivity(windowId); }
+	async endRuntimeActivity(windowId: number, handle: string): Promise<void> { this.coordinator.endRuntimeActivity(windowId, handle); }
 	beginActivity(windowId: number, source: string) { return this.coordinator.beginActivity(windowId, source); }
 	endActivity(windowId: number, handle: string) { return this.coordinator.endActivity(windowId, handle); }
 	reportNotebooks(windowId: number, files: { file: string; dirty: boolean }[]) { return this.coordinator.reportNotebooks(windowId, files); }

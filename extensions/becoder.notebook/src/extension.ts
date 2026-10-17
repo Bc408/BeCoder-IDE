@@ -85,11 +85,14 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 		let settle!: () => void; settling.set(key, new Promise<void>(resolve => { settle = resolve; }));
 		const cancellation = execution.token.onCancellationRequested(() => abort.abort());
 		let activity: string | undefined;
+		let runtimeActivity: string | undefined;
 		const statusOutput = new vscode.NotebookCellOutput([]);
 		const showStatus = (attempt: object) => execution.replaceOutputItems([vscode.NotebookCellOutputItem.text(JSON.stringify(attempt), beCoderNotebookStatusMime)], statusOutput);
 		let currentAttempt: Record<string, unknown> | undefined; let completedResult: NotebookRunResult | undefined;
 		const alive = () => !retired && !document.isClosed && document.getCells().includes(cell);
 		try {
+			try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
+			catch (error) { console.warn('Beacon Notebook runtime tracking unavailable', error); }
 			await execution.replaceOutput([statusOutput]); await showStatus({ status: 'preparing' }); await patch(cell, { clearAttempt: true }); await ensureIds(document);
 			const meta = readBeCoderCellMetadata(cell.metadata);
 			captured.codeCellId = readBeCoderCellMetadata(programCell.metadata).id || programCell.document.uri.toString();
@@ -138,7 +141,20 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 				finally { execution.end(completedResult?.status === 'completed', Date.now()); }
 			}
 			return completedResult?.status ?? (abort.signal.aborted ? 'cancelled' : 'unable-to-start');
-		} finally { cancellation.dispose(); outputQueues.get(key)?.clear(); outputQueues.delete(key); outputContainers.delete(key); running.delete(key); try { if (activity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity }); } } finally { try { if (resource) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); } } finally { settle(); settling.delete(key); } } }
+		} finally {
+			cancellation.dispose(); outputQueues.get(key)?.clear(); outputQueues.delete(key); outputContainers.delete(key);
+			try {
+				if (activity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity }); }
+			} finally {
+				try {
+					if (resource) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); }
+				} finally {
+					try {
+						if (runtimeActivity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endRuntimeActivity', { handle: runtimeActivity }); }
+					} finally { running.delete(key); settle(); settling.delete(key); }
+				}
+			}
+		}
 	};
 	controller.executeHandler = async (cells, document) => {
 		const inputs = cells.filter(cell => isBeCoderInputCell(cell.metadata));

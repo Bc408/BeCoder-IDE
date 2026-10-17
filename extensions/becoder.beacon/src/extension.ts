@@ -100,7 +100,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let requestNotice: { id: number; text: string } | undefined;
 	const canSend = () => !historyUnreadable && (temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
 	const request = async (beforeId = Infinity) => {
-		await native.refresh(); permission = native.permission;
+		await native.refreshForRequest(); permission = native.permission;
 		if (!canSend()) { throw new Error('beacon-conversation-owner'); }
 		const roots = native.roots;
 		const scope = native.captureScope();
@@ -135,7 +135,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (visible.attachments) { visible.attachments = visible.attachments.map(item => ({ ...item, contents: '' })); }
 				return visible;
 			});
-			const message = { type: 'snapshot', ...snapshot, screen, history: native.consumingWorkspace ? snapshot.history : [], context: native.state, canSend: canSend(), temporary, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
+			const message = { type: 'snapshot', ...snapshot, screen, history: native.consumingWorkspace ? snapshot.history : [], context: native.state, canSend: canSend(), temporary, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), responseBusy: session.snapshot.busy, stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
 			void view?.webview.postMessage(message);
 			if (configurationPanel) {
 				const connection = connections.snapshot;
@@ -338,7 +338,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		generation++; await recordView();
 	}
 	async function respond(kind: string, id: number, text?: string): Promise<void> {
-		if (busy() || !canSend() || !connections.configured) { publish(); return; }
+		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured) { publish(); return; }
 		const controller = new AbortController(); attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
 		try {
@@ -402,6 +402,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	function attachmentNotice(error: unknown): void {
 		const contextErrors: Record<string, string> = {
+			'beacon-runtime-busy': vscode.l10n.t('Wait for the current run to finish before sending to Beacon.'),
 			'beacon-busy': vscode.l10n.t('Finish the current response, run or save before switching the Beacon workspace.'),
 			'conversation-open': vscode.l10n.t('This chat is already open in another window.'),
 			'beacon-workspace-unavailable': vscode.l10n.t('The selected Beacon workspace is unavailable. Restore it or choose a folder again.'),
@@ -476,7 +477,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (alive && !controller.signal.aborted && uris?.length) { await track(addResources(uris, 'picker')); }
 	}
 	async function send(text: string): Promise<void> {
-		if (busy() || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
+		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
 		const sentViewKey = viewKey();
 		const controller = new AbortController();
 		attachmentJob = controller; publish();
@@ -499,10 +500,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			screen = 'conversation';
 			if (home()?.id === activeId) { homes.delete(native.state.root!); }
 			await draftTail;
-			const remainingText = draft().text === text ? '' : draft().text;
+			await native.refreshForRequest();
+			const previousDraftText = draft().text;
+			const remainingText = previousDraftText === text ? '' : previousDraftText;
 			const sentAttachments = new Set(captured.map(item => item.id));
 			const remainingAttachments = attachments().filter(item => !sentAttachments.has(item.id));
 			await setDraft(remainingText, remainingAttachments);
+			try {
+				// Draft persistence can yield after the first admission check.
+				await native.refreshForRequest();
+				controller.signal.throwIfAborted();
+			} catch (error) {
+				if (error instanceof Error && error.message === 'beacon-runtime-busy') {
+					const restored = draftTail.then(async () => {
+						const current = draft(); const currentIds = new Set(current.attachments.map(item => item.id));
+						await setDraft(current.text === remainingText ? previousDraftText : current.text, [...captured.filter(item => !currentIds.has(item.id)), ...current.attachments]);
+					});
+					draftTail = restored.catch(attachmentNotice); await restored;
+				}
+				throw error;
+			}
 			completion = session.send(text, next.generate, next.source, next.files, captured);
 			generation++; await recordView();
 			void view?.webview.postMessage({ type: 'sendAccepted', text, activeId, conversationId: history.snapshot.activeId, viewKey: sentViewKey, conversationViewKey: viewKey() });

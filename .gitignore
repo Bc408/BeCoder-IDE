@@ -51,6 +51,7 @@ dist
 .agents/skills/.local/
 .github/skills/.local/
 /tmp
+/extensions/becoder.notebook/dist-test/
 /AGENTS_raw_project.md
 /INTEGRATED_BROWSER_API_REFERENCE.md
 /*.prob

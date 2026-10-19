@@ -4,14 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { readFileSync } from 'fs';
-import { suite, test } from 'node:test';
-import { applyExtensionControlManifestPolicy } from '../../../src/vs/platform/extensionManagement/common/extensionControlManifestPolicy.ts';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
+import { applyExtensionControlManifestPolicy } from '../../common/extensionControlManifestPolicy.js';
 
 const cph = 'divyanshuagrawal.competitive-programming-helper';
 const product = { extensionControlManifestExemptions: [cph] };
 
 suite('BeCoder extension control manifest policy', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+
 	test('exempts only the exact CPH report and retains unrelated metadata and publisher bans', () => {
 		const other = { extensionOrPublisher: { id: 'other.extension' }, learnMoreLink: 'https://example.com/report' };
 		const publisher = { extensionOrPublisher: 'divyanshuagrawal' };
@@ -33,10 +34,4 @@ suite('BeCoder extension control manifest policy', () => {
 		assert.deepStrictEqual(applyExtensionControlManifestPolicy(reports, { ...product, extensionBlacklist: [cph.toUpperCase()] }), reports);
 	});
 
-	test('protects bundled CPH and blocks the original without a remote-report exception', () => {
-		const current = JSON.parse(readFileSync(new URL('../../../product.json', import.meta.url), 'utf8'));
-		assert.strictEqual(current.extensionControlManifestExemptions, undefined);
-		assert.deepStrictEqual(current.extensionBlacklist, ['ms-vscode.cpptools', 'ms-vscode.cpptools-extension-pack', cph]);
-		assert.ok(current.protectedExtensions.includes('becoder.cph'));
-	});
 });

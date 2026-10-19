@@ -12,6 +12,7 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 if (-not (Test-Path -LiteralPath $PackagePath -PathType Container)) {
 	throw "Packaged application was not found at $PackagePath."
 }
+$PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
 
 $requiredFiles = @(
 	'BeCoder.exe',
@@ -132,6 +133,13 @@ foreach ($relativePath in $requiredFiles) {
 	if ((Get-Item -LiteralPath $path).Length -eq 0) {
 		throw "Required Windows package file is empty: $relativePath"
 	}
+}
+
+$sevenZipVerifier = Join-Path $repositoryRoot 'build\lib\sevenZip.ts'
+$sevenZipSource = Join-Path $repositoryRoot 'node_modules\7zip-bin'
+& node $sevenZipVerifier (Join-Path $PackagePath 'resources\app\node_modules.asar') $sevenZipSource
+if ($LASTEXITCODE -ne 0) {
+	throw 'The packaged Windows x64 7zip-bin verification failed.'
 }
 
 $onboardingSourceHash = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'resources\oi-defaults\onboarding\helloCoder.cpp') -Algorithm SHA256).Hash

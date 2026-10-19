@@ -76,11 +76,17 @@ Beyond Beacon's focused conversation and read-only tools, the current product do
 
 ## Install and First Launch
 
-BeCoder is distributed through a Setup installer for 64-bit Windows 10 and later.
+BeCoder is distributed through a Setup installer for 64-bit Windows 10 and later. Setup offers two installation modes:
+
+- **Native application (recommended):** creates a current-user Windows uninstall entry and generated uninstaller, plus `BeCoder.lnk` directly in the public Start-menu Programs folder. Setup keeps its user-level permissions; only public shortcut creation or removal requests administrator authorization when needed. A shortcut belonging to another installation is preserved. The current-user desktop shortcut is selected by default.
+- **Fully Portable:** does not create an uninstall entry or write BeCoder installation state to the Windows registry. Copy the complete directory to removable storage or another Windows machine and run BeCoder from there.
+
+If public Start-menu shortcut maintenance fails or administrator authorization is cancelled, Setup offers Retry or Cancel. Cancel completes installation or uninstall without completing that shortcut operation; it does not restart Setup or create a current-user Start-menu fallback.
 
 1. Run Setup and select a dedicated installation folder. The path must contain only ASCII characters, must be no longer than 70 characters, and cannot be a drive root. The default is `%LOCALAPPDATA%\Programs\BeCoder`.
-2. The desktop-shortcut checkbox is selected by default. Clear it if you do not need a shortcut, especially when installing BeCoder on removable storage.
-3. On the first normal launch, BeCoder opens the bundled `coding\helloCoder.cpp` sample. Only this installation-provided onboarding folder is trusted automatically.
+2. Choose Native application or Fully Portable mode. Native application is selected by default.
+3. The desktop-shortcut checkbox is selected by default in both modes. Clear it if you do not need a shortcut, especially when installing BeCoder on removable storage.
+4. On the first normal launch, BeCoder opens the bundled `coding\helloCoder.cpp` sample. Only this installation-provided onboarding folder is trusted automatically.
 
 The installed BeCoder directory is self-contained and may be moved as a complete directory, including to a removable drive. Separate BeCoder directories keep independent application data and toolchains.
 
@@ -90,7 +96,9 @@ The application keeps settings, installed extensions, caches, legacy history and
 
 Reinstalling into an existing BeCoder installation replaces its private data, including legacy Beacon history. Back up needed installation data before replacement; profile export is not a complete chat backup. User workspaces and `.beaconWork` outside the installation are not part of Setup replacement.
 
-BeCoder creates no registry-based uninstaller, Start-menu entry, PATH change, file association, protocol registration, service, or startup task. To uninstall it, close BeCoder and delete its complete installation directory. Delete the desktop shortcut separately if you kept that installation option selected.
+Native application mode provides the familiar Windows uninstall entry. Its uninstall operation removes the installation directory and the native uninstall registration, while preserving user workspaces and `.beaconWork` or `.notebook` folders outside that directory. If a Native application installation is manually moved, BeCoder can continue to run but its Windows uninstall entry is no longer guaranteed to point to the moved directory.
+
+Fully Portable mode creates no registry-based uninstaller, Start-menu entry, PATH change, file association, protocol registration, service, or startup task. To remove a Portable installation, close BeCoder and delete its complete installation directory. Delete the desktop shortcut separately if you chose to create one.
 
 ## Extensions and Updates
 

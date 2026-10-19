@@ -8,12 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$verificationBaseRoot = Join-Path $repositoryRoot '.build\si'
-$resolvedBuildRoot = (Resolve-Path (Join-Path $repositoryRoot '.build')).Path
-$verificationParent = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($verificationBaseRoot))
-if ($verificationParent -ne $resolvedBuildRoot) {
-	throw "Unsafe Setup verification root: $verificationBaseRoot"
-}
+$verificationBaseRoot = 'C:\BeCoderSetupVerification'
 if (-not (Test-Path -LiteralPath $SetupPath -PathType Leaf)) {
 	throw "BeCoder Setup was not found: $SetupPath"
 }
@@ -24,14 +19,21 @@ if (-not (Test-Path -LiteralPath $StagedPackagePath -PathType Container)) {
 $setupScriptPath = Join-Path $repositoryRoot 'build\win32\becoder.iss'
 $setupScript = Get-Content -LiteralPath $setupScriptPath -Raw -Encoding utf8
 foreach ($requiredDirective in @(
-	'(?im)^\s*Uninstallable=no\s*$',
-	'(?im)^\s*CreateUninstallRegKey=no\s*$',
 	'(?im)^\s*PrivilegesRequired=lowest\s*$',
+	'(?im)^\s*UninstallDisplayIcon=\{app\}\\\{#ExeBasename\}\.exe\s*$',
 	'(?im)^\s*ChangesAssociations=no\s*$',
 	'(?im)^\s*ChangesEnvironment=no\s*$'
 )) {
 	if ($setupScript -notmatch $requiredDirective) {
 		throw "BeCoder Setup is missing a required zero-integration directive: $requiredDirective"
+	}
+}
+foreach ($requiredModeDirective in @(
+	'(?im)^\s*Uninstallable\s*=\s*not IsPortableMode\(\)\s*$',
+	'(?im)^\s*CreateUninstallRegKey\s*=\s*not IsPortableMode\(\)\s*$'
+)) {
+	if ($setupScript -notmatch $requiredModeDirective) {
+		throw "BeCoder Setup is missing a required mode-aware uninstall directive: $requiredModeDirective"
 	}
 }
 foreach ($previousSetting in @('AppDir', 'Group', 'Language', 'Privileges', 'SetupType', 'Tasks', 'UserInfo')) {
@@ -58,9 +60,20 @@ if ($taskEntries.Count -ne 1 -or
 
 $iconsSection = Get-InnoSection -Name 'Icons'
 $iconEntries = @($iconsSection -split '\r?\n' | Where-Object { $_ -match '^\s*Name:' })
-if ($iconEntries.Count -ne 1 -or
-	$iconEntries[0] -notmatch '^\s*Name:\s*"\{userdesktop\}\\\{#NameLong\}";\s*Filename:\s*"\{app\}\\\{#ExeBasename\}\.exe";\s*WorkingDir:\s*"\{app\}";\s*Tasks:\s*desktopicon\s*$') {
-	throw 'BeCoder Setup must create only the explicitly selected current-user desktop shortcut.'
+$desktopIconEntries = @($iconEntries | Where-Object { $_ -match '^\s*Name:\s*"\{userdesktop\}\\\{#NameLong\}";' })
+if ($iconEntries.Count -ne 1 -or $desktopIconEntries.Count -ne 1 -or
+	$desktopIconEntries[0] -notmatch '^\s*Name:\s*"\{userdesktop\}\\\{#NameLong\}";\s*Filename:\s*"\{app\}\\\{#ExeBasename\}\.exe";\s*WorkingDir:\s*"\{app\}";\s*Tasks:\s*desktopicon\s*$') {
+	throw 'BeCoder Setup must keep the selected-by-default current-user desktop shortcut.'
+}
+foreach ($requiredShortcutBoundary in @(
+	"not IsPortableMode\(\) and RunStartMenuShortcut\('create'\)",
+	"RunStartMenuShortcut\('remove'\)",
+	'ShortcutHelperSHA256',
+	"ShellExec\('runas'"
+)) {
+	if ($setupScript -notmatch $requiredShortcutBoundary) {
+		throw "BeCoder Setup is missing the public Start-menu helper boundary: $requiredShortcutBoundary"
+	}
 }
 
 foreach ($requiredShortcutMessage in @(
@@ -74,7 +87,7 @@ foreach ($requiredShortcutMessage in @(
 foreach ($forbiddenPattern in @(
 	'(?im)^\s*AppId=',
 	'(?im)^\s*DefaultGroupName=',
-	'(?im)^\s*\[(Registry|UninstallDelete|UninstallRun)\]\s*$',
+	'(?im)^\s*\[(Registry|UninstallRun)\]\s*$',
 	'(?i)\{(?:auto|common)desktop\}|\{group\}|\{userstartmenu\}|\{commonstartmenu\}',
 	'(?i)\bReg(?:Write|Delete)\w*\s*\('
 )) {
@@ -84,16 +97,18 @@ foreach ($forbiddenPattern in @(
 }
 
 if (Test-Path -LiteralPath $verificationBaseRoot) {
-	Remove-Item -LiteralPath $verificationBaseRoot -Recurse -Force
+	$verificationBase = Get-Item -LiteralPath $verificationBaseRoot -Force
+	if (-not $verificationBase.PSIsContainer -or ($verificationBase.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+		throw "Unsafe Setup verification directory: $verificationBaseRoot"
+	}
+} else {
+	New-Item -ItemType Directory -Path $verificationBaseRoot | Out-Null
 }
-if (Test-Path -LiteralPath $verificationBaseRoot) {
-	throw "Unable to remove the previous Setup verification directory: $verificationBaseRoot"
-}
-New-Item -ItemType Directory -Path $verificationBaseRoot | Out-Null
 $verificationRoot = Join-Path $verificationBaseRoot ('r' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
 New-Item -ItemType Directory -Path $verificationRoot | Out-Null
 $installRoot = Join-Path $verificationRoot 'BeCoder A'
 $secondInstallRoot = Join-Path $verificationRoot 'BeCoder B'
+$nativeInstallRoot = Join-Path $verificationRoot 'Native'
 $movedInstallRoot = Join-Path $verificationRoot 'Moved A'
 $foreignRoot = Join-Path $verificationRoot 'foreign'
 # allow-any-unicode-next-line
@@ -114,7 +129,7 @@ New-Item -ItemType Junction -Path $unicodeJunction -Target $unicodeJunctionTarge
 New-Item -ItemType Junction -Path $longJunction -Target $longJunctionTarget | Out-Null
 
 function Invoke-Setup {
-	param([string]$Target, [string]$LogName, [switch]$AllowDataLoss, [switch]$UseDefaultTasks)
+	param([string]$Target, [string]$LogName, [switch]$AllowDataLoss, [switch]$UseDefaultTasks, [switch]$Portable)
 	$arguments = @(
 		'/VERYSILENT',
 		'/SUPPRESSMSGBOXES',
@@ -124,6 +139,9 @@ function Invoke-Setup {
 	)
 	if ($AllowDataLoss) {
 		$arguments += '/BECODERALLOWDATALOSS=1'
+	}
+	if ($Portable) {
+		$arguments += '/BECODERPORTABLE=1'
 	}
 	if (-not $UseDefaultTasks) {
 		$arguments += '/TASKS=""'
@@ -215,10 +233,45 @@ function Get-BeCoderNamedRegistrySnapshot {
 			if ($LASTEXITCODE -notin @(0, 1)) {
 				throw "Unable to inspect $hive for registry term $term."
 			}
-			$lines += @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { "$hive|$term|$($_.Trim())" })
+			$lines += @(Get-RegistrySearchKeys -SearchOutput $output -TemporaryRegistrationName $nativeRegistryBackupName | ForEach-Object { "$hive|$term|$_" })
 		}
 	}
 	return @($lines | Sort-Object -Unique)
+}
+
+Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class BeCoderSetupVerificationRegistry {
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern int RegRenameKey(SafeRegistryHandle parent, string oldName, string newName);
+}
+'@
+
+function Rename-VerificationUninstallKey {
+	param([string]$SourceName, [string]$DestinationName)
+	$parent = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Uninstall', $true)
+	if (-not $parent) { throw 'The current-user uninstall registry root is unavailable.' }
+	try {
+		# RegRenameKey fails if DestinationName exists; never copy over another registration.
+		$status = [BeCoderSetupVerificationRegistry]::RegRenameKey($parent.Handle, $SourceName, $DestinationName)
+		if ($status -ne 0) { throw "Unable to rename uninstall registration $SourceName to $DestinationName (code $status)." }
+	} finally {
+		$parent.Dispose()
+	}
+}
+
+function Get-RegistrySearchKeys {
+	param([string[]]$SearchOutput, [string]$TemporaryRegistrationName)
+	# Windows caches temporary uninstall-key names in CloudStore even after restoration.
+	# Exclude only that derived verification metadata, retaining real backup keys and all product entries.
+	$temporaryMetadata = '(?!)'
+	if (-not [string]::IsNullOrEmpty($TemporaryRegistrationName)) {
+		$temporaryMetadata = '^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\(?:Cloud|Current)\\[^\\]+\$windows\.data\.apps\.appmetadata\$appmetadatalist\\windows\.data\.apps\.appmetadata\$' + [regex]::Escape($TemporaryRegistrationName) + '$'
+	}
+	return @($SearchOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() } | Where-Object {
+		$_ -match '^HKEY_(?:CURRENT_USER|LOCAL_MACHINE)\\' -and $_ -notmatch $temporaryMetadata
+	})
 }
 
 $shortcutsBefore = Get-ShortcutSnapshot
@@ -226,35 +279,26 @@ $registryBefore = Get-RegistryIntegrationSnapshot
 $namedRegistryBefore = Get-BeCoderNamedRegistrySnapshot
 
 $stagedProduct = Get-Content -LiteralPath (Join-Path $StagedPackagePath 'resources\app\product.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$nativeDesktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) ($stagedProduct.nameLong + '.lnk')
+$nativeStartMenuShortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) ($stagedProduct.nameLong + '.lnk')
+$nativeRegistrationName = $stagedProduct.nameLong + '_is1'
+$nativeRegistrationPath = Join-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' $nativeRegistrationName
+if (Test-Path -LiteralPath $nativeStartMenuShortcut) {
+	throw 'Setup verification requires no existing BeCoder public Start-menu shortcut.'
+}
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) ($stagedProduct.nameLong + '.lnk')
 $shortcutExisted = Test-Path -LiteralPath $shortcutPath -PathType Leaf
-$shortcutBackup = if ($shortcutExisted) { [IO.File]::ReadAllBytes($shortcutPath) } else { $null }
-try {
-	if ((Invoke-Setup -Target $installRoot -LogName 'install.log' -UseDefaultTasks) -ne 0) {
-		throw 'BeCoder Setup failed to install into the isolated verification directory.'
-	}
-	if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) {
-		throw 'BeCoder Setup did not create the desktop shortcut with default tasks.'
-	}
-	$shell = New-Object -ComObject WScript.Shell
-	try {
-		$shortcut = $shell.CreateShortcut($shortcutPath)
-		if ($shortcut.TargetPath -ine (Join-Path $installRoot 'BeCoder.exe') -or $shortcut.WorkingDirectory -ine $installRoot) {
-			throw 'The default desktop shortcut does not target the verified installation.'
-		}
-	} finally {
-		if ($shortcut) { [Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null }
-		[Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-	}
-} finally {
-	if ($shortcutExisted) { [IO.File]::WriteAllBytes($shortcutPath, $shortcutBackup) }
-	elseif (Test-Path -LiteralPath $shortcutPath -PathType Leaf) { Remove-Item -LiteralPath $shortcutPath }
+if ((Invoke-Setup -Target $installRoot -LogName 'portable-install.log' -Portable) -ne 0) {
+	throw 'BeCoder Setup failed to install Portable mode into the isolated verification directory.'
 }
-if ((Invoke-Setup -Target $secondInstallRoot -LogName 'second-install.log') -ne 0) {
-	throw 'BeCoder Setup failed to create a second independent installation.'
+if (-not $shortcutExisted -and (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) {
+	throw 'BeCoder Portable mode created a desktop shortcut despite explicit opt-out.'
 }
-Assert-SetupLogHasNoRegistryWrites -LogName 'install.log'
-Assert-SetupLogHasNoRegistryWrites -LogName 'second-install.log'
+if ((Invoke-Setup -Target $secondInstallRoot -LogName 'second-portable-install.log' -Portable) -ne 0) {
+	throw 'BeCoder Setup failed to create a second independent Portable installation.'
+}
+Assert-SetupLogHasNoRegistryWrites -LogName 'portable-install.log'
+Assert-SetupLogHasNoRegistryWrites -LogName 'second-portable-install.log'
 
 $onboardingRelativePaths = @('coding\helloCoder.cpp', 'data\.becoder-open-hello-coder')
 foreach ($root in @($installRoot, $secondInstallRoot)) {
@@ -299,7 +343,7 @@ if ($ownership.schemaVersion -ne 2 -or $ownership.product -ne 'BeCoder' -or $own
 $originalInstallationId = $ownership.installationId
 foreach ($root in @($installRoot, $secondInstallRoot)) {
 	if (Get-ChildItem -LiteralPath $root -Filter 'unins*' -Force -ErrorAction SilentlyContinue) {
-		throw "BeCoder Setup generated forbidden uninstall files in: $root"
+		throw "BeCoder Portable Setup generated forbidden uninstall files in: $root"
 	}
 }
 
@@ -320,10 +364,10 @@ New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($sentinel)) -For
 New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($secondSentinel)) -Force | Out-Null
 Set-Content -LiteralPath $sentinel -Value 'reinstall must remove this file' -Encoding ascii
 Set-Content -LiteralPath $secondSentinel -Value 'other installation must not modify this file' -Encoding ascii
-if ((Invoke-Setup -Target $installRoot -LogName 'reinstall-without-consent.log') -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) {
+if ((Invoke-Setup -Target $installRoot -LogName 'reinstall-without-consent.log' -Portable) -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) {
 	throw 'BeCoder Setup replaced user data silently without explicit data-loss consent.'
 }
-if ((Invoke-Setup -Target $installRoot -LogName 'reinstall.log' -AllowDataLoss) -ne 0 -or (Test-Path -LiteralPath $sentinel)) {
+if ((Invoke-Setup -Target $installRoot -LogName 'reinstall.log' -AllowDataLoss -Portable) -ne 0 -or (Test-Path -LiteralPath $sentinel)) {
 	throw 'BeCoder Setup did not completely replace the previous owned installation.'
 }
 Assert-SetupLogHasNoRegistryWrites -LogName 'reinstall.log'
@@ -348,7 +392,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $foreignRoot 'user-file.txt') -PathT
 
 $markerContents = Get-Content -LiteralPath $ownershipMarker -Raw
 Set-Content -LiteralPath $ownershipMarker -Value '{}' -Encoding ascii -NoNewline
-if ((Invoke-Setup -Target $installRoot -LogName 'invalid-marker-replacement.log' -AllowDataLoss) -eq 0 -or -not (Test-Path -LiteralPath $installRoot -PathType Container)) {
+if ((Invoke-Setup -Target $installRoot -LogName 'invalid-marker-replacement.log' -AllowDataLoss -Portable) -eq 0 -or -not (Test-Path -LiteralPath $installRoot -PathType Container)) {
 	throw 'BeCoder Setup replaced a directory with an invalid ownership marker.'
 }
 Set-Content -LiteralPath $ownershipMarker -Value $markerContents -Encoding ascii -NoNewline
@@ -386,13 +430,119 @@ if ((Test-Path -LiteralPath $movedInstallRoot) -or (Test-Path -LiteralPath $seco
 	throw 'Manual installation-directory deletion did not remain isolated from external files.'
 }
 
+if (Test-Path -LiteralPath $nativeStartMenuShortcut) {
+	throw 'Existing Native integration appeared during verification; refusing to overwrite it.'
+}
+$nativeRegistryBefore = Get-RegistryIntegrationSnapshot
+$nativeNamedRegistryBefore = Get-BeCoderNamedRegistrySnapshot
+$nativeShortcutsBefore = Get-ShortcutSnapshot
+$nativeDesktopBackup = Join-Path $verificationRoot 'saved-desktop.lnk'
+$nativeRegistryBackupName = $nativeRegistrationName + '.verification-' + [Guid]::NewGuid().ToString('N')
+$nativeRegistrySaved = $false
+try {
+	if (Test-Path -LiteralPath $nativeRegistrationPath) {
+		& reg.exe export "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\$nativeRegistrationName" (Join-Path $verificationRoot 'saved-uninstall.reg') /y | Out-Null
+		if ($LASTEXITCODE -ne 0) { throw 'Unable to export the existing uninstall registration for recovery.' }
+		Rename-VerificationUninstallKey -SourceName $nativeRegistrationName -DestinationName $nativeRegistryBackupName
+		$nativeRegistrySaved = $true
+	}
+	if (Test-Path -LiteralPath $nativeDesktopShortcut) {
+		Move-Item -LiteralPath $nativeDesktopShortcut -Destination $nativeDesktopBackup
+	}
+	$nativeRegistryDuringTest = Get-RegistryIntegrationSnapshot
+	if ((Invoke-Setup -Target $nativeInstallRoot -LogName 'native-install.log' -UseDefaultTasks) -ne 0) {
+		throw 'BeCoder Setup failed to install Native application mode.'
+	}
+	$nativeUninstallFiles = @(Get-ChildItem -LiteralPath $nativeInstallRoot -Filter 'unins*' -Force -ErrorAction Stop)
+	if ($nativeUninstallFiles.Count -lt 2) {
+		throw 'BeCoder Native application mode did not create its generated uninstaller files.'
+	}
+	$nativeUninstallEntry = Get-ItemProperty -LiteralPath $nativeRegistrationPath
+	if ($nativeUninstallEntry.InstallLocation.TrimEnd('\') -ine $nativeInstallRoot -or
+		$nativeUninstallEntry.UninstallString -ine ('"' + (Join-Path $nativeInstallRoot 'unins000.exe') + '"') -or
+		$nativeUninstallEntry.DisplayIcon -ine (Join-Path $nativeInstallRoot ($stagedProduct.nameShort + '.exe'))) {
+		throw 'BeCoder Native application mode did not register the verified installation uninstaller and display icon.'
+	}
+	if (-not (Test-Path -LiteralPath $nativeDesktopShortcut -PathType Leaf) -or -not (Test-Path -LiteralPath $nativeStartMenuShortcut -PathType Leaf)) {
+		throw 'BeCoder Native application mode did not create its default desktop and Start-menu shortcuts.'
+	}
+	$nativeShortcutShell = New-Object -ComObject WScript.Shell
+	$nativeShortcutLink = $null
+	try {
+		$nativeShortcutLink = $nativeShortcutShell.CreateShortcut($nativeStartMenuShortcut)
+		if ($nativeShortcutLink.TargetPath -ne (Join-Path $nativeInstallRoot ($stagedProduct.nameShort + '.exe')) -or
+			$nativeShortcutLink.WorkingDirectory -ne $nativeInstallRoot -or $nativeShortcutLink.Arguments -ne '') {
+			throw 'BeCoder Native Start-menu shortcut does not point to this installation with an empty argument list.'
+		}
+	} finally {
+		if ($nativeShortcutLink) { [Runtime.InteropServices.Marshal]::ReleaseComObject($nativeShortcutLink) | Out-Null }
+		[Runtime.InteropServices.Marshal]::ReleaseComObject($nativeShortcutShell) | Out-Null
+	}
+	if (-not (Test-Path -LiteralPath (Join-Path $nativeInstallRoot 'tools\becoder-shortcuts.exe') -PathType Leaf)) {
+		throw 'BeCoder Native application mode did not install its shortcut maintenance helper.'
+	}
+	$nativeRegistryAfterInstall = Get-RegistryIntegrationSnapshot
+	$nativeRegistryChanges = @(Compare-Object $nativeRegistryDuringTest $nativeRegistryAfterInstall)
+	$unexpectedNativeRegistryChanges = @($nativeRegistryChanges | Where-Object { $_.InputObject -notlike '*\Software\Microsoft\Windows\CurrentVersion\Uninstall\BeCoder_is1|*' })
+	if ($unexpectedNativeRegistryChanges.Count -gt 0) {
+		throw 'BeCoder Native application mode changed registry state outside its uninstall entry.'
+	}
+	$nativeDataSentinel = Join-Path $nativeInstallRoot 'data\user-data\must-be-deleted-on-native-uninstall.txt'
+	New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($nativeDataSentinel)) -Force | Out-Null
+	Set-Content -LiteralPath $nativeDataSentinel -Value 'native uninstall must remove installation data' -Encoding ascii
+	$uninstallerPath = Join-Path $nativeInstallRoot 'unins000.exe'
+	$uninstallProcess = Start-Process -FilePath $uninstallerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$(Join-Path $verificationRoot 'native-uninstall.log')`"") -Wait -PassThru -WindowStyle Hidden
+	if ($uninstallProcess.ExitCode -ne 0 -or
+		(Test-Path -LiteralPath $nativeDataSentinel) -or
+		(Test-Path -LiteralPath (Join-Path $nativeInstallRoot '.becoder-installation.json')) -or
+		(Get-ChildItem -LiteralPath $nativeInstallRoot -Filter 'unins*' -Force -ErrorAction SilentlyContinue)) {
+		throw 'BeCoder Native application uninstall did not remove installation data, identity, and uninstaller files.'
+	}
+	if (Test-Path -LiteralPath $nativeRegistrationPath) {
+		throw 'BeCoder Native application uninstall left its Windows uninstall entry behind.'
+	}
+} finally {
+	try {
+		if ($nativeRegistrySaved) {
+			Rename-VerificationUninstallKey -SourceName $nativeRegistryBackupName -DestinationName $nativeRegistrationName
+		}
+	} finally {
+		if (Test-Path -LiteralPath $nativeDesktopBackup) {
+			# Never overwrite an entry that appeared concurrently; keep the backup for recovery.
+			if (Test-Path -LiteralPath $nativeDesktopShortcut) {
+				throw "Unable to restore the desktop shortcut without overwriting an existing entry. Original preserved at $nativeDesktopBackup"
+			}
+			Move-Item -LiteralPath $nativeDesktopBackup -Destination $nativeDesktopShortcut
+		}
+	}
+}
+$nativeShortcutChanges = @(Compare-Object $nativeShortcutsBefore (Get-ShortcutSnapshot))
+$nativeRegistryChangesAfterUninstall = @(Compare-Object $nativeRegistryBefore (Get-RegistryIntegrationSnapshot))
+$nativeNamedRegistryChangesAfterUninstall = @(Compare-Object $nativeNamedRegistryBefore (Get-BeCoderNamedRegistrySnapshot))
+if ($nativeShortcutChanges.Count -gt 0 -or $nativeRegistryChangesAfterUninstall.Count -gt 0 -or $nativeNamedRegistryChangesAfterUninstall.Count -gt 0) {
+	$diagnostics = foreach ($category in @(
+		@{ Name = 'Shortcuts'; Changes = $nativeShortcutChanges; IdentityFields = 1 },
+		@{ Name = 'Registry'; Changes = $nativeRegistryChangesAfterUninstall; IdentityFields = 3 },
+		@{ Name = 'NamedRegistry'; Changes = $nativeNamedRegistryChangesAfterUninstall; IdentityFields = 3 }
+	)) {
+		foreach ($change in $category.Changes) {
+			# Record identities only; registry values can contain credentials.
+			$fields = $change.InputObject -split '\|'
+			[PSCustomObject]@{ Category = $category.Name; Side = $change.SideIndicator; Identity = ($fields | Select-Object -First $category.IdentityFields) -join '|' }
+		}
+	}
+	$diagnosticPath = Join-Path $verificationRoot 'native-integration-diff.json'
+	$diagnostics | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $diagnosticPath -Encoding utf8
+	throw "BeCoder Native application uninstall did not restore registry and shortcut state. See $diagnosticPath"
+}
+Remove-Item -LiteralPath $nativeInstallRoot -Recurse -Force -ErrorAction SilentlyContinue
+
 Remove-Item -LiteralPath $verificationRoot -Recurse -Force
 if (Test-Path -LiteralPath $verificationRoot) {
 	throw "Unable to remove the completed Setup verification run: $verificationRoot"
 }
-Remove-Item -LiteralPath $verificationBaseRoot -Force
-if (Test-Path -LiteralPath $verificationBaseRoot) {
-	throw "Setup verification left unexpected files in its owned directory: $verificationBaseRoot"
+if (-not (Get-ChildItem -LiteralPath $verificationBaseRoot -Force | Select-Object -First 1)) {
+	Remove-Item -LiteralPath $verificationBaseRoot -Force
 }
 
 Write-Host "Verified BeCoder Setup at $SetupPath"

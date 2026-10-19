@@ -30,6 +30,7 @@ import { compileNonNativeExtensionsBuildTask, compileNativeExtensionsBuildTask, 
 import { copyCodiconsTask } from './lib/compilation.ts';
 import { getRipgrepExcludeFilter } from './lib/ripgrep.ts';
 import { isNodePtyPlatformFile } from './lib/nodePty.ts';
+import { isSevenZipPlatformFile } from './lib/sevenZip.ts';
 import { ensureOSProxyResolverPlatformPackage, getOSProxyResolverExcludeFilter, getOSProxyResolverPlatformFiles } from './lib/osProxyResolver.ts';
 import { isBeCoderElectronLocale } from './lib/electronLocales.ts';
 import { useEsbuildTranspile } from './buildConfig.ts';
@@ -360,6 +361,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const deps = es.merge(cleanedDeps, osProxyResolverPlatformPackage)
 			.pipe(filter(getRipgrepExcludeFilter(platform, arch)))
 			.pipe(filter(file => isNodePtyPlatformFile(file.relative, platform, arch)))
+			.pipe(filter(file => isSevenZipPlatformFile(file.relative, platform, arch)))
 			.pipe(filter(getOSProxyResolverExcludeFilter(platform, arch)))
 			.pipe(jsFilter)
 			.pipe(util.rewriteSourceMappingURL(sourceMappingURLBase))

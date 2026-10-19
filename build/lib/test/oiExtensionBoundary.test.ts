@@ -836,6 +836,7 @@ suite('OI extension boundary', () => {
 		const product = JSON.parse(productText) as {
 			extensionsGallery?: Record<string, string>;
 			extensionBlacklist?: readonly string[];
+			extensionControlManifestExemptions?: readonly string[];
 			protectedExtensions?: readonly string[];
 			builtInExtensions?: readonly { name?: string }[];
 			linkProtectionTrustedDomains?: readonly string[];
@@ -851,6 +852,7 @@ suite('OI extension boundary', () => {
 			'ms-vscode.cpptools-extension-pack',
 			'divyanshuagrawal.competitive-programming-helper'
 		]);
+		assert.strictEqual(product.extensionControlManifestExemptions, undefined);
 		assert.deepStrictEqual(product.protectedExtensions, [
 			'becoder.becoder-setup',
 			'becoder.runner',
@@ -1735,17 +1737,33 @@ suite('OI extension boundary', () => {
 		assert.match(buildToolchainSource, /becoder-toolchain-manifest\.json/);
 		const setupScript = fs.readFileSync(path.join(repositoryRoot, 'build', 'win32', 'becoder.iss'), 'utf8');
 		assert.match(setupScript, /PrivilegesRequired=lowest/);
-		assert.match(setupScript, /Uninstallable=no/);
-		assert.match(setupScript, /CreateUninstallRegKey=no/);
+		assert.match(setupScript, /Uninstallable\s*=\s*not IsPortableMode\(\)/);
+		assert.match(setupScript, /CreateUninstallRegKey\s*=\s*not IsPortableMode\(\)/);
+		assert.match(setupScript, /^UninstallDisplayIcon=\{app\}\\\{#ExeBasename\}\.exe$/m);
+		assert.match(setupScript, /function IsPortableMode\(\): Boolean/);
+		assert.match(setupScript, /CreateCustomPage\(wpWelcome/);
+		assert.match(setupScript, /english\.NativeInstallMode=Native application \(recommended\)/);
+		assert.match(setupScript, /english\.PortableInstallMode=Fully portable \(no system integration\)/);
+		assert.match(setupScript, /simplifiedChinese\.NativeInstallMode=原生应用版（推荐）/);
+		assert.match(setupScript, /simplifiedChinese\.PortableInstallMode=完全 Portable 版（不写入系统集成）/);
 		assert.doesNotMatch(setupScript, /^AppId=/m);
 		assert.match(setupScript, /^\[Tasks\]$/m);
 		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"$/m);
+		assert.match(setupScript, /SetWindowLongW\(WizardForm\.TasksList\.Handle, -20,\s*GetWindowLongW\(WizardForm\.TasksList\.Handle, -20\) or \$02000000\)/);
 		assert.match(setupScript, /^english\.CreateDesktopShortcut=Create a desktop shortcut \(not recommended when installing BeCoder on removable storage\)$/m);
 		assert.match(setupScript, /^simplifiedChinese\.CreateDesktopShortcut=创建桌面快捷方式（当你正在给可移动存储介质安装 BeCoder 时，不建议勾选）$/m);
 		assert.match(setupScript, /^\[Icons\]$/m);
 		assert.match(setupScript, /^Name: "\{userdesktop\}\\\{#NameLong\}"; Filename: "\{app\}\\\{#ExeBasename\}\.exe"; WorkingDir: "\{app\}"; Tasks: desktopicon$/m);
+		assert.doesNotMatch(setupScript, /^Name: "\{userprograms\}/m);
+		assert.match(setupScript, /RunStartMenuShortcut\('create'\)/);
+		assert.match(setupScript, /RunStartMenuShortcut\('remove'\)/);
+		assert.match(setupScript, /ShortcutHelperSHA256/);
+		assert.match(setupScript, /LockShortcutDirectories\(ExtractFileDir\(HelperPath\), DirectoryLocks\)/);
+		assert.match(setupScript, /GetShortcutDirectoryInfo\(Handle, 9, Info, 8\)/);
 		assert.doesNotMatch(setupScript, /^\[Registry\]$/m);
-		assert.doesNotMatch(setupScript, /^\[UninstallDelete\]$/m);
+		assert.match(setupScript, /^\[UninstallDelete\]$/m);
+		assert.match(setupScript, /^Type: filesandordirs; Name: "\{app\}\\data"$/m);
+		assert.match(setupScript, /^Type: files; Name: "\{app\}\\\.becoder-installation\.json"$/m);
 		assert.doesNotMatch(setupScript, /\{(?:auto|common)desktop\}|\{group\}|\{userstartmenu\}|\{commonstartmenu\}|DefaultGroupName/i);
 		assert.doesNotMatch(setupScript, /InitializeUninstall|UninstallWarning|SilentUninstall|uninstallexe|ScheduleMovedInstallationRemoval/);
 		assert.doesNotMatch(setupScript, /\bReg(?:Write|Delete)\w*\s*\(/i);
@@ -1832,9 +1850,10 @@ suite('OI extension boundary', () => {
 		assert.match(setupVerifierSource, /unicode-junction\.log/);
 		assert.match(setupVerifierSource, /long-junction\.log/);
 		assert.match(setupVerifierSource, /junction target must survive/);
-		assert.match(setupVerifierSource, /\$verificationBaseRoot = Join-Path \$repositoryRoot '\.build\\si'/);
+		assert.match(setupVerifierSource, /\$verificationBaseRoot = 'C:\\BeCoderSetupVerification'/);
 		assert.match(setupVerifierSource, /\[Guid\]::NewGuid\(\)\.ToString\('N'\)\.Substring\(0, 6\)/);
-		assert.match(setupVerifierSource, /Unable to remove the previous Setup verification directory/);
+		assert.match(setupVerifierSource, /Unsafe Setup verification directory/);
+		assert.doesNotMatch(setupVerifierSource, /Remove-Item -LiteralPath \$verificationBaseRoot -Recurse/);
 		assert.match(setupVerifierSource, /Unable to remove the completed Setup verification run/);
 		assert.match(setupVerifierSource, /reg\.exe query \$hive \/f \$term \/k \/s/);
 		const electronBuildSource = fs.readFileSync(path.join(repositoryRoot, 'build', 'lib', 'electron.ts'), 'utf8');
@@ -1916,7 +1935,7 @@ suite('OI extension boundary', () => {
 				'$snapshot = @(Get-ShortcutSnapshot -Paths $paths)',
 				'ConvertTo-Json -InputObject $snapshot -Compress'
 			].join('; ');
-			const environment = {
+			const environment: NodeJS.ProcessEnv = {
 				...process.env,
 				BECODER_SHORTCUT_FUNCTION: functionBase64,
 				BECODER_SHORTCUT_PATHS: pathsBase64

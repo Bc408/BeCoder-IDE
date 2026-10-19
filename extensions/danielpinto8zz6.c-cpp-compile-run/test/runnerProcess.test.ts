@@ -16,7 +16,7 @@ import { PassThrough } from 'stream';
 import { suite, test } from 'node:test';
 
 import type { BeCoderSource, RunnerSettings } from '../src/compiler';
-import { buildCompilerArguments, finalizePublishedExecutable, privateRunnerEnvironment, publishExecutable, RunnerExecutionResult, RunnerExecutor } from '../src/runnerProcess';
+import { buildCompilerArguments, buildPrecompiledHeaderArguments, buildPrecompiledHeaderProbeArguments, finalizePublishedExecutable, privateRunnerEnvironment, publishExecutable, RunnerExecutionResult, RunnerExecutor } from '../src/runnerProcess';
 
 const settings: RunnerSettings = {
 	cStandard: 'c17',
@@ -113,6 +113,19 @@ suite('Runner process boundary', () => {
 		for (const flag of ['-O0', '-O3', '-Ofast', '-UDEBUG', '-DDEBUG=0', '-Wno-all']) {
 			assert.throws(() => buildCompilerArguments(source, { ...settings, cppFlags: [flag] }, 'D:\\contest\\main.exe'));
 		}
+	});
+
+	test('builds a universal-header cache with the exact effective C++ flags and debugger header', () => {
+		assert.deepStrictEqual(buildPrecompiledHeaderArguments('D:\\BeCoder\\bits\\stdc++.h', { ...settings, cppStandard: 'c++17', cppFlags: ['-DLOCAL=1', '-Wall'] }, 'D:\\BeCoder\\bits\\cache.tmp'), [
+			'-O2', '-Wall', '-DDEBUG', '-DLOCAL=1', '-std=c++17',
+			'-finput-charset=UTF-8', '-fexec-charset=UTF-8',
+			'-include', 'bits/debugger.h', '-x', 'c++-header', 'D:\\BeCoder\\bits\\stdc++.h', '-o', 'D:\\BeCoder\\bits\\cache.tmp'
+		]);
+		assert.throws(() => buildPrecompiledHeaderArguments('D:\\BeCoder\\bits\\stdc++.h', { ...settings, cppFlags: ['-fplugin=unsafe.dll'] }, 'D:\\BeCoder\\bits\\cache.tmp'));
+		assert.deepStrictEqual(buildPrecompiledHeaderProbeArguments('D:\\BeCoder\\probe.cpp', { ...settings, cppStandard: 'c++17', cppFlags: ['-DLOCAL=1'] }), [
+			'-O2', '-Wall', '-DDEBUG', '-DLOCAL=1', '-std=c++17', '-finput-charset=UTF-8', '-fexec-charset=UTF-8', '-fdiagnostics-color=never',
+			'-include', 'bits/stdc++.h', '-include', 'bits/debugger.h', '-fsyntax-only', 'D:\\BeCoder\\probe.cpp', '-H', '-Winvalid-pch'
+		]);
 	});
 
 	test('creates a private allowlisted environment', () => {
@@ -456,11 +469,19 @@ suite('Runner process boundary', () => {
 				terminate: async () => undefined
 			});
 			const source = sourceAt(sourcePath);
-			const result = await executor.execute(requestFor(source, compilerPath), {
+			const request = { ...requestFor(source, compilerPath), requestStartedAt: Date.now() - 100, preCompileMs: 100 };
+			let bannerElapsedMs: number | undefined;
+			const result = await executor.execute(request, {
 				write: () => undefined,
-				setPhase: () => undefined
+				setPhase: () => undefined,
+				beforeProgramStart: elapsedMs => bannerElapsedMs = elapsedMs
 			});
 			assert.strictEqual(result.status, 'completed');
+			assert.ok((bannerElapsedMs ?? 0) >= 100);
+			assert.strictEqual(result.timings.bannerElapsedMs, bannerElapsedMs);
+			assert.strictEqual(result.timings.preCompileMs, 100);
+			assert.ok(result.timings.runnerPreparationMs! >= 0);
+			assert.ok(result.timings.publishMs! >= 0);
 			assert.strictEqual(result.publishedExecutable, true);
 			assert.strictEqual(result.executableRemoved, false);
 			assert.ok(path.resolve(compilerOutputPath).startsWith(path.resolve(sessionRoot) + path.sep));
@@ -965,6 +986,7 @@ function requestFor(source: BeCoderSource, compilerPath: string, runnerSettings 
 		compilerPath,
 		settings: runnerSettings,
 		requestStartedAt: Date.now(),
+		preCompileMs: 0,
 		panelReadyMs: 0,
 		saveMs: 0
 	};

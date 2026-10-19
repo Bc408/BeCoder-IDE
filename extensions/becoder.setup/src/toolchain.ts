@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { selectDisplayText } from './localize';
+import { isGchCachePath } from './pchCache';
 import { IToolchainManifest, maximumToolchainManifestBytes, validateToolchainManifest } from './toolchainManifest';
 
 const manifestName = 'becoder-toolchain-manifest.json';
@@ -27,7 +28,6 @@ const requiredPaths = new Set([
 	'ucrt64/bin/libintl-8.dll',
 	'ucrt64/bin/libiconv-2.dll',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h',
-	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1.exe',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1plus.exe',
@@ -86,6 +86,9 @@ async function collectInstalledFiles(root: string, relativeDirectory = ''): Prom
 	const result: string[] = [];
 	for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name, 'en'))) {
 		const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+		if (isGchCachePath(relativePath)) {
+			continue;
+		}
 		if (relativePath === manifestName) {
 			continue;
 		}
@@ -130,9 +133,10 @@ export async function validateInstalledToolchain(context: vscode.ExtensionContex
 		return { root, issues: [...issues, manifestValidation.issue ?? 'The toolchain manifest is invalid.'] };
 	}
 	const manifest: IToolchainManifest = manifestValidation.manifest;
-	const manifestPaths = new Set(manifest.files.map(file => file.path));
-	const caseInsensitiveManifestPaths = new Set(manifest.files.map(file => file.path.toLowerCase()));
-	if (manifestPaths.size !== manifest.files.length || caseInsensitiveManifestPaths.size !== manifest.files.length) {
+	const trackedManifestFiles = manifest.files.filter(file => !isGchCachePath(file.path));
+	const manifestPaths = new Set(trackedManifestFiles.map(file => file.path));
+	const caseInsensitiveManifestPaths = new Set(trackedManifestFiles.map(file => file.path.toLowerCase()));
+	if (manifestPaths.size !== trackedManifestFiles.length || caseInsensitiveManifestPaths.size !== trackedManifestFiles.length) {
 		issues.push('The toolchain manifest contains duplicate paths.');
 	}
 	for (const requiredPath of requiredPaths) {
@@ -140,7 +144,7 @@ export async function validateInstalledToolchain(context: vscode.ExtensionContex
 			issues.push(`Manifest entry missing: ${requiredPath}`);
 		}
 	}
-	const filesToVerify = verifyHashes ? manifest.files : manifest.files.filter(file => requiredPaths.has(file.path));
+	const filesToVerify = verifyHashes ? trackedManifestFiles : trackedManifestFiles.filter(file => requiredPaths.has(file.path));
 	for (const file of filesToVerify) {
 		const filePath = path.join(root, ...file.path.split('/'));
 		const stat = await fs.promises.stat(filePath).catch(() => undefined);
@@ -160,7 +164,7 @@ export async function validateInstalledToolchain(context: vscode.ExtensionContex
 				issues.push(`Unrecognized toolchain file: ${file}`);
 			}
 		}
-		for (const file of manifest.files) {
+		for (const file of trackedManifestFiles) {
 			if (!actualPaths.has(file.path.toLowerCase())) {
 				issues.push(`Manifest file is absent from the installed tree: ${file.path}`);
 			}
@@ -179,21 +183,16 @@ export function initializeInstalledToolchain(context: vscode.ExtensionContext): 
 		}
 		// allow-any-unicode-next-line
 		const getSetup = selectDisplayText('Get BeCoder Setup', '获取 BeCoder Setup');
-		// allow-any-unicode-next-line
-		const diagnostics = selectDisplayText('Open Diagnostics', '打开诊断');
 		const action = await vscode.window.showErrorMessage(
 			selectDisplayText(
 				'The BeCoder toolchain is incomplete or damaged. Reinstall BeCoder with the latest Setup package.',
 				// allow-any-unicode-next-line
 				'BeCoder 工具链不完整或已损坏。请使用最新 Setup 安装包重新安装 BeCoder。'
 			),
-			getSetup,
-			diagnostics
+			getSetup
 		);
 		if (action === getSetup) {
 			await vscode.env.openExternal(setupUrl);
-		} else if (action === diagnostics) {
-			await vscode.commands.executeCommand('becoder.openToolchainDiagnostics');
 		}
 	}, error => console.error('BeCoder toolchain health check failed.', error));
 }

@@ -9623,6 +9623,7 @@
 			"defineKeybinding.oneExists": "已有 1 条命令的按键绑定与此相同"
 		},
 		"vs/workbench/contrib/preferences/browser/preferences.contribution": {
+			"generateGchCache": "生成 gch 缓存",
 			"clear": "清除搜索结果",
 			"clearHistory": "清除键盘快捷方式搜索历史记录",
 			"defineKeybinding.start": "定义键绑定",

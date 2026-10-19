@@ -8,16 +8,20 @@ import * as vscode from 'vscode';
 import { FileVisibilityState, hideBeCoderFiles, isBeCoderHideActiveInAllScopes, migrateLegacyBeCoderExcludes, showBeCoderFiles } from './fileVisibility';
 import { registerSimpleSettings } from './simpleSettings';
 import { initializeInstalledToolchain } from './toolchain';
-import { registerToolchainDiagnostics } from './toolchainDiagnostics';
+import { registerGchGeneration, stopGchGeneration } from './gchGeneration';
 
 const LEGACY_FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v4';
 const FILE_EXCLUDES_MIGRATION = 'becoder.fileExcludes.v5';
 const FILE_VISIBILITY_STATE = 'becoder.fileVisibility.state.v1';
 const CLANGD_SETTINGS_MIGRATION = 'becoder.clangdSettings.v1';
 
+export async function deactivate(): Promise<void> {
+	await stopGchGeneration();
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	registerSimpleSettings(context);
-	registerToolchainDiagnostics(context);
+	registerGchGeneration(context);
 	if (!context.globalState.get<boolean>(FILE_EXCLUDES_MIGRATION)) {
 		await migrateLegacyFileExcludes(context.globalState.get<boolean>(LEGACY_FILE_EXCLUDES_MIGRATION) === true);
 		await context.globalState.update(FILE_EXCLUDES_MIGRATION, true);

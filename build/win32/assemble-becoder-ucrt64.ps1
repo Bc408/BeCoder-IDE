@@ -178,12 +178,10 @@ try {
 			throw "The slim compiler is missing a required C/Windows/thread header: $requiredHeader"
 		}
 	}
-	$standardHeader = Join-Path $stagedRoot 'include\c++\16.2.0\x86_64-w64-mingw32\bits\stdc++.h'
-	$pchPath = "$standardHeader.gch"
 	$compiler = Join-Path $stagedRoot 'bin\g++.exe'
-	& $compiler '-O2' '-Wall' '-DDEBUG' '-std=c++20' '-finput-charset=UTF-8' '-fexec-charset=UTF-8' '-include' 'bits/debugger.h' '-x' 'c++-header' $standardHeader '-o' $pchPath
-	if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $pchPath -PathType Leaf)) {
-		throw 'GCC 16.2 failed to build the BeCoder stdc++.h precompiled header.'
+	$cachedHeaders = @(Get-ChildItem -LiteralPath $stagedRoot -Recurse -Force | Where-Object { $_.Name -match '\.gch$' })
+	foreach ($cachedHeader in $cachedHeaders) {
+		Remove-Item -LiteralPath $cachedHeader.FullName -Force -Recurse
 	}
 
 	$cppProbe = Join-Path $workRoot 'compiler-probe.cpp'

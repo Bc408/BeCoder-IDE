@@ -72,7 +72,6 @@ const requiredToolchainFiles = [
 	'ucrt64/bin/libintl-8.dll',
 	'ucrt64/bin/libiconv-2.dll',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h',
-	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1.exe',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1plus.exe',
@@ -163,7 +162,10 @@ async function copyDirectory(source: string, destination: string): Promise<void>
 	if (!stat?.isDirectory()) {
 		throw new Error(`The BeCoder compiler allowlist directory is missing: ${source}`);
 	}
-	await fs.promises.cp(source, destination, { recursive: true, errorOnExist: true, force: false });
+	await fs.promises.cp(source, destination, {
+		recursive: true, errorOnExist: true, force: false,
+		filter: candidate => !path.basename(candidate).toLowerCase().endsWith('.gch')
+	});
 }
 
 async function stageSlimCompiler(compilerArchive: string, toolchainRoot: string): Promise<void> {

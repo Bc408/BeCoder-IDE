@@ -17,7 +17,7 @@
 	"command.openSettings": "BeCoder IDE：设置",
 	"command.configureCppSnippets": "BeCoder IDE：配置代码模板",
 	"command.configureAutoFormat": "BeCoder IDE：配置自动格式化",
-	"command.openToolchainDiagnostics": "BeCoder IDE：工具链诊断",
+	"command.generateGchCache": "BeCoder IDE：生成 gch 缓存",
 	"command.showAllFiles": "BeCoder IDE：显示所有文件",
 	"command.hideSetupFiles": "BeCoder IDE：隐藏配置和可执行文件"
 }

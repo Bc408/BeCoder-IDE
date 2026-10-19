@@ -127,7 +127,7 @@ export class CompileRunManager implements vscode.Disposable {
 				throw new Error('BeCoder generated an invalid internal Run command.');
 			}
 			pseudoterminal.echoCommand(commandText);
-			await this.executeRun(commandText, parsed.command, prepared, requestStartedAt, panelReadyMs, pseudoterminal, request);
+			await this.executeRun(commandText, parsed.command, prepared, requestStartedAt, Date.now() - requestStartedAt, panelReadyMs, pseudoterminal, request);
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
@@ -176,7 +176,7 @@ export class CompileRunManager implements vscode.Disposable {
 			request.beaconActivity = await this.beginBeaconActivity(sourcePath);
 			const prepared = await prepareCommandSource(sourcePath);
 			this.throwIfCancelled(request);
-			await this.executeRun(text.trim(), parsed.command, prepared, requestStartedAt, 0, pseudoterminal, request);
+			await this.executeRun(text.trim(), parsed.command, prepared, requestStartedAt, Date.now() - requestStartedAt, 0, pseudoterminal, request);
 		} catch (error) {
 			this.handleRequestError(error, request, pseudoterminal);
 		} finally {
@@ -216,6 +216,7 @@ export class CompileRunManager implements vscode.Disposable {
 		command: Extract<BcCommand, { kind: 'run' }>,
 		prepared: PreparedSource,
 		requestStartedAt: number,
+		preCompileMs: number,
 		panelReadyMs: number,
 		pseudoterminal: BcTerminal,
 		request: ActiveRequest
@@ -234,6 +235,7 @@ export class CompileRunManager implements vscode.Disposable {
 			ptyDimensions: pseudoterminal.programDimensions,
 			inputHelperPath: path.join(this.context.extensionPath, 'dist', 'runner-input.exe'),
 			requestStartedAt,
+			preCompileMs,
 			panelReadyMs,
 			saveMs: prepared.saveMs
 		}, {

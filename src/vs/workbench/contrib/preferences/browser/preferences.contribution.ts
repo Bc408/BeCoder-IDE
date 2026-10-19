@@ -217,6 +217,11 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 	}
 
 	private registerSettingsActions() {
+		this._register(MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
+			command: { id: 'becoder.generateGchCache', title: nls.localize('generateGchCache', "Generate gch Cache") },
+			group: '2_configuration',
+			order: 2.5
+		}));
 		this._register(registerAction2(class extends Action2 {
 			constructor() {
 				super({

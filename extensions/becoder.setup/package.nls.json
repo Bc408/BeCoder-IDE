@@ -17,7 +17,7 @@
 	"command.openSettings": "BeCoder IDE: Settings",
 	"command.configureCppSnippets": "BeCoder IDE: Configure Code Snippets",
 	"command.configureAutoFormat": "BeCoder IDE: Configure Automatic Formatting",
-	"command.openToolchainDiagnostics": "BeCoder IDE: Toolchain Diagnostics",
+	"command.generateGchCache": "BeCoder IDE: Generate gch Cache",
 	"command.showAllFiles": "BeCoder IDE: Show All Files",
 	"command.hideSetupFiles": "BeCoder IDE: Hide Configuration and Executable Files"
 }

@@ -64,7 +64,11 @@ for (const standard of ['c++11', 'c++14', 'c++17', 'c++20', 'c++23']) {
 			const args = buildCompilerArguments({ path: input, language: 'cpp', originalPath }, { ...settings, cppStandard: standard }, executable);
 			const result = spawnSync(compiler, [...args, '-H', '-Winvalid-pch'], { cwd: directory, env: environment, windowsHide: true, timeout: 30000, encoding: 'utf8' });
 			assert.strictEqual(result.status, 0, result.stderr);
-			assert.match(result.stderr, standard === 'c++20' ? /! .*stdc\+\+\.h\.gch/ : /x .*stdc\+\+\.h\.gch/);
+			if (fs.existsSync(path.join(compilerRoot, 'include', 'c++', '16.2.0', 'x86_64-w64-mingw32', 'bits', 'stdc++.h.gch'))) {
+				assert.match(result.stderr, standard === 'c++20' ? /! .*stdc\+\+\.h\.gch/ : /x .*stdc\+\+\.h\.gch/);
+			} else {
+				assert.doesNotMatch(result.stderr, /! .*stdc\+\+\.h\.gch/);
+			}
 			const run = spawnSync(executable, [], { cwd: directory, env: environment, windowsHide: true, timeout: 5000, encoding: 'utf8' });
 			assert.strictEqual(run.status, 0, run.stderr);
 			return { stdout: run.stdout, stderr: stripVTControlCharacters(run.stderr) };

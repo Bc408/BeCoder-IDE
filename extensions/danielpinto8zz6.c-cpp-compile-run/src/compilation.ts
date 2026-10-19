@@ -16,11 +16,8 @@ export function buildCompilerArguments(source: Pick<BeCoderSource, 'path' | 'lan
 		throw new Error(`Unsupported BeCoder ${source.language === 'c' ? 'C' : 'C++'} standard: ${standard}`);
 	}
 	const requestedFlags = source.language === 'c' ? settings.cFlags : settings.cppFlags;
-	const requiredFlags = ['-O2', '-Wall', '-DDEBUG'];
-	const flags = requestedFlags.map(validateCompilerFlag).filter(flag => !requiredFlags.includes(flag));
 	return [
-		...requiredFlags,
-		...flags,
+		...validatedCompilerFlags(requestedFlags),
 		`-std=${standard}`,
 		'-finput-charset=UTF-8',
 		'-fexec-charset=UTF-8',
@@ -36,6 +33,45 @@ export function buildCompilerArguments(source: Pick<BeCoderSource, 'path' | 'lan
 		'-o',
 		outputPath
 	];
+}
+
+export function buildPrecompiledHeaderArguments(headerPath: string, settings: RunnerSettings, outputPath: string): readonly string[] {
+	return [
+		...cppCompilationOptions(settings),
+		'-include', 'bits/debugger.h',
+		'-x', 'c++-header',
+		headerPath,
+		'-o', outputPath
+	];
+}
+
+export function buildPrecompiledHeaderProbeArguments(sourcePath: string, settings: RunnerSettings): readonly string[] {
+	return [
+		...cppCompilationOptions(settings),
+		'-fdiagnostics-color=never',
+		'-include', 'bits/stdc++.h',
+		'-include', 'bits/debugger.h',
+		'-fsyntax-only', sourcePath,
+		'-H', '-Winvalid-pch'
+	];
+}
+
+function cppCompilationOptions(settings: RunnerSettings): readonly string[] {
+	if (!['c++11', 'c++14', 'c++17', 'c++20', 'c++23'].includes(settings.cppStandard)) {
+		throw new Error(`Unsupported BeCoder C++ standard: ${settings.cppStandard}`);
+	}
+	return [
+		...validatedCompilerFlags(settings.cppFlags),
+		`-std=${settings.cppStandard}`,
+		'-finput-charset=UTF-8',
+		'-fexec-charset=UTF-8'
+	];
+}
+
+function validatedCompilerFlags(requestedFlags: readonly string[]): readonly string[] {
+	const requiredFlags = ['-O2', '-Wall', '-DDEBUG'];
+	const flags = requestedFlags.map(validateCompilerFlag).filter(flag => !requiredFlags.includes(flag));
+	return [...requiredFlags, ...flags];
 }
 
 export function privateRunnerEnvironment(sessionRoot: string, compilerPath: string): Record<string, string> {

@@ -61,7 +61,8 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.setup\out\extension.js',
 	'resources\app\extensions\becoder.setup\out\fileVisibility.js',
 	'resources\app\extensions\becoder.setup\out\toolchain.js',
-	'resources\app\extensions\becoder.setup\out\toolchainDiagnostics.js',
+	'resources\app\extensions\becoder.setup\out\gchGeneration.js',
+	'resources\app\extensions\becoder.setup\out\pchCache.js',
 	'resources\app\extensions\becoder.setup\out\toolchainManifest.js',
 	'resources\app\node_modules.asar',
 	'resources\app\node_modules.asar.unpacked\@vscode\sqlite3\build\Release\vscode-sqlite3.node',
@@ -417,25 +418,24 @@ foreach ($removedPreparationBoundary in @('.becoder-repair-requested', '.becoder
 		throw "The packaged Setup extension contains a removed runtime toolchain-preparation boundary: $removedPreparationBoundary"
 	}
 }
-foreach ($requiredSetupCommand in @('becoder.openToolchainDiagnostics')) {
+foreach ($requiredSetupCommand in @('becoder.generateGchCache')) {
 	if ($setupCommands -notcontains $requiredSetupCommand) {
 		throw "The packaged Setup extension is missing command: $requiredSetupCommand"
 	}
 }
-foreach ($removedSetupCommand in @('becoder.exportUserData', 'becoder.importUserData')) {
+foreach ($removedSetupCommand in @('becoder.exportUserData', 'becoder.importUserData', 'becoder.openToolchainDiagnostics')) {
 	if ($setupCommands -contains $removedSetupCommand) {
 		throw "The packaged Setup extension still contributes a removed BeCoder user-data transfer command: $removedSetupCommand"
 	}
 }
 $toolchainBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchain.js') -Raw
-$toolchainDiagnosticsBundle = Get-Content -LiteralPath (Join-Path $appPath 'extensions\becoder.setup\out\toolchainDiagnostics.js') -Raw
-foreach ($requiredHealthBoundary in @('becoder-toolchain-manifest.json', 'Get BeCoder Setup', 'Open Diagnostics')) {
+foreach ($requiredHealthBoundary in @('becoder-toolchain-manifest.json', 'Get BeCoder Setup')) {
 	if (-not $toolchainBundle.Contains($requiredHealthBoundary)) {
 		throw "The packaged installed-toolchain health check is missing: $requiredHealthBoundary"
 	}
 }
-if ($toolchainDiagnosticsBundle -notmatch 'validateInstalledToolchain\)\([^,]+,\s*true\)') {
-	throw 'The packaged diagnostics page does not request explicit full toolchain integrity verification.'
+if ((Test-Path -LiteralPath (Join-Path $setupOutRoot 'toolchainDiagnostics.js')) -or $toolchainBundle.Contains('Open Diagnostics')) {
+	throw 'The packaged Setup extension still contains the removed toolchain diagnostics UI.'
 }
 $displayLanguage = $setupManifest.contributes.configuration.properties.'becoder.displayLanguage'
 if ($displayLanguage.default -ne 'zh-cn' -or
@@ -729,7 +729,6 @@ $requiredToolchainFiles = @(
 	'ucrt64/bin/libintl-8.dll',
 	'ucrt64/bin/libiconv-2.dll',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h',
-	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/stdc++.h.gch',
 	'ucrt64/include/c++/16.2.0/x86_64-w64-mingw32/bits/debugger.h',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1.exe',
 	'ucrt64/lib/gcc/x86_64-w64-mingw32/16.2.0/cc1plus.exe',
@@ -745,6 +744,10 @@ $requiredToolchainFiles = @(
 	'clangd/clangd_22.1.6/LICENSE.TXT'
 )
 $manifestPaths = @($toolchainManifest.files.path)
+if (@(Get-ChildItem -LiteralPath $toolchainRoot -Recurse -Force | Where-Object { $_.Name -match '\.gch$' }).Count -gt 0 -or
+	@($manifestPaths | Where-Object { $_ -match '\.gch(/|$)' }).Count -gt 0) {
+	throw 'The staged toolchain contains a runtime-only gch cache.'
+}
 foreach ($requiredToolchainFile in $requiredToolchainFiles) {
 	if ($manifestPaths -notcontains $requiredToolchainFile) {
 		throw "The staged toolchain manifest is missing a critical component: $requiredToolchainFile"
@@ -798,8 +801,8 @@ foreach ($forbiddenCompilerEntry in @(
 }
 $compilerSize = (Get-ChildItem -LiteralPath $compilerRoot -File -Recurse | Measure-Object Length -Sum).Sum
 $compilerFileCount = @(Get-ChildItem -LiteralPath $compilerRoot -File -Recurse).Count
-if ($compilerFileCount -ne 3233) {
-	throw "The staged compiler does not match the audited 3233-file closure: $compilerFileCount files"
+if ($compilerFileCount -ne 3232) {
+	throw "The staged compiler does not match the audited 3232-file closure: $compilerFileCount files"
 }
 if ($compilerSize -gt 400MB) {
 	throw "The staged compiler exceeds the audited 400 MiB boundary: $compilerSize bytes"
@@ -865,8 +868,8 @@ if ($electronComponent.version -ne '43.7.3' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne '8435eb0aaeb22e3b21baf12a632f34ee8783277d772ef90740f7c9e7342ecc6f' -or
-	$languagePackComponent.packagedContentSha256 -ne 'fd0f4673efb956ca2b469363037e573bf34239ecb59f218335cf1c97efe00905') {
+	$languagePackComponent.contentSha256 -ne 'c7b7076b6a0270dc3f9ab618cab5047d527d28bd73255fc8dfe0ff0c5eaa63d6' -or
+	$languagePackComponent.packagedContentSha256 -ne 'd44a0f0524da6cd09a466b3c22cf376a2e96432cabfb1969c859aca79bbe8dea') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

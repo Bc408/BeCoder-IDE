@@ -8,10 +8,11 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 
 import { CompileRunManager } from './compile-run-manager';
-import { bundledCompiler, runnerSettings } from './compiler';
-import { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
+import { bundledCompiler, runnerSettings, toolchainRoot } from './compiler';
+import { buildCompilerArguments, buildPrecompiledHeaderArguments, buildPrecompiledHeaderProbeArguments, privateRunnerEnvironment } from './compilation';
 import { captureCompilationSource, CompilationSourceSnapshot } from './compilationSnapshot';
 import { BeaconEvidence, RuntimeEvidence } from './beaconEvidence';
 import { runNotebookProgram, NotebookRunRequest, NotebookRunCallbacks, NotebookRunResult } from './notebookProcess';
@@ -43,6 +44,33 @@ export function activate(context: vscode.ExtensionContext): RunnerCompilerApi {
 	for (const [command, handler] of commands) {
 		context.subscriptions.push(vscode.commands.registerCommand(command, handler));
 	}
+	context.subscriptions.push(vscode.commands.registerCommand('_becoder.runner.gchGenerationPlan', (temporaryOutput: unknown, probeSource: unknown, privateRoot: unknown) => {
+		if (typeof temporaryOutput !== 'string' || typeof probeSource !== 'string' || typeof privateRoot !== 'string') {
+			throw new Error('Invalid BeCoder gch generation paths.');
+		}
+		const root = path.resolve(toolchainRoot(context));
+		const header = path.join(root, 'ucrt64', 'include', 'c++', '16.2.0', 'x86_64-w64-mingw32', 'bits', 'stdc++.h');
+		const output = path.resolve(temporaryOutput);
+		const probe = path.resolve(probeSource);
+		const privateDirectory = path.resolve(privateRoot);
+		if (path.dirname(output) !== path.dirname(header) || !path.basename(output).startsWith('stdc++.h.gch.') || !path.basename(output).endsWith('.tmp')
+			|| !isWithin(root, probe) || path.dirname(probe) !== privateDirectory || !isWithin(root, privateDirectory)) {
+			throw new Error('BeCoder gch generation paths are outside the installed toolchain.');
+		}
+		const headerStat = fs.lstatSync(header);
+		if (!headerStat.isFile() || headerStat.isSymbolicLink()) {
+			throw new Error('The BeCoder universal header is missing or not an ordinary file.');
+		}
+		const compiler = bundledCompiler(context, 'cpp');
+		const settings = runnerSettings();
+		return {
+			compiler,
+			cwd: path.dirname(header),
+			buildArgs: buildPrecompiledHeaderArguments(header, settings, output),
+			probeArgs: buildPrecompiledHeaderProbeArguments(probe, settings),
+			environment: privateRunnerEnvironment(privateDirectory, compiler)
+		};
+	}));
 	return {
 		runNotebook(request, signal, callbacks) {
 			const settings = runnerSettings();
@@ -67,6 +95,11 @@ export function activate(context: vscode.ExtensionContext): RunnerCompilerApi {
 			return { compiler, args: buildCompilerArguments({ path: sourceSnapshot.path, originalPath: sourceSnapshot.originalPath, language }, settings, output), environment: privateRunnerEnvironment(session, compiler), sourceSnapshot };
 		}
 	};
+}
+
+function isWithin(root: string, candidate: string): boolean {
+	const relative = path.relative(root, candidate);
+	return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 export function deactivate(): void {

@@ -15,7 +15,7 @@ import { StringDecoder } from 'string_decoder';
 import type { BeCoderSource, RunnerSettings } from './compiler';
 import { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
 import { captureCompilationSource, CompilationSourceSnapshot, CompilerPathMapper } from './compilationSnapshot';
-export { buildCompilerArguments, privateRunnerEnvironment } from './compilation';
+export { buildCompilerArguments, buildPrecompiledHeaderArguments, buildPrecompiledHeaderProbeArguments, privateRunnerEnvironment } from './compilation';
 import { RunnerPhase } from './runnerLifecycle';
 import { Osc633Filter } from './terminalVisuals';
 import { RunnerPtyProcess } from './runnerPtyProcess';
@@ -27,6 +27,10 @@ export type RunnerTimings = {
 	readonly saveMs: number;
 	readonly compilerSpawnMs: number;
 	readonly compileMs: number;
+	readonly preCompileMs?: number;
+	readonly runnerPreparationMs?: number;
+	readonly publishMs?: number;
+	readonly bannerElapsedMs?: number;
 	readonly processStartMs?: number;
 	readonly compileToRunStartMs?: number;
 	readonly programRuntimeMs?: number;
@@ -74,6 +78,7 @@ export type RunnerExecutionRequest = {
 	readonly inputHelperPath?: string;
 	readonly ptyDimensions?: { readonly cols: number; readonly rows: number };
 	readonly requestStartedAt: number;
+	readonly preCompileMs: number;
 	readonly panelReadyMs: number;
 	readonly saveMs: number;
 };
@@ -82,7 +87,7 @@ export type RunnerExecutionCallbacks = {
 	readonly evidence?: RuntimeEvidence;
 	readonly write: (text: string) => void;
 	/** Publish Runner UI before ConPTY asks the frontend to inherit its cursor. */
-	readonly beforeProgramStart?: () => void;
+	readonly beforeProgramStart?: (bannerElapsedMs: number) => void;
 	readonly setPhase: (phase: Extract<RunnerPhase, 'compiling' | 'running'>) => void;
 };
 
@@ -153,6 +158,9 @@ export class RunnerExecutor {
 		let publicationCleanupFailed = false;
 		let compilerSpawnMs = 0;
 		let compileMs = 0;
+		let runnerPreparationMs = 0;
+		let publishMs: number | undefined;
+		let bannerElapsedMs: number | undefined;
 		let processStartMs: number | undefined;
 		let compileToRunStartMs: number | undefined;
 		let programRuntimeMs: number | undefined;
@@ -170,6 +178,7 @@ export class RunnerExecutor {
 				throw new RunnerUnableToStartError();
 			}
 			taskArtifactsCreated = true;
+			const runnerPreparationStartedAt = Date.now();
 			const environment = privateRunnerEnvironment(requestRoot, request.compilerPath);
 			await preparePrivateEnvironment(environment);
 			this.throwIfCancellationRequested();
@@ -192,6 +201,7 @@ export class RunnerExecutor {
 			sourceSnapshot = await captureCompilationSource(request.source.path, requestRoot);
 			this.throwIfCancellationRequested();
 			const compilerArguments = buildCompilerArguments({ ...request.source, path: sourceSnapshot.path, originalPath: sourceSnapshot.originalPath }, request.settings, temporaryExecutable);
+			runnerPreparationMs = Date.now() - runnerPreparationStartedAt;
 			callbacks.setPhase('compiling');
 			callbacks.evidence?.start(sourceSnapshot, { compiler: request.compilerPath, args: compilerArguments, cwd: request.source.directory,
 				input: inputData ? { source: request.inputPath, bytesBase64: inputData.toString('base64'), byteLength: inputData.length } : { source: 'interactive' },
@@ -219,10 +229,13 @@ export class RunnerExecutor {
 				message = 'BeCoder bundled compiler did not produce an executable.';
 			} else {
 				this.throwIfCancellationRequested();
+				const publishStartedAt = Date.now();
 				publishedExecutableIdentity = await publishExecutable(temporaryExecutable, request.source.executablePath, this.dependencies);
+				publishMs = Date.now() - publishStartedAt;
 				publishedExecutable = true;
 				this.throwIfCancellationRequested();
-				callbacks.beforeProgramStart?.();
+				bannerElapsedMs = Date.now() - request.requestStartedAt;
+				callbacks.beforeProgramStart?.(bannerElapsedMs);
 				const processRequestedAt = Date.now();
 				const programResult = request.ptyDimensions
 					? await this.runPty(request, environment, callbacks, inputSnapshot)
@@ -296,6 +309,10 @@ export class RunnerExecutor {
 				saveMs: request.saveMs,
 				compilerSpawnMs,
 				compileMs,
+				preCompileMs: request.preCompileMs,
+				runnerPreparationMs,
+				publishMs,
+				bannerElapsedMs,
 				processStartMs,
 				compileToRunStartMs,
 				programRuntimeMs,

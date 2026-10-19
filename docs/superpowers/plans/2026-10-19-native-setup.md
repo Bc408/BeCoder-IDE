@@ -42,4 +42,24 @@ No legacy migration, backup or cleanup of unrelated files. Commit and push were 
 - [x] Build staged Windows app, verify package, build Setup and directly verify it. Stop on failures, fix within scope and rerun affected gates.
 - [x] Review final diff and deliver Setup without committing. Owner observes startup UAC and performs manual acceptance.
 
-Accepted delivery: source checks, build-script suite 251/251, actual minimal installer test, staged/package and final Setup verification passed. The project owner accepted the Setup on 2026-10-19 and authorized documentation updates, the About attribution text change to Code-OSS (MIT) 1.140.0, and commit/push to `codex/BeCoder_Next`. Detailed attempts and corrected test assumptions remain in the local validation ledger. The existing verified Setup predates the subsequent About-only text change; do not treat it as a rebuilt installer for that change.
+Accepted delivery: source checks, build-script suite 251/251, actual minimal installer test, staged/package and final Setup verification passed. The project owner accepted the Setup on 2026-10-19 and authorized documentation updates, the About attribution text change to Code-OSS (MIT) 1.140.0, and commit/push to `codex/BeCoder_Next`. Detailed attempts and corrected test assumptions remain in the local validation ledger. The 2026-10-20 full rebuild below includes the subsequent About text change.
+
+
+## 2026-10-20 full Setup rebuild
+
+The owner requested a full source-to-Setup build, autonomous correction of failures, and commit/push to the corresponding branch. Product source baseline: `e8e59cc02a298f854d79bb3945877f3d44fe7871`. No product source fixes were needed. The owner separately confirmed removal of the three tracked `launch` skill files and requested including those deletions in this commit; these files are development tooling, not application payload.
+
+| Check | Final result |
+| --- | --- |
+| `npm run typecheck-client` | exit 0; 13.267 s; 120 s external limit |
+| `npm run compile-oi-extensions` | exit 0; 47.287 s; 120 s external limit |
+| `npm --prefix build run typecheck` | exit 0 |
+| `npm run test-build-scripts` | exit 0; 251/251 |
+| `npm run gulp vscode-win32-x64-min` | exit 0; 173.324 s; 300 s external limit |
+| Direct package verifier with `-IncludeCompiler $true` | exit 0 |
+| `npm run gulp vscode-win32-x64-becoder-setup` | exit 0; 355.282 s including command startup |
+| Elevated direct Setup verifier | exit 0; actual Portable/native installation, replacement/path protections, duplicate-native refusal, public shortcut/HKLM registration, and uninstall cleanup |
+
+The bundled workbench contains `Roots in Code-OSS (MIT) 1.140.0 & growth under GPL 3.0`; the direct installer verification also compares installed payload against the staged application. No installed editor was launched, and this rebuild does not assert a new GUI/runtime acceptance.
+
+Artifact: `.build/win32-x64/becoder-setup/BeCoderSetup-x64-2.0.0-beta.exe`, 173106214 bytes. SHA256: `D4411B9A680D7EB87294F939D18761ACCA373D779A5526056E549BCDBF175A8A`. The Setup is a local ignored build artifact; this branch publication does not create a tag or GitHub Release. Detailed commands and logs are in local ignored `tmp/setup-build-2026-10-20/`.

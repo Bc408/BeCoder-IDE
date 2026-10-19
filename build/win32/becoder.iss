@@ -1,4 +1,5 @@
 [Setup]
+AppId={#NameLong}
 AppName={#NameLong}
 AppVerName={#NameLong} {#Version}
 AppVersion={#Version}
@@ -16,7 +17,7 @@ UninstallDisplayIcon={app}\{#ExeBasename}.exe
 Uninstallable=not IsPortableMode()
 CreateUninstallRegKey=not IsPortableMode()
 MinVersion=10.0
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=force
@@ -66,10 +67,11 @@ simplifiedChinese.InstallModePageTitle=选择安装模式
 simplifiedChinese.InstallModePageDescription=选择 BeCoder 与此电脑的集成方式。
 simplifiedChinese.NativeInstallMode=原生应用版（推荐）
 simplifiedChinese.PortableInstallMode=完全 Portable 版（不写入系统集成）
-english.StartMenuCreateFailed=BeCoder is installed, but its public Start-menu shortcut could not be created. A shortcut belonging to another installation will be preserved. Retry? Cancel continues without this shortcut.
-simplifiedChinese.StartMenuCreateFailed=BeCoder 已安装，但未能创建公共开始菜单快捷方式。属于其他安装的快捷方式会被保留。是否重试？取消将继续完成安装，但不创建此快捷方式。
-english.StartMenuRemoveFailed=The public Start-menu shortcut could not be removed. A shortcut belonging to another installation will be preserved. Retry? Cancel continues the uninstall; you may need to remove the shortcut manually.
-simplifiedChinese.StartMenuRemoveFailed=未能移除公共开始菜单快捷方式。属于其他安装的快捷方式会被保留。是否重试？取消将继续卸载，你可能需要手动清理快捷方式。
+
+english.NativeAlreadyInstalled=BeCoder already has a native installation. Reinstall into its registered folder, or uninstall it before choosing another folder.
+simplifiedChinese.NativeAlreadyInstalled=BeCoder 已有原生安装。请在已登记的目录重新安装，或先卸载再选择其他目录。
+english.PortableOverNative=This folder is the registered native installation. Choose a different folder for Portable mode.
+simplifiedChinese.PortableOverNative=此目录是已登记的原生安装。请为 Portable 模式选择其他目录。
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"
@@ -80,9 +82,9 @@ Type: files; Name: "{app}\.becoder-installation.json"
 
 [Files]
 Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#ShortcutHelperPath}"; DestDir: "{app}\tools"; DestName: "becoder-shortcuts.exe"; Flags: ignoreversion; Check: not IsPortableMode()
 
 [Icons]
+Name: "{commonprograms}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; WorkingDir: "{app}"; Check: not IsPortableMode()
 Name: "{userdesktop}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
@@ -90,11 +92,6 @@ Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong
 
 [Code]
 type
-  TShortcutLocks = array of THandle;
-  TShortcutDirectoryInfo = record
-    Attributes: LongWord;
-    ReparseTag: LongWord;
-  end;
   TBeCoderGuid = record
     Data1: LongWord;
     Data2: Word;
@@ -188,108 +185,6 @@ function GetFileAttributesW(lpFileName: String): LongWord;
 
 function GetLongPathNameW(lpszShortPath: String; lpszLongPath: String; cchBuffer: LongWord): LongWord;
   external 'GetLongPathNameW@kernel32.dll stdcall';
-
-function LockShortcutHelper(FileName: String; Access, ShareMode, Security, Creation, Flags, Template: LongWord): THandle;
-  external 'CreateFileW@kernel32.dll stdcall';
-
-function CloseShortcutHelper(Handle: THandle): Boolean;
-  external 'CloseHandle@kernel32.dll stdcall';
-
-function GetShortcutDirectoryInfo(Handle: THandle; InfoClass: Integer; var Info: TShortcutDirectoryInfo; Size: LongWord): Boolean;
-  external 'GetFileInformationByHandleEx@kernel32.dll stdcall';
-
-function LockShortcutDirectories(const Directory: String; var Locks: TShortcutLocks): Boolean;
-var
-  Index: Integer;
-  Handle: THandle;
-  Info: TShortcutDirectoryInfo;
-begin
-  Result := False;
-  if (Length(Directory) < 3) or (Copy(Directory, 2, 2) <> ':\') then
-    Exit;
-  for Index := 3 to Length(Directory) do
-  begin
-    if (Index = 3) or (Index = Length(Directory)) or (Copy(Directory, Index + 1, 1) = '\') then
-    begin
-      { Open the directory itself, refusing junctions and holding its name stable. }
-      Handle := LockShortcutHelper(Copy(Directory, 1, Index), $80, 3, 0, 3, $02200000, 0);
-      if Handle = THandle($FFFFFFFF) then
-        Exit;
-      SetArrayLength(Locks, GetArrayLength(Locks) + 1);
-      Locks[GetArrayLength(Locks) - 1] := Handle;
-      if not GetShortcutDirectoryInfo(Handle, 9, Info, 8) then
-        Exit;
-      if ((Info.Attributes and $10) = 0) or ((Info.Attributes and FileAttributeReparsePoint) <> 0) then
-        Exit;
-    end;
-  end;
-  Result := True;
-end;
-
-function InvokeShortcutHelper(const Action: String; var ResultCode: Integer): Boolean;
-var
-  HelperPath: String;
-  Parameters: String;
-  HelperLock: THandle;
-  DirectoryLocks: TShortcutLocks;
-  HelperInfo: TShortcutDirectoryInfo;
-  Index: Integer;
-begin
-  Result := False;
-  ResultCode := 13;
-  HelperPath := ExpandConstant('{app}\tools\becoder-shortcuts.exe');
-  HelperLock := THandle($FFFFFFFF);
-  try
-    if not LockShortcutDirectories(ExtractFileDir(HelperPath), DirectoryLocks) then
-      Exit;
-    HelperLock := LockShortcutHelper(HelperPath, $80000000, 1, 0, 3, $00200080, 0);
-    if HelperLock = THandle($FFFFFFFF) then
-      Exit;
-    if not GetShortcutDirectoryInfo(HelperLock, 9, HelperInfo, 8) then
-      Exit;
-    if (HelperInfo.Attributes and ($10 or FileAttributeReparsePoint)) <> 0 then
-      Exit;
-    if CompareText(GetSHA256OfFile(HelperPath), '{#ShortcutHelperSHA256}') <> 0 then
-    begin
-      Log('The Start-menu helper failed its integrity check.');
-      Exit;
-    end;
-    Parameters := Action + ' "' + ExpandConstant('{app}') + '"';
-    Result := Exec(HelperPath, Parameters, ExpandConstant('{sys}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    if Result and ((ResultCode = 5) or (ResultCode = 1314)) and (Action <> 'remove-legacy') then
-    begin
-      Result := ShellExec('runas', HelperPath, Parameters, ExpandConstant('{sys}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      if Result then
-        { Verify the final shortcut state as the original user after elevation. }
-        Result := Exec(HelperPath, Parameters, ExpandConstant('{sys}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
-  finally
-    if HelperLock <> THandle($FFFFFFFF) then
-      CloseShortcutHelper(HelperLock);
-    for Index := GetArrayLength(DirectoryLocks) - 1 downto 0 do
-      CloseShortcutHelper(DirectoryLocks[Index]);
-  end;
-end;
-
-function RunStartMenuShortcut(const Action: String): Boolean;
-var
-  ResultCode: Integer;
-  Message: String;
-begin
-  Result := False;
-  repeat
-    if InvokeShortcutHelper(Action, ResultCode) and (ResultCode = 0) then
-    begin
-      Result := True;
-      Exit;
-    end;
-    Log(Format('Start-menu operation %s failed with code %d.', [Action, ResultCode]));
-    if Action = 'remove' then
-      Message := ExpandConstant('{cm:StartMenuRemoveFailed}')
-    else
-      Message := ExpandConstant('{cm:StartMenuCreateFailed}');
-  until SuppressibleMsgBox(Message, mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY;
-end;
 
 function IsHexDigit(const Value: Char): Boolean;
 begin
@@ -517,9 +412,29 @@ begin
   end;
 end;
 
+function CheckNativeDestination(const Target: String): String;
+var
+  ExistingDirectory: String;
+begin
+  Result := '';
+  if RegQueryStringValue(HKLM64,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#NameLong}_is1',
+    'InstallLocation', ExistingDirectory) then
+  begin
+    if IsPortableMode() then
+    begin
+      if CompareText(NormalizedPath(ExistingDirectory), Target) = 0 then
+        Result := ExpandConstant('{cm:PortableOverNative}');
+    end
+    else if CompareText(NormalizedPath(ExistingDirectory), Target) <> 0 then
+      Result := ExpandConstant('{cm:NativeAlreadyInstalled}');
+  end;
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Target: String;
+  DestinationError: String;
 begin
   Result := True;
   if CurPageID = InstallModePage.ID then
@@ -541,6 +456,13 @@ begin
   if not TryResolveSupportedInstallPath(WizardDirValue, Target) then
   begin
     SuppressibleMsgBox(ExpandConstant('{cm:UnsupportedPath}'), mbError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
+  DestinationError := CheckNativeDestination(Target);
+  if DestinationError <> '' then
+  begin
+    SuppressibleMsgBox(DestinationError, mbError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
@@ -569,6 +491,9 @@ begin
     Result := ExpandConstant('{cm:UnsupportedPath}');
     Exit;
   end;
+  Result := CheckNativeDestination(Target);
+  if Result <> '' then
+    Exit;
   SelectInstallationId(Target);
   if not DirExists(Target) or not DirectoryHasEntries(Target) then
     Exit;
@@ -592,24 +517,10 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  LegacyResult: Integer;
 begin
-	if CurStep = ssPostInstall then
-	begin
-		if (InstallationId = '') or not SaveStringToFile(ExpandConstant('{app}\') + OwnershipMarkerName, OwnershipMarkerValue(), False) then
-			RaiseException(ExpandConstant('{cm:OwnershipMarkerFailed}'));
-		if not IsPortableMode() and RunStartMenuShortcut('create') then
-		begin
-			{ Resolve the legacy user Programs path only in the unprivileged process. }
-			if not InvokeShortcutHelper('remove-legacy', LegacyResult) or (LegacyResult <> 0) then
-				Log(Format('Legacy Start-menu shortcut was preserved (code %d).', [LegacyResult]));
-		end;
-	end;
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-	if CurUninstallStep = usUninstall then
-		RunStartMenuShortcut('remove');
+  if CurStep = ssPostInstall then
+  begin
+    if (InstallationId = '') or not SaveStringToFile(ExpandConstant('{app}\') + OwnershipMarkerName, OwnershipMarkerValue(), False) then
+      RaiseException(ExpandConstant('{cm:OwnershipMarkerFailed}'));
+  end;
 end;

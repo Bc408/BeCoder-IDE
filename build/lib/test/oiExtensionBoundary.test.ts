@@ -1736,7 +1736,7 @@ suite('OI extension boundary', () => {
 		}
 		assert.match(buildToolchainSource, /becoder-toolchain-manifest\.json/);
 		const setupScript = fs.readFileSync(path.join(repositoryRoot, 'build', 'win32', 'becoder.iss'), 'utf8');
-		assert.match(setupScript, /PrivilegesRequired=lowest/);
+		assert.match(setupScript, /PrivilegesRequired=admin/);
 		assert.match(setupScript, /Uninstallable\s*=\s*not IsPortableMode\(\)/);
 		assert.match(setupScript, /CreateUninstallRegKey\s*=\s*not IsPortableMode\(\)/);
 		assert.match(setupScript, /^UninstallDisplayIcon=\{app\}\\\{#ExeBasename\}\.exe$/m);
@@ -1746,7 +1746,7 @@ suite('OI extension boundary', () => {
 		assert.match(setupScript, /english\.PortableInstallMode=Fully portable \(no system integration\)/);
 		assert.match(setupScript, /simplifiedChinese\.NativeInstallMode=原生应用版（推荐）/);
 		assert.match(setupScript, /simplifiedChinese\.PortableInstallMode=完全 Portable 版（不写入系统集成）/);
-		assert.doesNotMatch(setupScript, /^AppId=/m);
+		assert.match(setupScript, /^AppId=\{#NameLong\}$/m);
 		assert.match(setupScript, /^\[Tasks\]$/m);
 		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"$/m);
 		assert.match(setupScript, /SetWindowLongW\(WizardForm\.TasksList\.Handle, -20,\s*GetWindowLongW\(WizardForm\.TasksList\.Handle, -20\) or \$02000000\)/);
@@ -1755,11 +1755,8 @@ suite('OI extension boundary', () => {
 		assert.match(setupScript, /^\[Icons\]$/m);
 		assert.match(setupScript, /^Name: "\{userdesktop\}\\\{#NameLong\}"; Filename: "\{app\}\\\{#ExeBasename\}\.exe"; WorkingDir: "\{app\}"; Tasks: desktopicon$/m);
 		assert.doesNotMatch(setupScript, /^Name: "\{userprograms\}/m);
-		assert.match(setupScript, /RunStartMenuShortcut\('create'\)/);
-		assert.match(setupScript, /RunStartMenuShortcut\('remove'\)/);
-		assert.match(setupScript, /ShortcutHelperSHA256/);
-		assert.match(setupScript, /LockShortcutDirectories\(ExtractFileDir\(HelperPath\), DirectoryLocks\)/);
-		assert.match(setupScript, /GetShortcutDirectoryInfo\(Handle, 9, Info, 8\)/);
+		assert.match(setupScript, /^Name: "\{commonprograms\}\\\{#NameLong\}"; Filename: "\{app\}\\\{#ExeBasename\}\.exe"; WorkingDir: "\{app\}"; Check: not IsPortableMode\(\)$/m);
+		assert.doesNotMatch(setupScript, /ShortcutHelper|RunStartMenuShortcut|remove-legacy|ShellExec/);
 		assert.doesNotMatch(setupScript, /^\[Registry\]$/m);
 		assert.match(setupScript, /^\[UninstallDelete\]$/m);
 		assert.match(setupScript, /^Type: filesandordirs; Name: "\{app\}\\data"$/m);

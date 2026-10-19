@@ -12,7 +12,6 @@ import vfs from 'vinyl-fs';
 import pkg from '../package.json' with { type: 'json' };
 import product from '../product.json' with { type: 'json' };
 import { getVersion } from './lib/getVersion.ts';
-import { buildBeCoderShortcutHelper } from './lib/becoderShortcuts.ts';
 import * as task from './lib/gulp/task.ts';
 import * as util from './lib/util.ts';
 
@@ -140,20 +139,16 @@ function buildBeCoderSetup(arch: string): task.CallbackTask {
 			return;
 		}
 		fs.mkdirSync(outputPath, { recursive: true });
-		const shortcutHelper = path.join(outputPath, 'becoder-shortcuts.exe');
-		const compiler = path.join(sourcePath, 'data', 'toolchains', 'ucrt64', 'bin', 'g++.exe');
-		buildBeCoderShortcutHelper(compiler, shortcutHelper).then(shortcutHelperHash => packageInnoSetup(path.join(import.meta.dirname, 'win32', 'becoder.iss'), {
+		packageInnoSetup(path.join(import.meta.dirname, 'win32', 'becoder.iss'), {
 			definitions: {
 				NameLong: product.nameLong,
 				Version: pkg.version,
 				ExeBasename: product.nameShort,
 				SourceDir: sourcePath,
 				RepoDir: repoPath,
-				OutputDir: outputPath,
-				ShortcutHelperPath: shortcutHelper,
-				ShortcutHelperSHA256: shortcutHelperHash
+				OutputDir: outputPath
 			}
-		}, cb as (err?: Error | null) => void), cb);
+		}, cb as (err?: Error | null) => void);
 	};
 }
 

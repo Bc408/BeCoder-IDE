@@ -859,7 +859,7 @@ try {
 	await page.locator('.draft-attachments img').waitFor();
 	await page.getByRole('button', { name: '移除附件 question.png', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'removeAttachment', id: 'image-test' });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'computer', connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-flash', parameters: {}, loading: false, keyConfigured: true, error: '' } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'computer', connection: { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'deepseek-flash', capabilities: { purpose: 'chat', vision: 'supported', reasoning: 'supported', tools: 'supported', source: 'service' }, parameters: {}, loading: false, keyConfigured: true, error: '' } }, '*'));
 	await page.getByRole('button', { name: '添加文件', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'addFiles' });
 	await page.getByRole('textbox', { name: '向 Beacon 提问' }).fill('查看附件');
@@ -886,108 +886,69 @@ try {
 	await page.getByRole('button', { name: '发送', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
 	await page.goto('http://127.0.0.1:' + server.address().port + '/configuration');
-	await page.addStyleTag({ content: ':root { --vscode-editor-background:#21252b; --vscode-sideBar-background:#21252b; --vscode-foreground:#ccc; --vscode-descriptionForeground:#999a9c; --vscode-font-family:Segoe UI, sans-serif; --vscode-input-background:#282c34; --vscode-input-foreground:#ccc; --vscode-textLink-foreground:#7db9e8; --vscode-button-background:#365a78; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
 	await page.evaluate(() => {
-		window.settings = { revision: 1, pending: false, error: '', keyConfigured: {}, providers: {
-			deepseek: { baseURL: 'https://api.deepseek.com', models: [] },
-			bailian: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [] },
-			moonshot: { baseURL: 'https://api.moonshot.cn/v1', models: [] },
-			ollama: { baseURL: 'http://localhost:11434/v1', models: [] }
-		} };
+		window.settings = { revision: 1, pending: false, error: '', supplierEnabled: true, keyConfigured: { deepseek: true }, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [] } } };
 		window.fixtureSnapshot({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*');
 	});
-	const acknowledge = async (ok, error) => page.evaluate(({ ok, error }) => {
-		const message = window.messages.at(-1);
-		if (ok) {
-			if (message.type === 'saveConnection') {
-				window.settings.providers[message.provider].baseURL = message.baseURL.replace(/\/+$/, '');
-				window.settings.keyConfigured[message.provider] = !!message.key;
-			}
-			if (message.type === 'saveModel') {
-				const models = window.settings.providers[message.provider].models;
-				const index = models.findIndex(model => model.id === message.originalId);
-				if (index < 0) { models.push(message.model); } else { models[index] = message.model; }
-			}
-			window.settings.revision++;
-		}
-		window.fixtureSnapshot({ type: 'settingsSnapshot', settings: window.settings, busy: true }, '*');
-		window.fixtureSnapshot({ type: 'settingsResult', requestId: message.requestId, ok, error }, '*');
-	}, { ok, error });
 	await page.getByRole('heading', { name: 'Beacon 设置', exact: true }).waitFor();
-	await page.setViewportSize({ width: 360, height: 1000 });
-	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Settings fit a narrow editor');
-	await page.screenshot({ path: path.join(output, 'settings-dark-360.png') });
-	await page.getByLabel('API 地址', { exact: true }).fill('https://api.deepseek.com/');
-	await page.getByLabel('API Key', { exact: true }).fill('new-test-key');
-	assert.ok(await page.getByRole('button', { name: /Ollama/ }).isDisabled(), 'Provider navigation preserves an unsaved connection draft');
-	await page.getByRole('button', { name: '保存连接', exact: true }).click();
-	assert.equal((await page.evaluate(() => window.messages.at(-1))).type, 'saveConnection');
-	await acknowledge(false, '测试保存失败，保留草稿');
-	await page.getByRole('alert').filter({ hasText: '测试保存失败' }).waitFor();
-	assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), 'new-test-key');
-	await page.getByRole('button', { name: '保存连接', exact: true }).click();
-	await acknowledge(true);
-	await page.getByRole('button', { name: /Ollama/ }).waitFor();
-	await page.waitForFunction(() => document.querySelector('input[type="password"]').value === '');
-	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), 'https://api.deepseek.com');
-	assert.ok(await page.getByRole('button', { name: '保存连接', exact: true }).isDisabled());
+	assert.equal(await page.locator('.provider-list').count(), 0, 'Only DeepSeek is exposed, without an empty navigation');
+	await page.getByRole('switch', { name: '启用 DeepSeek', exact: true }).waitFor();
+	await page.addStyleTag({ content: ':root { --vscode-editor-background:#282c34; --vscode-foreground:#d4d5d8; --vscode-descriptionForeground:#a1a5ae; --vscode-font-family:Segoe UI,sans-serif; --vscode-input-background:#21252b; --vscode-input-foreground:#d4d5d8; --vscode-button-background:#365f88; --vscode-button-foreground:#fff; --vscode-widget-border:#3a3e46; --vscode-focusBorder:#59a4f9; }' });
+	const settingsPublish = async patch => page.evaluate(patch => { Object.assign(window.settings, patch); window.fixtureSnapshot({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); }, patch);
+	const settingsAck = async (ok = true, error) => page.evaluate(({ ok, error }) => { const message = window.messages.findLast(message => message.requestId); window.fixtureSnapshot({ type: 'settingsResult', requestId: message.requestId, ok, error }, '*'); }, { ok, error });
+	const caps = { purpose: 'chat', vision: 'supported', reasoning: 'supported', tools: 'unknown', source: 'service', contextWindow: 1048576, maxOutputTokens: 393216, reasoningEfforts: ['low', 'high', 'max'] };
+	await settingsPublish({ providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', parameters: {}, settings: {}, discovered: caps }] } } });
+	for (const width of [1440, 900, 620, 360]) {
+		await page.setViewportSize({ width, height: 1000 });
+		assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'New settings fit viewport');
+		await page.screenshot({ path: path.join(output, 'deepseek-settings-dark-' + width + '.png'), fullPage: true });
+	}
+	await page.getByLabel('API Key', { exact: true }).fill('fixture-input');
+	assert.ok(await page.getByRole('button', { name: '获取模型', exact: true }).isDisabled());
+	await page.getByRole('button', { name: '保存连接', exact: true }).click(); await settingsAck(false, '保存失败');
+	assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), 'fixture-input');
+	await page.getByRole('button', { name: '保存连接', exact: true }).click(); await settingsAck();
+	await page.waitForFunction(() => document.querySelector('input[type=password]').value === '');
 	await page.getByRole('button', { name: '获取模型', exact: true }).click();
-	assert.equal((await page.evaluate(() => window.messages.at(-1))).type, 'fetchModels');
-	await page.evaluate(() => {
-		window.settings.providers.deepseek.models = [{ id: 'deepseek-v4-flash', name: 'DeepSeek Flash', enabled: true, parameters: {}, settings: {} }];
-	});
-	await acknowledge(true);
+	await settingsPublish({ discovery: { id: 'candidate-1', revision: 1, provider: 'deepseek', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', capabilities: caps }, { id: 'new-pro', name: 'New Pro', capabilities: { ...caps, vision: 'unsupported' } }] } }); await settingsAck();
+	const dialog = page.getByRole('dialog');
+	assert.equal(await dialog.getByRole('checkbox', { name: /DeepSeek Flash/ }).isChecked(), true);
+	assert.equal(await dialog.getByRole('checkbox', { name: /New Pro/ }).isChecked(), false);
+	await dialog.getByRole('searchbox').fill('New');
+	await dialog.getByRole('button', { name: '选择全部搜索结果', exact: true }).click();
+	await dialog.getByRole('searchbox').fill('');
+	assert.equal(await dialog.getByRole('checkbox', { name: /DeepSeek Flash/ }).isChecked(), true);
+	await page.setViewportSize({ width: 900, height: 1000 });
+	await page.screenshot({ path: path.join(output, 'deepseek-discovery-dark.png') });
+	await settingsPublish({ revision: 2, discovery: undefined });
+	await page.getByRole('alert').filter({ hasText: '设置已改变，请重新获取模型。' }).waitFor({ timeout: 1500 });
+	assert.equal(await page.getByRole('dialog').count(), 0, 'Stale candidates do not masquerade as a pending fetch');
+	await page.getByRole('button', { name: '获取模型', exact: true }).click();
+	await settingsPublish({ discovery: { id: 'candidate-2', revision: 2, provider: 'deepseek', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', capabilities: caps }, { id: 'new-pro', name: 'New Pro', capabilities: caps }] } }); await settingsAck();
+	await dialog.getByRole('checkbox', { name: /New Pro/ }).check();
+	await dialog.getByRole('button', { name: '确认', exact: true }).click();
+	assert.deepStrictEqual((await page.evaluate(() => window.messages.at(-1))).ids, ['deepseek-flash', 'new-pro']);
+	await settingsPublish({ discovery: undefined }); await settingsAck();
 	await page.getByRole('button', { name: '编辑 DeepSeek Flash', exact: true }).click();
+	assert.equal(await page.getByLabel('模型 ID', { exact: true }).getAttribute('readonly'), '');
 	await page.getByLabel('显示名称', { exact: true }).fill('My Flash');
-	const beforeDraft = await page.evaluate(() => window.messages.length);
-	await page.getByRole('combobox', { name: '思考模式', exact: true }).selectOption('disabled');
-	await page.getByRole('switch', { name: '自定义温度', exact: true }).click();
-	await page.getByRole('spinbutton', { name: '温度', exact: true }).fill('0.7');
-	await page.getByRole('switch', { name: '自定义Top-P', exact: true }).click();
-	await page.getByRole('spinbutton', { name: 'Top-P', exact: true }).fill('0.8');
+	await page.getByText('手动修正能力', { exact: true }).click();
 	await page.getByRole('combobox', { name: '工具调用', exact: true }).selectOption('supported');
-	assert.equal(await page.evaluate(() => window.messages.length), beforeDraft, 'Model edits stay local until Save');
-	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Model details fit a narrow editor');
-	await page.setViewportSize({ width: 1440, height: 1100 });
-	await page.evaluate(() => { document.querySelector('.settings-page').scrollTop = 0; });
-	await page.screenshot({ path: path.join(output, 'settings-model-dark-1440.png'), fullPage: true });
-	await page.locator('.model-form').screenshot({ path: path.join(output, 'settings-model-detail-dark.png') });
-	const circles = await page.locator('.settings-model-row .settings-icon').evaluateAll(elements => elements.every(element => { const box = element.getBoundingClientRect(); return box.width === box.height && getComputedStyle(element).borderRadius === '50%'; }));
-	assert.ok(circles, 'Model icon buttons have circular hover surfaces');
-	await page.getByRole('button', { name: '保存模型', exact: true }).click();
-	const save = await page.evaluate(() => window.messages.at(-1));
-	assert.equal(save.type, 'saveModel'); assert.equal(save.model.name, 'My Flash');
-	assert.deepStrictEqual(save.model.parameters, { temperature: 0.7, topP: 0.8 });
-	await acknowledge(false, '测试模型保存失败');
-	await page.getByRole('alert').filter({ hasText: '测试模型保存失败' }).waitFor();
+	await page.screenshot({ path: path.join(output, 'deepseek-detail-dark.png') });
+	await page.getByRole('button', { name: '保存模型', exact: true }).click(); await settingsAck(false, '模型保存失败');
 	assert.equal(await page.getByLabel('显示名称', { exact: true }).inputValue(), 'My Flash');
-	await page.getByRole('button', { name: '保存模型', exact: true }).click();
-	await acknowledge(true);
-	await page.getByRole('button', { name: '编辑 My Flash', exact: true }).click();
-	await page.getByLabel('显示名称', { exact: true }).fill('Discarded name');
-	const beforeCancel = await page.evaluate(() => window.messages.length);
-	await page.getByRole('button', { name: '取消编辑', exact: true }).click();
-	assert.equal(await page.evaluate(() => window.messages.length), beforeCancel, 'Cancel never sends an update');
-	await page.getByRole('button', { name: '编辑 My Flash', exact: true }).click();
-	assert.equal(await page.getByLabel('显示名称', { exact: true }).inputValue(), 'My Flash');
-	await page.getByRole('combobox', { name: '思考模式', exact: true }).selectOption('enabled');
-	assert.equal(await page.getByRole('spinbutton', { name: '温度', exact: true }).count(), 0, 'Unsupported sampling overrides are removed when thinking is enabled');
-	await page.getByRole('button', { name: '取消编辑', exact: true }).click();
+	await page.getByRole('dialog').getByRole('alert').filter({ hasText: '模型保存失败' }).waitFor();
+	await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
 	await page.evaluate(() => { document.body.className = 'vscode-light'; });
-	await page.addStyleTag({ content: ':root { --vscode-editor-background:#fff; --vscode-sideBar-background:#fff; --vscode-foreground:#222; --vscode-descriptionForeground:#777; --vscode-input-background:#fafafa; --vscode-input-foreground:#222; --vscode-widget-border:#eee; --vscode-textLink-foreground:#3278ae; }' });
-	await page.screenshot({ path: path.join(output, 'settings-light-1440.png'), fullPage: true });
-	await page.setViewportSize({ width: 360, height: 1000 });
-	await page.getByRole('button', { name: '编辑 My Flash', exact: true }).click();
-	await page.locator('.model-form').screenshot({ path: path.join(output, 'settings-model-light-360.png') });
-	await page.getByRole('button', { name: '取消编辑', exact: true }).click();
-	await page.getByRole('button', { name: /Ollama/ }).click();
-	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), 'http://localhost:11434/v1');
-	await page.getByRole('button', { name: '添加模型', exact: true }).click();
-	await page.getByLabel('模型 ID', { exact: true }).fill('local-model');
-	assert.equal(await page.getByLabel('显示名称', { exact: true }).inputValue(), 'local-model');
-	await page.getByRole('button', { name: '取消编辑', exact: true }).click();
-	await page.getByRole('button', { name: '打开聊天', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'openChat' });
+	await page.addStyleTag({ content: ':root { --vscode-editor-background:#fafafa; --vscode-foreground:#272a30; --vscode-descriptionForeground:#60656d; --vscode-input-background:#f1f2f4; --vscode-input-foreground:#272a30; --vscode-widget-border:#d5d8df; --vscode-button-background:#305f98; --vscode-focusBorder:#3076be; }' });
+	for (const width of [1440, 360]) {
+		await page.setViewportSize({ width, height: 1000 });
+		await page.screenshot({ path: path.join(output, 'deepseek-settings-light-' + width + '.png'), fullPage: true });
+	}
+	await page.getByRole('button', { name: '编辑 DeepSeek Flash', exact: true }).click();
+	await page.screenshot({ path: path.join(output, 'deepseek-detail-light-360.png') });
+	await page.keyboard.press('Escape');
+
 	assert.deepStrictEqual(errors, []);
 	console.log('Production UI: Captain Who-style Markdown/code blocks, exact clipboard, GFM/math, activity lifecycle/timer, reduced motion, scroll escape/return/resize, Chinese/English, themes, history and settings passed. Screenshots: ' + output);
 } catch (error) {

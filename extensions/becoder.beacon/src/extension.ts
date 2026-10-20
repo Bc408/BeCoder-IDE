@@ -108,6 +108,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let requestNotice: { id: number; text: string } | undefined;
 	const canSend = () => !historyUnreadable && (modeDraft ? !binding.root || binding.root === native.state.root : temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
 	const request = async (beforeId = Infinity) => {
+		if (connections.testing) { throw new Error('settings-pending'); }
 		await native.refreshForRequest(); permission = native.permission;
 		if (!canSend()) { throw new Error('beacon-conversation-owner'); }
 		const roots = native.roots;
@@ -148,7 +149,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			void view?.webview.postMessage(message);
 			if (configurationPanel) {
 				const connection = connections.snapshot;
-				const stamp = `${connection.revision}:${connection.loading}:${connection.error}:${busy()}:${JSON.stringify(native.state)}`;
+				const stamp = `${JSON.stringify(connections.settings)}:${connection.revision}:${connection.loading}:${connection.error}:${busy()}:${JSON.stringify(native.state)}`;
 				if (settingsStamp !== stamp) { settingsStamp = stamp; void configurationPanel.webview.postMessage({ type: 'settingsSnapshot', settings: connections.settings, context: native.state, busy: busy() }); }
 			}
 		}
@@ -400,9 +401,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const command = message as SettingsCommand;
 		if (!command || typeof command !== 'object' || !Number.isSafeInteger(command.requestId)) { return; }
 		try {
+			if (command.type === 'testProvider' && (busy() || native.state.runtimeBusy)) { throw new Error('settings-pending'); }
 			await connections.apply(command);
 			if (!alive) { return; }
-			requestNotice = { id: Date.now(), text: busy() ? vscode.l10n.t('Model settings changes will take effect in the next response.') : vscode.l10n.t('Model settings saved.') };
+			if (['saveConnection', 'saveModel', 'confirmModels', 'removeModel', 'toggleProvider', 'selectModel'].includes(command.type)) { requestNotice = { id: Date.now(), text: busy() ? vscode.l10n.t('Model settings changes will take effect in the next response.') : vscode.l10n.t('Model settings saved.') }; }
 			publish();
 			void webview?.postMessage({ type: 'settingsResult', requestId: command.requestId, ok: true });
 		} catch (error) {
@@ -425,7 +427,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			else if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
 			else { void changeSettings(message, panel.webview); }
 		});
-		const disposed = panel.onDidDispose(() => { received.dispose(); disposed.dispose(); if (configurationPanel === panel) { configurationPanel = undefined; } });
+		const disposed = panel.onDidDispose(() => { connections.closeSettings(); received.dispose(); disposed.dispose(); if (configurationPanel === panel) { configurationPanel = undefined; } });
 		context.subscriptions.push(panel, received, disposed);
 		publish();
 	}

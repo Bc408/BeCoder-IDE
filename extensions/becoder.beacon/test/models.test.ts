@@ -6,6 +6,7 @@
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createGenerator, inspectModel } from '../src/provider';
+import { parseDeepSeekModels } from '../src/deepseekModels';
 import { providers, type Connection } from '../src/connection';
 import { ModelCapabilityError, resolveCapabilities, serviceCapabilities, unknownCapabilities } from '../src/models';
 import { ProtocolRecorder, replayProtocol } from '../src/protocol';
@@ -23,17 +24,41 @@ async function collect(generate: Generate): Promise<Delta[]> {
 }
 
 suite('Beacon model capabilities', () => {
-	test('official catalog is endpoint-bound; unknown names and explicit service metadata remain distinct', () => {
-		assert.equal(resolveCapabilities('deepseek', providers.deepseek.baseURL, 'deepseek-flash').vision, 'supported');
+	test('service output budgets and canonical effort survive the installed SDK request body', async () => {
+		let requests = 0;
+		const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'opaque-alias', apiKey: 'fixture', parameters: { maxOutputTokens: 393216 }, capabilities: { ...unknownCapabilities, purpose: 'chat', reasoning: 'supported', reasoningEfforts: ['low', 'high', 'max'] }, modelSettings: { thinking: 'enabled', effort: 'max' } };
+		await collect(createGenerator(async () => connection, async (_url, options) => {
+			requests++; const body = JSON.parse(String(options?.body));
+			assert.equal(body.max_tokens, 393216); assert.equal(body.reasoning_effort, 'max');
+			assert.deepStrictEqual(body.thinking, { type: 'enabled' });
+			assert.equal(body.temperature, undefined); assert.equal(body.top_p, undefined);
+			return response([{ content: 'answer' }]);
+		}));
+		assert.equal(requests, 1);
+	});
+	test('DeepSeek discovery uses service fields rather than model names', () => {
+		const entry = { id: 'arbitrary', name: 'Friendly', context_window: 1048576, max_output_tokens: 393216, input_modalities: ['text', 'image'], output_modalities: ['text'], effort: { supported_levels: ['low', 'high', 'max'] }, api_capabilities: { anthropic_messages: { tools: true } } };
+		const result = parseDeepSeekModels({ data: [entry, entry] });
+		assert.equal(result.length, 1); assert.equal(result[0].name, 'Friendly');
+		assert.deepStrictEqual(result[0].capabilities, { ...unknownCapabilities, source: 'service', purpose: 'chat', vision: 'supported', reasoning: 'supported', contextWindow: 1048576, maxOutputTokens: 393216, reasoningEfforts: ['low', 'high', 'max'] });
+		assert.deepStrictEqual(parseDeepSeekModels({ data: [] }), []);
+		assert.deepStrictEqual(parseDeepSeekModels({ data: [{ id: 'partial', capabilities: ['completion'] }] })[0].capabilities, { ...unknownCapabilities, purpose: 'chat', source: 'service' });
+		for (const entry of [{ id: 'x', vision: 'yes' }, { id: 'x', maxOutputTokens: -1 }, { id: 'x', capabilities: {} }]) { assert.throws(() => parseDeepSeekModels({ data: [entry] }), /invalid-model-list/); }
+		for (const value of [null, {}, { data: [null] }, { data: [{ id: '' }] }, { data: [entry, { ...entry, name: 'Conflict' }] }]) { assert.throws(() => parseDeepSeekModels(value), /invalid-model-list/); }
+		assert.deepStrictEqual(parseDeepSeekModels({ data: [{ id: 'deepseek-flash' }] })[0].capabilities, unknownCapabilities);
+		assert.equal(parseDeepSeekModels({ data: [{ id: 'x', input_modalities: ['text'] }] })[0].capabilities?.vision, 'unsupported');
+	});
+	test('model names do not declare capabilities; service metadata remains distinct', () => {
+		assert.equal(resolveCapabilities('deepseek', providers.deepseek.baseURL, 'deepseek-flash').vision, 'unknown');
 		assert.equal(resolveCapabilities('deepseek', 'https://gateway.example/v1', 'deepseek-flash').source, 'unknown');
 		assert.equal(resolveCapabilities('deepseek', providers.deepseek.baseURL, 'future-model').tools, 'unknown');
-		assert.equal(resolveCapabilities('bailian', providers.bailian.baseURL, 'text-embedding-v4').purpose, 'embedding');
-		assert.equal(resolveCapabilities('bailian', providers.bailian.baseURL, 'qwen3-vl-plus').vision, 'supported');
+		assert.equal(resolveCapabilities('bailian', providers.bailian.baseURL, 'text-embedding-v4').purpose, 'unknown');
+		assert.equal(resolveCapabilities('bailian', providers.bailian.baseURL, 'qwen3-vl-plus').vision, 'unknown');
 		assert.equal(serviceCapabilities({ owned_by: 'vision-tools-thinking' }), undefined);
 		assert.deepStrictEqual(serviceCapabilities({ capabilities: ['embedding'] }), { ...unknownCapabilities, purpose: 'embedding', vision: 'unsupported', reasoning: 'unsupported', tools: 'unsupported', source: 'service' });
 	});
 	test('non-chat models, unsupported thinking and excessive output limits fail before fetching', async () => {
-		const connection: Connection = { provider: 'bailian', ...providers.bailian, model: 'text-embedding-v4', apiKey: 'test', parameters: {} };
+		const connection: Connection = { provider: 'bailian', ...providers.bailian, model: 'text-embedding-v4', capabilities: { ...unknownCapabilities, purpose: 'embedding' }, apiKey: 'test', parameters: {} };
 		const never: typeof fetch = async () => { assert.fail('Blocked request reached the service'); };
 		await assert.rejects(collect(createGenerator(async () => connection, never)), (error: unknown) => error instanceof ModelCapabilityError && error.code === 'non-chat');
 		connection.model = 'chat'; connection.capabilities = { ...unknownCapabilities, purpose: 'chat', maxOutputTokens: 1024 };
@@ -81,7 +106,7 @@ suite('Beacon model capabilities', () => {
 		assert.deepStrictEqual(result, { purpose: 'chat', vision: 'supported', reasoning: 'supported', tools: 'supported', source: 'service', contextWindow: 131072 });
 	});
 	test('non-vision file tools return an actionable error, never image bytes; saved images block before fetching', async () => {
-		const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', apiKey: 'test', parameters: {} };
+		const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', capabilities: { ...unknownCapabilities, vision: 'unsupported', tools: 'supported' }, apiKey: 'test', parameters: {} };
 		let requests = 0;
 		const parts = await collect(createGenerator(async () => connection, async (_url, options) => {
 			requests++;
@@ -104,7 +129,7 @@ suite('Beacon durable protocol', () => {
 		let saved: HistoryData | undefined;
 		let requests = 0;
 		const source = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-v4-flash' };
-		const connection: Connection = { ...source, provider: 'deepseek', apiKey: 'test', parameters: {} };
+		const connection: Connection = { ...source, provider: 'deepseek', capabilities: { ...unknownCapabilities, tools: 'supported' }, apiKey: 'test', parameters: {} };
 		const mock: typeof fetch = async (_url, options) => {
 			requests++;
 			const body = JSON.parse(String(options?.body));

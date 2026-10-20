@@ -3,11 +3,13 @@
  *  Licensed under the MIT License. See LICENSE in this directory's extension root.
  *--------------------------------------------------------------------------------------------*/
 
+import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import { isProvider, normalizeBaseURL, providers, secretName, type Connection, type ConnectionState, type ProviderId } from './connection';
-import { createGenerator, inspectModel, listModels } from './provider';
+import { createGenerator, listModels, testModelConnection } from './provider';
+import { ProviderTests } from './providerTests';
 import { ModelCapabilityError, resolveCapabilities } from './models';
-import { emptyConfiguration, parseConfiguration, parseModel, validateModel, type ModelConfiguration, type SettingsCommand, type SettingsSnapshot } from './modelConfiguration';
+import { modelParameterIssues, replaceDiscoveredModels, emptyConfiguration, parseConfiguration, parseModel, validateModel, type ModelDiscovery, type ModelConfiguration, type SettingsCommand, type SettingsSnapshot } from './modelConfiguration';
 import type { FileTool, FilePermission, FileRoot } from './fileTools';
 import { RequestRecoveryError, RequestRejectedError, type RequestDiagnostic } from './requestRecovery';
 
@@ -21,6 +23,8 @@ export function connectionError(error: unknown): string {
 		const text = error.failure.kind === 'rate-limit' ? vscode.l10n.t('Too many requests. Please try again later.') : error.failure.kind === 'timeout' ? vscode.l10n.t('The provider connection timed out. Please retry.') : vscode.l10n.t('The provider is temporarily unreachable. Please retry.');
 		return error.failure.retries ? `${text} ${vscode.l10n.t('Automatic reconnection was attempted {0} times.', error.failure.retries)}` : text;
 	}
+	const parameterCode = error instanceof Error ? error.message : '';
+	if (['invalid-thinking', 'invalid-effort', 'output-limit', 'unsupported-sampling'].includes(parameterCode)) { return vscode.l10n.t('The saved generation parameters conflict with the current model capabilities. Adjust them in Beacon settings.'); }
 	if (error instanceof ModelCapabilityError) {
 		if (error.code === 'non-chat') { return vscode.l10n.t('This model is not a chat model. Select a chat model in Beacon settings.'); }
 		if (error.code === 'vision') { return vscode.l10n.t('This conversation contains images. Select a vision-capable model or correct its capabilities in Beacon settings.'); }
@@ -43,7 +47,12 @@ export function connectionError(error: unknown): string {
 
 /** One connection per provider. Keys never enter a Webview snapshot. */
 export class Connections implements vscode.Disposable {
+	private readonly tests = new ProviderTests(testModelConnection, () => this.changed(), connectionError);
+	get testing(): boolean { return this.tests.running; }
+	closeSettings(): void { this.tests.cancel(); this.cancelDiscovery(); }
 	private data = emptyConfiguration();
+	private discovery: ModelDiscovery | undefined;
+	private discoveryJob: AbortController | undefined;
 	private keys: Partial<Record<ProviderId, string>> = {};
 	private revision = 0;
 	private refreshing = 0;
@@ -62,10 +71,12 @@ export class Connections implements vscode.Disposable {
 		})];
 	}
 	private configurationChanged(): void {
+		this.tests.clear();
+		this.cancelDiscovery();
 		if (this.pending) { this.refreshNeeded = true; } else { void this.refresh(); }
 	}
 	get settings(): SettingsSnapshot {
-		return structuredClone({ ...this.data, revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error, keyConfigured: Object.fromEntries(Object.keys(providers).map(id => [id, !!this.keys[id as ProviderId]])) });
+		return structuredClone({ ...this.data, supplierEnabled: this.supplierEnabled, providerTest: this.tests.snapshot, discovery: this.discovery, parameterIssues: Object.fromEntries(this.data.providers.deepseek.models.map(model => [model.id, modelParameterIssues('deepseek', this.data.providers.deepseek.baseURL, model)])), revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error, keyConfigured: Object.fromEntries(Object.keys(providers).map(id => [id, !!this.keys[id as ProviderId]])) });
 	}
 	get snapshot(): ConnectionState {
 		const stamp = `${this.revision}:${this.pending}:${this.refreshing}:${this.error}`;
@@ -74,7 +85,7 @@ export class Connections implements vscode.Disposable {
 		const provider = selection?.provider ?? 'deepseek';
 		const profile = this.data.providers[provider];
 		const model = profile.models.find(item => item.id === selection?.model);
-		const choices = (Object.keys(providers) as ProviderId[]).flatMap(id => this.data.providers[id].models.filter(item => item.enabled && ['chat', 'unknown'].includes(resolveCapabilities(id, this.data.providers[id].baseURL, item.id, item.discovered, item.settings).purpose)).map(item => ({ provider: id, id: item.id, name: item.name })));
+		const choices = this.supplierEnabled ? this.data.providers.deepseek.models.filter(item => ['chat', 'unknown'].includes(resolveCapabilities('deepseek', this.data.providers.deepseek.baseURL, item.id, item.discovered, item.settings).purpose)).map(item => ({ provider: 'deepseek' as const, id: item.id, name: item.name })) : [];
 		const snapshot = { provider, baseURL: profile.baseURL, model: model?.id ?? '', displayName: model?.name, parameters: model?.parameters ?? {}, modelSettings: model?.settings, capabilities: resolveCapabilities(provider, profile.baseURL, model?.id ?? '', model?.discovered, model?.settings), choices, revision: this.revision, keyConfigured: !!this.keys[provider], loading: this.pending || !!this.refreshing, error: this.error };
 		this.cached = { stamp, snapshot: structuredClone(snapshot) };
 		return snapshot;
@@ -83,9 +94,15 @@ export class Connections implements vscode.Disposable {
 		const selection = this.data.selection;
 		if (!selection || this.pending || this.refreshing || this.error) { return false; }
 		const state = this.snapshot;
-		return this.data.providers[selection.provider].models.some(item => item.id === selection.model && item.enabled) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
+		return selection.provider === 'deepseek' && this.supplierEnabled && this.data.providers[selection.provider].models.some(item => item.id === selection.model) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
+	}
+	get supplierEnabled(): boolean { return this.data.providers.deepseek.enabled ?? (this.data.selection?.provider === 'deepseek'); }
+	cancelDiscovery(id?: string): void {
+		if (id && this.discovery?.id !== id) { return; }
+		this.discoveryJob?.abort(); this.discoveryJob = undefined; this.discovery = undefined;
 	}
 	async refresh(): Promise<void> {
+		this.cancelDiscovery();
 		const generation = ++this.revision;
 		this.refreshing++; this.changed();
 		try {
@@ -97,24 +114,33 @@ export class Connections implements vscode.Disposable {
 		finally { this.refreshing--; this.changed(); }
 	}
 	private async persist(data: ModelConfiguration): Promise<void> {
+		this.tests.clear();
 		const current = parseConfiguration(vscode.workspace.getConfiguration('beacon').get('modelConfiguration'));
 		if (JSON.stringify(current) !== JSON.stringify(this.data)) { await this.refresh(); throw new Error('settings-stale'); }
 		await vscode.workspace.getConfiguration('beacon').update('modelConfiguration', data, vscode.ConfigurationTarget.Global);
 		this.data = data; this.revision++;
 	}
 	async apply(value: SettingsCommand): Promise<void> {
-		if (this.disposed || this.pending || this.refreshing) { throw new Error('settings-pending'); }
-		if (!isProvider(value.provider) || !Number.isSafeInteger(value.revision) || value.revision !== this.revision) { throw new Error('settings-stale'); }
+		if (value.type === 'cancelProviderTest') { this.tests.cancel(value.testId); return; }
+		if (value.type === 'cancelDiscovery') { this.cancelDiscovery(value.discoveryId); this.changed(); return; }
+		if (this.disposed || this.pending || this.refreshing || this.testing) { throw new Error('settings-pending'); }
+		if (value.provider !== 'deepseek' || !isProvider(value.provider) || !Number.isSafeInteger(value.revision) || value.revision !== this.revision) { throw new Error('settings-stale'); }
 		if (this.error) { throw new Error('settings-unreadable'); }
+		if (value.type === 'testProvider') {
+			const profile = this.data.providers.deepseek;
+			if (!profile.models.length || !this.keys.deepseek) { throw new Error('model-unavailable'); }
+			await this.tests.start(profile.models.map(model => ({ provider: 'deepseek', baseURL: profile.baseURL, model: model.id, apiKey: this.keys.deepseek, parameters: {} })), this.revision); return;
+		}
 		this.pending = true; this.changed();
 		try {
 			const data = structuredClone(this.data);
 			const profile = data.providers[value.provider];
+			if (profile.enabled === undefined && this.supplierEnabled) { profile.enabled = true; }
 			switch (value.type) {
 				case 'saveConnection': {
 					if (typeof value.baseURL !== 'string' || (value.clearKey !== undefined && typeof value.clearKey !== 'boolean') || (value.key !== undefined && (typeof value.key !== 'string' || value.key.length > 4096)) || (value.clearKey && value.key?.trim())) { throw new Error('invalid-connection'); }
 					const baseURL = normalizeBaseURL(value.baseURL, value.provider);
-					if (baseURL !== profile.baseURL) { for (const model of profile.models) { delete model.discovered; } }
+					if (baseURL !== profile.baseURL) { for (const model of profile.models) { delete model.discovered; delete model.settings.overrides; } }
 					profile.baseURL = baseURL;
 					const previous = this.keys[value.provider];
 					const next = value.clearKey ? undefined : value.key?.trim() || previous;
@@ -135,44 +161,42 @@ export class Connections implements vscode.Disposable {
 					if (profile.models.some(item => item.id === model.id && item !== original)) { throw new Error('duplicate-model'); }
 					// Discovery metadata is owned by the host, not by the model form.
 					model.discovered = original?.id === model.id ? original.discovered : undefined;
-					if (value.provider === 'ollama' && model.discovered?.source !== 'service') {
-						model.discovered = await inspectModel({ provider: value.provider, baseURL: profile.baseURL, model: model.id, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, AbortSignal.timeout(10000)])).catch(() => undefined);
-					}
+
 					validateModel(value.provider, profile.baseURL, model);
+					if (original && original.id !== model.id) { throw new Error('invalid-model'); }
 					if (original) { profile.models[profile.models.indexOf(original)] = model; } else { if (profile.models.length >= 2000) { throw new Error('model-limit'); } profile.models.push(model); }
-					if (data.selection?.provider === value.provider && data.selection.model === value.originalId) { data.selection.model = model.id; }
+					this.clearInvalidSelection(data);
 					await this.persist(data); break;
 				}
 				case 'fetchModels': {
-					const models = await listModels({ provider: value.provider, baseURL: profile.baseURL, model: data.selection?.provider === value.provider ? data.selection.model : '', parameters: {}, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, AbortSignal.timeout(20000)]));
-					if (!models.length) { throw new Error('empty-models'); }
-					for (const item of models) {
-						const existing = profile.models.find(model => model.id === item.id);
-						const discovered = item.capabilities?.source === 'service' ? item.capabilities : undefined;
-						if (existing && discovered) { existing.discovered = discovered; }
-						else if (existing) { continue; }
-						else { profile.models.push({ id: item.id, name: item.id, enabled: ['chat', 'unknown'].includes(item.capabilities?.purpose ?? 'unknown'), parameters: {}, settings: {}, discovered }); }
-					}
-					if (profile.models.length > 2000) { throw new Error('model-limit'); }
+					this.cancelDiscovery();
+					const job = new AbortController(); this.discoveryJob = job;
+					const revision = this.revision;
+					const models = await listModels({ provider: value.provider, baseURL: profile.baseURL, model: '', parameters: {}, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, job.signal, AbortSignal.timeout(20000)]));
+					if (job.signal.aborted || this.disposed || revision !== this.revision || this.refreshNeeded) { throw new Error('settings-stale'); }
+					this.discovery = { id: randomUUID(), revision, provider: value.provider, models };
+					this.discoveryJob = undefined; break;
+				}
+				case 'confirmModels': {
+					const candidate = this.discovery;
+					if (!candidate || candidate.id !== value.discoveryId || candidate.revision !== this.revision || !Array.isArray(value.ids) || value.ids.some(id => typeof id !== 'string')) { throw new Error('settings-stale'); }
+					data.providers[value.provider] = replaceDiscoveredModels(profile, candidate.models, value.ids);
+					this.clearInvalidSelection(data);
+					await this.persist(data); this.discovery = undefined; break;
+				}
+				case 'toggleProvider': {
+					if (typeof value.enabled !== 'boolean') { throw new Error('invalid-model'); }
+					profile.enabled = value.enabled;
+					if (!value.enabled && data.selection?.provider === value.provider) { delete data.selection; }
 					await this.persist(data); break;
 				}
-				case 'selectModel': case 'toggleModel': case 'removeModel': {
+				case 'selectModel': case 'removeModel': {
 					const model = profile.models.find(item => item.id === value.id);
 					if (!model) { throw new Error('settings-stale'); }
 					if (value.type === 'selectModel') {
-						if (value.provider === 'ollama' && model.discovered?.source !== 'service') {
-							model.discovered = await inspectModel({ provider: value.provider, baseURL: profile.baseURL, model: model.id, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, AbortSignal.timeout(10000)])).catch(() => undefined);
-						}
-						if (!model.enabled || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || (value.provider !== 'ollama' && !this.keys[value.provider])) { throw new Error('model-unavailable'); }
-						validateModel(value.provider, profile.baseURL, model);
+						if (!this.supplierEnabled || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || !this.keys[value.provider]) { throw new Error('model-unavailable'); }
 						data.selection = { provider: value.provider, model: model.id };
-					} else if (value.type === 'toggleModel') {
-						if (typeof value.enabled !== 'boolean') { throw new Error('invalid-model'); }
-						model.enabled = value.enabled;
-					} else {
-						profile.models.splice(profile.models.indexOf(model), 1);
-						if (data.selection?.provider === value.provider && data.selection.model === model.id) { delete data.selection; }
-					}
+					} else { profile.models.splice(profile.models.indexOf(model), 1); this.clearInvalidSelection(data); }
 					await this.persist(data); break;
 				}
 				default: throw new Error('invalid-settings-command');
@@ -183,10 +207,17 @@ export class Connections implements vscode.Disposable {
 			this.changed();
 		}
 	}
+	private clearInvalidSelection(data: ModelConfiguration): void {
+		if (!data.selection || data.selection.provider !== 'deepseek') { return; }
+		const profile = data.providers.deepseek;
+		const model = profile.models.find(item => item.id === data.selection!.model);
+		if (!model || !['chat', 'unknown'].includes(resolveCapabilities('deepseek', profile.baseURL, model.id, model.discovered, model.settings).purpose)) { delete data.selection; }
+	}
 	private async writeKey(provider: ProviderId, key: string | undefined): Promise<void> {
 		if (key) { await this.context.secrets.store(secretName(provider), key); } else { await this.context.secrets.delete(secretName(provider)); }
 	}
 	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean, context?: import('./contextTools').ContextAccess, notebooks?: import('./notebookTools').NotebookAccess) {
+		if (this.testing) { throw new Error('settings-pending'); }
 		if (!this.configured) { throw new Error('model-unavailable'); }
 		const state = this.snapshot;
 		const model = this.data.providers[state.provider].models.find(item => item.id === state.model)!;
@@ -194,7 +225,7 @@ export class Connections implements vscode.Disposable {
 		const connection: Connection = structuredClone({ provider: state.provider, baseURL: state.baseURL, model: state.model, parameters: state.parameters, capabilities: state.capabilities, modelSettings: state.modelSettings, apiKey: this.keys[state.provider] });
 		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }, context, notebooks), files };
 	}
-	dispose(): void { this.disposed = true; this.controller.abort(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
+	dispose(): void { this.disposed = true; this.tests.dispose(); this.controller.abort(); this.cancelDiscovery(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
 }
 
 export function settingsError(error: unknown): string {

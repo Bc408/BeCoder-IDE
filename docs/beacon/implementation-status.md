@@ -2,6 +2,14 @@
 
 更新：2026-10-20。本文区分已记录实现、当前改造和历史验证。分支为 `codex/BeCoder_Next`；2026-10-15 的验证以当时 `6cf90af024a047d394d3c5f5a968b536294792a8` 及工作树为依据，不能证明本轮代码。三档切换与继承源码已实施并通过所属回归及生产 Webview 渲染检查；staged Windows 构建成功；负责人于 2026-10-20 明确反馈本轮验收通过并授权本地提交及推送对应 GitHub 分支。正式需求以[PRD](prd.md)、[三档专项设计](mode-conversation-design.md)及负责人最新直接决定为准。
 
+## DeepSeek 设置闭环（2026-10-20）
+
+依据[新设置设计](../../DESIGN.md)实施单连接／单密钥、服务声明能力、候选确认替换、供应商启停、主动批量文本连通测试及取消。新设置页只开放 DeepSeek，其他供应商数据保留而不进入新菜单。模型详情使用独立弹窗、收起的能力修正及保存／取消；能力更新保留生成参数，冲突在请求前反馈。活动回复继续使用固定快照。无模型启停、多密钥、价格或自动连通测试。
+
+本地证据：扩展类型检查、生产 bundle、171 项 Node 回归、零警告 lint、所属 CSS 与生产 Webview 渲染通过。已查看深浅色、宽窄窗口、候选和详情截图。独立只读复审发现的候选永久加载及未声明能力误判，已通过失败到通过的回归修复。客户端类型检查、OI 扩展编译和最终 staged Windows 应用构建均通过。首轮构建后发现存量启用状态边界并补回归修复，最终以 171 项回归及重新执行的客户端检查／OI 编译／staged 构建为准。应用目录为 C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64。
+
+未执行真实 DeepSeek 账号／收费调用、桌面 GUI、package 或 Setup，不宣称负责人验收。原始命令、失败与重跑记录在本机 tmp/beacon-deepseek-settings/validation.md，截图为 tmp/beacon-render/deepseek-*.png。下列历史验证不作为本轮设置验证的替代。
+
 ## 已实现的调用链
 
 - [窗口协调器](../../src/vs/platform/beacon/node/beaconCoordinator.ts)管理独立 Beacon 根、三档资格、忙时拒绝切根、固定会话归属、同对话单窗口占用及请求 scope 校验。[存储](../../src/vs/platform/beacon/node/beaconStore.ts)与[租约](../../src/vs/platform/beacon/node/beaconLease.ts)负责共享工作区资产和短写协调；无根、根不可用或用户主动 Blackout 时均不新增工作区资产读取；主动切档可保留已加载继承上下文，接受发送后的来源草稿清理由宿主窄入口负责。开发期安装级历史导入已移除。

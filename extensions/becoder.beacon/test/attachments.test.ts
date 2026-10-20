@@ -36,6 +36,32 @@ async function until(condition: () => boolean, label = '') {
 }
 
 suite('Beacon attachments', () => {
+	test('settings batch rejects chat, preserves draft, and cancellation retires without replay', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+		let calls = 0; let aborted = false;
+		globalThis.fetch = async (_url, options) => { calls++; return new Promise((_resolve, reject) => options?.signal?.addEventListener('abort', () => { aborted = true; reject(options.signal?.reason); }, { once: true })); };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; draftText: string };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'draft', text: 'unsent question', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'unsent question');
+			view.receive({ type: 'settings' }); const panel = mock.panels.at(-1)!; panel.receive({ type: 'ready' });
+			const settings = () => (panel.messages.filter(message => message.type === 'settingsSnapshot').at(-1) as { settings: { revision: number; providerTest?: { id: string; running: boolean; models: { status: string }[] } } }).settings;
+			await until(() => !!settings());
+			panel.receive({ type: 'testProvider', provider: 'deepseek', revision: settings().revision, requestId: 91 }); await until(() => calls === 1);
+			view.receive({ type: 'send', text: 'unsent question' }); await until(() => !snapshot().busy);
+			assert.equal(snapshot().messages.length, 0); assert.equal(snapshot().draftText, 'unsent question');
+			panel.receive({ type: 'testProvider', provider: 'deepseek', revision: settings().revision, requestId: 92 });
+			await until(() => panel.messages.some(message => message.type === 'settingsResult' && message.requestId === 92)); assert.equal(calls, 1);
+			panel.receive({ type: 'cancelProviderTest', provider: 'deepseek', revision: settings().revision, requestId: 93, testId: settings().providerTest!.id });
+			await until(() => settings().providerTest?.running === false);
+			assert.equal(aborted, true); assert.equal(calls, 1); assert.deepStrictEqual(settings().providerTest?.models.map(model => model.status), ['cancelled', 'cancelled']);
+			globalThis.fetch = async () => { calls++; return response(); };
+			view.receive({ type: 'send', text: 'unsent question' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+			assert.equal(calls, 2); assert.equal(snapshot().messages.length, 2);
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+	}));
+
 	test('typing during mode IPC and a failed return preserve the latest pending input', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		globalThis.fetch = async () => response();

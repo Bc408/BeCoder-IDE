@@ -69,7 +69,7 @@ export function reset(directory: string) {
 	extensions.getExtension = () => undefined;
 	configuration.clear(); values.clear(); viewProviders.clear(); commandHandlers.clear(); commandCalls.length = 0; panels.length = 0; textPreviews.length = 0; window.activeTextEditor = undefined; workspace.notebookDocuments = []; delete controls.updateError; delete controls.secretError;
 	const data = emptyConfiguration();
-	data.providers.deepseek.models = ['deepseek-flash', 'deepseek-chat'].map(id => ({ id, name: id, enabled: true, parameters: {}, settings: {} }));
+	data.providers.deepseek.models = ['deepseek-flash', 'deepseek-chat'].map(id => ({ id, name: id, enabled: true, parameters: {}, settings: {}, discovered: { purpose: 'chat' as const, vision: (id === 'deepseek-chat' ? 'unsupported' : 'supported') as 'supported' | 'unsupported', reasoning: 'supported' as const, tools: 'supported' as const, source: 'service' as const, reasoningEfforts: ['low', 'high', 'max'] as ('low' | 'high' | 'max')[] } }));
 	data.selection = { provider: 'deepseek', model: 'deepseek-flash' };
 	values.set('modelConfiguration', data); values.set('webEnabled', false); values.set('filePermission', 'workspace');
 	workspace.workspaceFolders = [{ name: 'root', uri: Uri.file(directory) }]; workspace.textDocuments = [];

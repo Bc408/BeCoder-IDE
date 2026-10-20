@@ -1,4 +1,5 @@
 {
+	"The saved generation parameters conflict with the current model capabilities. Adjust them in Beacon settings.": "已保存的生成参数与当前模型能力冲突，请在 Beacon 设置中调整。",
 	"Send a new question to inherit this context, or switch back to the original mode to change earlier messages.": "发送新问题以继承上文；如需修改此前消息，请切回原模式。",
 	"The new conversation accepted your question, but the original draft could not be cleared. It is still saved in the original conversation.": "新对话已接收问题，但未能清除原草稿；它仍保存在原对话中。",
 	"Wait for the current response before adding a selection.": "请等待当前回答结束，再加入选区。",

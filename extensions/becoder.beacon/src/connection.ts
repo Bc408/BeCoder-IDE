@@ -44,6 +44,7 @@ export interface ModelParameters {
 export type ModelParameterName = keyof ModelParameters;
 export interface ModelInfo {
 	id: string;
+	name?: string;
 	provider: ProviderId;
 	capabilities?: ModelCapabilities;
 }
@@ -55,7 +56,7 @@ export function secretName(provider: ProviderId): string { return `beacon.modelC
 const parameterRanges: Record<ModelParameterName, { minimum: number; maximum: number; integer?: boolean }> = {
 	temperature: { minimum: 0, maximum: 2 },
 	topP: { minimum: 0, maximum: 1 },
-	maxOutputTokens: { minimum: 1, maximum: 131072, integer: true }
+	maxOutputTokens: { minimum: 1, maximum: 10000000, integer: true }
 };
 
 export function validParameter(name: ModelParameterName, value: unknown): value is number {

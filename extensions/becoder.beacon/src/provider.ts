@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in this directory's extension root.
  *--------------------------------------------------------------------------------------------*/
 
+import { parseDeepSeekModels } from './deepseekModels';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { InvalidToolInputError, jsonSchema, stepCountIs, streamText, tool, type FilePart, type LanguageModel, type ModelMessage } from 'ai';
@@ -61,6 +62,7 @@ async function listCompatibleModels(connection: Connection, signal: AbortSignal,
 	const response = await request(`${normalizeBaseURL(connection.baseURL, connection.provider)}/models`, { headers: headers(connection), signal, redirect: 'error' });
 	if (!response.ok) { throw new ConnectionError(response.status); }
 	const body = await response.json() as { data?: { id?: unknown }[] };
+	if (connection.provider === 'deepseek') { return parseDeepSeekModels(body); }
 	if (!Array.isArray(body.data)) { throw new Error('invalid-model-list'); }
 	return [...new Map(body.data.map(entry => modelInfo(connection, entry?.id, entry)).map(model => [model.id, model])).values()].sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -112,6 +114,19 @@ export async function inspectModel(connection: Pick<Connection, 'provider' | 'ba
 	const context = Object.entries(value.model_info ?? {}).find(([key]) => key.endsWith('.context_length'))?.[1];
 	if (capabilities && typeof context === 'number' && Number.isSafeInteger(context) && context > 0 && context <= 10000000) { capabilities.contextWindow = context; }
 	return capabilities;
+}
+
+/** A user-triggered probe never receives conversation context or generation overrides. */
+export async function testModelConnection(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<void> {
+	const controller = new AbortController();
+	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), messages: [{ role: 'user', content: 'Reply with OK.' }], abortSignal: AbortSignal.any([signal, controller.signal]), maxRetries: 0 });
+	try {
+		for await (const part of result.fullStream) {
+			if (part.type === 'error') { throw part.error; }
+			if (part.type === 'text-delta' && part.text.trim()) { return; }
+		}
+		signal.throwIfAborted(); throw new Error('empty-response');
+	} finally { controller.abort(); }
 }
 
 const fileSchema = jsonSchema<FileInput>({

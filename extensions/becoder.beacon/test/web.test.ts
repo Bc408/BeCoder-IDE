@@ -23,7 +23,7 @@ function modelStream(deltas: Record<string, unknown>[], finish = 'stop'): Respon
 	return new Response([...deltas, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'web-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: index === deltas.length ? finish : null }] }) + '\n\n').join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 const webCall = (operation = 'search') => ({ tool_calls: [{ index: 0, id: 'actual-web-call', type: 'function', function: { name: 'browseWeb', arguments: JSON.stringify(operation === 'search' ? { operation, query: 'C++ vector documentation' } : { operation, url: pageURL }) } }] });
-const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'private-model-key', parameters: {} };
+const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'private-model-key', parameters: {}, capabilities: { purpose: 'chat', vision: 'supported', reasoning: 'supported', tools: 'supported', source: 'service' } };
 
 suite('Beacon keyless web lookup', () => {
 	test('fixed endpoint receives only public query arguments, no credentials; verified JSON and SSE formats retain stable sources', async () => {

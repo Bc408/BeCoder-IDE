@@ -59,6 +59,8 @@ await build({ ...shared, entryPoints: ['test/web.test.ts'], outfile: 'dist-test/
 await build({ ...shared, entryPoints: ['test/attachments.test.ts'], outfile: 'dist-test/attachments.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [{ name: 'test-vscode', setup(builder) { builder.onResolve({ filter: /^vscode$/ }, () => ({ path: path.join(root, 'test/vscodeMock.ts') })); } }] });
 await build({ ...shared, entryPoints: ['test/settings.test.ts'], outfile: 'dist-test/settings.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, plugins: [{ name: 'test-vscode', setup(builder) { builder.onResolve({ filter: /^vscode$/ }, () => ({ path: path.join(root, 'test/vscodeMock.ts') })); } }] });
 
+await build({ ...shared, entryPoints: ['test/providerTests.test.ts'], outfile: 'dist-test/providerTests.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+
 // Distribute full dependency licenses alongside the bundled code, including transitive packages.
 const packages = new Map();
 for (const file of [...Object.keys(host.metafile.inputs), ...Object.keys(ui.metafile.inputs), ...Object.keys(worker.metafile.inputs)]) {

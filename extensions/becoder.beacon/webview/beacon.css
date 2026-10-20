@@ -183,6 +183,8 @@ main[data-navigation-lock] .send:disabled:not([data-unavailable]):hover { filter
 .history-actions { position: absolute; right: 6px; top: 50%; display: flex; align-items: center; transform: translate(3px, -50%); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 30ms linear, transform 40ms ease-out; }
 .history-row:hover .history-actions, .history-row:has(:focus-visible) .history-actions { transform: translate(0, -50%); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
 .history-actions button { width: var(--icon-target); height: var(--icon-target); padding: 3px; border-radius: 50%; color: var(--chat-muted); overflow: hidden; white-space: nowrap; }
+.history-actions button:enabled:not(.delete-confirm):hover { color: var(--chat-title); background: transparent; }
+.history-actions button:enabled:not(.delete-confirm):hover svg { filter: drop-shadow(0 0 2px color-mix(in srgb, currentColor 45%, transparent)); }
 .history-actions .history-rename { transition: width 40ms ease-out, padding 40ms ease-out, opacity 25ms linear, transform 40ms ease-out; }
 .history-row.confirming .history-rename { width: 0; padding: 0; opacity: 0; visibility: hidden; transform: scale(.75); pointer-events: none; }
 .history-actions .history-delete { transition: width 45ms ease-out, border-radius 45ms ease-out, color 35ms linear, background-color 35ms linear, transform 45ms ease-out; }

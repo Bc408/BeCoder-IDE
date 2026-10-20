@@ -694,6 +694,23 @@ try {
 	await page.locator('.history-row').first().hover();
 	assert.ok(await page.getByRole('button', { name: '重命名聊天', exact: true }).first().isVisible());
 	assert.ok(await page.getByRole('button', { name: '删除聊天', exact: true }).first().isVisible());
+	for (const theme of ['dark', 'light']) {
+		const palette = await page.addStyleTag({ content: theme === 'dark' ? ':root { --vscode-sideBar-background:#21262d; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; }' : ':root { --vscode-sideBar-background:#fff; --vscode-foreground:#252525; --vscode-descriptionForeground:#616161; }' });
+		for (const selector of ['.history-rename', '.history-delete']) {
+			const control = page.locator(selector).first();
+			await page.locator('.history-open').first().hover({ position: { x: 12, y: 12 } });
+			await page.waitForTimeout(130);
+			const bounds = await control.boundingBox();
+			assert.equal(await control.locator('svg').evaluate(element => getComputedStyle(element).filter), 'none');
+			await control.hover();
+			await page.waitForTimeout(130);
+			assert.deepStrictEqual(await control.boundingBox(), bounds, 'History hover preserves the target bounds');
+			assert.equal(await control.evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
+			assert.match(await control.locator('svg').evaluate(element => getComputedStyle(element).filter), /drop-shadow/, 'Production history icons have a hover glow');
+			await page.locator('.history-row').first().screenshot({ path: path.join(output, `history-${theme}-${selector.slice(1)}-hover.png`) });
+		}
+		await palette.evaluate(element => element.remove());
+	}
 	await page.getByRole('button', { name: '连接设置', exact: true }).hover();
 	assert.equal(await page.getByRole('button', { name: '重命名聊天', exact: true }).first().isVisible(), false);
 	await page.locator('.history-row').first().hover();

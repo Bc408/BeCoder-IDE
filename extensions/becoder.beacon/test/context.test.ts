@@ -7,7 +7,7 @@ import { suite, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { BeaconContextClient, withPdfPages } from '../src/context';
-import { ContextTools, redactContext } from '../src/contextTools';
+import { ContextTools, redactContext, type ContextSnapshot } from '../src/contextTools';
 import { NotebookTools } from '../src/notebookTools';
 import { createGenerator } from '../src/provider';
 import { ChatSession } from '../src/session';
@@ -274,6 +274,79 @@ suite('Beacon native context consumer', () => {
 		opened = false;
 		assert.equal((await tools.execute({ operation: 'page', id: 'page', version: '2' }, new AbortController().signal)).ok, false);
 	});
+	test('Blackout overview with a retained source lease lists open pages without workspace records', async () => {
+		const state: IBeaconContext = { ...selected(), mode: 'blackout', workspaceState: 'blackout' };
+		const operations: string[] = [];
+		const page = { id: 'open', kind: 'text', title: 'main.cpp', version: '2', dirty: true };
+		const client = new BeaconContextClient(async operation => {
+			operations.push(operation);
+			if (operation === 'context') { return state; }
+			if (operation === 'pages') { return [page]; }
+			if (operation === 'page') { return { ...page, contents: 'dirty source', totalCharacters: 12 }; }
+			throw new Error('unexpected-workspace-access');
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		const overview = await tools.execute({ operation: 'overview' }, signal);
+		assert.equal(overview.ok, true);
+		assert.deepEqual(overview.pages, [page]);
+		assert.deepEqual(overview.records, []);
+		assert.equal(overview.runtimeUnavailable, 'blackout');
+		assert.equal((await tools.execute({ operation: 'page', id: 'open', version: '2' }, signal)).contents, 'dirty source');
+		assert.equal(operations.includes('runtimeList'), false);
+	});
+
+	test('Blackout retained ownership does not authorize direct runtime or material reads', async () => {
+		const state: IBeaconContext = { ...selected(), mode: 'blackout', workspaceState: 'blackout' };
+		const operations: string[] = [];
+		const client = new BeaconContextClient(async operation => {
+			operations.push(operation);
+			if (operation === 'context') { return state; }
+			throw new Error('unexpected-workspace-access');
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		for (const input of [{ operation: 'records', producer: 'runner' }, { operation: 'record', producer: 'runner', id: 'run', revision: 1 }, { operation: 'material', id: 'runner-run-1' }] as const) {
+			const denied = await tools.execute(input, signal);
+			assert.equal(denied.ok, false);
+			assert.equal(denied.code, 'beacon-workspace-unavailable');
+		}
+		assert.equal(operations.some(operation => ['runtimeList', 'runtimeRead', 'materialRead'].includes(operation)), false);
+	});
+
+	test('captured complete page and runtime snapshots survive a Blackout fork without source reads', async () => {
+		const snapshots: ContextSnapshot[] = []; const operations: string[] = [];
+		let state = selected(); let pageOpen = true;
+		const client = new BeaconContextClient(async operation => {
+			operations.push(operation);
+			if (operation === 'context') { return state; }
+			if (operation === 'pages') { return pageOpen ? [{ id: 'page', kind: 'text', title: 'main.cpp', version: '2' }] : []; }
+			if (operation === 'page') { return { contents: 'full page api_key=secret', totalCharacters: 24 }; }
+			if (operation === 'runtimeRead') { return { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, code: 'complete captured code', events: [{ type: 'output', text: 'complete observation' }] }; }
+			throw new Error('source no longer exists');
+		});
+		await client.refresh(); const source = new ContextTools(client, client.captureScope(), [], [], snapshot => snapshots.push(snapshot)); const signal = new AbortController().signal;
+		assert.equal((await source.execute({ operation: 'page', id: 'page', version: '2', limit: 4 }, signal)).contents, 'full');
+		assert.equal((await source.execute({ operation: 'record', id: 'run', producer: 'runner', revision: 3, limit: 3 }, signal)).ok, true);
+		assert.equal(snapshots.length, 2);
+		assert.equal(snapshots[0].raw, 'full page api_key=secret');
+		assert.ok(snapshots[1].raw.includes('complete captured code'));
+		await source.execute({ operation: 'page', id: 'page', version: '2' }, signal);
+		assert.equal(snapshots.length, 2);
+		state = { ...state, mode: 'blackout', workspaceState: 'blackout', epoch: 3 }; pageOpen = false;
+		await client.refresh(); const inherited = new ContextTools(client, client.captureScope(), [], structuredClone(snapshots));
+		const overview = await inherited.execute({ operation: 'overview' }, signal);
+		assert.equal(overview.ok, true);
+		assert.deepEqual((overview.materials as { id: string }[]).map(item => item.id), ['page:page:2:', 'material:runner-run-3']);
+		operations.length = 0;
+		const page = await inherited.execute({ operation: 'material', id: 'page:page:2:' }, signal);
+		assert.equal(page.ok, true); assert.equal(page.contents, 'full page api_key=[redacted]');
+		const runtime = await inherited.execute({ operation: 'material', id: 'runner-run-3', part: 'code' }, signal);
+		assert.equal(runtime.contents, 'complete captured code');
+		assert.equal(operations.every(operation => operation === 'context'), true);
+		assert.equal((await inherited.execute({ operation: 'page', id: 'page', version: '2' }, signal)).code, 'beacon-page-closed');
+		state = { ...state, epoch: 4 };
+		assert.equal((await inherited.execute({ operation: 'material', id: 'runner-run-3' }, signal)).code, 'beacon-context-changed');
+	});
+
 	test('runtime records pin native revision and return immutable own material, with decoded observations', async () => {
 		let state = selected(); const operations: string[] = [];
 		const client = new BeaconContextClient(async (operation, input) => {

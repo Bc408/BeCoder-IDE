@@ -78,7 +78,8 @@ export class BeaconContextClient {
 	async select(root: string): Promise<IBeaconContext> { return this.accept(await this.call('select', { root })); }
 	async clearWorkspace(): Promise<IBeaconContext> { return this.accept(await this.call('clearWorkspace')); }
 	async removeRecentWorkspace(root: string): Promise<IBeaconContext> { return this.accept(await this.call('removeRecentWorkspace', { root })); }
-	async setMode(mode: BeaconMode): Promise<IBeaconContext> { return this.accept(await this.call('mode', { mode })); }
+	async setMode(mode: BeaconMode, retainConversation = false): Promise<IBeaconContext> { return this.accept(await this.call('mode', { mode, retainConversation })); }
+	async consumeDraft(id: string, revision: number): Promise<void> { await this.call('consumeDraft', { id, revision }); }
 	async setBusy(busy: boolean): Promise<void> { await this.call('busy', { busy }); }
 	async release(): Promise<void> { await this.call('release'); await this.refresh(); }
 	async resume(): Promise<IBeaconResume | undefined> { return this.consumingWorkspace ? this.call('resume') : undefined; }

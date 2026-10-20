@@ -10,6 +10,7 @@ import { modelMessageSchema } from 'ai';
 import { isWebSource } from './webTools';
 import { validAttachments, type Attachment } from './attachments';
 import { isToolError } from './toolFeedback';
+import { validContextSnapshots, type ContextSnapshot } from './contextTools';
 
 export interface Conversation {
 	id: string;
@@ -20,6 +21,7 @@ export interface Conversation {
 	workspace: FileRoot[];
 	draft?: { text: string; attachments: Attachment[] };
 	draftOnly?: boolean;
+	contextSnapshots?: ContextSnapshot[];
 }
 
 export interface HistoryData {
@@ -46,10 +48,12 @@ export function readHistory(value: unknown): HistoryData {
 		if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.title !== 'string' || typeof item.error !== 'string' || (!Number.isFinite(item.updatedAt) || item.updatedAt < 0 || item.updatedAt > 8640000000000000) || !Array.isArray(item.messages)) { throw new Error('invalid-history'); }
 		ids.add(item.id);
 		if (item.draftOnly !== undefined && typeof item.draftOnly !== 'boolean') { throw new Error('invalid-history'); }
+		if (item.contextSnapshots !== undefined && !validContextSnapshots(item.contextSnapshots)) { throw new Error('invalid-history'); }
 		if (item.draft !== undefined && (!item.draft || typeof item.draft.text !== 'string' || !validAttachments(item.draft.attachments))) { throw new Error('invalid-history'); }
 		if (!Array.isArray(item.workspace) || item.workspace.some(root => typeof root.name !== 'string' || typeof root.path !== 'string')) { throw new Error('invalid-history'); }
 		let previous = 0;
 		for (const message of item.messages) {
+			if (message?.transition !== undefined && (message.role !== 'user' || !['temporary', 'persistent'].includes(message.transition))) { throw new Error('invalid-history'); }
 			if (message?.failure !== undefined && (message.role !== 'assistant' || !message.failure || !['connection', 'timeout', 'rate-limit', 'unavailable'].includes(message.failure.kind) || !Number.isInteger(message.failure.retries) || message.failure.retries < 0 || message.failure.retries > 2)) { throw new Error('invalid-history'); }
 			if (message?.attachments !== undefined && (message.role !== 'user' || !validAttachments(message.attachments))) { throw new Error('invalid-history'); }
 			if (message?.sources !== undefined && (message.role !== 'assistant' || !Array.isArray(message.sources) || message.sources.length > 1000 || message.sources.some(source => !isWebSource(source)) || new Set(message.sources.map(source => source.id)).size !== message.sources.length)) { throw new Error('invalid-history'); }
@@ -111,6 +115,23 @@ export class ChatHistory {
 	get currentConversation(): Conversation | undefined {
 		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId));
 	}
+
+	get contextSnapshots(): ContextSnapshot[] {
+		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId)?.contextSnapshots ?? []);
+	}
+
+	captureContext(snapshot: ContextSnapshot): void {
+		if (this.disposed) { return; }
+		const active = this.data.conversations.find(item => item.id === this.data.activeId);
+		if (!active) { return; }
+		const snapshots = this.contextSnapshots.filter(item => item.key !== snapshot.key).concat(snapshot);
+		if (!validContextSnapshots(snapshots)) { throw new Error('invalid-history'); }
+		active.contextSnapshots = structuredClone(snapshots);
+		if (!this.timer) { this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, 300); }
+		this.changed();
+	}
+
+	get checkpoint(): HistoryData { return structuredClone(this.data); }
 
 	private capture(snapshot: Snapshot): void {
 		if (this.restoring || this.disposed) { return; }

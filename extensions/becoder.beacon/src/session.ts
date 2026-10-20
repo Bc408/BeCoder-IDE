@@ -26,6 +26,7 @@ export function fileModelOutput(output: FileOutput) {
 }
 
 export interface Message {
+	transition?: 'temporary' | 'persistent';
 	failure?: RequestFailure;
 	attachments?: Attachment[];
 	id: number;
@@ -91,11 +92,11 @@ export class ChatSession {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = []): Promise<void> {
+	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = [], transition?: Message['transition']): Promise<void> {
 		if (this.disposed || this.controller) { return; }
 		text = text.trim();
 		if ((!text && !attachments.length) || text.length > 32000 || !validAttachments(attachments)) { return; }
-		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
+		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(transition ? { transition } : {}), ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
 		await this.respond(generate, files, source);
 	}
 

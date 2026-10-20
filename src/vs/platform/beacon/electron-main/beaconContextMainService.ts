@@ -70,7 +70,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	selectWorkspace(windowId: number, root: string) { return this.coordinator.selectWorkspace(windowId, root); }
 	clearWorkspace(windowId: number) { return this.coordinator.clearWorkspace(windowId); }
 	removeRecentWorkspace(windowId: number, root: string) { return this.coordinator.removeRecentWorkspace(windowId, root); }
-	setMode(windowId: number, mode: BeaconMode) { return this.coordinator.setMode(windowId, mode); }
+	setMode(windowId: number, mode: BeaconMode, retainConversation?: boolean) { return this.coordinator.setMode(windowId, mode, retainConversation); }
 	async setBusy(windowId: number, busy: boolean): Promise<void> { this.coordinator.setBusy(windowId, busy); }
 	async beginRuntimeActivity(windowId: number): Promise<string> { return this.coordinator.beginRuntimeActivity(windowId); }
 	async endRuntimeActivity(windowId: number, handle: string): Promise<void> { this.coordinator.endRuntimeActivity(windowId, handle); }
@@ -93,6 +93,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	listHistory(windowId: number) { return this.coordinator.listHistory(windowId); }
 	openConversation(windowId: number, id: string, create?: boolean) { return this.coordinator.openConversation(windowId, id, create); }
 	saveConversation(windowId: number, data: IBeaconConversation, revision: number) { return this.coordinator.saveConversation(windowId, data, revision); }
+	consumeDraft(windowId: number, id: string, revision: number) { return this.coordinator.consumeDraft(windowId, id, revision); }
 	renameConversation(windowId: number, id: string, title: string) { return this.coordinator.renameConversation(windowId, id, title); }
 	deleteConversation(windowId: number, id: string) { return this.coordinator.deleteConversation(windowId, id); }
 	releaseConversation(windowId: number) { return this.coordinator.releaseConversation(windowId); }

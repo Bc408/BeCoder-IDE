@@ -7,7 +7,7 @@ import { createHash } from 'crypto';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { IBeaconContext, IBeaconPageRead, IBeaconRuntimeItem, IBeaconConsumedRecord } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
-import { BeaconContextClient, type BeaconPage } from './context';
+import type { BeaconContextClient, BeaconPage } from './context';
 import { isProtectedFilePath } from './fileTools';
 
 export interface ContextInput { operation: 'overview' | 'pages' | 'page' | 'records' | 'record' | 'material'; id?: string; version?: string; pageNumber?: number; producer?: 'runner' | 'cph' | 'notebook'; revision?: number; part?: 'all' | 'code' | 'events'; offset?: number; limit?: number }
@@ -30,6 +30,26 @@ export interface ContextSource {
 }
 export interface ContextOutput { ok: boolean; contents?: string; error?: string; source?: ContextSource; [key: string]: unknown }
 export interface ContextAccess { execute(input: ContextInput, signal: AbortSignal): Promise<ContextOutput>; describe(signal: AbortSignal): Promise<string> }
+export interface ContextSnapshot { key: string; raw: string; metadata: Record<string, unknown> }
+
+/** Complete, already captured representations; never instructions or live reading grants. */
+export function validContextSnapshots(value: unknown): value is ContextSnapshot[] {
+	if (!Array.isArray(value) || value.length > 4096) { return false; }
+	const keys = new Set<string>();
+	try {
+		for (const item of value as ContextSnapshot[]) {
+			if (!item || typeof item.key !== 'string' || item.key.length > 4096 || !/^(page|material):.+/.test(item.key) || keys.has(item.key) || typeof item.raw !== 'string' || !item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) { return false; }
+			keys.add(item.key);
+			const source = item.metadata.source as ContextSource | undefined;
+			if (!source || !['page', 'runtime'].includes(source.kind) || typeof source.id !== 'string' || !source.id || !Number.isFinite(source.capturedAt) || source.capturedAt < 0 || typeof source.contentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(source.contentSha256) || typeof source.representation !== 'string') { return false; }
+			if (source.kind === 'runtime') {
+				const document = JSON.parse(item.raw) as { code?: unknown; events?: unknown };
+				if (!item.key.startsWith('material:') || item.key !== `material:${item.metadata.materialId}` || !Number.isSafeInteger(source.revision) || source.revision! < 1 || !document || typeof document.code !== 'string' || !Array.isArray(document.events)) { return false; }
+			} else if (!item.key.startsWith('page:') || typeof source.version !== 'string') { return false; }
+		}
+		return Buffer.byteLength(JSON.stringify(value), 'utf8') <= 32 * 1024 * 1024;
+	} catch { return false; }
+}
 
 // Apply to the complete representation before pagination, including decoded bytes.
 export function redactContext(text: string): string {
@@ -96,8 +116,17 @@ const explanations: Record<string, string> = {
 
 export class ContextTools implements ContextAccess {
 	private used = 0;
-	private readonly snapshots = new Map<string, { raw: string; metadata: object }>();
-	constructor(private readonly client: BeaconContextClient, private readonly scope: IBeaconContext, private readonly protectedRoots: string[] = []) { }
+	private readonly snapshots = new Map<string, { raw: string; metadata: Record<string, unknown> }>();
+	constructor(private readonly client: BeaconContextClient, private readonly scope: IBeaconContext, private readonly protectedRoots: string[] = [], snapshots: ContextSnapshot[] = [], private readonly captured?: (snapshot: ContextSnapshot) => void) {
+		if (!validContextSnapshots(snapshots)) { throw new Error('beacon-invalid-context-snapshot'); }
+		for (const { key, raw, metadata } of structuredClone(snapshots)) { this.snapshots.set(key, { raw, metadata }); }
+	}
+	private captureSnapshot(key: string, snapshot: { raw: string; metadata: Record<string, unknown> }): void {
+		const captured = { key, ...snapshot };
+		if (!validContextSnapshots([...this.snapshots].map(([key, value]) => ({ key, ...value })).concat(captured))) { throw new Error('beacon-context-budget'); }
+		this.captured?.(structuredClone(captured));
+		this.snapshots.set(key, snapshot);
+	}
 	private call<T>(operation: string, input: object, signal: AbortSignal): Promise<T> { return this.client.scopedCall(this.scope, operation, input, signal); }
 	private pageAllowed(page: BeaconPage): boolean {
 		if (!page.uri?.startsWith('file:')) { return true; }
@@ -109,7 +138,7 @@ export class ContextTools implements ContextAccess {
 	private async pages(signal: AbortSignal): Promise<BeaconPage[]> {
 		return (await this.call<BeaconPage[]>('pages', {}, signal)).map(page => this.pageAllowed(page) ? page : { ...page, reason: 'beacon-protected-page' });
 	}
-	private recordsEnabled(): void { if (!this.scope.usable) { throw new Error('beacon-workspace-unavailable'); } if (!this.scope.activeId) { throw new Error('beacon-conversation-owner'); } }
+	private recordsEnabled(): void { if (!this.scope.usable || this.scope.mode === 'blackout') { throw new Error('beacon-workspace-unavailable'); } if (!this.scope.activeId) { throw new Error('beacon-conversation-owner'); } }
 	private async records(producer: ContextInput['producer'], signal: AbortSignal): Promise<IBeaconRuntimeItem[]> {
 		this.recordsEnabled();
 		if (producer && producer !== 'runner' && producer !== 'cph' && producer !== 'notebook') { throw new Error('beacon-invalid-context-input'); }
@@ -118,7 +147,8 @@ export class ContextTools implements ContextAccess {
 		return result;
 	}
 	private async overview(signal: AbortSignal): Promise<ContextOutput> {
-		return { ok: true, mode: this.scope.mode, root: this.scope.root, workspaceUsable: this.scope.usable, conversation: this.scope.activeId, pages: await this.pages(signal), pdfReading: 'For listed PDF documents use operation page with id, version and physical pageNumber from 1 to pageCount. Read needed pages on demand, then use offset/nextOffset within that same page. Text extraction is not OCR or visual understanding; empty text does not imply an empty page.', records: this.scope.usable && this.scope.activeId ? await this.records(undefined, signal) : [], runtimeUnavailable: !this.scope.usable ? 'blackout' : !this.scope.activeId ? 'no-active-conversation' : undefined };
+		const materials = [...this.snapshots].map(([key, value]) => ({ ...value.metadata, id: key, snapshot: true }));
+		return { ok: true, mode: this.scope.mode, root: this.scope.root, workspaceUsable: this.scope.usable, conversation: this.scope.activeId, pages: await this.pages(signal), materials, materialReading: 'Use operation material with a listed material id to read its captured snapshot, including in Blackout. These are inherited or previously captured representations, not current pages or permission to reread original sources.', pdfReading: 'For listed PDF documents use operation page with id, version and physical pageNumber from 1 to pageCount. Read needed pages on demand, then use offset/nextOffset within that same page. Text extraction is not OCR or visual understanding; empty text does not imply an empty page.', records: this.scope.usable && this.scope.mode !== 'blackout' && this.scope.activeId ? await this.records(undefined, signal) : [], runtimeUnavailable: !this.scope.usable || this.scope.mode === 'blackout' ? 'blackout' : !this.scope.activeId ? 'no-active-conversation' : undefined };
 	}
 	async describe(signal: AbortSignal): Promise<string> {
 		const overview = await this.execute({ operation: 'overview' }, signal);
@@ -137,7 +167,7 @@ export class ContextTools implements ContextAccess {
 			else if (input.operation === 'pages') { output = { ok: true, pages: await this.pages(signal) }; }
 			else if (input.operation === 'records') { output = { ok: true, records: await this.records(input.producer, signal) }; }
 			else {
-				if (typeof input.id !== 'string' || !input.id || input.id.length > 256) { throw new Error('beacon-invalid-context-input'); }
+				if (typeof input.id !== 'string' || !input.id || input.id.length > (input.operation === 'material' ? 4096 : 256)) { throw new Error('beacon-invalid-context-input'); }
 				let key: string;
 				if (input.operation === 'page') {
 					if (typeof input.version !== 'string') { throw new Error('beacon-invalid-context-input'); }
@@ -150,8 +180,13 @@ export class ContextTools implements ContextAccess {
 					if (!this.snapshots.has(key)) {
 						const captured = await this.call<IBeaconPageRead>('page', { id: input.id, version: input.version, ...(input.pageNumber === undefined ? {} : { pageNumber: input.pageNumber }) }, signal);
 						const source: ContextSource = { kind: 'page', id: page.id, origin: page.uri, version: page.version, ...(page.kind === 'pdf' ? { pageNumber: input.pageNumber } : {}), capturedAt: Date.now(), contentSha256: createHash('sha256').update(captured.contents).digest('hex'), representation: page.kind === 'pdf' ? 'PDF.js text extraction of the specified physical page in the loaded document; no OCR or image input; layout and formulas may be incomplete, empty text does not mean an empty page' : page.kind === 'browser' ? 'rendered main-frame text and visible textareas; images, frames and unrendered editor code are not included' : page.kind === 'notebook' ? 'loaded Notebook cells and current outputs; attachment names, MIME and sizes do not provide model vision input' : 'loaded editor text model' };
-						this.snapshots.set(key, { raw: captured.contents, metadata: { ...page, ...(page.kind === 'pdf' ? { pageNumber: input.pageNumber, textAvailable: !!captured.contents.trim() } : {}), source } });
+						this.captureSnapshot(key, { raw: captured.contents, metadata: { ...page, ...(page.kind === 'pdf' ? { pageNumber: input.pageNumber, textAvailable: !!captured.contents.trim() } : {}), source } });
 					}
+				} else if (input.operation === 'material' && (this.snapshots.has(input.id) || this.snapshots.has(`material:${input.id}`))) {
+					key = this.snapshots.has(input.id) ? input.id : `material:${input.id}`;
+					// A retained snapshot is conversation content, not a grant to its
+					// original disk asset. Still reject a changed request scope.
+					await this.call('context', {}, signal);
 				} else {
 					this.recordsEnabled();
 					if (input.operation === 'record' && (!['runner', 'cph', 'notebook'].includes(input.producer ?? '') || !Number.isSafeInteger(input.revision) || input.revision! < 1)) { throw new Error('beacon-invalid-context-input'); }
@@ -168,15 +203,16 @@ export class ContextTools implements ContextAccess {
 						const omitted = capture?.complete === false || events.some(event => event?.partial === true || event?.coverage?.truncated === true);
 						const coverageKnown = capture?.complete === true && events.some(event => event?.type === 'finished' && event.coverage?.truncated === false);
 						const source: ContextSource = { kind: 'runtime', id: record.id, producer, origin: capture?.originalPath, revision: record.revision, capturedAt: Date.now(), contentSha256: createHash('sha256').update(raw).digest('hex'), sourceSha256: capture?.sha256, ...(omitted || coverageKnown ? { partial: omitted } : {}), representation: 'captured runtime evidence JSON; byte fields decoded for reading; raw material retained in this conversation; source and event coverage are described by producer events' };
-						this.snapshots.set(key, { raw, metadata: { materialId: record.materialId, recordId: record.id, revision: record.revision, startedAt: record.startedAt, source } });
+						this.captureSnapshot(key, { raw, metadata: { materialId: record.materialId, recordId: record.id, revision: record.revision, startedAt: record.startedAt, source } });
 					}
 				}
 				const snapshot = this.snapshots.get(key)!;
-				const document = input.operation === 'page' ? undefined : JSON.parse(snapshot.raw) as { code: string; events: unknown[] };
+				const document = (snapshot.metadata.source as ContextSource).kind === 'runtime' ? JSON.parse(snapshot.raw) as { code: string; events: unknown[] } : undefined;
+				if (!document && input.part !== undefined) { throw new Error('beacon-invalid-context-input'); }
 				const raw = input.part === 'code' ? document!.code : input.part === 'events' ? JSON.stringify(document!.events, null, 2) : snapshot.raw;
-				const text = input.operation === 'page' || input.part === 'code' ? redactContext(raw) : JSON.stringify(redactValues(JSON.parse(raw)), null, 2);
+				const text = !document || input.part === 'code' ? redactContext(raw) : JSON.stringify(redactValues(JSON.parse(raw)), null, 2);
 				const end = Math.min(text.length, offset + limit);
-				output = { ok: true, ...snapshot.metadata, contents: text.slice(offset, end), ...(document ? { part: input.part ?? 'all', availableParts: ['code', 'events'] } : {}), offset, totalCharacters: text.length, redacted: text !== raw, truncated: offset > 0 || end < text.length, ...(end < text.length ? { nextOffset: end } : {}) };
+				output = { ok: true, ...snapshot.metadata, contents: text.slice(offset, end), ...(input.operation === 'material' ? { snapshot: true, snapshotKey: key } : {}), ...(document ? { part: input.part ?? 'all', availableParts: ['code', 'events'] } : {}), offset, totalCharacters: text.length, redacted: text !== raw, truncated: offset > 0 || end < text.length, ...(end < text.length ? { nextOffset: end } : {}) };
 				if (input.operation === 'page') {
 					const current = (await this.pages(signal)).find(page => page.id === input.id);
 					if (!current) { throw new Error('beacon-page-closed'); }

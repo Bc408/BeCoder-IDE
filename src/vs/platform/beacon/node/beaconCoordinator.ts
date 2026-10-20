@@ -214,7 +214,7 @@ export class BeaconCoordinator {
 		});
 	}
 
-	async setMode(id: number, mode: BeaconMode): Promise<IBeaconContext> {
+	async setMode(id: number, mode: BeaconMode, retainConversation = false): Promise<IBeaconContext> {
 		return this.serial(id, false, async context => {
 			await this.refresh(context);
 			if (!context.usable && mode !== 'blackout') { throw new Error('beacon-mode-unavailable'); }
@@ -222,7 +222,7 @@ export class BeaconCoordinator {
 				context.selection = { ...context.selection, mode }; context.epoch++;
 				this.callbacks.saveSelection(id, context.selection);
 			}
-			if (mode === 'blackout') { await this.release(context); }
+			if (mode === 'blackout' && !retainConversation) { await this.release(context); }
 			this.callbacks.changed(id);
 			return this.snapshot(context);
 		});
@@ -437,6 +437,26 @@ export class BeaconCoordinator {
 			const result = await store.saveConversation(data, revision);
 			this.callbacks.changed(0);
 			return result;
+		});
+	}
+
+	/** Clear only the owned source draft after a mode handoff accepts its first send. */
+	async consumeDraft(id: number, conversationId: string, revision: number): Promise<void> {
+		checkBeaconIdentifier(conversationId);
+		if (!Number.isSafeInteger(revision) || revision < 1) { throw new Error('beacon-invalid-history'); }
+		await this.serial(id, true, async context => {
+			// Unlike normal asset access this host cleanup may run in Blackout. It
+			// accepts no replacement content and requires the retained source lease.
+			await this.refresh(context);
+			const store = context.store;
+			if (!context.usable || !store) { throw new Error('beacon-workspace-unavailable'); }
+			if (context.active?.id !== conversationId || context.active.identity !== store.binding.identity) { throw new Error('beacon-conversation-owner'); }
+			await store.validate();
+			const current = await store.readConversation(conversationId);
+			if (!current) { throw new Error('beacon-missing-conversation'); }
+			if (current.revision !== revision) { throw new Error('beacon-history-conflict'); }
+			await store.saveConversation({ ...current.data, draft: { text: '', attachments: [] } }, revision);
+			this.callbacks.changed(0);
 		});
 	}
 

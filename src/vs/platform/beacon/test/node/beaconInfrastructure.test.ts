@@ -461,6 +461,54 @@ suite('Beacon window context and conversation ownership', () => {
 		} finally { await service.dispose(); }
 	}));
 
+	test('explicit mode handoff retains ownership and only consumes the matching source draft in Blackout', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
+			const opened = await service.openConversation(1, 'source', true);
+			const saved = await service.saveConversation(1, { ...conversation('source'), draft: { text: 'pending', attachments: [{ contents: 'captured' }] } }, opened.revision);
+			const blackout = await service.setMode(1, 'blackout', true);
+			assert.equal(blackout.activeId, 'source');
+			assert.equal((await service.setMode(1, 'blackout', true)).activeId, 'source');
+			await assert.rejects(service.openConversation(2, 'source'), /conversation-open/);
+			await assert.rejects(service.openConversation(1, 'source'), /workspace/);
+			await assert.rejects(service.saveConversation(1, saved.data, saved.revision), /workspace/);
+			await assert.rejects(service.listHistory(1), /workspace/);
+			await assert.rejects(service.listRuntime(1, 'runner', blackout), /workspace/);
+			await assert.rejects(service.readConsumed(1, 'material', blackout), /workspace/);
+			await assert.rejects(service.consumeDraft(2, 'source', saved.revision), /owner/);
+			await assert.rejects(service.consumeDraft(1, 'other', saved.revision), /owner/);
+			await assert.rejects(service.consumeDraft(1, 'source', saved.revision - 1), /conflict/);
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			assert.deepEqual((await store.readConversation('source'))?.data, saved.data);
+			service.setBusy(1, true);
+			await service.consumeDraft(1, 'source', saved.revision);
+			const consumed = await store.readConversation('source');
+			assert.deepEqual(consumed?.data, { ...saved.data, draft: { text: '', attachments: [] } });
+			assert.equal(consumed?.revision, saved.revision + 1);
+			assert.equal((await service.getContext(1)).activeId, 'source');
+			await assert.rejects(service.openConversation(2, 'source'), /conversation-open/);
+			await assert.rejects(service.consumeDraft(1, 'source', saved.revision), /conflict/);
+			service.setBusy(1, false);
+			await service.resetWindow(1);
+			await service.openConversation(2, 'source');
+		} finally { await service.dispose(); }
+	}));
+
+	test('draft consumption rejects a replaced workspace instead of clearing its conversation', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			await service.selectWorkspace(1, root);
+			const source = await service.openConversation(1, 'source', true);
+			await service.setMode(1, 'blackout', true);
+			await fs.rename(path.join(root, '.beaconWork'), path.join(root, 'original'));
+			const replacement = new BeaconStore(await prepareBeaconWorkspace(root, true));
+			await replacement.saveConversation({ ...conversation('source'), draft: { text: 'replacement', attachments: [] } }, 0);
+			await assert.rejects(service.consumeDraft(1, 'source', source.revision), /workspace/);
+			assert.equal((await replacement.readConversation('source'))?.data.draft?.text, 'replacement');
+		} finally { await service.dispose(); }
+	}));
+
 	test('keeps manual Blackout across roots and moves a cleared root to recents without duplicates', async () => fixture(async parent => {
 		const first = path.join(parent, 'first'); const second = path.join(parent, 'second');
 		await fs.mkdir(first); await fs.mkdir(second);

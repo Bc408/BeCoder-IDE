@@ -6,7 +6,7 @@
 import { randomBytes, randomUUID } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ChatHistory, type Conversation } from './history';
+import { ChatHistory, type Conversation, type HistoryItem } from './history';
 import { Connections, connectionError, settingsError } from './connections';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
@@ -40,8 +40,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let history = new ChatHistory(binding.data, binding.save, schedule, describeError);
 	let session = history.session;
 	let temporary = true;
+	// The displayed conversation keeps its owner until a send crosses storage classes.
+	let modeDraft: { text: string; attachments: Attachment[] } | undefined;
+	let modeHistory: HistoryItem[] | undefined;
 	let screen: 'home' | 'conversation' = 'home';
 	let generation = 0;
+	let inputRevision = 0;
+	let acceptedInputView: { previous: string; current: string; editRevision?: number } | undefined;
 	let draftTail = Promise.resolve();
 	const pendingWork = new Set<Promise<void>>();
 	const track = (work: Promise<void>): Promise<void> => {
@@ -71,16 +76,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (value !== nativeBusy) { nativeBusy = value; busyTail = busyTail.then(() => native.setBusy(value)).catch(() => { nativeBusy = undefined; }); }
 	};
 	const viewKey = () => `${native.state.slot}:${native.state.root ?? ''}:${screen}:${generation}`;
-	const draft = () => temporary ? temporaryDrafts.get(native.state.root ?? '') ?? { text: '', attachments: [] } : history.draft;
+	const draft = () => modeDraft ?? (temporary ? temporaryDrafts.get(native.state.root ?? '') ?? { text: '', attachments: [] } : history.draft);
 	const attachments = () => draft().attachments;
 	const home = () => homes.get(native.state.root ?? '');
 	const recordView = async () => {
-		if (!native.consumingWorkspace) { return; }
+		if (!native.consumingWorkspace || modeDraft) { return; }
 		if (screen === 'home') { homes.set(native.state.root!, { id: history.snapshot.activeId || undefined, hasDraft: !!(draft().text || attachments().length) }); }
 		await native.setView({ screen, id: screen === 'conversation' ? history.snapshot.activeId || undefined : undefined, homeId: home()?.id });
 	};
 	const setDraft = async (text: string, items: Attachment[]) => {
-		if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text, attachments: items }); }
+		if (modeDraft) { modeDraft = { text, attachments: items }; }
+		else if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text, attachments: items }); }
 		else {
 			if (!history.snapshot.activeId && (text.length || items.length)) { await replaceHistory(await native.bindHistory({ id: randomUUID(), create: true })); }
 			history.setDraft(text, items);
@@ -88,7 +94,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		await recordView();
 	};
 	const updateDraft = (text: string, expected: string) => {
+		if (expected === acceptedInputView?.previous && viewKey() === acceptedInputView.current) { expected = acceptedInputView.current; }
 		if (text.length > 32000 || expected !== viewKey() || historyUnreadable) { return; }
+		inputRevision++;
 		draftTail = draftTail.then(async () => { if (expected !== viewKey()) { return; } await setDraft(text, attachments()); publish(); }).catch(error => attachmentNotice(error));
 	};
 	const connectionLog = vscode.window.createOutputChannel(vscode.l10n.t('Beacon Connections'));
@@ -98,15 +106,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const readWebEnabled = () => vscode.workspace.getConfiguration('beacon').get<boolean>('webEnabled', true) !== false;
 	let webEnabled = readWebEnabled();
 	let requestNotice: { id: number; text: string } | undefined;
-	const canSend = () => !historyUnreadable && (temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
+	const canSend = () => !historyUnreadable && (modeDraft ? !binding.root || binding.root === native.state.root : temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
 	const request = async (beforeId = Infinity) => {
 		await native.refreshForRequest(); permission = native.permission;
 		if (!canSend()) { throw new Error('beacon-conversation-owner'); }
 		const roots = native.roots;
 		const scope = native.captureScope();
+		const requestHistory = history;
 		const files = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] }).execute;
 		const notebooks = permission === 'none' ? undefined : new NotebookTools(async () => { const extension = vscode.extensions.getExtension<NotebookEditApi>('becoder.notebook'); if (!extension) { throw new Error('notebook-extension-unavailable'); } return extension.activate(); }, scope);
-		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath]), notebooks);
+		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], requestHistory.contextSnapshots, snapshot => requestHistory.captureContext(snapshot)), notebooks);
 		if (next.capabilities.vision !== 'supported' && session.snapshot.messages.some(message => message.id < beforeId && (message.attachments?.some(item => item.kind === 'image') || message.toolResults?.some(item => item.output.kind === 'image')))) { throw new ModelCapabilityError('vision'); }
 		return next;
 	};
@@ -135,7 +144,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (visible.attachments) { visible.attachments = visible.attachments.map(item => ({ ...item, contents: '' })); }
 				return visible;
 			});
-			const message = { type: 'snapshot', ...snapshot, screen, history: native.consumingWorkspace ? snapshot.history : [], context: native.state, canSend: canSend(), temporary, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), responseBusy: session.snapshot.busy, stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
+			const message = { type: 'snapshot', ...snapshot, modeTransitionPending: !!modeDraft, acceptedInputView: acceptedInputView?.current === viewKey() ? acceptedInputView : undefined, screen, history: native.consumingWorkspace ? modeDraft && temporary ? modeHistory ?? [] : snapshot.history : [], context: native.state, canSend: canSend(), temporary: !native.consumingWorkspace, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), responseBusy: session.snapshot.busy, stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
 			void view?.webview.postMessage(message);
 			if (configurationPanel) {
 				const connection = connections.snapshot;
@@ -159,17 +168,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	function receive(message: unknown): void {
 		if (!alive) { return; }
 		if (!message || typeof message !== 'object') { return; }
-		const value = message as { type?: string; root?: string; text?: string; viewKey?: string; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
+		const value = message as { type?: string; root?: string; text?: string; viewKey?: string; editRevision?: number; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
 		try { switch (value.type) {
 			case 'ready': publish(); break;
 			case 'draft': if (typeof value.text === 'string' && typeof value.viewKey === 'string') { updateDraft(value.text, value.viewKey); } break;
-			case 'send': if (typeof value.text === 'string') { void track(send(value.text)); } break;
+			case 'send': if (typeof value.text === 'string') { void track(send(value.text, value.editRevision)); } break;
 			case 'addFiles': void pickFiles(); break;
 			case 'pasteImages': addClipboardImages(value.images, value.activeId); break;
 			case 'attachmentInputError': if (value.code === 'image' || value.code === 'budget' || value.code === 'busy') { attachmentNotice(new AttachmentError(value.code)); } break;
 			case 'unsupportedDrop': attachmentNotice(new AttachmentError('source')); break;
 			case 'removeAttachment': if (!busy() && typeof value.id === 'string') {
-				if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text: draft().text, attachments: attachments().filter(item => item.id !== value.id) }); publish(); }
+				if (temporary || modeDraft) { void setDraft(draft().text, attachments().filter(item => item.id !== value.id)); publish(); }
 				else { draftTail = draftTail.then(async () => { await setDraft(draft().text, attachments().filter(item => item.id !== value.id)); publish(); }).catch(attachmentNotice); }
 			} break;
 			case 'previewAttachment': {
@@ -210,11 +219,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	async function setPermission(value: FilePermission): Promise<void> {
 		await workspaceAction(async () => {
-			await flushHistory();
-			const wasTemporary = temporary;
-			await native.setMode(value === 'none' ? 'blackout' : value === 'workspace' ? 'spot' : 'flood'); permission = native.permission;
-			if (!native.consumingWorkspace) { await returnHome(); }
-			else if (wasTemporary) { await native.release(); await replaceHistory(await native.bindHistory()); await restoreWorkspace(false); }
+			if (value === native.permission) { return; }
+			// Freeze the source before IPC; edits arriving during the switch belong
+			// to the same live composer, never to a stale captured input version.
+			modeDraft = structuredClone(draft());
+			try { await native.setMode(value === 'none' ? 'blackout' : value === 'workspace' ? 'spot' : 'flood', true); }
+			finally {
+				await draftTail; permission = native.permission;
+				if (temporary === !native.consumingWorkspace) {
+					const current = structuredClone(draft()); modeDraft = undefined;
+					await setDraft(current.text, current.attachments); await flushHistory();
+				}
+			}
+			modeHistory = modeDraft && temporary && native.consumingWorkspace ? (await native.metadata()).conversations.map(({ id, title, updatedAt, workspace }) => ({ id, title, updatedAt, workspace })) : undefined;
 		});
 	}
 	async function flushHistory(): Promise<void> {
@@ -257,12 +274,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	async function selectWorkspace(root: string): Promise<void> {
 		if (screen !== 'home') { throw new Error('beacon-workspace-home-only'); }
+		if (modeDraft) { await returnHome(); await flushHistory(); }
 		await native.select(root);
 		await native.release();
 		await replaceHistory(await native.bindHistory());
 		await restoreWorkspace(false);
 	}
 	async function clearWorkspace(): Promise<void> {
+		if (modeDraft) { await returnHome(); await flushHistory(); }
 		await native.clearWorkspace();
 		await replaceHistory(await native.bindHistory());
 		screen = 'home';
@@ -283,6 +302,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		});
 	}
 	async function openHistory(id: string): Promise<void> {
+		if (modeDraft) { await returnHome(); await flushHistory(); }
 		await native.refresh();
 		if (!native.consumingWorkspace) { throw new Error('beacon-mode-unavailable'); }
 		await recordView();
@@ -291,6 +311,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		generation++; await recordView();
 	}
 	async function returnHome(): Promise<void> {
+		const carried = modeDraft;
 		await native.release();
 		await replaceHistory(await native.bindHistory());
 		screen = 'home';
@@ -299,9 +320,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			try { await replaceHistory(await native.bindHistory({ id })); }
 			catch (error) { if (!(error instanceof Error) || !['conversation-open', 'beacon-missing-conversation'].includes(error.message)) { throw error; } homes.delete(native.state.root!); }
 		}
+		if (carried) {
+			await draftTail;
+			const current = structuredClone(draft()); modeDraft = undefined;
+			try { await setDraft(current.text, current.attachments); }
+			catch (error) { modeDraft = current; throw error; }
+		}
 		generation++; await recordView();
 	}
 	async function clearHome(): Promise<void> {
+		if (modeDraft) { await returnHome(); }
 		const current = history.currentConversation;
 		await setDraft('', []); await flushHistory();
 		if (native.consumingWorkspace && current?.draftOnly) { await native.remove(current.id); }
@@ -338,6 +366,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		generation++; await recordView();
 	}
 	async function respond(kind: string, id: number, text?: string): Promise<void> {
+		if (modeDraft) { requestNotice = { id: Date.now(), text: vscode.l10n.t('Send a new question to inherit this context, or switch back to the original mode to change earlier messages.') }; publish(); return; }
 		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured) { publish(); return; }
 		const controller = new AbortController(); attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
@@ -359,9 +388,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				do {
 					refreshPending = false;
 					await native.refresh(); permission = native.permission;
-					if (!temporary && !native.consumingWorkspace && !busy()) { await returnHome(); }
-					else if (temporary && native.consumingWorkspace && !busy()) { await replaceHistory(await native.bindHistory()); await restoreWorkspace(false); }
-					if (!busy() && !history.snapshot.persisting && !history.snapshot.saveFailed && !historyUnreadable && native.consumingWorkspace && binding.root === native.state.root) { history.refresh(await native.metadata(history.currentConversation)); }
+					if ((!modeDraft || !native.state.usable) && !temporary && !native.consumingWorkspace && !busy()) { await returnHome(); }
+					else if (!modeDraft && temporary && native.consumingWorkspace && !busy()) { await replaceHistory(await native.bindHistory()); await restoreWorkspace(false); }
+					if (!modeDraft && !busy() && !history.snapshot.persisting && !history.snapshot.saveFailed && !historyUnreadable && native.consumingWorkspace && binding.root === native.state.root) { history.refresh(await native.metadata(history.currentConversation)); }
 				} while (refreshPending && alive);
 			} catch (error) { attachmentNotice(error); }
 			finally { refreshing = undefined; publish(); }
@@ -425,7 +454,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			const captured = captureClipboardImages(images);
 			const next = [...attachments(), ...captured];
 			if (next.length > 64 || next.reduce((size, item) => size + Buffer.byteLength(item.contents, 'utf8'), 0) > attachmentBudget) { throw new AttachmentError('budget'); }
-			if (temporary) { temporaryDrafts.set(native.state.root ?? '', { text: draft().text, attachments: next }); publish(); }
+			if (temporary || modeDraft) { void setDraft(draft().text, next); publish(); }
 			else { draftTail = draftTail.then(async () => { await setDraft(draft().text, next); publish(); }).catch(attachmentNotice); await draftTail; }
 		} catch (error) { attachmentNotice(error); }
 	}
@@ -476,15 +505,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		// Permission may have changed while the native dialog was open.
 		if (alive && !controller.signal.aborted && uris?.length) { await track(addResources(uris, 'picker')); }
 	}
-	async function send(text: string): Promise<void> {
+	async function send(text: string, editRevision?: number): Promise<void> {
 		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
 		const sentViewKey = viewKey();
+		const sentInputRevision = inputRevision;
 		const controller = new AbortController();
 		attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
+		let rollback: (() => Promise<void>) | undefined;
+		let consumedSource: { id: string; binding: BeaconHistoryBinding } | undefined;
+		let transition: 'temporary' | 'persistent' | undefined;
+		let consumeTemporary = false;
 		try {
 			const preparing = draftTail.then(async () => {
-				if (native.consumingWorkspace && !history.snapshot.activeId) {
+				if (!modeDraft && native.consumingWorkspace && !history.snapshot.activeId) {
 					await replaceHistory(await native.bindHistory({ id: randomUUID(), create: true }));
 				}
 			});
@@ -492,17 +526,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			await preparing;
 			const refs = attachments();
 			const activeId = history.snapshot.activeId;
-			const next = await request();
+			let next = await request();
 			if (refs.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
 			const captured = structuredClone(refs);
 			controller.signal.throwIfAborted();
 			if (captured.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
-			screen = 'conversation';
-			if (home()?.id === activeId) { homes.delete(native.state.root!); }
 			await draftTail;
 			await native.refreshForRequest();
+			if (modeDraft) {
+				const sourceBinding = binding; const sourceData = history.checkpoint; const sourceTemporary = temporary;
+				const sourceScreen = screen; const pending = structuredClone(draft());
+				const inherited = session.snapshot.messages;
+				let target: BeaconHistoryBinding;
+				let targetId: string | undefined;
+				// Roll back the staged identity if admission or preparation fails. The source
+				// remains untouched until the new user message has actually been accepted.
+				rollback = async () => {
+					await draftTail;
+					modeDraft = structuredClone(draft());
+					await history.dispose();
+					if (targetId) {
+						await native.setBusy(false); nativeBusy = undefined;
+						await native.remove(targetId); await native.release();
+					}
+					binding = sourceBinding;
+					history = new ChatHistory(sourceData, binding.save, schedule, describeError, () => native.roots);
+					session = history.session; temporary = sourceTemporary; screen = sourceScreen;
+				};
+				if (native.consumingWorkspace) {
+					await native.release();
+					targetId = randomUUID();
+					target = await native.bindHistory({ id: targetId, create: true });
+				} else { target = { data: { version: 1, activeId: randomUUID(), conversations: [] }, save: async data => data }; }
+				const id = target.data.activeId;
+				const conversation: Conversation = { id, title: history.currentConversation?.title ?? '', updatedAt: Date.now(), messages: inherited, error: '', workspace: native.roots, draftOnly: inherited.length === 0, draft: pending, contextSnapshots: history.contextSnapshots };
+				target.data = { ...target.data, conversations: [...target.data.conversations.filter(item => item.id !== id), conversation] };
+				await replaceHistory(target);
+				await draftTail;
+				const latestDraft = structuredClone(draft()); modeDraft = undefined;
+				await setDraft(latestDraft.text, latestDraft.attachments);
+				if (inherited.length) { transition = temporary ? 'temporary' : 'persistent'; }
+				consumeTemporary = sourceTemporary;
+				if (!sourceTemporary && sourceData.activeId) { consumedSource = { id: sourceData.activeId, binding: sourceBinding }; }
+				next = await request();
+			}
+			await draftTail;
 			const previousDraftText = draft().text;
-			const remainingText = previousDraftText === text ? '' : previousDraftText;
+			const remainingText = previousDraftText === text && inputRevision === sentInputRevision ? '' : previousDraftText;
 			const sentAttachments = new Set(captured.map(item => item.id));
 			const remainingAttachments = attachments().filter(item => !sentAttachments.has(item.id));
 			await setDraft(remainingText, remainingAttachments);
@@ -511,7 +581,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				await native.refreshForRequest();
 				controller.signal.throwIfAborted();
 			} catch (error) {
-				if (error instanceof Error && error.message === 'beacon-runtime-busy') {
+				{
 					const restored = draftTail.then(async () => {
 						const current = draft(); const currentIds = new Set(current.attachments.map(item => item.id));
 						await setDraft(current.text === remainingText ? previousDraftText : current.text, [...captured.filter(item => !currentIds.has(item.id)), ...current.attachments]);
@@ -520,12 +590,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				}
 				throw error;
 			}
-			completion = session.send(text, next.generate, next.source, next.files, captured);
-			generation++; await recordView();
-			void view?.webview.postMessage({ type: 'sendAccepted', text, activeId, conversationId: history.snapshot.activeId, viewKey: sentViewKey, conversationViewKey: viewKey() });
-		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
+			screen = 'conversation';
+			generation++; acceptedInputView = { previous: sentViewKey, current: viewKey(), editRevision };
+			completion = session.send(text, next.generate, next.source, next.files, captured, transition);
+			rollback = undefined;
+			if (home()?.id === activeId || consumedSource?.id === home()?.id) { homes.delete(native.state.root!); }
+			if (consumeTemporary) { temporaryDrafts.delete(native.state.root ?? ''); }
+			if (consumedSource) {
+				try { await native.consumeDraft(consumedSource.id, consumedSource.binding.revision!); }
+				catch { requestNotice = { id: Date.now(), text: vscode.l10n.t('The new conversation accepted your question, but the original draft could not be cleared. It is still saved in the original conversation.') }; }
+			}
+			await recordView();
+			void view?.webview.postMessage({ type: 'sendAccepted', text, editRevision, activeId, conversationId: history.snapshot.activeId, viewKey: sentViewKey, conversationViewKey: viewKey() });
+		} catch (error) {
+			if (rollback) { try { await rollback(); } catch (restoreError) { attachmentNotice(restoreError); } }
+			if (!controller.signal.aborted) { attachmentNotice(error); }
+		}
 		finally { attachmentJob = undefined; publish(); }
 		await completion;
+		if (consumedSource && temporary) { await native.release(); }
 		publish();
 	}
 	async function setWebEnabled(value: boolean): Promise<void> {

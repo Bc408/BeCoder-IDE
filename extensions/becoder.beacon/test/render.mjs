@@ -47,13 +47,53 @@ try {
 		window.fixtureState = () => structuredClone(state);
 		window.acquireVsCodeApi = () => ({ postMessage: message => {
 			(window.messages ??= []).push(message);
-			if (message.type === 'send' && window.acceptSends !== false) { window.postMessage({ type: 'sendAccepted', text: message.text, viewKey: state.viewKey, conversationViewKey: state.viewKey }, '*'); }
+			if (message.type === 'send' && window.acceptSends !== false) { window.postMessage({ type: 'sendAccepted', text: message.text, editRevision: message.editRevision, viewKey: state.viewKey, conversationViewKey: state.viewKey }, '*'); }
 		} });
 	});
 	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-editor-background:#181b20; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-input-background:#1b1f24; --vscode-input-foreground:#d4d4d4; --vscode-input-placeholderForeground:#8b919a; --vscode-textCodeBlock-background:#171b20; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-button-background:#505965; --vscode-button-foreground:#fff; --vscode-scrollbarSlider-background:#454c57; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', canSend: false, configured: false, busy: false, messages: [] }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'inherited', configured: true, messages: [
+		{ id: 1, role: 'user', text: '原聊天中的问题', status: 'complete', activities: [] },
+		{ id: 2, role: 'assistant', text: '这是已有上下文。', status: 'complete', activities: [] },
+		{ id: 3, role: 'user', text: '临时追问', status: 'complete', activities: [], transition: 'temporary' },
+		{ id: 4, role: 'assistant', text: '临时对话继续。', status: 'complete', activities: [] },
+		{ id: 5, role: 'user', text: '保存后继续讨论', status: 'complete', activities: [], transition: 'persistent' }
+	] }, '*'));
+	await page.getByText('原聊天中的问题', { exact: true }).waitFor();
+	assert.equal(await page.getByRole('separator').count(), 2, 'Both inherited conversation boundaries are visible');
+	await page.getByText('已继承上文，开始临时对话', { exact: true }).waitFor();
+	await page.getByText('已继承上文，建立持久化对话', { exact: true }).waitFor();
+	for (const width of [360, 760]) {
+		await page.setViewportSize({ width, height: 1000 });
+		assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Inherited dividers fit the panel');
+		await page.screenshot({ path: path.join(output, `mode-inheritance-dark-${width}.png`) });
+	}
+	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#fff; --vscode-foreground:#252525; --vscode-descriptionForeground:#616161; --vscode-widget-border:#ddd; --vscode-input-background:#f5f5f5; --vscode-input-foreground:#252525; }' });
+	await page.evaluate(() => { document.body.className = 'vscode-light'; });
+	await page.setViewportSize({ width: 360, height: 1000 });
+	await page.screenshot({ path: path.join(output, 'mode-inheritance-light-360.png') });
+	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-widget-border:#343b44; --vscode-input-background:#1b1f24; --vscode-input-foreground:#d4d4d4; }' });
+	await page.evaluate(() => { document.body.className = 'vscode-dark'; });
+	await page.setViewportSize({ width: 760, height: 1000 });
+	await page.evaluate(() => { window.acceptSends = false; });
+	const sameTextInput = page.getByRole('textbox', { name: '向 Beacon 提问', exact: true });
+	await sameTextInput.fill('同样的问题'); await page.getByRole('button', { name: '发送', exact: true }).click();
+	const originalSend = await page.evaluate(() => window.messages.findLast(message => message.type === 'send'));
+	await sameTextInput.fill(''); await sameTextInput.fill('同样的问题');
+	await page.evaluate(send => { window.postMessage({ type: 'sendAccepted', text: send.text, viewKey: window.fixtureState().viewKey, editRevision: send.editRevision }, '*'); }, originalSend);
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	assert.equal(await sameTextInput.inputValue(), '同样的问题', 'A late send acknowledgement preserves a new draft even when its text matches the sent question');
+	await page.evaluate(send => {
+		const previous = window.fixtureState(); const current = `${previous.context.slot}:${previous.context.root ?? ''}:accepted-destination`;
+		window.fixtureSnapshot({ type: 'snapshot', activeId: 'accepted-destination', draftText: '', acceptedInputView: { previous: previous.viewKey, current, editRevision: send.editRevision } }, '*');
+	}, originalSend);
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	assert.equal(await sameTextInput.inputValue(), '同样的问题', 'An accepted destination snapshot cannot erase newer local input still in flight');
+	await sameTextInput.press('End'); await sameTextInput.pressSequentially('继续');
+	assert.equal(await sameTextInput.inputValue(), '同样的问题继续');
+	await page.evaluate(() => { window.acceptSends = true; });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', canSend: false, configured: false, busy: false, messages: [] }, '*'));
 	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始。').waitFor();
 	assert.equal(await page.getByText('打开一段聊天，或点击新聊天开始提问。', { exact: true }).count(), 0, 'A clean home screen does not show an obsolete chat-selection warning');
 	assert.equal(await page.getByRole('button', { name: '选择工作区' }).count(), 1, 'The workspace selector appears on the home page');
@@ -109,7 +149,7 @@ try {
 	assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'send').length), sendsAfterRuntime, 'Completing runtime work does not automatically send the preserved draft');
 	assert.equal(await runtimeDraft.inputValue(), '运行结束后由我再次发送', 'Runtime activity preserves the draft');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '运行结束后由我再次发送' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '运行结束后由我再次发送', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] } }, '*'));
 	const webToggle = page.getByRole('button', { name: '联网搜索', exact: true });
 	// The reference's cool hover surface follows the theme, including selected web search.
@@ -280,7 +320,7 @@ try {
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 3, busy: false, recent: ['D:/fixture'] } }, '*'));
 	await page.getByRole('textbox').fill('解释这段代码');
 	await page.getByRole('textbox').press('Enter');
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: true, messages: [] }, '*'));
 	assert.ok(await page.getByRole('button', { name: 'Spot', exact: true }).isDisabled(), 'Permission changes are unavailable while a response is running');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
@@ -410,7 +450,7 @@ try {
 	assert.equal(await page.locator('.assistant-actions').getByRole('button', { name: '继续回答', exact: true }).count(), 0);
 	await page.getByRole('textbox').fill('补充要求');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '补充要求' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '补充要求', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
 	await publishAnswer(burst + '停止。', '', 'stopped', 1000, 23);
 	await page.getByRole('button', { name: '继续回答', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'continue', id: 23 });
@@ -791,7 +831,7 @@ try {
 	await page.getByRole('button', { name: '发送', exact: true }).waitFor();
 	assert.equal(await page.getByRole('button', { name: '继续回答', exact: true }).count(), 0, 'A new attachment sends a new message after pause');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '' });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
 	await page.goto('http://127.0.0.1:' + server.address().port + '/configuration');
 	await page.addStyleTag({ content: ':root { --vscode-editor-background:#21252b; --vscode-sideBar-background:#21252b; --vscode-foreground:#ccc; --vscode-descriptionForeground:#999a9c; --vscode-font-family:Segoe UI, sans-serif; --vscode-input-background:#282c34; --vscode-input-foreground:#ccc; --vscode-textLink-foreground:#7db9e8; --vscode-button-background:#365a78; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
 	await page.evaluate(() => {

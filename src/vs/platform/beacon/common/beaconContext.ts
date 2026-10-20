@@ -18,7 +18,7 @@ export interface IBeaconContextService {
 	selectWorkspace(windowId: number, root: string): Promise<IBeaconContext>;
 	clearWorkspace(windowId: number): Promise<IBeaconContext>;
 	removeRecentWorkspace(windowId: number, root: string): Promise<IBeaconContext>;
-	setMode(windowId: number, mode: BeaconMode): Promise<IBeaconContext>;
+	setMode(windowId: number, mode: BeaconMode, retainConversation?: boolean): Promise<IBeaconContext>;
 	setBusy(windowId: number, busy: boolean): Promise<void>;
 	beginRuntimeActivity(windowId: number): Promise<string>;
 	endRuntimeActivity(windowId: number, handle: string): Promise<void>;
@@ -41,6 +41,7 @@ export interface IBeaconContextService {
 	listHistory(windowId: number): Promise<IBeaconHistoryItem[]>;
 	openConversation(windowId: number, id: string, create?: boolean): Promise<IBeaconStoredConversation>;
 	saveConversation(windowId: number, data: IBeaconConversation, revision: number): Promise<IBeaconStoredConversation>;
+	consumeDraft(windowId: number, id: string, revision: number): Promise<void>;
 	renameConversation(windowId: number, id: string, title: string): Promise<void>;
 	deleteConversation(windowId: number, id: string): Promise<void>;
 	releaseConversation(windowId: number): Promise<void>;

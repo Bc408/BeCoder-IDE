@@ -9,12 +9,35 @@ import { ChatHistory, readHistory, type Conversation, type HistoryData } from '.
 import { BeaconContextClient } from '../src/context';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { Attachment } from '../src/attachments';
+import type { ContextSnapshot } from '../src/contextTools';
 
 const attachment: Attachment = { id: 'one', path: 'C:\\chosen\\main.cpp', source: 'picker', name: 'main.cpp', kind: 'text', contents: 'int main() {}', truncated: false };
 const conversation = (): Conversation => ({ id: 'draft-one', title: '', updatedAt: 1, messages: [], error: '', workspace: [], draftOnly: true });
 const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
 
 suite('Beacon conversation drafts', () => {
+	test('captured context persists independently and remains detached across restores and updates', async () => {
+		let saved: HistoryData | undefined;
+		const snapshot: ContextSnapshot = { key: 'page:one:2:', raw: 'captured complete page', metadata: { source: { kind: 'page', id: 'one', version: '2', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded editor text model' } } };
+		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
+		history.captureContext(snapshot);
+		snapshot.raw = 'mutated input';
+		const detached = history.contextSnapshots; detached[0].raw = 'mutated output';
+		assert.equal(history.contextSnapshots[0].raw, 'captured complete page');
+		history.captureContext({ ...history.contextSnapshots[0], raw: 'updated captured page' });
+		assert.equal(history.contextSnapshots.length, 1);
+		await history.dispose();
+		const restored = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		assert.equal(restored.contextSnapshots[0].raw, 'updated captured page');
+		assert.equal(restored.currentConversation?.contextSnapshots?.length, 1);
+		await restored.dispose();
+	});
+	test('rejects malformed or oversized persisted context snapshots before restoring history', () => {
+		const snapshot = { key: 'page:one:2:', raw: 'captured page', metadata: { source: { kind: 'page', id: 'one', version: '2', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded editor text model' } } };
+		for (const contextSnapshots of [null, {}, [snapshot, snapshot], [{ ...snapshot, raw: 7 }], [{ ...snapshot, key: '../file' }], [{ ...snapshot, metadata: {} }], [{ ...snapshot, metadata: { source: null } }], [{ ...snapshot, raw: 'x'.repeat(32 * 1024 * 1024) }]]) {
+			assert.throws(() => readHistory({ version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), contextSnapshots }] }), /invalid-history/);
+		}
+	});
 	test('persists draft attachments and text without exposing an empty conversation in history', async () => {
 		let saved: HistoryData | undefined;
 		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => { saved = structuredClone(data); }, () => {}, () => 'error');

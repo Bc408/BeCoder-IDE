@@ -26,7 +26,7 @@ let pageProvider: BeaconWorkbenchPages | undefined;
 CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unknown, input: unknown) => {
 	const service = ProxyChannel.toService<IBeaconContextService>(accessor.get(IMainProcessService).getChannel(beaconContextChannel));
 	const windowId = mainWindow.vscodeWindowId;
-	const value = input as { root?: string; source?: string; handle?: string; producer?: 'runner' | 'cph' | 'notebook'; code?: string; events?: unknown[]; sequence?: number; mode?: unknown; busy?: boolean; id?: string; create?: boolean; title?: string; revision?: number; data?: IBeaconConversation; scope?: IBeaconContext; version?: string; view?: IBeaconResume } | undefined;
+	const value = input as { root?: string; source?: string; handle?: string; producer?: 'runner' | 'cph' | 'notebook'; code?: string; events?: unknown[]; sequence?: number; mode?: unknown; retainConversation?: boolean; busy?: boolean; id?: string; create?: boolean; title?: string; revision?: number; data?: IBeaconConversation; scope?: IBeaconContext; version?: string; view?: IBeaconResume } | undefined;
 	const pages = () => pageProvider ??= new BeaconWorkbenchPages(accessor.get(IEditorService), accessor.get(IModelService), ProxyChannel.toService<IBrowserViewService>(accessor.get(IMainProcessService).getChannel(ipcBrowserViewChannelName)), service, windowId, accessor.get(INotebookService));
 	switch (operation) {
 		case 'context': return service.getContext(windowId);
@@ -35,7 +35,7 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'select': if (typeof value?.root === 'string') { return service.selectWorkspace(windowId, value.root); } break;
 		case 'clearWorkspace': return service.clearWorkspace(windowId);
 		case 'removeRecentWorkspace': if (typeof value?.root === 'string') { return service.removeRecentWorkspace(windowId, value.root); } break;
-		case 'mode': if (value?.mode === 'blackout' || value?.mode === 'spot' || value?.mode === 'flood') { return service.setMode(windowId, value.mode); } break;
+		case 'mode': if (value?.mode === 'blackout' || value?.mode === 'spot' || value?.mode === 'flood') { return service.setMode(windowId, value.mode, value.retainConversation === true); } break;
 		case 'busy': if (typeof value?.busy === 'boolean') { return service.setBusy(windowId, value.busy); } break;
 		case 'beginRuntimeActivity': return service.beginRuntimeActivity(windowId);
 		case 'endRuntimeActivity': if (typeof value?.handle === 'string') { return service.endRuntimeActivity(windowId, value.handle); } break;
@@ -52,6 +52,7 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'history': return service.listHistory(windowId);
 		case 'open': if (typeof value?.id === 'string') { return service.openConversation(windowId, value.id, value.create === true); } break;
 		case 'save': if (value?.data && typeof value.revision === 'number') { return service.saveConversation(windowId, value.data, value.revision); } break;
+		case 'consumeDraft': if (typeof value?.id === 'string' && typeof value.revision === 'number') { return service.consumeDraft(windowId, value.id, value.revision); } break;
 		case 'rename': if (typeof value?.id === 'string' && typeof value.title === 'string') { return service.renameConversation(windowId, value.id, value.title); } break;
 		case 'delete': if (typeof value?.id === 'string') { return service.deleteConversation(windowId, value.id); } break;
 		case 'release': return service.releaseConversation(windowId);

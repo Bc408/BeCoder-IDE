@@ -75,7 +75,7 @@ export function reset(directory: string) {
 	workspace.workspaceFolders = [{ name: 'root', uri: Uri.file(directory) }]; workspace.textDocuments = [];
 	beaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] }; beaconConversations.clear(); beaconResumes.clear();
 	commandHandlers.set('_becoder.beacon.context', (operation, argument) => {
-		const input = argument as { root: string; busy: boolean; mode: IBeaconContext['mode']; id: string; create: boolean; data: IBeaconConversation; revision: number; title: string };
+		const input = argument as { root: string; busy: boolean; mode: IBeaconContext['mode']; retainConversation?: boolean; id: string; create: boolean; data: IBeaconConversation; revision: number; title: string };
 		const key = (id: string) => `${beaconContext.root}:${id}`;
 		switch (operation) {
 			case 'checkPageAccess': return;
@@ -89,7 +89,12 @@ export function reset(directory: string) {
 				beaconResumes.set(beaconContext.root!, structuredClone(view)); return;
 			}
 			case 'select': if (beaconContext.busy) { throw new Error('beacon-busy'); } { const mode = beaconContext.root ? beaconContext.mode : 'spot'; beaconContext = { ...beaconContext, root: input.root, usable: true, workspaceState: mode === 'blackout' ? 'blackout' : 'ready', mode, activeId: undefined, epoch: beaconContext.epoch + 1, recent: [input.root, ...beaconContext.recent.filter(value => value !== input.root)] }; } return structuredClone(beaconContext);
-			case 'mode': if (!beaconContext.usable && input.mode !== 'blackout') { throw new Error('beacon-mode-unavailable'); } beaconContext.mode = input.mode; beaconContext.workspaceState = !beaconContext.root ? 'none' : !beaconContext.usable ? 'unavailable' : input.mode === 'blackout' ? 'blackout' : 'ready'; beaconContext.epoch++; if (input.mode === 'blackout') { delete beaconContext.activeId; } return structuredClone(beaconContext);
+			case 'mode': if (!beaconContext.usable && input.mode !== 'blackout') { throw new Error('beacon-mode-unavailable'); } beaconContext.mode = input.mode; beaconContext.workspaceState = !beaconContext.root ? 'none' : !beaconContext.usable ? 'unavailable' : input.mode === 'blackout' ? 'blackout' : 'ready'; beaconContext.epoch++; if (input.mode === 'blackout' && !input.retainConversation) { delete beaconContext.activeId; } return structuredClone(beaconContext);
+			case 'consumeDraft': {
+				const stored = beaconConversations.get(key(input.id));
+				if (beaconContext.activeId !== input.id || !stored || stored.revision !== input.revision) { throw new Error('beacon-history-conflict'); }
+				stored.data.draft = { text: '', attachments: [] }; stored.revision++; return;
+			}
 			case 'clearWorkspace': { const root = beaconContext.root; beaconContext = { ...beaconContext, root: undefined, usable: false, workspaceState: 'none', mode: 'blackout', activeId: undefined, epoch: beaconContext.epoch + 1, recent: root ? [root, ...beaconContext.recent.filter(value => value !== root)] : beaconContext.recent }; return structuredClone(beaconContext); }
 			case 'removeRecentWorkspace': if (beaconContext.root === input.root) { const root = beaconContext.root; beaconContext = { ...beaconContext, root: undefined, usable: false, workspaceState: 'none', mode: 'blackout', activeId: undefined, epoch: beaconContext.epoch + 1, recent: [root, ...beaconContext.recent.filter(value => value !== root)] }; } else { beaconContext.recent = beaconContext.recent.filter(value => value !== input.root); } return structuredClone(beaconContext);
 			case 'history': return [...beaconConversations.entries()].filter(([id, stored]) => id.startsWith(`${beaconContext.root}:`) && !stored.data.draftOnly).map(([, stored]) => ({ ...stored.data, revision: stored.revision, messages: undefined }));

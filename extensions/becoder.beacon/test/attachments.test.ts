@@ -39,7 +39,7 @@ suite('Beacon attachments', () => {
 	test('typing during mode IPC and a failed return preserve the latest pending input', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		globalThis.fetch = async () => response();
-		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; screen: string; activeId: string; configured: boolean; permission: string; requestNotice?: unknown };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { navigationBusy: boolean; draftText: string; viewKey: string; screen: string; activeId: string; configured: boolean; permission: string; requestNotice?: unknown };
 		let finish!: () => void;
 		const originalTransport = mock.commandHandlers.get('_becoder.beacon.context')!;
 		try {
@@ -53,8 +53,10 @@ suite('Beacon attachments', () => {
 			let enter!: () => void; const entered = new Promise<void>(resolve => { enter = resolve; }); const barrier = new Promise<void>(resolve => { finish = resolve; });
 			mock.commandHandlers.set('_becoder.beacon.context', async (operation, input) => { if (operation === 'mode') { enter(); await barrier; } return native(operation, input); });
 			view.receive({ type: 'setPermission', permission: 'none' }); await entered;
+			assert.equal(snapshot().navigationBusy, true, 'Mode switching identifies its existing lock for presentation');
 			view.receive({ type: 'draft', text: 'typed during switch', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'typed during switch'); finish();
 			await until(() => snapshot().permission === 'none' && !snapshot().busy);
+			assert.equal(snapshot().navigationBusy, false);
 			assert.equal(snapshot().draftText, 'typed during switch');
 			mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => { if (operation === 'release') { throw new Error('beacon-write-busy'); } return native(operation, input); });
 			view.receive({ type: 'back' }); await until(() => !!snapshot().requestNotice && !snapshot().busy);

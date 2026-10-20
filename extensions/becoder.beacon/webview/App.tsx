@@ -30,7 +30,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { modeTransitionPending?: boolean; responseBusy?: boolean; context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
+type State = Snapshot & { navigationBusy?: boolean; modeTransitionPending?: boolean; responseBusy?: boolean; context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -79,7 +79,7 @@ function App() {
 	const draftEditRevision = useRef(0);
 	const draftPending = useRef(false);
 	const activeRef = useRef('');
-	const [pending, setPending] = useState(false);
+	const [pending, setPending] = useState<'navigation' | 'response' | false>(false);
 	const [pasting, setPasting] = useState(false);
 	const pasteJob = useRef<AbortController | undefined>(undefined);
 	const [copied, setCopied] = useState<number>();
@@ -179,7 +179,10 @@ function App() {
 		const timer = setTimeout(() => setCopied(undefined), 1800);
 		return () => clearTimeout(timer);
 	}, [copied]);
-	const busy = state.busy || pending || pasting || !!state.context?.busy || !!state.context?.runtimeBusy;
+	const busy = !!(state.busy || pending || pasting || state.context?.busy || state.context?.runtimeBusy);
+	// Reuse the existing lock; only navigation-only presentation stays quiet.
+	const taskBusy = (state.busy && !state.navigationBusy) || pending === 'response' || pasting || state.responseBusy || state.context?.busy || state.context?.runtimeBusy;
+	const navigationOnly = (pending === 'navigation' || state.navigationBusy) && !taskBusy;
 	const pasteImages = (event: ClipboardEvent<HTMLTextAreaElement>) => {
 		let files = [...event.clipboardData.files].filter(file => file.type.startsWith('image/'));
 		if (!files.length) { files = [...event.clipboardData.items].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file); }
@@ -200,9 +203,10 @@ function App() {
 	const canContinue = !state.modeTransitionPending && pausedReply?.role === 'assistant' && pausedReply.status === 'stopped' && !draft.trim() && !state.attachments.length;
 	const capabilities = state.connection.capabilities ?? resolveCapabilities(state.connection.provider, state.connection.baseURL, state.connection.model, undefined, state.connection.modelSettings);
 	const blocked = capabilities.vision !== 'supported' && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
+	const sendUnavailable = !ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue);
 	const send = () => {
-		if (!ready || busy || !state.canSend || !state.configured || state.historyUnreadable || blocked || (!draft.trim() && !state.attachments.length && !canContinue)) { return; }
-		setPending(true);
+		if (busy || sendUnavailable) { return; }
+		setPending('response');
 		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id }); return; }
 		api.postMessage({ type: 'send', text: draft, editRevision: draftEditRevision.current });
 	};
@@ -213,10 +217,10 @@ function App() {
 	const temporaryFailure = !!state.messages.at(-1)?.failure;
 	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (capabilities.tools !== 'supported' ? '\n' + t('This model does not have confirmed tool support. Web search is unavailable; check its capabilities in settings.', '当前模型未确认支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
-		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending(true); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} data-becoder-tooltip={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
+		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending('navigation'); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} data-becoder-tooltip={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
 		<div className="history-actions"><button className="history-rename" disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} data-becoder-tooltip={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button className={`history-delete ${item.id === confirmDelete ? 'delete-confirm' : ''}`} disabled={busy} onClick={() => { if (item.id === confirmDelete) { setConfirmDelete(undefined); api.postMessage({ type: 'deleteHistory', conversationId: item.id }); } else { setConfirmDelete(item.id); } }} data-becoder-tooltip={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')} aria-label={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')}>{item.id === confirmDelete ? t('Confirm', '确认') : <Icon name="trash" />}</button></div>
 	</div>);
-	return <main onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); api.postMessage({ type: 'unsupportedDrop' }); }} onClick={event => {
+	return <main data-navigation-lock={navigationOnly && ready && !state.historyUnreadable && !state.saveFailed || undefined} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); api.postMessage({ type: 'unsupportedDrop' }); }} onClick={event => {
 		const link = (event.target as HTMLElement).closest('a');
 		if (link) { event.preventDefault(); api.postMessage({ type: 'link', url: link.href }); }
 	}}>
@@ -240,7 +244,7 @@ function App() {
 					<article className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
 						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} preview={(item, url) => openAttachment(message.attachments!, item, url)} />)}</div>}
-						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if ((!text && !message.attachments?.length) || busy) { return; } setPending(true); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
+						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if ((!text && !message.attachments?.length) || busy) { return; } setPending('response'); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
 							<textarea ref={editInput} rows={1} maxLength={32000} value={editingDraft} aria-label={t('Edit message', '编辑消息')} onChange={event => setEditingDraft(event.target.value)} onKeyDown={event => {
 								if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
 							}} />
@@ -257,7 +261,7 @@ function App() {
 						</>}
 						{message.status !== 'streaming' && <div className="message-actions assistant-actions">
 							{message.text && <button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} data-becoder-tooltip={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button>}
-							<button disabled={busy || state.modeTransitionPending || !state.configured || state.historyUnreadable} onClick={() => { setPending(true); api.postMessage({ type: 'regenerate', id: message.id }); }} data-becoder-tooltip={t('Regenerate response', '重新回答')} aria-label={t('Regenerate response', '重新回答')}><Icon name="retry" /></button>
+							<button disabled={busy || state.modeTransitionPending || !state.configured || state.historyUnreadable} onClick={() => { setPending('response'); api.postMessage({ type: 'regenerate', id: message.id }); }} data-becoder-tooltip={t('Regenerate response', '重新回答')} aria-label={t('Regenerate response', '重新回答')}><Icon name="retry" /></button>
 							{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt, now)}</time>}
 						</div>}
 					</>}
@@ -279,7 +283,7 @@ function App() {
 					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} busy={busy} post={message => api.postMessage(message)} />
 					<span className="composer-spacer" aria-hidden="true" />
 					<ModelPicker connection={state.connection} />
-					{state.responseBusy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" disabled={busy || !ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue)} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
+					{state.responseBusy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" data-unavailable={sendUnavailable || undefined} disabled={busy || sendUnavailable} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
 				</div>
 			</form>
 		</footer>

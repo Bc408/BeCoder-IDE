@@ -27,9 +27,14 @@
 .workspace-flight { position: fixed; z-index: 100; display: flex; align-items: center; pointer-events: none; color: var(--chat-muted); }
 .workspace-flight > button { display: flex; min-width: 0; width: 100%; height: 28px; padding: 4px 7px; font-size: 13px; text-align: left; }
 .workspace-picker.hidden, .workspace-picker.error { width: 28px; flex-shrink: 0; }
+.workspace-picker.hidden { --workspace-easing: cubic-bezier(.8, 0, .8, .2); }
+.workspace-picker.hidden.expanded { --workspace-easing: cubic-bezier(.2, .8, .2, 1); }
+.workspace-picker.hidden .workspace-picker-shell { transition: width 160ms var(--workspace-easing), background-color 160ms var(--workspace-easing), border-color 160ms var(--workspace-easing), border-radius 140ms ease; }
+.workspace-picker.hidden .workspace-status-label { overflow: visible; text-overflow: clip; transition: opacity 160ms var(--workspace-easing); }
 .workspace-picker.hidden .workspace-sizing, .workspace-picker.error .workspace-sizing { width: 28px; padding: 0; }
 .workspace-picker.hidden:not(.open) .workspace-picker-trigger, .workspace-picker.error:not(.open) .workspace-picker-trigger { position: relative; padding: 0; overflow: hidden; }
 .workspace-picker.hidden:not(.open) .workspace-labels, .workspace-picker.error:not(.open) .workspace-labels { position: absolute; left: 7px; right: 29px; }
+.workspace-picker.hidden:not(.open) .workspace-labels { clip-path: inset(0); }
 .workspace-picker .workspace-status-icon { position: absolute; top: 5px; right: 5px; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
 .workspace-picker .workspace-error-dot { border: 1.5px solid currentColor; border-radius: 50%; color: var(--vscode-errorForeground); font-weight: 600; font-size: 11px; }
 .workspace-picker .workspace-remove { display: flex; align-items: center; justify-content: center; flex: 0 0 26px; width: 26px; height: 26px; min-height: 26px; padding: 0; margin-right: 2px; color: var(--chat-muted); border-radius: 50%; }
@@ -48,5 +53,5 @@
 .workspace-picker.open .workspace-current::after { position: absolute; right: 6px; bottom: 0; left: 6px; height: 1px; content: ''; background: var(--control-border); pointer-events: none; }
 .workspace-picker.hidden.expanded:not(.open) .workspace-status-label, .workspace-picker.error.expanded:not(.open) .workspace-status-label { overflow: visible; text-overflow: clip; }
 @media (prefers-reduced-motion: reduce) {
-	.workspace-picker-shell, .workspace-picker-name, .workspace-expanded-label, .workspace-status-label, .workspace-menu-reveal { transition: none; }
+	.workspace-picker-shell, .workspace-picker-name, .workspace-expanded-label, .workspace-status-label, .workspace-menu-reveal, .workspace-picker.hidden .workspace-picker-shell, .workspace-picker.hidden .workspace-status-label { transition: none; }
 }

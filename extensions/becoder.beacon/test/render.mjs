@@ -347,6 +347,56 @@ try {
 	await page.locator('.workspace-picker-trigger.hidden').waitFor();
 	assert.ok(await page.locator('.workspace-picker-trigger.hidden').isVisible());
 	assert.equal(await page.locator('.workspace-picker-trigger.hidden').getAttribute('aria-label'), 'fixture 未使用');
+	await page.mouse.click(2, 200);
+	await page.waitForTimeout(180);
+	const collapsedWidth = (await page.locator('.workspace-picker-shell').boundingBox()).width;
+	await page.locator('.workspace-picker-trigger.hidden').hover();
+	await page.waitForTimeout(180);
+	const expandedWidth = (await page.locator('.workspace-picker-shell').boundingBox()).width;
+	assert.ok(expandedWidth > collapsedWidth, 'Blackout workspace status expands on hover');
+	await page.screenshot({ path: path.join(output, 'workspace-blackout-expanded.png') });
+	const naturalRestoration = page.locator('.workspace-picker-shell').evaluate(element => new Promise(resolve => {
+		const frames = [];
+		let started;
+		const sample = now => {
+			const label = element.querySelector('.workspace-status-label');
+			if (!element.closest('.workspace-picker').classList.contains('expanded')) {
+				started ??= now;
+				const labels = element.querySelector('.workspace-labels');
+				const icon = element.querySelector('.workspace-status-icon');
+				frames.push({ elapsed: now - started, width: element.getBoundingClientRect().width, overflow: getComputedStyle(label).overflow, clipPath: getComputedStyle(labels).clipPath, textWidth: labels.getBoundingClientRect().width, textRight: labels.getBoundingClientRect().right, iconLeft: icon.getBoundingClientRect().left });
+			}
+			if (started !== undefined && now - started >= 180) { resolve(frames); } else { requestAnimationFrame(sample); }
+		};
+		requestAnimationFrame(sample);
+	}));
+	await page.mouse.move(2, 200);
+	const restorationFrames = await naturalRestoration;
+	const earlyFrame = restorationFrames.find(frame => frame.elapsed >= 30 && frame.elapsed <= 65);
+	assert.ok(earlyFrame && earlyFrame.width > collapsedWidth + (expandedWidth - collapsedWidth) * .5, 'Natural pointer leave retains the visible capsule through the first frames');
+	assert.ok(restorationFrames.every(frame => frame.overflow === 'visible'), 'Status text retains its clipping rules throughout restoration');
+	assert.ok(restorationFrames.every(frame => frame.clipPath === 'inset(0px)' && (frame.textWidth === 0 || frame.textRight <= frame.iconLeft)), 'Restoring text is clipped to the left of the fixed status icon in every frame');
+	await page.locator('.workspace-picker-trigger.hidden').hover();
+	await page.waitForTimeout(180);
+	await page.mouse.move(2, 200);
+	const restoring = await page.locator('.workspace-picker-shell').evaluate(element => {
+		const animations = element.getAnimations({ subtree: true });
+		const transitions = animations.filter(animation => animation instanceof CSSTransition && (animation.effect.target === element || animation.effect.target === element.querySelector('.workspace-status-label')));
+		for (const animation of animations) { animation.pause(); animation.currentTime = 80; }
+		return { width: element.getBoundingClientRect().width, properties: transitions.map(animation => animation.transitionProperty), durations: transitions.filter(animation => ['width', 'background-color', 'border-top-color', 'opacity'].includes(animation.transitionProperty)).map(animation => animation.effect.getTiming().duration), opacity: Number(getComputedStyle(element.querySelector('.workspace-status-label')).opacity) };
+	});
+	assert.ok(restoring.properties.includes('border-top-color'), 'The workspace border fades back instead of disappearing immediately');
+	assert.ok(restoring.durations.every(duration => duration === 160), 'Workspace width, surface and label restore with the same timing');
+	assert.ok(restoring.width > collapsedWidth && restoring.width < expandedWidth, 'The workspace is visibly between expanded and collapsed sizes');
+	assert.ok(restoring.opacity > 0 && restoring.opacity < 1, 'The status label fades during restoration');
+	await page.screenshot({ path: path.join(output, 'workspace-blackout-restoring.png'), animations: 'allow' });
+	await page.locator('.workspace-picker-shell').evaluate(element => element.getAnimations({ subtree: true }).forEach(animation => animation.finish()));
+	assert.equal((await page.locator('.workspace-picker-shell').boundingBox()).width, collapsedWidth, 'Restoration ends at the original icon size');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.locator('.workspace-picker-trigger.hidden').hover();
+	await page.mouse.move(2, 200);
+	assert.equal(await page.locator('.workspace-picker-shell').evaluate(element => element.getAnimations({ subtree: true }).filter(animation => animation.effect.target === element || animation.effect.target === element.querySelector('.workspace-status-label')).length), 0, 'Reduced motion keeps workspace restoration immediate');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await page.screenshot({ path: path.join(output, 'workspace-blackout.png') });
 	await page.getByRole('button', { name: 'Blackout', exact: true }).click();
 	const blackoutPermissions = page.getByRole('dialog', { name: '文件读取权限', exact: true });

@@ -45,7 +45,7 @@ const syntaxAssets = { name: 'beacon-syntax-assets', setup(builder) {
 	});
 } };
 const host = await build({ ...shared, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.cjs', platform: 'node', format: 'cjs', target: 'node22', external: ['vscode'] });
-const ui = await build({ ...shared, entryPoints: ['webview/App.tsx'], outfile: 'dist/beacon.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets], loader: { '.woff': 'file', '.woff2': 'file', '.ttf': 'file' }, assetNames: 'fonts/[name]-[hash]', define: { 'process.env.NODE_ENV': '"production"' } });
+const ui = await build({ ...shared, entryPoints: ['webview/App.tsx'], outfile: 'dist/beacon.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets], loader: { '.woff': 'file', '.woff2': 'file', '.ttf': 'file', '.svg': 'dataurl' }, assetNames: 'fonts/[name]-[hash]', define: { 'process.env.NODE_ENV': '"production"' } });
 const worker = await build({ ...shared, entryPoints: ['webview/syntax.worker.ts'], outfile: 'dist/syntax-worker.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets] });
 fs.copyFileSync(path.join(root, '../../node_modules/vscode-oniguruma/release/onig.wasm'), path.join(root, 'dist/onig.wasm'));
 fs.copyFileSync(path.join(root, '../becoder.shared/LICENSE'), path.join(root, 'dist/HoverLicense.txt'));
@@ -75,7 +75,7 @@ for (const file of [...Object.keys(host.metafile.inputs), ...Object.keys(ui.meta
 		directory = path.dirname(directory);
 	}
 }
-const notices = ['Beacon bundled dependency notices. AI Elements attribution is in ../UPSTREAM.md.'];
+const notices = [fs.readFileSync(path.join(root, 'licenses/lobe-icons.txt'), 'utf8'), 'Beacon bundled dependency notices. AI Elements attribution is in ../UPSTREAM.md.'];
 notices.push(`\nBeCoder built-in grammar sources: ${grammarExtensions.join(', ')}; corresponding upstream notices follow.\n`, fs.readFileSync(path.join(root, '../../ThirdPartyNotices.txt'), 'utf8'));
 for (const file of ['markdown-latex-combined-license.txt', 'cpp-bailout-license.txt']) { notices.push(fs.readFileSync(path.join(root, '../latex', file), 'utf8')); }
 const shikiLanguages = path.join(root, 'node_modules/@shikijs/langs');

@@ -97,6 +97,14 @@ export class Connections implements vscode.Disposable {
 		return selection.provider === 'deepseek' && this.supplierEnabled && this.data.providers[selection.provider].models.some(item => item.id === selection.model) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
 	}
 	get supplierEnabled(): boolean { return this.data.providers.deepseek.enabled ?? (this.data.selection?.provider === 'deepseek'); }
+	async accessKey(action: 'copy' | 'reveal', revision: number): Promise<string | undefined> {
+		if (this.disposed || this.pending || this.refreshing || this.testing) { throw new Error('settings-pending'); }
+		if (revision !== this.revision || this.error) { throw new Error('settings-stale'); }
+		const key = await this.context.secrets.get(secretName('deepseek'));
+		if (this.disposed || revision !== this.revision || key !== this.keys.deepseek) { throw new Error('settings-stale'); }
+		if (action === 'copy') { await vscode.env.clipboard.writeText(key ?? ''); return; }
+		return key ?? '';
+	}
 	cancelDiscovery(id?: string): void {
 		if (id && this.discovery?.id !== id) { return; }
 		this.discoveryJob?.abort(); this.discoveryJob = undefined; this.discovery = undefined;

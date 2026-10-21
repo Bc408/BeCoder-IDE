@@ -1,5 +1,6 @@
 /* Copyright (c) BeCoder contributors. Licensed under MIT. */
 const paths = {
+	eye: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
 	plus: 'M12 4v16M4 12h16',
 	minus: 'M4 12h16',
 	forward: 'm14 5 7 7-7 7M3 12h18',

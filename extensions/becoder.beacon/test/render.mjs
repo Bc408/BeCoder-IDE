@@ -940,8 +940,10 @@ try {
 		window.settings = { revision: 1, pending: false, error: '', supplierEnabled: true, keyConfigured: { deepseek: true }, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [] } } };
 		window.fixtureSnapshot({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*');
 	});
-	await page.getByRole('heading', { name: 'Beacon 设置', exact: true }).waitFor();
-	assert.equal(await page.locator('.provider-list').count(), 0, 'Only DeepSeek is exposed, without an empty navigation');
+	await page.getByRole('heading', { name: '模型服务', exact: true }).waitFor();
+	await page.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '模型配置', exact: true }).waitFor();
+	assert.equal(await page.getByRole('combobox', { name: '供应商', exact: true }).locator('option').count(), 1);
+	assert.equal(await page.getByText('已保存，留空保留', { exact: true }).count(), 0);
 	await page.getByRole('switch', { name: '启用 DeepSeek', exact: true }).waitFor();
 	await page.addStyleTag({ content: ':root { --vscode-editor-background:#282c34; --vscode-foreground:#d4d5d8; --vscode-descriptionForeground:#a1a5ae; --vscode-font-family:Segoe UI,sans-serif; --vscode-input-background:#21252b; --vscode-input-foreground:#d4d5d8; --vscode-button-background:#365f88; --vscode-button-foreground:#fff; --vscode-widget-border:#3a3e46; --vscode-focusBorder:#59a4f9; }' });
 	const settingsPublish = async patch => page.evaluate(patch => { Object.assign(window.settings, patch); window.fixtureSnapshot({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); }, patch);
@@ -953,13 +955,50 @@ try {
 		assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'New settings fit viewport');
 		await page.screenshot({ path: path.join(output, 'deepseek-settings-dark-' + width + '.png'), fullPage: true });
 	}
-	await page.getByLabel('API Key', { exact: true }).fill('fixture-input');
-	assert.ok(await page.getByRole('button', { name: '获取模型', exact: true }).isDisabled());
+	for (const width of [900, 700, 620]) {
+		await page.setViewportSize({ width, height: 1000 });
+		for (const id of ['connection-address', 'connection-key']) {
+			const label = await page.locator('label[for="' + id + '"]').boundingBox();
+			const input = await page.locator('#' + id).boundingBox();
+			assert.ok(Math.abs((label.y + label.height / 2) - (input.y + input.height / 2)) < 5, 'Connection label and input share one row at ' + width);
+		}
+		await page.screenshot({ path: path.join(output, 'settings-inline-' + width + '.png'), fullPage: true });
+	}
+	assert.equal(await page.locator('.settings-header h1').evaluate(element => getComputedStyle(element).fontSize), '26px');
+	assert.equal(await page.locator('.settings-navigation button').evaluate(element => getComputedStyle(element).fontSize), '14px');
+	assert.equal(await page.locator('.settings-card').first().evaluate(element => getComputedStyle(element).borderRadius), '16px');
+	assert.equal(await page.locator('.settings-v3 .settings-switch').evaluate(element => getComputedStyle(element).width), '36px');
+	await page.setViewportSize({ width: 360, height: 1000 });
+	await page.locator('.connection-key-field').hover();
+	await page.getByRole('button', { name: '复制密钥', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).action, 'copy');
+	await page.getByRole('button', { name: '显示密钥', exact: true }).click();
+	const revealRequest = await page.evaluate(() => window.messages.at(-1));
+	await page.evaluate(id => window.fixtureSnapshot({ type: 'connectionKey', requestId: id, revision: 1, key: 'fixture-saved' }, '*'), revealRequest.requestId);
+	await page.waitForFunction(() => document.querySelector('input[aria-label="API 密钥"]').value === 'fixture-saved');
+	await page.getByRole('button', { name: '隐藏密钥', exact: true }).click();
+	assert.equal(await page.getByLabel('API 密钥', { exact: true }).inputValue(), '••••••••');
+	await page.getByRole('button', { name: '删除密钥', exact: true }).click();
+	await page.getByRole('button', { name: '保存连接', exact: true }).waitFor();
+	await page.getByRole('button', { name: '取消', exact: true }).click();
+	await page.getByRole('button', { name: 'deepseek', exact: true }).click();
+	assert.equal(await page.locator('.settings-model-row').count(), 0);
+	await page.getByRole('button', { name: 'deepseek', exact: true }).click();
+	await page.locator('.settings-model-logo img').waitFor();
+	assert.ok(await page.locator('.settings-model-logo img').evaluate(image => image.complete && image.naturalWidth > 0));
+	await page.locator('.connection-key-field').hover();
+	await page.screenshot({ path: path.join(output, 'settings-approved-key-hover.png'), fullPage: true });
+	await page.getByRole('button', { name: '编辑密钥', exact: true }).click();
+	const keyRequest = await page.evaluate(() => window.messages.at(-1));
+	await page.evaluate(id => window.fixtureSnapshot({ type: 'connectionKey', requestId: id, revision: 1, key: 'fixture-saved' }, '*'), keyRequest.requestId);
+	await page.getByLabel('API 密钥', { exact: true }).fill('fixture-input');
+	assert.ok(await page.getByRole('button', { name: '同步模型', exact: true }).isDisabled());
 	await page.getByRole('button', { name: '保存连接', exact: true }).click(); await settingsAck(false, '保存失败');
-	assert.equal(await page.getByLabel('API Key', { exact: true }).inputValue(), 'fixture-input');
+	assert.equal(await page.getByLabel('API 密钥', { exact: true }).inputValue(), 'fixture-input');
 	await page.getByRole('button', { name: '保存连接', exact: true }).click(); await settingsAck();
-	await page.waitForFunction(() => document.querySelector('input[type=password]').value === '');
-	await page.getByRole('button', { name: '获取模型', exact: true }).click();
+	await page.waitForFunction(() => document.querySelector('input[aria-label="API 密钥"]').value === '••••••••');
+	assert.equal(await page.getByText('已保存，修改将在下一轮回复中生效。', { exact: true }).count(), 0);
+	await page.getByRole('button', { name: '同步模型', exact: true }).click();
 	await settingsPublish({ discovery: { id: 'candidate-1', revision: 1, provider: 'deepseek', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', capabilities: caps }, { id: 'new-pro', name: 'New Pro', capabilities: { ...caps, vision: 'unsupported' } }] } }); await settingsAck();
 	const dialog = page.getByRole('dialog');
 	assert.equal(await dialog.getByRole('checkbox', { name: /DeepSeek Flash/ }).isChecked(), true);
@@ -973,7 +1012,7 @@ try {
 	await settingsPublish({ revision: 2, discovery: undefined });
 	await page.getByRole('alert').filter({ hasText: '设置已改变，请重新获取模型。' }).waitFor({ timeout: 1500 });
 	assert.equal(await page.getByRole('dialog').count(), 0, 'Stale candidates do not masquerade as a pending fetch');
-	await page.getByRole('button', { name: '获取模型', exact: true }).click();
+	await page.getByRole('button', { name: '同步模型', exact: true }).click();
 	await settingsPublish({ discovery: { id: 'candidate-2', revision: 2, provider: 'deepseek', models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', capabilities: caps }, { id: 'new-pro', name: 'New Pro', capabilities: caps }] } }); await settingsAck();
 	await dialog.getByRole('checkbox', { name: /New Pro/ }).check();
 	await dialog.getByRole('button', { name: '确认', exact: true }).click();
@@ -981,9 +1020,14 @@ try {
 	await settingsPublish({ discovery: undefined }); await settingsAck();
 	await page.getByRole('button', { name: '编辑 DeepSeek Flash', exact: true }).click();
 	assert.equal(await page.getByLabel('模型 ID', { exact: true }).getAttribute('readonly'), '');
+	await page.setViewportSize({ width: 900, height: 712 });
+	await page.screenshot({ path: path.join(output, 'deepseek-detail-compact-dark.png') });
 	await page.getByLabel('显示名称', { exact: true }).fill('My Flash');
 	await page.getByText('手动修正能力', { exact: true }).click();
 	await page.getByRole('combobox', { name: '工具调用', exact: true }).selectOption('supported');
+	const modelFooter = await page.locator('.model-form .settings-form-actions').boundingBox();
+	assert.ok(modelFooter.y + modelFooter.height <= 712 && modelFooter.y > 0, 'Expanded capabilities keep model actions visible at laptop height');
+	assert.ok(await page.locator('.model-form-body').evaluate(element => element.scrollHeight > element.clientHeight), 'Model form body scrolls independently of its actions');
 	await page.screenshot({ path: path.join(output, 'deepseek-detail-dark.png') });
 	await page.getByRole('button', { name: '保存模型', exact: true }).click(); await settingsAck(false, '模型保存失败');
 	assert.equal(await page.getByLabel('显示名称', { exact: true }).inputValue(), 'My Flash');
@@ -991,6 +1035,9 @@ try {
 	await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
 	await page.evaluate(() => { document.body.className = 'vscode-light'; });
 	await page.addStyleTag({ content: ':root { --vscode-editor-background:#fafafa; --vscode-foreground:#272a30; --vscode-descriptionForeground:#60656d; --vscode-input-background:#f1f2f4; --vscode-input-foreground:#272a30; --vscode-widget-border:#d5d8df; --vscode-button-background:#305f98; --vscode-focusBorder:#3076be; }' });
+	await page.screenshot({ path: path.join(output, 'deepseek-settings-error-light.png') });
+	await page.getByRole('button', { name: '编辑 DeepSeek Flash', exact: true }).click();
+	await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
 	for (const width of [1440, 360]) {
 		await page.setViewportSize({ width, height: 1000 });
 		await page.screenshot({ path: path.join(output, 'deepseek-settings-light-' + width + '.png'), fullPage: true });
@@ -998,6 +1045,15 @@ try {
 	await page.getByRole('button', { name: '编辑 DeepSeek Flash', exact: true }).click();
 	await page.screenshot({ path: path.join(output, 'deepseek-detail-light-360.png') });
 	await page.keyboard.press('Escape');
+	await page.setViewportSize({ width: 900, height: 712 });
+	const idleKey = await page.getByLabel('API 密钥', { exact: true }).boundingBox();
+	await settingsPublish({ providerTest: { id: 'visual-test', revision: 2, running: true, models: [{ id: 'deepseek-flash', status: 'running' }] } });
+	await page.getByRole('button', { name: '测试中…', exact: true }).waitFor();
+	const testingKey = await page.getByLabel('API 密钥', { exact: true }).boundingBox();
+	assert.equal(testingKey.width, idleKey.width, 'Testing feedback preserves key input width');
+	assert.equal(await page.getByRole('button', { name: '测试中…', exact: true }).getAttribute('aria-busy'), 'true');
+	await page.screenshot({ path: path.join(output, 'deepseek-testing-light.png') });
+	await settingsPublish({ providerTest: undefined });
 
 	assert.deepStrictEqual(errors, []);
 	console.log('Production UI: Captain Who-style Markdown/code blocks, exact clipboard, GFM/math, activity lifecycle/timer, reduced motion, scroll escape/return/resize, Chinese/English, themes, history and settings passed. Screenshots: ' + output);

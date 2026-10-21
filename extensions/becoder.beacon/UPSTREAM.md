@@ -57,3 +57,7 @@ Beacon's shared incremental TextMate Worker. No Electron/Rust services are impor
 Some npm packages omit their repository license file. The notice generator uses the Vercel AI repository Apache-2.0 license for `@ai-sdk/provider-utils`, and `licenses/remark-math.txt` for `remark-math` (source: https://github.com/remarkjs/remark-math/blob/main/license, retrieved 2026-09-23).
 
 All code languages share the incremental renderer using pinned root `vscode-textmate`, `vscode-oniguruma` and its WASM, with the default token rules under `extensions/becoder.one-monokai`. Build-time language discovery prefers the repository's bundled grammar contributions (including Better C++ Syntax, MagicPython and embedded/injection grammars); additional fence languages use the directly pinned `@shikijs/langs` grammar assets. Shiki rendering engines and themes are not dependencies of Beacon. Built-in grammar upstream notices, additional LaTeX licenses, @shikijs/langs and Better C++ Syntax/One Monokai licenses ship in ThirdPartyNotices. No semantic or user-theme customization is applied.
+
+## DeepSeek provider mark
+
+resources/deepseek.svg comes from LobeHub lobe-icons, MIT, Copyright (c) 2023 LobeHub. Source: https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/deepseek-color.svg (retrieved 2026-10-20). Full license is licenses/lobe-icons.txt and is included in bundled notices. The logo identifies the service and does not imply affiliation.

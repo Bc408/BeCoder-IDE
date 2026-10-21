@@ -23,6 +23,15 @@ function apply(connections: Connections, command: Omit<SettingsCommand, 'revisio
 }
 
 suite('Beacon settings', () => {
+	test('explicit settings key access checks revision without publishing credentials in snapshots', async () => fixture(async connections => {
+		const revision = connections.settings.revision;
+		assert.equal(await connections.accessKey('reveal', revision), 'mock-secret');
+		assert.equal(await connections.accessKey('copy', revision), undefined);
+		assert.ok(!JSON.stringify(connections.settings).includes('mock-secret'));
+		await apply(connections, { type: 'toggleProvider', enabled: false });
+		await assert.rejects(connections.accessKey('reveal', revision), /settings-stale/);
+	}));
+
 	test('removing a legacy selected model does not implicitly disable its supplier', async () => fixture(async connections => {
 		assert.equal(connections.supplierEnabled, true);
 		await apply(connections, { type: 'removeModel', id: 'deepseek-flash' });

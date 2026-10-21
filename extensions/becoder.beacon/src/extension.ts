@@ -425,6 +425,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			const type = (message as { type?: string }).type;
 			if (type === 'ready') { settingsStamp = ''; publish(); }
 			else if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
+			else if (type === 'connectionKey') {
+				const input = message as { requestId?: number; revision?: number; action?: string };
+				if (!Number.isSafeInteger(input.requestId) || !Number.isSafeInteger(input.revision) || !['copy', 'reveal'].includes(input.action ?? '')) { return; }
+				void (async () => {
+					try {
+						const key = await connections.accessKey(input.action as 'copy' | 'reveal', input.revision!);
+						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', requestId: input.requestId, revision: input.revision, ...(input.action === 'reveal' ? { key } : { copied: true }) }); }
+					} catch (error) {
+						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', requestId: input.requestId, revision: input.revision, error: settingsError(error) }); }
+					}
+				})();
+			}
 			else { void changeSettings(message, panel.webview); }
 		});
 		const disposed = panel.onDidDispose(() => { connections.closeSettings(); received.dispose(); disposed.dispose(); if (configurationPanel === panel) { configurationPanel = undefined; } });

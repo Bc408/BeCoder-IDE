@@ -202,7 +202,7 @@ function App() {
 	const pausedReply = state.messages.at(-1);
 	const canContinue = !state.modeTransitionPending && pausedReply?.role === 'assistant' && pausedReply.status === 'stopped' && !draft.trim() && !state.attachments.length;
 	const capabilities = state.connection.capabilities ?? resolveCapabilities(state.connection.provider, state.connection.baseURL, state.connection.model, undefined, state.connection.modelSettings);
-	const blocked = capabilities.vision !== 'supported' && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
+	const blocked = !capabilities.vision && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
 	const sendUnavailable = !ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue);
 	const send = () => {
 		if (busy || sendUnavailable) { return; }
@@ -215,7 +215,7 @@ function App() {
 	const visibleHistory = state.context?.workspaceState === 'ready' ? state.history : [];
 	const failedReply = state.messages.at(-1)?.status === 'error';
 	const temporaryFailure = !!state.messages.at(-1)?.failure;
-	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (capabilities.tools !== 'supported' ? '\n' + t('This model does not have confirmed tool support. Web search is unavailable; check its capabilities in settings.', '当前模型未确认支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
+	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (!capabilities.tools ? '\n' + t('This model does not support tools. Web search is unavailable; check its capabilities in settings.', '当前模型不支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
 		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending('navigation'); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} data-becoder-tooltip={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
 		<div className="history-actions"><button className="history-rename" disabled={busy} onClick={() => api.postMessage({ type: 'renameHistory', conversationId: item.id })} data-becoder-tooltip={t('Rename chat', '重命名聊天')} aria-label={t('Rename chat', '重命名聊天')}><Icon name="edit" /></button><button className={`history-delete ${item.id === confirmDelete ? 'delete-confirm' : ''}`} disabled={busy} onClick={() => { if (item.id === confirmDelete) { setConfirmDelete(undefined); api.postMessage({ type: 'deleteHistory', conversationId: item.id }); } else { setConfirmDelete(item.id); } }} data-becoder-tooltip={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')} aria-label={item.id === confirmDelete ? t('Confirm delete', '确认删除') : t('Delete chat', '删除聊天')}>{item.id === confirmDelete ? t('Confirm', '确认') : <Icon name="trash" />}</button></div>
@@ -279,7 +279,7 @@ function App() {
 				}} />
 				<div className="composer-toolbar">
 					<button className="add-files" type="button" disabled={!ready || busy || state.historyUnreadable} data-becoder-tooltip={t('Add files', '添加文件')} aria-label={t('Add files', '添加文件')} onClick={() => api.postMessage({ type: 'addFiles' })}><Icon name="plus" /></button>
-					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools === 'supported'} data-becoder-tooltip={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
+					<button className="web-toggle" type="button" disabled={!ready} aria-label={t('Web search', '联网搜索')} aria-pressed={state.webEnabled} data-available={capabilities.tools} data-becoder-tooltip={webTitle} onClick={() => api.postMessage({ type: 'setWebEnabled', enabled: !state.webEnabled })}><Icon name="globe" /></button>
 					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} busy={busy} post={message => api.postMessage(message)} />
 					<span className="composer-spacer" aria-hidden="true" />
 					<ModelPicker connection={state.connection} />

@@ -235,7 +235,7 @@ suite('Beacon window session', () => {
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
 		const session = new ChatSession(() => { }, () => 'provider error');
-		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', capabilities: { purpose: 'chat', vision: 'unsupported', reasoning: 'unsupported', tools: 'supported', source: 'service' }, parameters: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 }, apiKey: 'test-key' }), fetchMock, 'workspace', [], false));
+		await session.send('hello', createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', capabilities: { purpose: 'chat', vision: false, reasoning: false, tools: true, source: 'service' }, parameters: { temperature: 0.7, topP: 0.9, maxOutputTokens: 4096 }, apiKey: 'test-key' }), fetchMock, 'workspace', [], false));
 		assert.equal(session.snapshot.error, '');
 		assert.equal(session.snapshot.messages[1].text, 'hello back');
 		assert.equal(session.snapshot.messages[1].reasoning, 'thinking');
@@ -259,7 +259,7 @@ suite('Beacon window session', () => {
 			const chunks = [{ content: 'Here is the summary.' }, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'tool-test', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: index === 1 ? 'stop' : null }] }) + '\n\n');
 			return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		};
-		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', capabilities: { purpose: 'chat', vision: 'unsupported', reasoning: 'unsupported', tools: 'supported', source: 'service' }, parameters: {}, apiKey: 'test-key' }), fetchMock, 'workspace');
+		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'deepseek-chat', capabilities: { purpose: 'chat', vision: false, reasoning: false, tools: true, source: 'service' }, parameters: {}, apiKey: 'test-key' }), fetchMock, 'workspace');
 		await session.send('Read src/main.ts', generate, undefined, async input => ({ ok: true, path: input.path, contents }));
 		assert.equal(requestCount, 2);
 		assert.equal(session.snapshot.messages[1].text, 'Here is the summary.');

@@ -23,6 +23,35 @@ function apply(connections: Connections, command: Omit<SettingsCommand, 'revisio
 }
 
 suite('Beacon settings', () => {
+	test('legacy capability overrides persist as booleans', () => {
+		const model = parseModel({ id: 'legacy', name: 'Legacy', parameters: {}, settings: { overrides: { vision: 'unknown', reasoning: 'supported', tools: 'unsupported' } }, discovered: { vision: 'unsupported', tools: 'unknown' } });
+		assert.deepStrictEqual(model.settings.overrides, { vision: true, reasoning: true, tools: false });
+		assert.equal(model.discovered?.vision, false); assert.equal(model.discovered?.tools, true);
+	});
+	test('disabled reasoning clears dependent settings while preserving sampling and capacities', () => {
+		const model = parseModel({ id: 'opaque', name: 'Mine', parameters: { temperature: 0.3, topP: 0.8 }, settings: { thinking: 'enabled', effort: 'high', overrides: { reasoning: false, maxInputTokens: 12000 } } });
+		assert.deepStrictEqual(model.settings, { overrides: { reasoning: false, maxInputTokens: 12000 } });
+		assert.deepStrictEqual(model.parameters, { temperature: 0.3, topP: 0.8 });
+		assert.deepStrictEqual(modelParameterIssues('deepseek', 'https://api.deepseek.com', model), []);
+	});
+	test('saving or deleting only the key preserves address, model settings and selection', async () => fixture(async (connections, context) => {
+		const before = connections.settings.providers;
+		const selection = connections.settings.selection;
+		await connections.apply({ type: 'saveKey', provider: 'deepseek', requestId: 1, revision: connections.settings.revision, key: ' replacement ' });
+		assert.equal(await context.secrets.get(secretName('deepseek')), 'replacement');
+		assert.deepStrictEqual(connections.settings.providers, before);
+		assert.deepStrictEqual(connections.settings.selection, selection);
+		mock.controls.secretError = new Error('secret-storage');
+		await assert.rejects(connections.apply({ type: 'saveKey', provider: 'deepseek', requestId: 2, revision: connections.settings.revision, clearKey: true }), /secret-storage/);
+		assert.equal(connections.settings.keyConfigured.deepseek, true);
+		delete mock.controls.secretError;
+		await connections.apply({ type: 'saveKey', provider: 'deepseek', requestId: 3, revision: connections.settings.revision, clearKey: true });
+		assert.equal(await context.secrets.get(secretName('deepseek')), undefined);
+		assert.equal(connections.settings.keyConfigured.deepseek, false);
+		assert.deepStrictEqual(connections.settings.providers, before);
+		assert.deepStrictEqual(connections.settings.selection, selection);
+	}));
+
 	test('explicit settings key access checks revision without publishing credentials in snapshots', async () => fixture(async connections => {
 		const revision = connections.settings.revision;
 		assert.equal(await connections.accessKey('reveal', revision), 'mock-secret');
@@ -69,7 +98,7 @@ suite('Beacon settings', () => {
 	test('refreshing capabilities preserves conflicting parameters and blocks the next request', async () => fixture(async connections => {
 		const original = globalThis.fetch;
 		try {
-			await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'Mine', parameters: { maxOutputTokens: 300000 }, settings: {} } });
+			await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'Mine', parameters: { maxOutputTokens: 300000 }, settings: { overrides: { maxOutputTokens: 400000 } } } });
 			globalThis.fetch = async () => Response.json({ data: [{ id: 'deepseek-flash', max_output_tokens: 1000 }] });
 			await apply(connections, { type: 'fetchModels' });
 			await apply(connections, { type: 'confirmModels', discoveryId: connections.settings.discovery!.id, ids: ['deepseek-flash'] });
@@ -98,8 +127,8 @@ suite('Beacon settings', () => {
 	}));
 
 	test('confirmation replaces capabilities and membership while preserving generation parameters', () => {
-		const current = { baseURL: 'https://api.deepseek.com', models: [parseModel({ id: 'A', name: 'Mine', enabled: false, parameters: { temperature: 0.4, maxOutputTokens: 300000 }, settings: { thinking: 'disabled', overrides: { vision: 'supported' } } }), parseModel({ id: 'Pro', name: 'Pro', parameters: {}, settings: {} })] };
-		const next = replaceDiscoveredModels(current, [{ provider: 'deepseek', id: 'A', capabilities: { purpose: 'chat', vision: 'unknown', tools: 'unknown', reasoning: 'supported', source: 'service', maxOutputTokens: 200000 } }], ['A']);
+		const current = { baseURL: 'https://api.deepseek.com', models: [parseModel({ id: 'A', name: 'Mine', enabled: false, parameters: { temperature: 0.4, maxOutputTokens: 300000 }, settings: { thinking: 'disabled', overrides: { vision: true } } }), parseModel({ id: 'Pro', name: 'Pro', parameters: {}, settings: {} })] };
+		const next = replaceDiscoveredModels(current, [{ provider: 'deepseek', id: 'A', capabilities: { purpose: 'chat', vision: true, tools: true, reasoning: true, source: 'service', maxOutputTokens: 200000 } }], ['A']);
 		assert.equal(next.enabled, true); assert.equal(next.models.length, 1); assert.equal(next.models[0].name, 'Mine');
 		assert.deepStrictEqual(next.models[0].parameters, { temperature: 0.4, maxOutputTokens: 300000 });
 		assert.equal(next.models[0].settings.overrides, undefined);
@@ -127,7 +156,7 @@ suite('Beacon settings', () => {
 	}));
 	test('duplicates, invalid parameter values and unsupported adapter options are rejected', () => {
 		const data = emptyConfiguration();
-		const model = parseModel({ id: 'one', name: 'One', enabled: true, parameters: { temperature: 0.3 }, settings: { overrides: { vision: 'supported' } } });
+		const model = parseModel({ id: 'one', name: 'One', enabled: true, parameters: { temperature: 0.3 }, settings: { overrides: { vision: true } } });
 		data.providers.deepseek.models = [model, model];
 		assert.throws(() => parseConfiguration(data), /duplicate-model/);
 		assert.throws(() => parseModel({ ...model, parameters: { topP: NaN } }), /invalid-model-parameter/);
@@ -137,7 +166,7 @@ suite('Beacon settings', () => {
 		assert.equal(parameterPolicy('deepseek', 'deepseek-reasoner', reasoning, {}).fixedThinking, false);
 		assert.throws(() => validateModel('deepseek', 'https://api.deepseek.com', { ...model, id: 'deepseek-reasoner', settings: {}, parameters: { temperature: 1 } }), /unsupported-sampling/);
 		assert.throws(() => validateModel('deepseek', 'https://other.example/v1', { ...model, id: 'deepseek-flash', settings: {}, parameters: { temperature: 0.4 } }), /unsupported-sampling/);
-		validateModel('deepseek', 'https://other.example/v1', { ...model, id: 'deepseek-flash', settings: { thinking: 'disabled', overrides: { reasoning: 'supported' } }, parameters: { temperature: 0.4 } });
+		validateModel('deepseek', 'https://other.example/v1', { ...model, id: 'deepseek-flash', settings: { thinking: 'disabled', overrides: { reasoning: true } }, parameters: { temperature: 0.4 } });
 	});
 	test('a save persists the whole model; disabling/removing the active model never selects another', async () => fixture(async connections => {
 		await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'My Flash', enabled: true, parameters: { temperature: 0.5, topP: 0.8, maxOutputTokens: 2048 }, settings: { thinking: 'disabled', overrides: { contextWindow: 128000 } } } });
@@ -173,7 +202,7 @@ suite('Beacon settings', () => {
 			assert.equal(models.find(model => model.id === 'deepseek-chat')?.name, 'My chat');
 			assert.equal(models.find(model => model.id === 'deepseek-chat')?.enabled, undefined);
 			assert.equal(models.find(model => model.id === 'deepseek-chat')?.parameters.temperature, 0.4);
-			assert.equal(models.find(model => model.id === 'future')?.discovered?.vision, 'supported');
+			assert.equal(models.find(model => model.id === 'future')?.discovered?.vision, true);
 			assert.equal(connections.settings.selection, undefined);
 		} finally { globalThis.fetch = original; }
 	}));
@@ -188,7 +217,7 @@ suite('Beacon settings', () => {
 			const files = async (input: { path: string }) => ({ ok: false as const, path: input.path });
 			const active = connections.request(files, 'none', [], false);
 			await apply(connections, { type: 'saveConnection', baseURL: 'https://other.example/v1', key: 'new-key' });
-			await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'Flash', enabled: true, parameters: { temperature: 0.4 }, settings: { thinking: 'disabled', overrides: { reasoning: 'supported' } } } });
+			await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'Flash', enabled: true, parameters: { temperature: 0.4 }, settings: { thinking: 'disabled', overrides: { reasoning: true } } } });
 			for await (const part of active.generate([{ role: 'user', content: 'test' }], new AbortController().signal, files)) { assert.ok(part); }
 			const next = connections.request(files, 'none', [], false);
 			for await (const part of next.generate([{ role: 'user', content: 'next' }], new AbortController().signal, files)) { assert.ok(part); }

@@ -27,11 +27,12 @@ export interface SettingsSnapshot extends ModelConfiguration {
 	parameterIssues?: Record<string, ParameterIssue[]>;
 	revision: number;
 	keyConfigured: Partial<Record<ProviderId, boolean>>;
+	keyPreview?: Partial<Record<ProviderId, string>>;
 	pending: boolean;
 	error: string;
 }
 export interface SettingsCommand {
-	type: 'saveConnection' | 'saveModel' | 'removeModel' | 'fetchModels' | 'selectModel' | 'toggleProvider' | 'confirmModels' | 'cancelDiscovery' | 'testProvider' | 'cancelProviderTest';
+	type: 'saveKey' | 'saveConnection' | 'saveModel' | 'removeModel' | 'fetchModels' | 'selectModel' | 'toggleProvider' | 'confirmModels' | 'cancelDiscovery' | 'testProvider' | 'cancelProviderTest';
 	requestId: number;
 	revision: number;
 	provider: ProviderId;
@@ -61,7 +62,10 @@ export function parseModel(value: unknown): ConfiguredModel {
 		if (!['temperature', 'topP', 'maxOutputTokens'].includes(field) || !validParameter(field as ModelParameterName, parameter)) { throw new Error('invalid-model-parameter'); }
 		parameters[field as ModelParameterName] = parameter as number;
 	}
-	return { id: value.id.trim(), name: value.name.trim(), enabled: value.enabled, parameters, settings: parseModelSettings(value.settings), ...(value.discovered && (value.discovered as ModelCapabilities).source !== 'catalog' ? { discovered: serviceCapabilities(value.discovered) } : {}) };
+	const settings = parseModelSettings(value.settings);
+	const discovered = value.discovered && (value.discovered as ModelCapabilities).source !== 'catalog' ? serviceCapabilities(value.discovered) : undefined;
+	if ((settings.overrides?.reasoning ?? discovered?.reasoning) === false) { delete settings.thinking; delete settings.effort; }
+	return { id: value.id.trim(), name: value.name.trim(), enabled: value.enabled, parameters, settings, ...(discovered ? { discovered } : {}) };
 }
 /** This is a fresh document format. Old configuration keys are intentionally never read. */
 export function parseConfiguration(value: unknown): ModelConfiguration {
@@ -85,7 +89,7 @@ export function parseConfiguration(value: unknown): ModelConfiguration {
 
 export interface ParameterIssue {
 	field: 'temperature' | 'topP' | 'maxOutputTokens' | 'thinking' | 'effort';
-	code: 'unsupported' | 'exceeds-limit' | 'unknown-support';
+	code: 'unsupported' | 'exceeds-limit';
 }
 
 export function replaceDiscoveredModels(current: ProviderConfiguration, candidates: ModelInfo[], ids: string[]): ProviderConfiguration {
@@ -101,14 +105,14 @@ export function replaceDiscoveredModels(current: ProviderConfiguration, candidat
 /** SDK sampling defaults are transport constraints, never capability declarations. */
 export function parameterPolicy(provider: ProviderId, model: string, capabilities: ModelCapabilities, settings: ModelSettings) {
 	const defaultThinking = model === 'deepseek-reasoner' || model.includes('deepseek-v4') || model.startsWith('deepseek-flash') || model.startsWith('deepseek-pro');
-	const sampling = !(provider === 'deepseek' && settings.thinking !== 'disabled' && (settings.thinking === 'enabled' || defaultThinking));
-	return { thinking: capabilities.reasoning === 'supported', fixedThinking: false, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
+	const sampling = !(capabilities.reasoning && provider === 'deepseek' && settings.thinking !== 'disabled' && (settings.thinking === 'enabled' || defaultThinking));
+	return { thinking: capabilities.reasoning, fixedThinking: false, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
 }
 export function modelParameterIssues(provider: ProviderId, baseURL: string, model: ConfiguredModel): ParameterIssue[] {
 	const capabilities = resolveCapabilities(provider, baseURL, model.id, model.discovered, model.settings);
 	const policy = parameterPolicy(provider, model.id, capabilities, model.settings);
 	const issues: ParameterIssue[] = [];
-	if (model.settings.thinking && !policy.thinking) { issues.push({ field: 'thinking', code: capabilities.reasoning === 'unknown' ? 'unknown-support' : 'unsupported' }); }
+	if (model.settings.thinking && !policy.thinking) { issues.push({ field: 'thinking', code: 'unsupported' }); }
 	if (model.settings.effort && (!policy.efforts.includes(model.settings.effort) || model.settings.thinking === 'disabled' || !policy.thinking)) { issues.push({ field: 'effort', code: 'unsupported' }); }
 	for (const field of ['temperature', 'topP'] as const) { if (!policy.sampling && model.parameters[field] !== undefined) { issues.push({ field, code: 'unsupported' }); } }
 	if (model.parameters.maxOutputTokens !== undefined && model.parameters.maxOutputTokens > policy.outputMaximum) { issues.push({ field: 'maxOutputTokens', code: 'exceeds-limit' }); }

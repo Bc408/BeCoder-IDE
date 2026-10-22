@@ -10,14 +10,14 @@ import { createGenerator } from '../src/provider';
 import { ChatSession, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { providers, type Connection } from '../src/connection';
-import { unknownCapabilities } from '../src/models';
+import { defaultCapabilities } from '../src/models';
 import { captureClipboardImages } from '../src/attachments';
 
 const signal = () => new AbortController().signal;
 const networkError = (code = 'ECONNRESET') => Object.assign(new Error('private diagnostic content'), { code });
 const init = { method: 'POST', body: 'private request image and credentials' };
 const wait = async () => {};
-const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'custom', apiKey: 'private-secret', parameters: {}, capabilities: { ...unknownCapabilities, purpose: 'chat', vision: 'supported' } };
+const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'custom', apiKey: 'private-secret', parameters: {}, capabilities: { ...defaultCapabilities, purpose: 'chat', vision: true } };
 const chunk = (delta: Record<string, unknown>, finish: string | null = null) => 'data: ' + JSON.stringify({ id: 'recovery-test', choices: [{ index: 0, delta, finish_reason: finish }] }) + '\n\n';
 const answer = () => new Response(chunk({ content: 'answer' }) + chunk({}, 'stop') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 
@@ -191,7 +191,7 @@ suite('Beacon request recovery', () => {
 		}
 		let requests = 0; let tools = 0;
 		const session = new ChatSession(() => {}, () => 'connection failed');
-		await session.send('question', createGenerator(async () => ({ ...connection, capabilities: { ...connection.capabilities!, tools: 'supported' } }), async () => {
+		await session.send('question', createGenerator(async () => ({ ...connection, capabilities: { ...connection.capabilities!, tools: true } }), async () => {
 			if (++requests === 1) { return new Response(chunk({ tool_calls: [{ index: 0, id: 'read-once', type: 'function', function: { name: 'inspectFiles', arguments: '{"operation":"read","path":"main.cpp"}' } }] }) + chunk({}, 'tool_calls') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }); }
 			throw networkError();
 		}, 'workspace', [], false, undefined, { wait: async () => { assert.fail('Tool round was retried'); } }), undefined, async input => { tools++; return { ok: true, path: input.path, contents: 'code', kind: 'text' }; });

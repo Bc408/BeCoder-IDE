@@ -141,9 +141,9 @@ suite('Beacon read-only permissions', () => {
 			yield { type: 'text', text: 'uses previous context' };
 		}, undefined, new FileTools(permission, []).execute);
 	}));
-	test('default permission exposes no model tools', async () => {
+	test('default file permission exposes no file tools', async () => {
 		const generate = createGenerator(async () => ({ provider: 'deepseek', ...providers.deepseek, model: 'test', parameters: {}, apiKey: 'test' }), async (_url, options) => {
-			assert.equal(JSON.parse(String(options?.body)).tools, undefined);
+			assert.deepStrictEqual(JSON.parse(String(options?.body)).tools?.map((tool: { function: { name: string } }) => tool.function.name), ['browseWeb']);
 			return new Response('data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":null}]}\n\ndata: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		});
 		const session = new ChatSession(() => {}, () => 'error');
@@ -165,7 +165,7 @@ suite('Beacon read-only permissions', () => {
 				const chunks = [delta, {}].map((value, index) => 'data: ' + JSON.stringify({ id: 'image-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: value, finish_reason: index === 1 ? (requests < 3 ? 'tool_calls' : 'stop') : null }] }) + '\n\n');
 				return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 			};
-			const connection = async () => ({ provider, ...providers[provider], model: 'vision-test', parameters: {}, capabilities: { purpose: 'chat' as const, vision: 'supported' as const, tools: 'supported' as const, reasoning: 'unknown' as const, source: 'manual' as const }, apiKey: 'test-key' });
+			const connection = async () => ({ provider, ...providers[provider], model: 'vision-test', parameters: {}, capabilities: { purpose: 'chat' as const, vision: true as const, tools: true as const, reasoning: true as const, source: 'manual' as const }, apiKey: 'test-key' });
 			const session = new ChatSession(() => {}, () => 'error');
 			await session.send('Describe the image', createGenerator(connection, mock, 'workspace'), undefined, async input => ({ ok: true, path: input.path, kind: input.path === 'pixel.png' ? 'image' : 'text', contents: input.path === 'pixel.png' ? image : 'note', ...(input.path === 'pixel.png' ? { mediaType: 'image/png' } : {}) }));
 			assert.equal(requests, 3);

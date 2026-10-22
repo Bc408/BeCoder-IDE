@@ -23,7 +23,7 @@ function modelStream(deltas: Record<string, unknown>[], finish = 'stop'): Respon
 	return new Response([...deltas, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'web-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: index === deltas.length ? finish : null }] }) + '\n\n').join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 const webCall = (operation = 'search') => ({ tool_calls: [{ index: 0, id: 'actual-web-call', type: 'function', function: { name: 'browseWeb', arguments: JSON.stringify(operation === 'search' ? { operation, query: 'C++ vector documentation' } : { operation, url: pageURL }) } }] });
-const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'private-model-key', parameters: {}, capabilities: { purpose: 'chat', vision: 'supported', reasoning: 'supported', tools: 'supported', source: 'service' } };
+const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'private-model-key', parameters: {}, capabilities: { purpose: 'chat', vision: true, reasoning: true, tools: true, source: 'service' } };
 
 suite('Beacon keyless web lookup', () => {
 	test('fixed endpoint receives only public query arguments, no credentials; verified JSON and SSE formats retain stable sources', async () => {
@@ -126,29 +126,29 @@ suite('Beacon keyless web lookup', () => {
 suite('Beacon web conversation lifecycle', () => {
 	test('Notebook tools require file mode and confirmed tool support; real SDK results preserve edit feedback and cleanup', async () => {
 		for (const permission of ['none', 'workspace'] as const) {
-			for (const support of ['supported', 'unsupported'] as const) {
+			for (const support of [true, false]) {
 				let calls = 0; let edits = 0; let closed = false;
 				const session = new ChatSession(() => {}, error => String(error));
 				await session.send('Modify C:\\chosen\\note.bcnb', createGenerator(async () => ({ ...connection, capabilities: { ...resolveCapabilities(connection.provider, connection.baseURL, connection.model), tools: support } }), async (_url, init) => {
-					const body = JSON.parse(String(init?.body)); const offered = body.tools?.some((tool: { function: { name: string } }) => tool.function.name === 'editNotebook'); assert.equal(!!offered, permission !== 'none' && support === 'supported');
+					const body = JSON.parse(String(init?.body)); const offered = body.tools?.some((tool: { function: { name: string } }) => tool.function.name === 'editNotebook'); assert.equal(!!offered, permission !== 'none' && support);
 					if (offered && calls++ === 0) { const schema = body.tools.find((tool: { function: { name: string } }) => tool.function.name === 'editNotebook').function.parameters; assert.equal(schema.properties.cells.items.additionalProperties, false); assert.equal(schema.properties.cells.items.properties.outputs, undefined); return modelStream([{ tool_calls: [{ index: 0, id: 'edit-one', type: 'function', function: { name: 'editNotebook', arguments: JSON.stringify({ operation: 'begin', path: 'C:\\chosen\\note.bcnb' }) } }] }], 'tool_calls'); }
 					if (offered) { assert.ok(JSON.stringify(body.messages).includes('dirty')); }
 					return modelStream([{ content: 'Actual state reported.' }]);
 				}, permission, [], false, fetch, {}, undefined, { execute: async () => { edits++; return { ok: true, applied: false, saved: false, dirty: true }; }, close: async () => { closed = true; } }));
-				assert.equal(session.snapshot.error, ''); assert.equal(edits, permission !== 'none' && support === 'supported' ? 1 : 0); assert.equal(closed, true);
+				assert.equal(session.snapshot.error, ''); assert.equal(edits, permission !== 'none' && support ? 1 : 0); assert.equal(closed, true);
 				if (edits) { assert.ok(session.snapshot.messages[1].activities.some(activity => activity.type === 'notebook-edit')); assert.ok(session.snapshot.messages[1].protocol?.some(turn => JSON.stringify(turn).includes('editNotebook'))); readHistory({ version: 1, activeId: 'one', conversations: [{ id: 'one', title: 'note', updatedAt: 1, messages: session.snapshot.messages, error: '', workspace: [] }] }); }
 			}
 		}
 	});
 	test('default web access is independent of file access and only confirmed tool models register it', async () => {
-		for (const support of ['supported', 'unsupported', 'unknown'] as const) {
+		for (const support of [true, false]) {
 			const capabilities = { ...resolveCapabilities(connection.provider, connection.baseURL, connection.model), tools: support };
 			for (const enabled of [true, false]) {
 				const session = new ChatSession(() => {}, () => 'error');
 				await session.send('hello', createGenerator(async () => ({ ...connection, capabilities }), async (_url, init) => {
 					const body = JSON.parse(String(init?.body));
-					assert.deepStrictEqual(body.tools?.map((tool: { function: { name: string } }) => tool.function.name), enabled && support === 'supported' ? ['browseWeb'] : undefined);
-					assert.equal(body.messages.some((message: { role: string; content: string }) => message.role === 'system' && message.content.includes('untrusted reference material')), enabled && support === 'supported');
+					assert.deepStrictEqual(body.tools?.map((tool: { function: { name: string } }) => tool.function.name), enabled && support ? ['browseWeb'] : undefined);
+					assert.equal(body.messages.some((message: { role: string; content: string }) => message.role === 'system' && message.content.includes('untrusted reference material')), enabled && support);
 					return modelStream([{ content: 'hello' }]);
 				}, 'none', [], enabled, async () => { throw new Error('Unexpected search for greeting'); }));
 				assert.equal(session.snapshot.error, '');
@@ -183,7 +183,7 @@ suite('Beacon web conversation lifecycle', () => {
 	test('all four providers execute actual tool IDs and return source URLs and excerpts to the model', async () => {
 		for (const provider of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) {
 			let calls = 0;
-			const capabilities = { ...resolveCapabilities(provider, providers[provider].baseURL, 'test'), tools: 'supported' as const };
+			const capabilities = { ...resolveCapabilities(provider, providers[provider].baseURL, 'test'), tools: true as const };
 			const session = new ChatSession(() => {}, error => String(error));
 			await session.send('Find vector docs', createGenerator(async () => ({ ...connection, provider, baseURL: providers[provider].baseURL, capabilities }), async (_url, init) => {
 				const body = JSON.parse(String(init?.body));

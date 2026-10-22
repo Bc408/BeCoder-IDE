@@ -117,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const files = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] }).execute;
 		const notebooks = permission === 'none' ? undefined : new NotebookTools(async () => { const extension = vscode.extensions.getExtension<NotebookEditApi>('becoder.notebook'); if (!extension) { throw new Error('notebook-extension-unavailable'); } return extension.activate(); }, scope);
 		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], requestHistory.contextSnapshots, snapshot => requestHistory.captureContext(snapshot)), notebooks);
-		if (next.capabilities.vision !== 'supported' && session.snapshot.messages.some(message => message.id < beforeId && (message.attachments?.some(item => item.kind === 'image') || message.toolResults?.some(item => item.output.kind === 'image')))) { throw new ModelCapabilityError('vision'); }
+		if (!next.capabilities.vision && session.snapshot.messages.some(message => message.id < beforeId && (message.attachments?.some(item => item.kind === 'image') || message.toolResults?.some(item => item.output.kind === 'image')))) { throw new ModelCapabilityError('vision'); }
 		return next;
 	};
 	let closing: Promise<void> | undefined;
@@ -404,7 +404,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (command.type === 'testProvider' && (busy() || native.state.runtimeBusy)) { throw new Error('settings-pending'); }
 			await connections.apply(command);
 			if (!alive) { return; }
-			if (['saveConnection', 'saveModel', 'confirmModels', 'removeModel', 'toggleProvider', 'selectModel'].includes(command.type)) { requestNotice = { id: Date.now(), text: busy() ? vscode.l10n.t('Model settings changes will take effect in the next response.') : vscode.l10n.t('Model settings saved.') }; }
+			if (webview === view?.webview && ['saveKey', 'saveConnection', 'saveModel', 'confirmModels', 'removeModel', 'toggleProvider', 'selectModel'].includes(command.type)) { requestNotice = { id: Date.now(), text: busy() ? vscode.l10n.t('Model settings changes will take effect in the next response.') : vscode.l10n.t('Model settings saved.') }; }
 			publish();
 			void webview?.postMessage({ type: 'settingsResult', requestId: command.requestId, ok: true });
 		} catch (error) {
@@ -541,10 +541,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			const refs = attachments();
 			const activeId = history.snapshot.activeId;
 			let next = await request();
-			if (refs.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
+			if (refs.some(item => item.kind === 'image') && !next.capabilities.vision) { throw new ModelCapabilityError('vision'); }
 			const captured = structuredClone(refs);
 			controller.signal.throwIfAborted();
-			if (captured.some(item => item.kind === 'image') && next.capabilities.vision !== 'supported') { throw new ModelCapabilityError('vision'); }
+			if (captured.some(item => item.kind === 'image') && !next.capabilities.vision) { throw new ModelCapabilityError('vision'); }
 			await draftTail;
 			await native.refreshForRequest();
 			if (modeDraft) {

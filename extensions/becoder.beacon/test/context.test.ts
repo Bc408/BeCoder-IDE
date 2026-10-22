@@ -58,7 +58,7 @@ suite('Beacon native context consumer', () => {
 		assert.match(String(source?.contentSha256), /^[a-f0-9]{64}$/); assert.notEqual(source?.contentSha256, sourceHash); assert.deepEqual(next.source, source);
 	});
 	test('SDK context failures retain a safe actionable code in activity and saved history', async () => {
-		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: 'supported' } };
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: true } };
 		let requests = 0; const session = new ChatSession(() => {}, () => 'error');
 		const generator = createGenerator(async () => connection, async () => {
 			const delta = ++requests === 1 ? { tool_calls: [{ index: 0, id: 'context-failed', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: 'page', version: '2' }) } }] } : { content: 'Please reopen the page.' };
@@ -145,7 +145,7 @@ suite('Beacon native context consumer', () => {
 		opened = false; assert.equal((await tools.execute({ operation: 'page', id: 'pdf:one', version, pageNumber: 1 }, signal)).code, 'beacon-page-closed');
 	});
 	test('real SDK advertises Notebook create and retains the actual saved result in conversation protocol', async () => {
-		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: 'supported' } };
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: true } };
 		let requests = 0; const actions: string[] = []; const session = new ChatSession(() => {}, () => 'error');
 		const notebooks = new NotebookTools(async () => ({ edit: async input => { actions.push(input.operation); return { created: true, saved: true, opened: true, path: input.path }; } }), selected());
 		const generator = createGenerator(async () => connection, async (_url, init) => {
@@ -241,7 +241,7 @@ suite('Beacon native context consumer', () => {
 		assert.equal(result.ok, false); assert.equal(result.contents, undefined);
 	});
 	test('real SDK registers context in blackout without file tools and retains completed tool protocol', async () => {
-		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: 'supported' } };
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: true } };
 		const session = new ChatSession(() => {}, () => 'error'); let requests = 0; let reads = 0;
 		const generator = createGenerator(async () => connection, async (_url, init) => {
 			const body = JSON.parse(String(init?.body)); requests++;

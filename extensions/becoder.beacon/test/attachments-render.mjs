@@ -30,7 +30,7 @@ try {
 	page.on('pageerror', error => errors.push(error.message));
 	await page.addInitScript(() => {
 		let counter = 0;
-		let state = { type: 'snapshot', activeId: 'preview-fixture', viewKey: 'preview::preview-fixture', canSend: true, temporary: true, configured: true, busy: false, permission: 'none', context: { slot: 'preview', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] }, attachments: [], messages: [], history: [], saveFailed: false, historyUnreadable: false, error: '', connection: { provider: 'deepseek', model: 'vision', baseURL: 'https://api.deepseek.com', parameters: {}, keyConfigured: true, loading: false, error: '', capabilities: { purpose: 'chat', vision: 'supported', tools: 'unsupported', reasoning: 'unsupported' } } };
+		let state = { type: 'snapshot', activeId: 'preview-fixture', viewKey: 'preview::preview-fixture', canSend: true, temporary: true, configured: true, busy: false, permission: 'none', context: { slot: 'preview', usable: false, mode: 'blackout', epoch: 0, busy: false, recent: [] }, attachments: [], messages: [], history: [], saveFailed: false, historyUnreadable: false, error: '', connection: { provider: 'deepseek', model: 'vision', baseURL: 'https://api.deepseek.com', parameters: {}, keyConfigured: true, loading: false, error: '', capabilities: { purpose: 'chat', vision: true, tools: false, reasoning: false } } };
 		const publish = () => window.postMessage({ ...state, attachments: state.attachments.map(item => ({ ...item, contents: '' })), messages: state.messages.map(message => ({ ...message, attachments: message.attachments?.map(item => ({ ...item, contents: '' })) })) }, '*');
 		window.hostMessages = [];
 		window.fixture = { update: patch => { state = { ...state, ...patch }; publish(); }, snapshot: () => state };
@@ -102,7 +102,7 @@ try {
 	await page.locator('.attachment-open').first().click(); await page.waitForFunction(() => document.querySelector('.image-preview-picture')?.naturalWidth === 1600);
 	assert.ok(await page.locator('dialog').evaluate(node => node.getBoundingClientRect().width <= innerWidth), 'The viewer fits a narrow Beacon pane');
 	await page.locator('.image-preview-stage').click({ position: { x: 3, y: 3 } }); await page.waitForSelector('dialog', { state: 'detached' });
-	await page.evaluate(() => { const state = window.fixture.snapshot(); window.fixture.update({ connection: { ...state.connection, capabilities: { ...state.connection.capabilities, vision: 'unsupported' } } }); });
+	await page.evaluate(() => { const state = window.fixture.snapshot(); window.fixture.update({ connection: { ...state.connection, capabilities: { ...state.connection.capabilities, vision: false } } }); });
 	await page.waitForFunction(() => document.querySelector('.send').disabled);
 	assert.equal(await page.getByRole('button', { name: '发送', exact: true }).isDisabled(), true);
 	await page.locator('.attachment-open').first().click(); await page.waitForSelector('dialog[open]'); await page.keyboard.press('Escape'); await page.waitForSelector('dialog', { state: 'detached' });
@@ -112,7 +112,7 @@ try {
 	await page.getByRole('button', { name: '在编辑器中打开 main.cpp' }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.hostMessages.at(-1)), { type: 'openAttachment', id: 'source' });
 	await page.setViewportSize({ width: 360, height: 800 });
-	await page.evaluate(() => window.fixture.update({ busy: true, attachments: [], retry: { attempt: 1, limit: 2 }, messages: [{ id: 1, role: 'user', text: 'question', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', activeStartedAt: Date.now() }], error: '' }));
+	await page.evaluate(() => window.fixture.update({ busy: true, responseBusy: true, attachments: [], retry: { attempt: 1, limit: 2 }, messages: [{ id: 1, role: 'user', text: 'question', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', activeStartedAt: Date.now() }], error: '' }));
 	await page.getByText('连接暂时中断，正在重连（1/2）…', { exact: true }).waitFor();
 	assert.equal(await page.locator('.error').count(), 0);
 	await page.screenshot({ path: path.join(output, 'recovery-reconnecting.png') });
@@ -128,7 +128,7 @@ try {
 	await page.locator('.reasoning-details > summary').getByText('正在思考', { exact: true }).waitFor();
 	assert.equal(await page.getByText(/正在重连/).count(), 0, 'Streaming reasoning must not retain recovery copy');
 	await page.screenshot({ path: path.join(output, 'recovery-restored.png') });
-	await page.evaluate(() => { const state = window.fixture.snapshot(); window.fixture.update({ busy: false, messages: [state.messages[0], { ...state.messages[1], status: 'complete', text: 'answer', durationMs: 1200 }] }); });
+	await page.evaluate(() => { const state = window.fixture.snapshot(); window.fixture.update({ busy: false, responseBusy: false, messages: [state.messages[0], { ...state.messages[1], status: 'complete', text: 'answer', durationMs: 1200 }] }); });
 	await page.locator('.assistant .markdown').filter({ hasText: /^answer$/ }).waitFor();
 	await page.getByText('用时 1s', { exact: true }).waitFor();
 	assert.equal(await page.getByText(/正在重连/).count(), 0);

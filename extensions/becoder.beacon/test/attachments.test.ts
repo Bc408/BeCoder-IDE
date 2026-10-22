@@ -14,7 +14,7 @@ import { ChatSession, type Generate, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { createGenerator } from '../src/provider';
 import { providers } from '../src/connection';
-import { unknownCapabilities } from '../src/models';
+import { defaultCapabilities } from '../src/models';
 import { WebviewResourceDrag } from '../../../src/vs/workbench/contrib/webview/common/webviewResourceDrag';
 import { activate, deactivate } from '../src/extension';
 import * as mock from './vscodeMock';
@@ -36,6 +36,27 @@ async function until(condition: () => boolean, label = '') {
 }
 
 suite('Beacon attachments', () => {
+	test('settings notifications stay in the settings panel while chat model changes still notify chat', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { requestNotice?: unknown };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => !!snapshot());
+			view.receive({ type: 'settings' }); const panel = mock.panels.at(-1)!; panel.receive({ type: 'ready' });
+			const settings = () => (panel.messages.filter(message => message.type === 'settingsSnapshot').at(-1) as { settings: { revision: number } }).settings;
+			await until(() => !!settings());
+			panel.receive({ type: 'saveKey', provider: 'deepseek', revision: settings().revision, requestId: 801, key: 'fixture-settings-only-key' });
+			await until(() => panel.messages.some(message => message.type === 'settingsResult' && message.requestId === 801));
+			assert.equal(panel.messages.find(message => message.type === 'settingsResult' && message.requestId === 801)?.ok, true);
+			assert.equal(snapshot().requestNotice, undefined, 'Saving a key in settings must not create a chat notice');
+			panel.receive({ type: 'saveKey', provider: 'deepseek', revision: -1, requestId: 802, key: 'fixture-stale-key' });
+			await until(() => panel.messages.some(message => message.type === 'settingsResult' && message.requestId === 802));
+			assert.equal(snapshot().requestNotice, undefined, 'Settings failures must not create a chat notice');
+			view.receive({ type: 'selectModel', provider: 'deepseek', id: 'missing-model', revision: settings().revision, requestId: 803 });
+			await until(() => !!snapshot().requestNotice);
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
+
 	test('settings batch rejects chat, preserves draft, and cancellation retires without replay', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		let calls = 0; let aborted = false;
@@ -604,7 +625,7 @@ suite('Beacon attachments', () => {
 		const captured = await readAttachments([{ path: 'image.png', source: 'internal' }], 'workspace', async () => ({ ok: true, path: 'image.png', kind: 'image', contents: png, mediaType: 'image/png' }), signal);
 		for (const provider of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) {
 			let calls = 0;
-			const generate = createGenerator(async () => ({ provider, ...providers[provider], model: 'vision', parameters: {}, apiKey: 'test', capabilities: { ...unknownCapabilities, purpose: 'chat', vision: 'supported' } }), async (_url, options) => {
+			const generate = createGenerator(async () => ({ provider, ...providers[provider], model: 'vision', parameters: {}, apiKey: 'test', capabilities: { ...defaultCapabilities, purpose: 'chat', vision: true } }), async (_url, options) => {
 				calls++;
 				const content = JSON.parse(String(options?.body)).messages.find((item: { role: string }) => item.role === 'user').content;
 				assert.ok(content.some((part: { type: string; image_url?: { url: string } }) => part.type === 'image_url' && part.image_url?.url === 'data:image/png;base64,' + png));

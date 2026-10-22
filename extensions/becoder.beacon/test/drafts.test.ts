@@ -65,7 +65,7 @@ suite('Beacon conversation drafts', () => {
 		await history.dispose();
 	});
 	test('validates persisted draft material before restoring it', () => {
-		for (const draft of [null, { text: 1, attachments: [] }, { text: '', attachments: [{ ...attachment, source: 'unknown' }] }]) {
+		for (const draft of [null, { text: 1, attachments: [] }, { text: '', attachments: [{ ...attachment, source: 'default' }] }]) {
 			assert.throws(() => readHistory({ version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), draft }] }), /invalid-history/);
 		}
 	});

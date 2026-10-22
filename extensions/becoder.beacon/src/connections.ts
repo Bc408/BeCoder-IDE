@@ -76,7 +76,7 @@ export class Connections implements vscode.Disposable {
 		if (this.pending) { this.refreshNeeded = true; } else { void this.refresh(); }
 	}
 	get settings(): SettingsSnapshot {
-		return structuredClone({ ...this.data, supplierEnabled: this.supplierEnabled, providerTest: this.tests.snapshot, discovery: this.discovery, parameterIssues: Object.fromEntries(this.data.providers.deepseek.models.map(model => [model.id, modelParameterIssues('deepseek', this.data.providers.deepseek.baseURL, model)])), revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error, keyConfigured: Object.fromEntries(Object.keys(providers).map(id => [id, !!this.keys[id as ProviderId]])) });
+		return structuredClone({ ...this.data, supplierEnabled: this.supplierEnabled, providerTest: this.tests.snapshot, discovery: this.discovery, parameterIssues: Object.fromEntries(this.data.providers.deepseek.models.map(model => [model.id, modelParameterIssues('deepseek', this.data.providers.deepseek.baseURL, model)])), revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error, keyConfigured: Object.fromEntries(Object.keys(providers).map(id => [id, !!this.keys[id as ProviderId]])), keyPreview: { deepseek: this.keys.deepseek && this.keys.deepseek.length > 12 ? this.keys.deepseek.slice(0, 2) + '••••••' + this.keys.deepseek.slice(-4) : '••••••••' } });
 	}
 	get snapshot(): ConnectionState {
 		const stamp = `${this.revision}:${this.pending}:${this.refreshing}:${this.error}`;
@@ -145,6 +145,13 @@ export class Connections implements vscode.Disposable {
 			const profile = data.providers[value.provider];
 			if (profile.enabled === undefined && this.supplierEnabled) { profile.enabled = true; }
 			switch (value.type) {
+				case 'saveKey': {
+					if ((value.clearKey !== undefined && typeof value.clearKey !== 'boolean') || (value.clearKey ? value.key !== undefined : typeof value.key !== 'string' || !value.key.trim() || value.key.length > 4096)) { throw new Error('invalid-connection'); }
+					await this.writeKey(value.provider, value.clearKey ? undefined : value.key!.trim());
+					this.keys[value.provider] = value.clearKey ? undefined : value.key!.trim();
+					this.tests.clear(); this.cancelDiscovery(); this.revision++;
+					break;
+				}
 				case 'saveConnection': {
 					if (typeof value.baseURL !== 'string' || (value.clearKey !== undefined && typeof value.clearKey !== 'boolean') || (value.key !== undefined && (typeof value.key !== 'string' || value.key.length > 4096)) || (value.clearKey && value.key?.trim())) { throw new Error('invalid-connection'); }
 					const baseURL = normalizeBaseURL(value.baseURL, value.provider);

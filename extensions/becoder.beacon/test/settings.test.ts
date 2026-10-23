@@ -8,9 +8,8 @@ import * as assert from 'node:assert/strict';
 import type * as vscode from 'vscode';
 import { Connections, connectionError } from '../src/connections';
 import { RequestRecovery } from '../src/requestRecovery';
-import { secretName } from '../src/connection';
-import { emptyConfiguration, replaceDiscoveredModels, modelParameterIssues, parseConfiguration, parseModel, parameterPolicy, validateModel, type SettingsCommand } from '../src/modelConfiguration';
-import { resolveCapabilities } from '../src/models';
+import { secretName, type ProviderId } from '../src/connection';
+import { emptyConfiguration, replaceDiscoveredModels, modelParameterIssues, parseConfiguration, parseModel, validateModel, type SettingsCommand } from '../src/modelConfiguration';
 import * as mock from './vscodeMock';
 
 async function fixture(run: (connections: Connections, context: ReturnType<typeof mock.reset>) => Promise<void>) {
@@ -18,21 +17,109 @@ async function fixture(run: (connections: Connections, context: ReturnType<typeo
 	const connections = new Connections(context as unknown as vscode.ExtensionContext, () => {});
 	try { await connections.refresh(); await run(connections, context); } finally { connections.dispose(); }
 }
-function apply(connections: Connections, command: Omit<SettingsCommand, 'revision' | 'requestId' | 'provider'>) {
+function apply(connections: Connections, command: Omit<SettingsCommand, 'revision' | 'requestId' | 'provider'> & { provider?: ProviderId }) {
 	return connections.apply({ provider: 'deepseek', revision: connections.settings.revision, requestId: 1, ...command });
 }
 
 suite('Beacon settings', () => {
+	test('provider state, keys and equal model IDs retain their provider identity', async () => fixture(async (connections, context) => {
+		const data = emptyConfiguration();
+		for (const provider of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) {
+			data.providers[provider].enabled = true;
+			data.providers[provider].models = [parseModel({ id: 'same-id', name: provider, parameters: {}, settings: {} })];
+			if (provider !== 'ollama') { await context.secrets.store(secretName(provider), provider + '-private-credential'); }
+		}
+		data.selection = { provider: 'deepseek', model: 'same-id' };
+		mock.values.set('modelConfiguration', data); await connections.refresh();
+		assert.deepStrictEqual(connections.snapshot.choices?.map(model => [model.provider, model.id]), ['deepseek', 'bailian', 'moonshot', 'ollama'].map(provider => [provider, 'same-id']));
+		for (const provider of ['bailian', 'moonshot', 'ollama'] as const) {
+			await apply(connections, { type: 'selectModel', provider, id: 'same-id' });
+			assert.equal(connections.configured, true);
+			assert.deepStrictEqual(connections.settings.selection, { provider, model: 'same-id' });
+			assert.equal(connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false).source.provider, provider);
+		}
+		assert.equal(connections.snapshot.keyConfigured, false, 'Local Ollama requires no API key');
+		await apply(connections, { type: 'toggleProvider', provider: 'bailian', enabled: false });
+		assert.deepStrictEqual(connections.settings.selection, { provider: 'ollama', model: 'same-id' });
+		assert.equal(connections.settings.providers.bailian.enabled, false);
+		assert.equal(connections.settings.providers.moonshot.enabled, true);
+		await apply(connections, { type: 'removeModel', provider: 'moonshot', id: 'same-id' });
+		assert.equal(connections.settings.selection?.provider, 'ollama');
+		await apply(connections, { type: 'toggleProvider', provider: 'ollama', enabled: false });
+		assert.equal(connections.settings.selection, undefined);
+		await apply(connections, { type: 'toggleProvider', provider: 'ollama', enabled: true });
+		assert.equal(connections.settings.selection, undefined);
+		assert.equal(await connections.accessKey('reveal', connections.settings.revision, 'moonshot'), 'moonshot-private-credential');
+		assert.ok(!JSON.stringify(connections.settings).includes('private-credential'));
+	}));
+	test('model discovery confirmation cannot cross provider ownership', async () => fixture(async connections => {
+		const original = globalThis.fetch;
+		try {
+			globalThis.fetch = async () => Response.json({ data: [{ id: 'same-id' }] });
+			await apply(connections, { type: 'fetchModels' });
+			const candidate = connections.settings.discovery!;
+			await assert.rejects(apply(connections, { type: 'confirmModels', provider: 'bailian', discoveryId: candidate.id, ids: ['same-id'] }), /settings-stale/);
+			assert.equal(connections.settings.providers.bailian.models.length, 0);
+			assert.equal(connections.settings.discovery?.id, candidate.id);
+		} finally { globalThis.fetch = original; }
+	}));
+	test('switching providers preserves the previous legacy provider enabled state', async () => fixture(async (connections, context) => {
+		const data = parseConfiguration(mock.values.get('modelConfiguration'));
+		data.providers.bailian = { ...data.providers.bailian, enabled: true, models: [parseModel({ id: 'qwen', name: 'Qwen', parameters: {}, settings: {} })] };
+		mock.values.set('modelConfiguration', data); await connections.refresh();
+		await assert.rejects(apply(connections, { type: 'selectModel', provider: 'bailian', id: 'qwen' }), /model-unavailable/);
+		await context.secrets.store(secretName('bailian'), 'bailian-key'); await connections.refresh();
+		await apply(connections, { type: 'selectModel', provider: 'bailian', id: 'qwen' });
+		assert.equal(connections.settings.providers.deepseek.enabled, true);
+		assert.ok(connections.snapshot.choices?.some(model => model.provider === 'deepseek'));
+		await apply(connections, { type: 'toggleProvider', provider: 'bailian', enabled: false });
+		assert.equal(connections.settings.selection, undefined);
+		assert.equal(connections.settings.providers.deepseek.enabled, true);
+	}));
+	test('parameter conflicts and saved edits are isolated by provider even with equal IDs', async () => fixture(async (connections, context) => {
+		const data = emptyConfiguration();
+		for (const provider of ['bailian', 'moonshot'] as const) {
+			data.providers[provider].enabled = true;
+			data.providers[provider].models = [parseModel({ id: 'same-id', name: provider, parameters: { maxOutputTokens: 10000 }, settings: { overrides: { maxOutputTokens: provider === 'bailian' ? 5000 : 20000 } } })];
+		}
+		data.selection = { provider: 'moonshot', model: 'same-id' };
+		mock.values.set('modelConfiguration', data); await context.secrets.store(secretName('moonshot'), 'moonshot-key'); await connections.refresh();
+		assert.deepStrictEqual(connections.settings.parameterIssues?.bailian?.['same-id'], [{ field: 'maxOutputTokens', code: 'exceeds-limit' }]);
+		assert.deepStrictEqual(connections.settings.parameterIssues?.moonshot?.['same-id'], []);
+		const before = connections.settings.providers.moonshot;
+		await apply(connections, { type: 'saveConnection', provider: 'bailian', baseURL: 'https://bailian.example/v1', key: 'bailian-key' });
+		assert.deepStrictEqual(connections.settings.providers.moonshot, before);
+		assert.deepStrictEqual(connections.settings.selection, { provider: 'moonshot', model: 'same-id' });
+		assert.equal(await connections.accessKey('reveal', connections.settings.revision, 'bailian'), 'bailian-key');
+		assert.equal(await connections.accessKey('reveal', connections.settings.revision, 'moonshot'), 'moonshot-key');
+	}));
+	test('Ollama discovery and batch testing use the saved local endpoint without a key', async () => fixture(async connections => {
+		const original = globalThis.fetch;
+		const calls: string[] = [];
+		try {
+			globalThis.fetch = async (url, options) => {
+				calls.push(String(url));
+				if (!options?.method || options.method === 'GET') { return String(url).endsWith('/api/tags') ? Response.json({ models: [{ name: 'local-model' }] }) : Response.json({ data: [{ id: 'local-model' }] }); }
+				return new Response('data: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+			};
+			await apply(connections, { type: 'fetchModels', provider: 'ollama' });
+			assert.equal(connections.settings.discovery?.provider, 'ollama');
+			await apply(connections, { type: 'confirmModels', provider: 'ollama', discoveryId: connections.settings.discovery!.id, ids: ['local-model'] });
+			await apply(connections, { type: 'testProvider', provider: 'ollama' });
+			assert.deepStrictEqual(connections.settings.providerTest?.models.map(model => model.status), ['success']);
+			assert.ok(calls.every(url => url.startsWith('http://localhost:11434/')));
+		} finally { globalThis.fetch = original; }
+	}));
 	test('legacy capability overrides persist as booleans', () => {
 		const model = parseModel({ id: 'legacy', name: 'Legacy', parameters: {}, settings: { overrides: { vision: 'unknown', reasoning: 'supported', tools: 'unsupported' } }, discovered: { vision: 'unsupported', tools: 'unknown' } });
 		assert.deepStrictEqual(model.settings.overrides, { vision: true, reasoning: true, tools: false });
 		assert.equal(model.discovered?.vision, false); assert.equal(model.discovered?.tools, true);
 	});
-	test('disabled reasoning clears dependent settings while preserving sampling and capacities', () => {
+	test('reading disabled reasoning preserves conflicting settings for explicit resolution', () => {
 		const model = parseModel({ id: 'opaque', name: 'Mine', parameters: { temperature: 0.3, topP: 0.8 }, settings: { thinking: 'enabled', effort: 'high', overrides: { reasoning: false, maxInputTokens: 12000 } } });
-		assert.deepStrictEqual(model.settings, { overrides: { reasoning: false, maxInputTokens: 12000 } });
+		assert.deepStrictEqual(model.settings, { thinking: 'enabled', effort: 'high', overrides: { reasoning: false, maxInputTokens: 12000 } });
 		assert.deepStrictEqual(model.parameters, { temperature: 0.3, topP: 0.8 });
-		assert.deepStrictEqual(modelParameterIssues('deepseek', 'https://api.deepseek.com', model), []);
+		assert.deepStrictEqual(modelParameterIssues('deepseek', 'https://api.deepseek.com', model), [{ field: 'thinking', code: 'unsupported' }, { field: 'effort', code: 'unsupported' }]);
 	});
 	test('saving or deleting only the key preserves address, model settings and selection', async () => fixture(async (connections, context) => {
 		const before = connections.settings.providers;
@@ -54,18 +141,18 @@ suite('Beacon settings', () => {
 
 	test('explicit settings key access checks revision without publishing credentials in snapshots', async () => fixture(async connections => {
 		const revision = connections.settings.revision;
-		assert.equal(await connections.accessKey('reveal', revision), 'mock-secret');
-		assert.equal(await connections.accessKey('copy', revision), undefined);
+		assert.equal(await connections.accessKey('reveal', revision, 'deepseek'), 'mock-secret');
+		assert.equal(await connections.accessKey('copy', revision, 'deepseek'), undefined);
 		assert.ok(!JSON.stringify(connections.settings).includes('mock-secret'));
 		await apply(connections, { type: 'toggleProvider', enabled: false });
-		await assert.rejects(connections.accessKey('reveal', revision), /settings-stale/);
+		await assert.rejects(connections.accessKey('reveal', revision, 'deepseek'), /settings-stale/);
 	}));
 
 	test('removing a legacy selected model does not implicitly disable its supplier', async () => fixture(async connections => {
-		assert.equal(connections.supplierEnabled, true);
+		assert.equal(connections.enabled('deepseek'), true);
 		await apply(connections, { type: 'removeModel', id: 'deepseek-flash' });
 		assert.equal(connections.settings.selection, undefined);
-		assert.equal(connections.supplierEnabled, true);
+		assert.equal(connections.enabled('deepseek'), true);
 		assert.deepStrictEqual(connections.snapshot.choices?.map(model => model.id), ['deepseek-chat']);
 	}));
 
@@ -86,12 +173,12 @@ suite('Beacon settings', () => {
 			await assert.rejects(apply(connections, { type: 'confirmModels', discoveryId: candidate.id, ids: [] }), /settings-stale/);
 		} finally { delete mock.controls.updateError; globalThis.fetch = original; }
 	}));
-	test('legacy hidden provider data and disabled models survive without becoming selectable', async () => fixture(async connections => {
+	test('legacy provider data survives and explicitly disabled models remain unavailable', async () => fixture(async connections => {
 		const data = emptyConfiguration();
 		data.providers.bailian.models = [parseModel({ id: 'private-model', name: 'Keep me', enabled: false, parameters: { topP: 0.7 }, settings: {} })];
 		data.selection = { provider: 'bailian', model: 'private-model' };
 		mock.values.set('modelConfiguration', data); await connections.refresh();
-		assert.deepStrictEqual(connections.settings.providers.bailian, data.providers.bailian);
+		assert.deepStrictEqual(connections.settings.providers.bailian, { ...data.providers.bailian, enabled: true });
 		assert.deepStrictEqual(connections.settings.selection, data.selection);
 		assert.equal(connections.configured, false); assert.deepStrictEqual(connections.snapshot.choices, []);
 	}));
@@ -103,8 +190,25 @@ suite('Beacon settings', () => {
 			await apply(connections, { type: 'fetchModels' });
 			await apply(connections, { type: 'confirmModels', discoveryId: connections.settings.discovery!.id, ids: ['deepseek-flash'] });
 			assert.equal(connections.settings.providers.deepseek.models[0].parameters.maxOutputTokens, 300000);
-			assert.deepStrictEqual(connections.settings.parameterIssues?.['deepseek-flash'], [{ field: 'maxOutputTokens', code: 'exceeds-limit' }]);
+			assert.deepStrictEqual(connections.settings.parameterIssues?.deepseek?.['deepseek-flash'], [{ field: 'maxOutputTokens', code: 'exceeds-limit' }]);
 			assert.throws(() => connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false), /output-limit/);
+		} finally { globalThis.fetch = original; }
+	}));
+	test('refreshed reasoning conflicts survive configuration reload until explicitly resolved', async () => fixture(async connections => {
+		const original = globalThis.fetch;
+		try {
+			await apply(connections, { type: 'saveModel', originalId: 'deepseek-flash', model: { id: 'deepseek-flash', name: 'Mine', parameters: {}, settings: { thinking: 'enabled', effort: 'high' } } });
+			globalThis.fetch = async () => Response.json({ data: [{ id: 'deepseek-flash', reasoning: false }] });
+			await apply(connections, { type: 'fetchModels' });
+			await apply(connections, { type: 'confirmModels', discoveryId: connections.settings.discovery!.id, ids: ['deepseek-flash'] });
+			await connections.refresh();
+			assert.deepStrictEqual(connections.settings.providers.deepseek.models[0].settings, { thinking: 'enabled', effort: 'high' });
+			assert.deepStrictEqual(connections.settings.parameterIssues?.deepseek?.['deepseek-flash'], [{ field: 'thinking', code: 'unsupported' }, { field: 'effort', code: 'unsupported' }]);
+			assert.throws(() => connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false), /invalid-thinking/);
+			const model = connections.settings.providers.deepseek.models[0];
+			await apply(connections, { type: 'saveModel', originalId: model.id, model: { ...model, settings: { overrides: { reasoning: false } } } });
+			await connections.refresh();
+			assert.deepStrictEqual(connections.settings.parameterIssues?.deepseek?.[model.id], []);
 		} finally { globalThis.fetch = original; }
 	}));
 
@@ -149,7 +253,7 @@ suite('Beacon settings', () => {
 	test('fresh configuration ignores all old keys and never picks the first model', async () => fixture(async connections => {
 		mock.values.delete('modelConfiguration'); mock.values.set('provider', 'deepseek'); mock.values.set('deepseek.model', 'deepseek-chat');
 		await connections.refresh();
-		assert.deepStrictEqual(connections.settings.providers, emptyConfiguration().providers);
+		assert.ok(Object.values(connections.settings.providers).every(profile => profile.models.length === 0 && profile.enabled === false));
 		assert.equal(connections.configured, false); assert.equal(connections.settings.selection, undefined);
 		await apply(connections, { type: 'saveModel', model: { id: 'new', name: 'New', enabled: true, parameters: {}, settings: {} } });
 		assert.equal(connections.settings.selection, undefined);
@@ -162,8 +266,6 @@ suite('Beacon settings', () => {
 		assert.throws(() => parseModel({ ...model, parameters: { topP: NaN } }), /invalid-model-parameter/);
 		assert.throws(() => parseModel({ ...model, settings: { overrides: { tools: 'yes' } } }), /invalid-model-capability/);
 		assert.throws(() => validateModel('moonshot', 'https://api.moonshot.cn/v1', { ...model, settings: { effort: 'max' } }), /invalid-effort/);
-		const reasoning = resolveCapabilities('deepseek', 'https://api.deepseek.com', 'deepseek-reasoner');
-		assert.equal(parameterPolicy('deepseek', 'deepseek-reasoner', reasoning, {}).fixedThinking, false);
 		assert.throws(() => validateModel('deepseek', 'https://api.deepseek.com', { ...model, id: 'deepseek-reasoner', settings: {}, parameters: { temperature: 1 } }), /unsupported-sampling/);
 		assert.throws(() => validateModel('deepseek', 'https://other.example/v1', { ...model, id: 'deepseek-flash', settings: {}, parameters: { temperature: 0.4 } }), /unsupported-sampling/);
 		validateModel('deepseek', 'https://other.example/v1', { ...model, id: 'deepseek-flash', settings: { thinking: 'disabled', overrides: { reasoning: true } }, parameters: { temperature: 0.4 } });

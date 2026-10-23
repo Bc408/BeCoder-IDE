@@ -10,7 +10,7 @@ import { InvalidToolInputError, jsonSchema, stepCountIs, streamText, tool, type 
 import { fileModelOutput, type Generate, type ToolActivity } from './session';
 import { safeFileError, type FileInput, type FileOutput, type FilePermission, type FileRoot } from './fileTools';
 import { ConnectionError, normalizeBaseURL, type Connection, type ModelInfo, type ProviderId } from './connection';
-import { ModelCapabilityError, reasoningOptions, resolveCapabilities, serviceCapabilities, type ModelCapabilities } from './models';
+import { defaultCapabilities, ModelCapabilityError, reasoningOptions, resolveCapabilities, serviceCapabilities, validCapability, type ModelCapabilities } from './models';
 import { ProtocolRecorder } from './protocol';
 import { createWebTool, webModelOutput, type WebInput, type WebOutput } from './webTools';
 import { toolErrorCode, type ToolError } from './toolFeedback';
@@ -25,7 +25,7 @@ interface ProviderAdapter {
 
 function options(connection: Connection, request: typeof fetch) {
 	return {
-		apiKey: connection.apiKey,
+		apiKey: connection.apiKey || (connection.provider === 'ollama' ? 'ollama' : undefined),
 		baseURL: normalizeBaseURL(connection.baseURL, connection.provider),
 		fetch: ((url, init) => request(url, { ...init, redirect: 'error' })) as typeof fetch,
 	};
@@ -52,19 +52,64 @@ function headers(connection: Connection): Record<string, string> {
 	return connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : {};
 }
 
-function modelInfo(connection: Connection, id: unknown, metadata?: unknown): ModelInfo {
-	if (typeof id !== 'string' || !id.trim() || id.length > 256) { throw new Error('invalid-model-list'); }
-	return { id, provider: connection.provider, capabilities: resolveCapabilities(connection.provider, connection.baseURL, id, serviceCapabilities(metadata)) };
+function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
+function safeModelText(value: unknown, maximum: number): value is string { return typeof value === 'string' && !!value.trim() && value.length <= maximum && !/[\x00-\x1f\x7f-\x9f]/.test(value); }
+
+function validateMetadata(value: Record<string, unknown>): void {
+	for (const field of ['purpose', 'vision', 'reasoning', 'tools', 'contextWindow', 'maxInputTokens', 'maxOutputTokens', 'reasoningEfforts'] as const) {
+		if (value[field] !== undefined && !validCapability(field, value[field])) { throw new Error('invalid-model-list'); }
+	}
+	for (const field of ['capabilities', 'features', 'input_modalities', 'output_modalities']) {
+		if (value[field] !== undefined && (!Array.isArray(value[field]) || !value[field].every(item => typeof item === 'string'))) { throw new Error('invalid-model-list'); }
+	}
+	if (value.model_info !== undefined && !record(value.model_info)) { throw new Error('invalid-model-list'); }
+	for (const info of [value, record(value.model_info) ? value.model_info : {}]) {
+		for (const [key, field] of [['context_window', 'contextWindow'], ['max_input_tokens', 'maxInputTokens'], ['max_output_tokens', 'maxOutputTokens']] as const) {
+			if (info[key] !== undefined && info[key] !== null && !validCapability(field, info[key])) { throw new Error('invalid-model-list'); }
+		}
+	}
+	if (value.inference_metadata !== undefined) {
+		if (!record(value.inference_metadata)) { throw new Error('invalid-model-list'); }
+		for (const key of ['request_modality', 'response_modality']) {
+			const modalities = value.inference_metadata[key];
+			if (modalities !== undefined && (!Array.isArray(modalities) || !modalities.every(item => typeof item === 'string'))) { throw new Error('invalid-model-list'); }
+		}
+	}
+}
+
+function modelInfo(connection: Connection, id: unknown, metadata: unknown): ModelInfo {
+	if (!safeModelText(id, 256) || !record(metadata) || (metadata.name !== undefined && !safeModelText(metadata.name, 120))) { throw new Error('invalid-model-list'); }
+	validateMetadata(metadata);
+	const declared = serviceCapabilities(metadata);
+	// Ollama detail is merged before capacity defaults so missing fields stay distinguishable.
+	const capabilities = connection.provider === 'ollama' ? declared ?? { ...defaultCapabilities } : resolveCapabilities(connection.provider, connection.baseURL, id, declared);
+	const modalities = record(metadata.inference_metadata) ? metadata.inference_metadata : {};
+	for (const values of [metadata.input_modalities ?? modalities.request_modality, metadata.output_modalities ?? modalities.response_modality]) {
+		if (Array.isArray(values) && !values.some(item => typeof item === 'string' && item.toLowerCase() === 'text')) { capabilities.purpose = 'image'; }
+	}
+	return { id: id.trim(), ...(metadata.name ? { name: String(metadata.name).trim() } : {}), provider: connection.provider, capabilities };
+}
+
+function addModel(models: Map<string, ModelInfo>, model: ModelInfo): void {
+	const previous = models.get(model.id);
+	if (previous && JSON.stringify(previous) !== JSON.stringify(model)) { throw new Error('invalid-model-list'); }
+	models.set(model.id, model);
+}
+
+function chatModels(models: Iterable<ModelInfo>): ModelInfo[] {
+	return [...models].filter(model => ['chat', 'unknown'].includes(model.capabilities?.purpose ?? 'chat')).sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** No redirects with credentials; no provider error body is exposed to the UI. */
 async function listCompatibleModels(connection: Connection, signal: AbortSignal, request: typeof fetch): Promise<ModelInfo[]> {
 	const response = await request(`${normalizeBaseURL(connection.baseURL, connection.provider)}/models`, { headers: headers(connection), signal, redirect: 'error' });
 	if (!response.ok) { throw new ConnectionError(response.status); }
-	const body = await response.json() as { data?: { id?: unknown }[] };
+	const body: unknown = await response.json();
 	if (connection.provider === 'deepseek') { return parseDeepSeekModels(body); }
-	if (!Array.isArray(body.data)) { throw new Error('invalid-model-list'); }
-	return [...new Map(body.data.map(entry => modelInfo(connection, entry?.id, entry)).map(model => [model.id, model])).values()].sort((a, b) => a.id.localeCompare(b.id));
+	if (!record(body) || !Array.isArray(body.data) || body.data.length > 2000) { throw new Error('invalid-model-list'); }
+	const models = new Map<string, ModelInfo>();
+	for (const entry of body.data) { addModel(models, modelInfo(connection, record(entry) ? entry.id : undefined, entry)); }
+	return chatModels(models.values());
 }
 
 async function listBailianModels(connection: Connection, signal: AbortSignal, request: typeof fetch): Promise<ModelInfo[]> {
@@ -72,15 +117,22 @@ async function listBailianModels(connection: Connection, signal: AbortSignal, re
 	if (!baseURL.endsWith('/compatible-mode/v1')) { return listCompatibleModels(connection, signal, request); }
 	const models = new Map<string, ModelInfo>();
 	let count = 0;
-	for (let page = 1; page <= 50; page++) {
+	for (let page = 1; page <= 2000; page++) {
 		const response = await request(`${baseURL.replace(/\/compatible-mode\/v1$/, '/api/v1')}/models?page_no=${page}&page_size=100&capabilities=TG`, { headers: headers(connection), signal, redirect: 'error' });
 		if (!response.ok) { throw new ConnectionError(response.status); }
-		const body = await response.json() as { output?: { models?: { model?: unknown }[]; total?: number } };
-		const entries = body.output?.models;
-		if (!Array.isArray(entries)) { throw new Error('invalid-model-list'); }
-		for (const entry of entries) { const model = modelInfo(connection, entry?.model, entry); models.set(model.id, model); }
+		const body: unknown = await response.json();
+		if (!record(body) || body.success === false || !record(body.output)) { throw new Error('invalid-model-list'); }
+		const { models: entries, total } = body.output;
+		if (!Array.isArray(entries) || entries.length > 100 || (total !== undefined && (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0 || total > 2000)) || count + entries.length > 2000) { throw new Error('invalid-model-list'); }
+		const previousIds = new Set(models.keys());
+		for (const entry of entries) { addModel(models, modelInfo(connection, record(entry) ? entry.model : undefined, entry)); }
 		count += entries.length;
-		if (!entries.length || (typeof body.output?.total === 'number' ? count >= body.output.total : entries.length < 100)) { return [...models.values()].sort((a, b) => a.id.localeCompare(b.id)); }
+		if (entries.length > 0 && entries.every(entry => record(entry) && typeof entry.model === 'string' && previousIds.has(entry.model.trim()))) { throw new Error('invalid-model-list'); }
+		if (typeof total === 'number') {
+			if (count > total || (!entries.length && count < total)) { throw new Error('invalid-model-list'); }
+			if (count === total) { return chatModels(models.values()); }
+		} else if (entries.length < 100) { return chatModels(models.values()); }
+		if (count === 2000) { throw new Error('invalid-model-list'); }
 	}
 	throw new Error('model-list-too-large');
 }
@@ -93,33 +145,41 @@ async function listBailianModels(connection: Connection, signal: AbortSignal, re
 export async function listModels(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<ModelInfo[]> {
 	if (connection.provider !== 'ollama' && !connection.apiKey) { throw new ConnectionError(401); }
 	const models = await adapters[connection.provider].listModels(connection, signal, request);
-	if (connection.provider === 'ollama' && connection.model) {
-		const detail = await inspectModel(connection, signal, request);
-		const selected = models.find(model => model.id === connection.model);
-		if (selected && detail) { selected.capabilities = detail; }
+	if (connection.provider === 'ollama') {
+		for (let start = 0; start < models.length; start += 4) {
+			signal.throwIfAborted();
+			await Promise.all(models.slice(start, start + 4).map(async model => {
+				try {
+					const detail = await inspectModel({ ...connection, model: model.id }, AbortSignal.any([signal, AbortSignal.timeout(5000)]), request);
+					if (detail) { model.capabilities = { ...model.capabilities, ...detail }; }
+				} catch { signal.throwIfAborted(); }
+			}));
+		}
+		for (const model of models) { model.capabilities = resolveCapabilities(connection.provider, connection.baseURL, model.id, model.capabilities); }
 	}
-	return models;
+	signal.throwIfAborted();
+	return chatModels(models);
 }
 
-/** Query only the selected local model; never inspect every installed model or change Ollama configuration. */
+/** Read one local model's metadata; never pull models or change runtime configuration. */
 export async function inspectModel(connection: Pick<Connection, 'provider' | 'baseURL' | 'model' | 'apiKey'>, signal: AbortSignal, request: typeof fetch = fetch): Promise<ModelCapabilities | undefined> {
 	if (connection.provider !== 'ollama' || !connection.model) { return; }
 	const baseURL = normalizeBaseURL(connection.baseURL, connection.provider);
-	if (!baseURL.endsWith('/v1')) { return; }
+	if (!baseURL.endsWith('/v1') || !['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname)) { return; }
 	const response = await request(`${baseURL.slice(0, -3)}/api/show`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : {}) }, body: JSON.stringify({ model: connection.model }), signal, redirect: 'error' });
 	if (response.status === 404) { return; }
 	if (!response.ok) { throw new ConnectionError(response.status); }
-	const value = await response.json() as { capabilities?: unknown; model_info?: Record<string, unknown> };
-	const capabilities = serviceCapabilities(value);
-	const context = Object.entries(value.model_info ?? {}).find(([key]) => key.endsWith('.context_length'))?.[1];
-	if (capabilities && typeof context === 'number' && Number.isSafeInteger(context) && context > 0 && context <= 10000000) { capabilities.contextWindow = context; }
-	return capabilities;
+	const value: unknown = await response.json();
+	if (!record(value)) { throw new Error('invalid-model-list'); }
+	validateMetadata(value);
+	const context = Object.entries(record(value.model_info) ? value.model_info : {}).find(([key]) => key.endsWith('.context_length'))?.[1];
+	return serviceCapabilities({ ...value, ...(validCapability('contextWindow', context) ? { contextWindow: context } : {}) }, true);
 }
 
 /** A user-triggered probe never receives conversation context or generation overrides. */
 export async function testModelConnection(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<void> {
 	const controller = new AbortController();
-	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), messages: [{ role: 'user', content: 'Reply with OK.' }], abortSignal: AbortSignal.any([signal, controller.signal]), maxRetries: 0 });
+	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), messages: [{ role: 'user', content: 'Reply with OK.' }], abortSignal: AbortSignal.any([signal, controller.signal]), maxRetries: 0, onError: () => {} });
 	try {
 		for await (const part of result.fullStream) {
 			if (part.type === 'error') { throw part.error; }

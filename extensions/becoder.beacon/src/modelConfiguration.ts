@@ -23,8 +23,7 @@ export interface ModelConfiguration {
 export interface SettingsSnapshot extends ModelConfiguration {
 	discovery?: ModelDiscovery;
 	providerTest?: ProviderTestSnapshot;
-	supplierEnabled?: boolean;
-	parameterIssues?: Record<string, ParameterIssue[]>;
+	parameterIssues?: Partial<Record<ProviderId, Record<string, ParameterIssue[]>>>;
 	revision: number;
 	keyConfigured: Partial<Record<ProviderId, boolean>>;
 	keyPreview?: Partial<Record<ProviderId, string>>;
@@ -64,7 +63,6 @@ export function parseModel(value: unknown): ConfiguredModel {
 	}
 	const settings = parseModelSettings(value.settings);
 	const discovered = value.discovered && (value.discovered as ModelCapabilities).source !== 'catalog' ? serviceCapabilities(value.discovered) : undefined;
-	if ((settings.overrides?.reasoning ?? discovered?.reasoning) === false) { delete settings.thinking; delete settings.effort; }
 	return { id: value.id.trim(), name: value.name.trim(), enabled: value.enabled, parameters, settings, ...(discovered ? { discovered } : {}) };
 }
 /** This is a fresh document format. Old configuration keys are intentionally never read. */
@@ -106,7 +104,7 @@ export function replaceDiscoveredModels(current: ProviderConfiguration, candidat
 export function parameterPolicy(provider: ProviderId, model: string, capabilities: ModelCapabilities, settings: ModelSettings) {
 	const defaultThinking = model === 'deepseek-reasoner' || model.includes('deepseek-v4') || model.startsWith('deepseek-flash') || model.startsWith('deepseek-pro');
 	const sampling = !(capabilities.reasoning && provider === 'deepseek' && settings.thinking !== 'disabled' && (settings.thinking === 'enabled' || defaultThinking));
-	return { thinking: capabilities.reasoning, fixedThinking: false, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
+	return { thinking: capabilities.reasoning, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
 }
 export function modelParameterIssues(provider: ProviderId, baseURL: string, model: ConfiguredModel): ParameterIssue[] {
 	const capabilities = resolveCapabilities(provider, baseURL, model.id, model.discovered, model.settings);

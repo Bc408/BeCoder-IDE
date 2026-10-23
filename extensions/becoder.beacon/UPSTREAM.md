@@ -61,3 +61,7 @@ All code languages share the incremental renderer using pinned root `vscode-text
 ## DeepSeek provider mark
 
 resources/deepseek.svg comes from LobeHub lobe-icons, MIT, Copyright (c) 2023 LobeHub. Source: https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/deepseek-color.svg (retrieved 2026-10-20). Full license is licenses/lobe-icons.txt and is included in bundled notices. The logo identifies the service and does not imply affiliation.
+
+## Additional provider marks
+
+`resources/bailian-color.svg`, `resources/moonshot.svg` and `resources/ollama.svg` are unmodified LobeHub lobe-icons assets from commit `453719ea68e6d480d0109a598c5a4cf80cda6a84` (retrieved 2026-10-23). Source directory: https://github.com/lobehub/lobe-icons/tree/453719ea68e6d480d0109a598c5a4cf80cda6a84/packages/static-svg/icons . The MIT license is retained in `licenses/lobe-icons.txt` and bundled by `build.mjs`. These marks identify Alibaba Cloud Bailian, Moonshot and Ollama; they do not imply affiliation or trademark ownership. Monochrome marks receive a white CSS backing for visibility in both themes; SVG geometry is unchanged.

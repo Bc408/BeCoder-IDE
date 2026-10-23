@@ -76,7 +76,16 @@ export class Connections implements vscode.Disposable {
 		if (this.pending) { this.refreshNeeded = true; } else { void this.refresh(); }
 	}
 	get settings(): SettingsSnapshot {
-		return structuredClone({ ...this.data, supplierEnabled: this.supplierEnabled, providerTest: this.tests.snapshot, discovery: this.discovery, parameterIssues: Object.fromEntries(this.data.providers.deepseek.models.map(model => [model.id, modelParameterIssues('deepseek', this.data.providers.deepseek.baseURL, model)])), revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error, keyConfigured: Object.fromEntries(Object.keys(providers).map(id => [id, !!this.keys[id as ProviderId]])), keyPreview: { deepseek: this.keys.deepseek && this.keys.deepseek.length > 12 ? this.keys.deepseek.slice(0, 2) + '••••••' + this.keys.deepseek.slice(-4) : '••••••••' } });
+		const providerIds = Object.keys(providers) as ProviderId[];
+		return structuredClone({
+			...this.data,
+			providers: Object.fromEntries(providerIds.map(id => [id, { ...this.data.providers[id], enabled: this.enabled(id) }])) as ModelConfiguration['providers'],
+			providerTest: this.tests.snapshot, discovery: this.discovery,
+			parameterIssues: Object.fromEntries(providerIds.map(id => [id, Object.fromEntries(this.data.providers[id].models.map(model => [model.id, modelParameterIssues(id, this.data.providers[id].baseURL, model)]))])),
+			revision: this.revision, pending: this.pending || !!this.refreshing, error: this.error,
+			keyConfigured: Object.fromEntries(providerIds.map(id => [id, !!this.keys[id]])),
+			keyPreview: Object.fromEntries(providerIds.map(id => { const key = this.keys[id]; return [id, key && key.length > 12 ? key.slice(0, 2) + '••••••' + key.slice(-4) : '••••••••']; }))
+		});
 	}
 	get snapshot(): ConnectionState {
 		const stamp = `${this.revision}:${this.pending}:${this.refreshing}:${this.error}`;
@@ -85,7 +94,7 @@ export class Connections implements vscode.Disposable {
 		const provider = selection?.provider ?? 'deepseek';
 		const profile = this.data.providers[provider];
 		const model = profile.models.find(item => item.id === selection?.model);
-		const choices = this.supplierEnabled ? this.data.providers.deepseek.models.filter(item => ['chat', 'unknown'].includes(resolveCapabilities('deepseek', this.data.providers.deepseek.baseURL, item.id, item.discovered, item.settings).purpose)).map(item => ({ provider: 'deepseek' as const, id: item.id, name: item.name })) : [];
+		const choices = (Object.keys(providers) as ProviderId[]).flatMap(id => this.enabled(id) ? this.data.providers[id].models.filter(item => item.enabled !== false && ['chat', 'unknown'].includes(resolveCapabilities(id, this.data.providers[id].baseURL, item.id, item.discovered, item.settings).purpose)).map(item => ({ provider: id, id: item.id, name: item.name })) : []);
 		const snapshot = { provider, baseURL: profile.baseURL, model: model?.id ?? '', displayName: model?.name, parameters: model?.parameters ?? {}, modelSettings: model?.settings, capabilities: resolveCapabilities(provider, profile.baseURL, model?.id ?? '', model?.discovered, model?.settings), choices, revision: this.revision, keyConfigured: !!this.keys[provider], loading: this.pending || !!this.refreshing, error: this.error };
 		this.cached = { stamp, snapshot: structuredClone(snapshot) };
 		return snapshot;
@@ -94,14 +103,14 @@ export class Connections implements vscode.Disposable {
 		const selection = this.data.selection;
 		if (!selection || this.pending || this.refreshing || this.error) { return false; }
 		const state = this.snapshot;
-		return selection.provider === 'deepseek' && this.supplierEnabled && this.data.providers[selection.provider].models.some(item => item.id === selection.model) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
+		return this.enabled(selection.provider) && this.data.providers[selection.provider].models.some(item => item.id === selection.model && item.enabled !== false) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
 	}
-	get supplierEnabled(): boolean { return this.data.providers.deepseek.enabled ?? (this.data.selection?.provider === 'deepseek'); }
-	async accessKey(action: 'copy' | 'reveal', revision: number): Promise<string | undefined> {
+	enabled(provider: ProviderId): boolean { return this.data.providers[provider].enabled ?? (this.data.selection?.provider === provider); }
+	async accessKey(action: 'copy' | 'reveal', revision: number, provider: ProviderId): Promise<string | undefined> {
 		if (this.disposed || this.pending || this.refreshing || this.testing) { throw new Error('settings-pending'); }
-		if (revision !== this.revision || this.error) { throw new Error('settings-stale'); }
-		const key = await this.context.secrets.get(secretName('deepseek'));
-		if (this.disposed || revision !== this.revision || key !== this.keys.deepseek) { throw new Error('settings-stale'); }
+		if (!isProvider(provider) || revision !== this.revision || this.error) { throw new Error('settings-stale'); }
+		const key = await this.context.secrets.get(secretName(provider));
+		if (this.disposed || revision !== this.revision || key !== this.keys[provider]) { throw new Error('settings-stale'); }
 		if (action === 'copy') { await vscode.env.clipboard.writeText(key ?? ''); return; }
 		return key ?? '';
 	}
@@ -132,18 +141,18 @@ export class Connections implements vscode.Disposable {
 		if (value.type === 'cancelProviderTest') { this.tests.cancel(value.testId); return; }
 		if (value.type === 'cancelDiscovery') { this.cancelDiscovery(value.discoveryId); this.changed(); return; }
 		if (this.disposed || this.pending || this.refreshing || this.testing) { throw new Error('settings-pending'); }
-		if (value.provider !== 'deepseek' || !isProvider(value.provider) || !Number.isSafeInteger(value.revision) || value.revision !== this.revision) { throw new Error('settings-stale'); }
+		if (!isProvider(value.provider) || !Number.isSafeInteger(value.revision) || value.revision !== this.revision) { throw new Error('settings-stale'); }
 		if (this.error) { throw new Error('settings-unreadable'); }
 		if (value.type === 'testProvider') {
-			const profile = this.data.providers.deepseek;
-			if (!profile.models.length || !this.keys.deepseek) { throw new Error('model-unavailable'); }
-			await this.tests.start(profile.models.map(model => ({ provider: 'deepseek', baseURL: profile.baseURL, model: model.id, apiKey: this.keys.deepseek, parameters: {} })), this.revision); return;
+			const profile = this.data.providers[value.provider];
+			if (!profile.models.length || (value.provider !== 'ollama' && !this.keys[value.provider])) { throw new Error('model-unavailable'); }
+			await this.tests.start(profile.models.map(model => ({ provider: value.provider, baseURL: profile.baseURL, model: model.id, apiKey: this.keys[value.provider], parameters: {} })), this.revision); return;
 		}
 		this.pending = true; this.changed();
 		try {
 			const data = structuredClone(this.data);
 			const profile = data.providers[value.provider];
-			if (profile.enabled === undefined && this.supplierEnabled) { profile.enabled = true; }
+			if (profile.enabled === undefined && this.enabled(value.provider)) { profile.enabled = true; }
 			switch (value.type) {
 				case 'saveKey': {
 					if ((value.clearKey !== undefined && typeof value.clearKey !== 'boolean') || (value.clearKey ? value.key !== undefined : typeof value.key !== 'string' || !value.key.trim() || value.key.length > 4096)) { throw new Error('invalid-connection'); }
@@ -180,23 +189,28 @@ export class Connections implements vscode.Disposable {
 					validateModel(value.provider, profile.baseURL, model);
 					if (original && original.id !== model.id) { throw new Error('invalid-model'); }
 					if (original) { profile.models[profile.models.indexOf(original)] = model; } else { if (profile.models.length >= 2000) { throw new Error('model-limit'); } profile.models.push(model); }
-					this.clearInvalidSelection(data);
+					this.clearInvalidSelection(data, value.provider);
 					await this.persist(data); break;
 				}
 				case 'fetchModels': {
 					this.cancelDiscovery();
 					const job = new AbortController(); this.discoveryJob = job;
 					const revision = this.revision;
-					const models = await listModels({ provider: value.provider, baseURL: profile.baseURL, model: '', parameters: {}, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, job.signal, AbortSignal.timeout(20000)]));
-					if (job.signal.aborted || this.disposed || revision !== this.revision || this.refreshNeeded) { throw new Error('settings-stale'); }
-					this.discovery = { id: randomUUID(), revision, provider: value.provider, models };
-					this.discoveryJob = undefined; break;
+					try {
+						const models = await listModels({ provider: value.provider, baseURL: profile.baseURL, model: '', parameters: {}, apiKey: this.keys[value.provider] }, AbortSignal.any([this.controller.signal, job.signal, AbortSignal.timeout(20000)]));
+						if (job.signal.aborted || this.disposed || revision !== this.revision || this.refreshNeeded) { throw new Error('settings-stale'); }
+						this.discovery = { id: randomUUID(), revision, provider: value.provider, models };
+					} catch (error) {
+						if (job.signal.aborted || this.disposed || revision !== this.revision || this.refreshNeeded) { throw new Error('settings-stale'); }
+						throw error;
+					} finally { if (this.discoveryJob === job) { this.discoveryJob = undefined; } }
+					break;
 				}
 				case 'confirmModels': {
 					const candidate = this.discovery;
-					if (!candidate || candidate.id !== value.discoveryId || candidate.revision !== this.revision || !Array.isArray(value.ids) || value.ids.some(id => typeof id !== 'string')) { throw new Error('settings-stale'); }
+					if (!candidate || candidate.provider !== value.provider || candidate.id !== value.discoveryId || candidate.revision !== this.revision || !Array.isArray(value.ids) || value.ids.some(id => typeof id !== 'string')) { throw new Error('settings-stale'); }
 					data.providers[value.provider] = replaceDiscoveredModels(profile, candidate.models, value.ids);
-					this.clearInvalidSelection(data);
+					this.clearInvalidSelection(data, value.provider);
 					await this.persist(data); this.discovery = undefined; break;
 				}
 				case 'toggleProvider': {
@@ -209,9 +223,10 @@ export class Connections implements vscode.Disposable {
 					const model = profile.models.find(item => item.id === value.id);
 					if (!model) { throw new Error('settings-stale'); }
 					if (value.type === 'selectModel') {
-						if (!this.supplierEnabled || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || !this.keys[value.provider]) { throw new Error('model-unavailable'); }
+						if (!this.enabled(value.provider) || model.enabled === false || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || (value.provider !== 'ollama' && !this.keys[value.provider])) { throw new Error('model-unavailable'); }
+						if (data.selection && data.providers[data.selection.provider].enabled === undefined) { data.providers[data.selection.provider].enabled = true; }
 						data.selection = { provider: value.provider, model: model.id };
-					} else { profile.models.splice(profile.models.indexOf(model), 1); this.clearInvalidSelection(data); }
+					} else { profile.models.splice(profile.models.indexOf(model), 1); this.clearInvalidSelection(data, value.provider); }
 					await this.persist(data); break;
 				}
 				default: throw new Error('invalid-settings-command');
@@ -222,11 +237,11 @@ export class Connections implements vscode.Disposable {
 			this.changed();
 		}
 	}
-	private clearInvalidSelection(data: ModelConfiguration): void {
-		if (!data.selection || data.selection.provider !== 'deepseek') { return; }
-		const profile = data.providers.deepseek;
+	private clearInvalidSelection(data: ModelConfiguration, provider: ProviderId): void {
+		if (!data.selection || data.selection.provider !== provider) { return; }
+		const profile = data.providers[provider];
 		const model = profile.models.find(item => item.id === data.selection!.model);
-		if (!model || !['chat', 'unknown'].includes(resolveCapabilities('deepseek', profile.baseURL, model.id, model.discovered, model.settings).purpose)) { delete data.selection; }
+		if (profile.enabled === false || !model || model.enabled === false || !['chat', 'unknown'].includes(resolveCapabilities(provider, profile.baseURL, model.id, model.discovered, model.settings).purpose)) { delete data.selection; }
 	}
 	private async writeKey(provider: ProviderId, key: string | undefined): Promise<void> {
 		if (key) { await this.context.secrets.store(secretName(provider), key); } else { await this.context.secrets.delete(secretName(provider)); }

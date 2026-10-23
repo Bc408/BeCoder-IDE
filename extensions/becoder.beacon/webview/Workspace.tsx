@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import { Icon } from './Icon';
+import eyeClosedIcon from '@vscode/codicons/src/icons/eye-closed.svg';
 import './workspace.css';
 
 const zh = document.documentElement.lang.startsWith('zh');
@@ -146,7 +147,7 @@ export function Workspace({ context, busy, post }: { context?: IBeaconContext; b
 						<span className="workspace-expanded-label">{current ? <Path path={current} /> : <span>{label('Choose workspace', '选择工作区')}</span>}</span>
 						{status && <span className="workspace-status-label">{folder} {statusText}</span>}
 					</span>
-					{!open && (status === 'hidden' ? <svg className="workspace-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m5 5 14 14M8 12a4 4 0 0 0 6 3M10 9a4 4 0 0 1 6 3" /></svg> : status === 'error' ? <span className="workspace-status-icon workspace-error-dot" aria-hidden="true">!</span> : null)}
+					{!open && (status === 'hidden' ? <span className="workspace-status-icon workspace-hidden-icon" aria-hidden="true" style={{ maskImage: `url(${JSON.stringify(eyeClosedIcon)})` }} /> : status === 'error' ? <span className="workspace-status-icon workspace-error-dot" aria-hidden="true">!</span> : null)}
 				</button>
 				{open && current && <button className="workspace-remove workspace-current-remove" type="button" disabled={disabled} aria-label={label(`Stop using ${current}`, `取消使用当前工作区 ${current}`)} data-becoder-tooltip={label('Stop using this workspace', '取消使用此工作区')} onClick={clearCurrent}><Icon name="close" /></button>}
 			</div>

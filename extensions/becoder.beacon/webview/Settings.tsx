@@ -6,11 +6,11 @@
 import { Children, cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { normalizeBaseURL, type ModelParameterName, type ProviderId } from '../src/connection';
 import { resolveCapabilities, type CapabilityField, type ModelCapabilities, type ModelSettings } from '../src/models';
-import { modelParameterIssues, parameterPolicy, type ConfiguredModel, type SettingsCommand, type SettingsResult, type SettingsSnapshot } from '../src/modelConfiguration';
+import { modelParameterIssues, parameterPolicy, type ConfiguredModel, type SettingsResult, type SettingsSnapshot } from '../src/modelConfiguration';
 import { ModelDiscoveryDialog, ModelSelect, ProviderSelector, SettingsDialog } from './SettingsDialogs';
 import { Notifications, type Notification } from './Notifications';
-import { ApiKeyDialog, ProviderTestResults, SavedApiKey } from './ApiKeyControls';
-import deepseekLogo from '../resources/deepseek.svg';
+import { ApiKeyDialog, ProviderTestResults, SavedApiKey, type RunSettings as Run } from './ApiKeyControls';
+import { ProviderMark, providerName } from './ProviderIdentity';
 import { Icon } from './Icon';
 
 const zh = document.documentElement.lang.startsWith('zh');
@@ -21,7 +21,6 @@ export function capabilitySummary(capabilities: ModelCapabilities): string {
 }
 
 
-type Run = (command: Omit<SettingsCommand, 'requestId' | 'provider' | 'revision'>, revision?: number) => Promise<boolean>;
 function Switch({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange(value: boolean): void }) {
 	return <button type="button" className="settings-switch" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}><span /></button>;
 }
@@ -41,19 +40,18 @@ function ConnectionForm({ provider, snapshot, run, dirtyChanged, post, enabled, 
 	const revision = useRef(snapshot.revision);
 	const originalAddress = useRef(saved);
 	const dirty = baseURL !== saved;
-	const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
 	useEffect(() => { dirtyChanged(dirty); }, [dirty, dirtyChanged]);
 	useEffect(() => {
-		if (!dirtyRef.current) { setBaseURL(saved); originalAddress.current = saved; revision.current = snapshot.revision; }
+		if (baseURL === originalAddress.current || baseURL === saved) { setBaseURL(saved); originalAddress.current = saved; revision.current = snapshot.revision; }
 		else if (saved === originalAddress.current) { revision.current = snapshot.revision; }
-	}, [saved, snapshot.revision]);
+	}, [saved, snapshot.revision, baseURL]);
 	return <section className="connection-form settings-card settings-connection">
-		<div className="settings-row"><div className="settings-row-copy"><span className="settings-row-title">{t('Enable provider', '启用服务商')}</span><small>{t('Use added models in chat', '在聊天中使用已添加的模型')}</small></div><div className="settings-row-control"><Switch checked={enabled} disabled={snapshot.pending || dirty} label={t('Enable DeepSeek', '启用 DeepSeek')} onChange={toggle} /></div></div>
+		<div className="settings-row"><div className="settings-row-copy"><span className="settings-row-title">{t('Enable provider', '启用服务商')}</span><small>{t('Use added models in chat', '在聊天中使用已添加的模型')}</small></div><div className="settings-row-control"><Switch checked={enabled} disabled={snapshot.pending || dirty} label={t('Enable ', '启用 ') + providerName(provider)} onChange={toggle} /></div></div>
 		<form onSubmit={async event => { event.preventDefault(); if (await run({ type: 'saveConnection', baseURL }, revision.current)) { setBaseURL(normalizeBaseURL(baseURL, provider)); } }}>
 			<div className="settings-row"><div className="settings-row-copy"><label className="settings-row-title" htmlFor="connection-address">{t('API address', 'API 地址')}</label><small>{t('Model request endpoint', '模型请求地址')}</small></div><div className="settings-row-control settings-address-control"><input id="connection-address" aria-label={t('API address', 'API 地址')} required type="url" value={baseURL} disabled={snapshot.pending} onChange={event => setBaseURL(event.target.value)} spellCheck={false} autoComplete="off" /></div></div>
 			{dirty && <div className="settings-form-actions"><button type="button" disabled={snapshot.pending} onClick={() => { setBaseURL(saved); originalAddress.current = saved; revision.current = snapshot.revision; }}>{t('Cancel', '取消')}</button><button type="submit" className="settings-primary" disabled={snapshot.pending}>{snapshot.pending ? t('Saving…', '保存中…') : t('Save address', '保存地址')}</button></div>}
 		</form>
-		<div className="settings-row"><div className="settings-row-copy"><span id="connection-key-label" className="settings-row-title">{t('API key', 'API 密钥')}</span><small>{t('Model service credential', '模型服务凭据')}</small></div><div className="settings-row-control key-test-line"><SavedApiKey snapshot={snapshot} disabled={keyDisabled} post={post} edit={editKey} remove={() => { void run({ type: 'saveKey', clearKey: true }); }} />
+		<div className="settings-row"><div className="settings-row-copy"><span id="connection-key-label" className="settings-row-title">{t('API key', 'API 密钥')}</span><small>{provider === 'ollama' ? t('Optional for a local Ollama service', '本地 Ollama 无需密钥，可选填') : t('Model service credential', '模型服务凭据')}</small></div><div className="settings-row-control key-test-line"><SavedApiKey key={provider} provider={provider} snapshot={snapshot} disabled={keyDisabled} post={post} edit={editKey} remove={() => { void run({ type: 'saveKey', clearKey: true }); }} />
 		<button type="button" className="connection-test" aria-busy={snapshot.providerTest?.running || undefined} disabled={!snapshot.providerTest?.running && (testDisabled || dirty)} data-becoder-tooltip={snapshot.providerTest?.running ? t('Cancel tests', '取消测试') : t('Test all ' + snapshot.providers[provider].models.length + ' added models. May use credits; checks default text generation only.', '测试全部 ' + snapshot.providers[provider].models.length + ' 个已添加模型，可能消耗少量额度，仅检查默认参数下的文本连通性。')} onClick={test}>{snapshot.providerTest?.running ? t('Cancel tests', '取消测试') : t('Test', '测试')}</button></div></div>
 	</section>;
 }
@@ -72,11 +70,7 @@ function Parameter({ name, label, maximum, disabled, unsupported, draft, setDraf
 const capacityFields = ['contextWindow', 'maxInputTokens', 'maxOutputTokens'] as const;
 const capacityValues = (capabilities: ModelCapabilities) => Object.fromEntries(capacityFields.map(field => [field, String(capabilities[field] ?? '')])) as Record<typeof capacityFields[number], string>;
 function ModelForm({ provider, snapshot, model, run, close }: { provider: ProviderId; snapshot: SettingsSnapshot; model?: ConfiguredModel; run: Run; close(): void }) {
-	const [draft, setDraft] = useState<ConfiguredModel>(() => {
-		const value = structuredClone(model ?? { id: '', name: '', parameters: {}, settings: {} });
-		if (!resolveCapabilities(provider, snapshot.providers[provider].baseURL, value.id, value.discovered, value.settings).reasoning) { delete value.settings.thinking; delete value.settings.effort; }
-		return value;
-	});
+	const [draft, setDraft] = useState<ConfiguredModel>(() => structuredClone(model ?? { id: '', name: '', parameters: {}, settings: {} }));
 	const [initialRevision] = useState(snapshot.revision);
 	const capabilities = resolveCapabilities(provider, snapshot.providers[provider].baseURL, draft.id, draft.discovered, draft.settings);
 	const automatic = resolveCapabilities(provider, snapshot.providers[provider].baseURL, draft.id, draft.discovered);
@@ -139,7 +133,9 @@ function ModelForm({ provider, snapshot, model, run, close }: { provider: Provid
 
 export function Settings({ post }: { post(message: unknown): void }) {
 	const settingsPage = useRef<HTMLElement>(null);
-	const [snapshot, setSnapshot] = useState<SettingsSnapshot>();
+	const [incomingSnapshot, setSnapshot] = useState<SettingsSnapshot>();
+	const [provider, setProvider] = useState<ProviderId>('deepseek');
+	const snapshot = incomingSnapshot && { ...incomingSnapshot, providerTest: incomingSnapshot.providerTest?.provider && incomingSnapshot.providerTest.provider !== provider ? undefined : incomingSnapshot.providerTest };
 	const currentSnapshot = useRef<SettingsSnapshot | undefined>(undefined);
 	const [keyFlow, setKeyFlow] = useState<'add' | 'replace' | 'models' | 'tests'>();
 	const flowEpoch = useRef(0);
@@ -202,19 +198,19 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	const run: Run = (command, revision = currentSnapshot.current!.revision) => {
 		if (currentSnapshot.current?.pending || currentSnapshot.current?.providerTest?.running || requests.current.size) { return Promise.resolve(false); }
 		const requestId = ++counter.current; setLocalPending(true); setResult(undefined);
-		return new Promise(resolve => { requests.current.set(requestId, { type: command.type, done: resolve }); post({ ...command, provider: 'deepseek', revision, requestId }); });
+		return new Promise(resolve => { requests.current.set(requestId, { type: command.type, done: resolve }); post({ ...command, provider, revision, requestId }); });
 	};
-	const cancelDiscovery = () => { post({ type: 'cancelDiscovery', provider: 'deepseek', revision: snapshot.revision, requestId: ++counter.current, discoveryId: snapshot.discovery?.id }); lastCandidate.current = undefined; setDiscovering(false); flowEpoch.current++; setKeyFlow(undefined); };
+	const cancelDiscovery = () => { post({ type: 'cancelDiscovery', provider, revision: snapshot.revision, requestId: ++counter.current, discoveryId: snapshot.discovery?.id }); lastCandidate.current = undefined; setDiscovering(false); flowEpoch.current++; setKeyFlow(undefined); };
 	const closeFlow = () => {
 		flowEpoch.current++;
-		if (currentSnapshot.current?.providerTest?.running || [...requests.current.values()].some(request => request.type === 'testProvider')) { post({ type: 'cancelProviderTest', provider: 'deepseek', revision: currentSnapshot.current?.revision, requestId: ++counter.current, testId: currentSnapshot.current?.providerTest?.id }); }
+		if (currentSnapshot.current?.providerTest?.running || [...requests.current.values()].some(request => request.type === 'testProvider')) { post({ type: 'cancelProviderTest', provider, revision: currentSnapshot.current?.revision, requestId: ++counter.current, testId: currentSnapshot.current?.providerTest?.id }); }
 		if (keyFlow === 'models') { cancelDiscovery(); }
 		setKeyFlow(undefined); setResult(undefined);
 	};
 	closeFlowRef.current = closeFlow;
 	const startTests = () => { setKeyFlow('tests'); void run({ type: 'testProvider' }); };
 	const fetchCandidates = () => { lastCandidate.current = undefined; setDiscovering(true); void run({ type: 'fetchModels' }); };
-	const keySaved = () => { if (keyFlow === 'replace') { if (currentSnapshot.current?.providers.deepseek.models.length) { startTests(); } else { setKeyFlow('tests'); } } else { setKeyFlow('models'); fetchCandidates(); } };
+	const keySaved = () => { if (keyFlow === 'replace') { if (currentSnapshot.current?.providers[provider].models.length) { startTests(); } else { setKeyFlow('tests'); } } else { setKeyFlow('models'); fetchCandidates(); } };
 	const confirmCandidates = async (ids: string[]) => {
 		const epoch = flowEpoch.current;
 		const setup = keyFlow === 'models';
@@ -224,28 +220,29 @@ export function Settings({ post }: { post(message: unknown): void }) {
 			if (setup) { if (ids.length) { startTests(); } else { setKeyFlow('tests'); } }
 		}
 	};
-	const profile = snapshot.providers.deepseek;
-	const enabled = snapshot.supplierEnabled ?? profile.enabled ?? snapshot.selection?.provider === 'deepseek';
+	const profile = snapshot.providers[provider];
+	const enabled = profile.enabled ?? snapshot.selection?.provider === provider;
+	const hasCredentials = provider === 'ollama' || !!snapshot.keyConfigured[provider];
 	const locked = state.pending || connectionDirty || !!editing || discovering || !!keyFlow;
 	return <main ref={settingsPage} className="settings-page settings-v3">
 		<aside className="settings-navigation"><nav aria-label={t('Settings categories', '设置分类')}><button type="button" className="settings-category" aria-current="page" onClick={() => settingsPage.current?.scrollTo({ top: 0 })}><Icon name="settings" /><span>{t('Model configuration', '模型配置')}</span></button></nav></aside>
 		<div className="settings-main-content"><header className="settings-header"><h1>{t('Model services', '模型服务')}</h1></header>
-		<section className="settings-card settings-provider-selection"><div className="settings-row"><div className="settings-row-copy"><label className="settings-row-title" htmlFor="settings-provider">{t('Provider', '供应商')}</label><small>{t('Choose a model service', '选择模型服务')}</small></div><div className="settings-row-control"><ProviderSelector /></div></div></section>
+		<section className="settings-card settings-provider-selection"><div className="settings-row"><div className="settings-row-copy"><label className="settings-row-title" htmlFor="settings-provider">{t('Provider', '供应商')}</label><small>{t('Choose a model service', '选择模型服务')}</small></div><div className="settings-row-control"><ProviderSelector value={provider} disabled={locked} onChange={value => { flowEpoch.current++; setResult(undefined); setModelsOpen(true); setProvider(value); }} /></div></div></section>
 		{busy && <p className="settings-note">{t('Busy. Changes apply next round.', '正在忙碌，修改下一轮生效')}</p>}
 		{snapshot.error && <div className="settings-feedback failure" role="alert">{snapshot.error}</div>}
 		{connectionDirty && <p className="settings-note">{t('Save or cancel the connection draft before fetching or testing.', '请先保存或取消连接修改，再同步模型或测试。')}</p>}
-		<ConnectionForm provider="deepseek" snapshot={{ ...state, pending: state.pending || !!editing || discovering || !!keyFlow }} run={run} dirtyChanged={setConnectionDirty} post={post} enabled={!!enabled} toggle={enabled => { void run({ type: 'toggleProvider', enabled }); }} keyDisabled={state.pending || !!editing || discovering || !!keyFlow} editKey={() => { flowEpoch.current++; setResult(undefined); setKeyFlow(snapshot.keyConfigured.deepseek ? 'replace' : 'add'); }} test={() => { if (testing) { post({ type: 'cancelProviderTest', provider: 'deepseek', requestId: ++counter.current, revision: snapshot.revision, testId: snapshot.providerTest!.id }); } else { void run({ type: 'testProvider' }); } }} testDisabled={locked || busy || !profile.models.length || !snapshot.keyConfigured.deepseek} />
-		<section className="settings-models"><div className="settings-section-title"><h2>{t('Models', '模型')}</h2><button aria-busy={(discovering && !snapshot.discovery) || undefined} disabled={locked || !snapshot.keyConfigured.deepseek} onClick={() => { lastCandidate.current = undefined; setDiscovering(true); void run({ type: 'fetchModels' }).then(ok => { if (!ok) { setDiscovering(false); } }); }}><Icon name="retry" />{discovering && !snapshot.discovery ? t('Syncing…', '同步中…') : t('Sync models', '同步模型')}</button></div>
-		<div className="settings-model-list"><div className="settings-model-group"><button type="button" aria-expanded={modelsOpen} onClick={() => setModelsOpen(!modelsOpen)}><span className={modelsOpen ? 'group-chevron expanded' : 'group-chevron'}><Icon name="chevron" /></span>deepseek</button><span>{profile.models.length} {t('models', '个模型')}</span></div>
-		{modelsOpen && <div>{!profile.models.length && <p className="settings-empty">{t('No models added. Sync models to choose which to add.', '尚未添加模型，点击“同步模型”选择添加。')}</p>}{profile.models.map(model => <div className="settings-model-row" key={model.id}><span className="settings-model-logo"><img src={deepseekLogo} alt="" /></span><div className="model-name"><strong title={model.id}>{model.name}</strong>{!!snapshot.parameterIssues?.[model.id]?.length && <small className="settings-warning">{t('Adjust conflicting parameters', '请调整冲突参数')}</small>}</div><ModelCapabilityIcons capabilities={resolveCapabilities('deepseek', profile.baseURL, model.id, model.discovered, model.settings)} /><div className="model-actions"><button className="settings-icon" disabled={locked} aria-label={t('Edit ', '编辑 ') + model.name} onClick={() => { setResult(undefined); setEditing(model); }}><Icon name="settings" /></button><button className="settings-icon" disabled={locked} aria-label={t('Remove ', '移除 ') + model.name} onClick={() => { void run({ type: 'removeModel', id: model.id }); }}><Icon name="minus" /></button></div></div>)}</div>}</div></section>
+		<ConnectionForm key={'connection-' + provider} provider={provider} snapshot={{ ...state, pending: state.pending || !!editing || discovering || !!keyFlow }} run={run} dirtyChanged={setConnectionDirty} post={post} enabled={!!enabled} toggle={enabled => { void run({ type: 'toggleProvider', enabled }); }} keyDisabled={state.pending || !!editing || discovering || !!keyFlow} editKey={() => { flowEpoch.current++; setResult(undefined); setKeyFlow(snapshot.keyConfigured[provider] ? 'replace' : 'add'); }} test={() => { if (testing) { post({ type: 'cancelProviderTest', provider, requestId: ++counter.current, revision: snapshot.revision, testId: snapshot.providerTest!.id }); } else { void run({ type: 'testProvider' }); } }} testDisabled={locked || busy || !profile.models.length || !hasCredentials} />
+		<section className="settings-models"><div className="settings-section-title"><h2>{t('Models', '模型')}</h2><button aria-busy={(discovering && !snapshot.discovery) || undefined} disabled={locked || !hasCredentials} onClick={() => { lastCandidate.current = undefined; setDiscovering(true); void run({ type: 'fetchModels' }).then(ok => { if (!ok) { setDiscovering(false); } }); }}><Icon name="retry" />{discovering && !snapshot.discovery ? t('Syncing…', '同步中…') : t('Sync models', '同步模型')}</button></div>
+		<div className="settings-model-list"><div className="settings-model-group"><button type="button" aria-expanded={modelsOpen} onClick={() => setModelsOpen(!modelsOpen)}><span className={modelsOpen ? 'group-chevron expanded' : 'group-chevron'}><Icon name="chevron" /></span>{provider}</button><span>{profile.models.length} {t('models', '个模型')}</span></div>
+		{modelsOpen && <div>{!profile.models.length && <p className="settings-empty">{t('No models added. Sync models to choose which to add.', '尚未添加模型，点击“同步模型”选择添加。')}</p>}{profile.models.map(model => <div className="settings-model-row" key={model.id}><span className="settings-model-logo"><ProviderMark provider={provider} /></span><div className="model-name"><strong title={model.id}>{model.name}</strong>{!!snapshot.parameterIssues?.[provider]?.[model.id]?.length && <small className="settings-warning">{t('Adjust conflicting parameters', '请调整冲突参数')}</small>}</div><ModelCapabilityIcons capabilities={resolveCapabilities(provider, profile.baseURL, model.id, model.discovered, model.settings)} /><div className="model-actions"><button className="settings-icon" disabled={locked} aria-label={t('Edit ', '编辑 ') + model.name} onClick={() => { setResult(undefined); setEditing(model); }}><Icon name="settings" /></button><button className="settings-icon" disabled={locked} aria-label={t('Remove ', '移除 ') + model.name} onClick={() => { void run({ type: 'removeModel', id: model.id }); }}><Icon name="minus" /></button></div></div>)}</div>}</div></section>
 		{discovering && <ModelDiscoveryDialog discovery={snapshot.discovery} configuredIds={profile.models.map(model => model.id)} pending={state.pending} error={result && !result.ok ? result.text : undefined} setup={keyFlow === 'models'} retry={fetchCandidates} cancel={cancelDiscovery} confirm={ids => { void confirmCandidates(ids); }} />}
-		{(keyFlow === 'add' || keyFlow === 'replace') && <ApiKeyDialog replace={keyFlow === 'replace'} revision={snapshot.revision} pending={state.pending} error={result && !result.ok ? result.text : undefined} run={async (command, revision) => { const epoch = flowEpoch.current; return await run(command, revision) && epoch === flowEpoch.current; }} saved={keySaved} close={() => { if (!state.pending) { closeFlow(); } }} />}
+		{(keyFlow === 'add' || keyFlow === 'replace') && <ApiKeyDialog key={'key-' + provider} provider={provider} replace={keyFlow === 'replace'} revision={snapshot.revision} pending={state.pending} error={result && !result.ok ? result.text : undefined} run={async (command, revision) => { const epoch = flowEpoch.current; return await run(command, revision) && epoch === flowEpoch.current; }} saved={keySaved} close={() => { if (!state.pending) { closeFlow(); } }} />}
 		{keyFlow === 'tests' && <SettingsDialog title={t('Check model connections', '检测模型连接')} close={closeFlow}><div className="settings-dialog-body setup-test-body">
 			{(state.pending || !profile.models.length) && <p className="settings-note">{state.pending ? t('Testing added models…', '正在检测已添加模型…') : t('No models selected. Your key has been saved; sync models from this page when ready.', '尚未添加模型。密钥已保存，之后可在主页面同步模型。')}</p>}
 			{result && !result.ok && <p className="settings-warning" role="alert">{result.text}</p>}<ProviderTestResults test={snapshot.providerTest} />
 		</div><footer>{!state.pending && profile.models.length > 0 && <button disabled={busy} onClick={startTests}>{t('Test again', '重新检测')}</button>}<button className="settings-primary" onClick={closeFlow}>{state.pending ? t('Cancel tests', '取消检测') : t('Done', '完成')}</button></footer></SettingsDialog>}
 
-		{editing && <SettingsDialog title={t('Edit model', '编辑模型')} close={() => { if (!state.pending) { setEditing(undefined); } }}>{result && !result.ok && <p className="settings-feedback failure" role="alert">{result.text}</p>}<ModelForm provider="deepseek" snapshot={state} model={editing} run={run} close={() => setEditing(undefined)} /></SettingsDialog>}
+		{editing && <SettingsDialog title={t('Edit model', '编辑模型')} close={() => { if (!state.pending) { setEditing(undefined); } }}>{result && !result.ok && <p className="settings-feedback failure" role="alert">{result.text}</p>}<ModelForm provider={provider} snapshot={state} model={editing} run={run} close={() => setEditing(undefined)} /></SettingsDialog>}
 		</div><div className="settings-notifications"><Notifications notices={notices} latest={latestNotice} dismiss={dismissNotice} /></div>
 	</main>;
 }

@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChatHistory, type Conversation, type HistoryItem } from './history';
 import { Connections, connectionError, settingsError } from './connections';
+import { isProvider } from './connection';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
 import { BeaconContextClient, withPdfPages, type PdfPageApi, type BeaconHistoryBinding } from './context';
@@ -426,14 +427,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (type === 'ready') { settingsStamp = ''; publish(); }
 			else if (type === 'openChat') { void vscode.commands.executeCommand('becoder.beacon.chat.focus'); }
 			else if (type === 'connectionKey') {
-				const input = message as { requestId?: number; revision?: number; action?: string };
-				if (!Number.isSafeInteger(input.requestId) || !Number.isSafeInteger(input.revision) || !['copy', 'reveal'].includes(input.action ?? '')) { return; }
+				const input = message as { requestId?: number; revision?: number; action?: string; provider?: unknown };
+				const provider = input.provider === undefined ? 'deepseek' : input.provider;
+				if (!isProvider(provider) || !Number.isSafeInteger(input.requestId) || !Number.isSafeInteger(input.revision) || !['copy', 'reveal'].includes(input.action ?? '')) { return; }
 				void (async () => {
 					try {
-						const key = await connections.accessKey(input.action as 'copy' | 'reveal', input.revision!);
-						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', requestId: input.requestId, revision: input.revision, ...(input.action === 'reveal' ? { key } : { copied: true }) }); }
+						const key = await connections.accessKey(input.action as 'copy' | 'reveal', input.revision!, provider);
+						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', provider, requestId: input.requestId, revision: input.revision, ...(input.action === 'reveal' ? { key } : { copied: true }) }); }
 					} catch (error) {
-						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', requestId: input.requestId, revision: input.revision, error: settingsError(error) }); }
+						if (alive && configurationPanel === panel) { await panel.webview.postMessage({ type: 'connectionKey', provider, requestId: input.requestId, revision: input.revision, error: settingsError(error) }); }
 					}
 				})();
 			}

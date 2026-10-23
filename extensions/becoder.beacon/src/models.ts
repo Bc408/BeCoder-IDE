@@ -66,7 +66,7 @@ export function resolveCapabilities(_provider: ProviderId, _baseURL: string, _mo
 }
 
 /** Read only explicit service metadata; do not infer capabilities from an arbitrary model name. */
-export function serviceCapabilities(value: unknown): ModelCapabilities | undefined {
+export function serviceCapabilities(value: unknown, completeCapabilityList = false): ModelCapabilities | undefined {
 	if (!record(value)) { return; }
 	const result = { ...defaultCapabilities, source: 'service' as const };
 	let found = false;
@@ -75,12 +75,23 @@ export function serviceCapabilities(value: unknown): ModelCapabilities | undefin
 	}
 	const caps = value.capabilities;
 	if (Array.isArray(caps) && caps.every(item => typeof item === 'string')) {
-		result.purpose = caps.includes('embedding') ? 'embedding' : caps.includes('rerank') ? 'rerank' : 'chat';
-		if (value.vision === undefined && caps.includes('vision')) { result.vision = true; }
-		if (value.reasoning === undefined && caps.includes('thinking')) { result.reasoning = true; }
-		if (value.tools === undefined && caps.includes('tools')) { result.tools = true; }
+		result.purpose = caps.includes('embedding') || caps.includes('TR') || caps.includes('ME') ? 'embedding' : caps.includes('rerank') ? 'rerank' : result.purpose;
+		if (value.vision === undefined && (completeCapabilityList || caps.includes('vision') || caps.includes('VU'))) { result.vision = caps.includes('vision') || caps.includes('VU'); }
+		if (value.reasoning === undefined && (completeCapabilityList || caps.includes('thinking') || caps.includes('Reasoning'))) { result.reasoning = caps.includes('thinking') || caps.includes('Reasoning'); }
+		if (value.tools === undefined && (completeCapabilityList || caps.includes('tools'))) { result.tools = caps.includes('tools'); }
 		found = true;
 	}
+	const info = record(value.model_info) ? value.model_info : {};
+	for (const [key, field] of [['context_window', 'contextWindow'], ['max_input_tokens', 'maxInputTokens'], ['max_output_tokens', 'maxOutputTokens']] as const) {
+		const capacity = value[key] ?? info[key];
+		if (validCapability(field, capacity)) { Object.assign(result, { [field]: capacity }); found = true; }
+	}
+	const modalities = record(value.inference_metadata) ? value.inference_metadata : {};
+	const input = value.input_modalities ?? modalities.request_modality;
+	const output = value.output_modalities ?? modalities.response_modality;
+	if (Array.isArray(input) && input.every(item => typeof item === 'string')) { result.vision = input.some(item => item.toLowerCase() === 'image'); found = true; }
+	if (Array.isArray(output) && output.every(item => typeof item === 'string') && !output.some(item => item.toLowerCase() === 'text')) { result.purpose = 'image'; found = true; }
+	if (value.tools === undefined && Array.isArray(value.features) && value.features.includes('function-calling')) { result.tools = true; found = true; }
 	return found ? result : undefined;
 }
 
@@ -89,8 +100,12 @@ export class ModelCapabilityError extends Error {
 }
 
 export function reasoningOptions(provider: ProviderId, _model: string, capabilities: ModelCapabilities, settings: ModelSettings): ProviderMetadata {
-	if (settings.thinking && !capabilities.reasoning) { throw new ModelCapabilityError('thinking'); }
-	if (!capabilities.reasoning) { return {}; }
+	if (settings.thinking === 'enabled' && !capabilities.reasoning) { throw new ModelCapabilityError('thinking'); }
+	if (!capabilities.reasoning) {
+		if (provider === 'bailian') { return { bailian: { enable_thinking: false } }; }
+		if (provider === 'ollama') { return { ollama: { reasoningEffort: 'none' } }; }
+		return { [provider]: { thinking: { type: 'disabled' } } };
+	}
 	if (provider === 'deepseek') {
 		return { deepseek: { ...(settings.thinking ? { thinking: { type: settings.thinking } } : {}), ...(settings.effort ? { reasoningEffort: settings.effort } : {}) } };
 	}

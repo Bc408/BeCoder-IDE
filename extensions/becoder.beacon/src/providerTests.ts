@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
-import type { Connection } from './connection';
+import type { Connection, ProviderId } from './connection';
 export interface ProviderTestSnapshot {
 	id: string; revision: number; running: boolean;
+	provider?: ProviderId;
 	models: { id: string; status: 'waiting' | 'running' | 'success' | 'failure' | 'cancelled'; error?: string }[];
 }
 export class ProviderTests {
@@ -21,7 +22,7 @@ export class ProviderTests {
 		if (this.disposed || this.running) { throw new Error('settings-pending'); }
 		const frozen = structuredClone(connections);
 		const controller = new AbortController(); this.controller = controller;
-		const state: ProviderTestSnapshot = { id: randomUUID(), revision, running: true, models: frozen.map(connection => ({ id: connection.model, status: 'waiting' })) };
+		const state: ProviderTestSnapshot = { id: randomUUID(), revision, provider: frozen[0]?.provider, running: true, models: frozen.map(connection => ({ id: connection.model, status: 'waiting' })) };
 		this.state = state; this.publish();
 		try {
 			for (const [index, connection] of frozen.entries()) {

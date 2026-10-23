@@ -36,6 +36,7 @@
 .workspace-picker.hidden:not(.open) .workspace-labels, .workspace-picker.error:not(.open) .workspace-labels { position: absolute; left: 7px; right: 29px; }
 .workspace-picker.hidden:not(.open) .workspace-labels { clip-path: inset(0); }
 .workspace-picker .workspace-status-icon { position: absolute; top: 5px; right: 5px; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.workspace-picker .workspace-hidden-icon { background: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; }
 .workspace-picker .workspace-error-dot { border: 1.5px solid currentColor; border-radius: 50%; color: var(--vscode-errorForeground); font-weight: 600; font-size: 11px; }
 .workspace-picker .workspace-remove { display: flex; align-items: center; justify-content: center; flex: 0 0 26px; width: 26px; height: 26px; min-height: 26px; padding: 0; margin-right: 2px; color: var(--chat-muted); border-radius: 50%; }
 .workspace-remove > svg { width: 14px; height: 14px; }

@@ -13,7 +13,7 @@ import { FileTools } from '../src/fileTools';
 import { ChatSession, type Generate, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { createGenerator } from '../src/provider';
-import { providers } from '../src/connection';
+import { providers, secretName } from '../src/connection';
 import { defaultCapabilities } from '../src/models';
 import { WebviewResourceDrag } from '../../../src/vs/workbench/contrib/webview/common/webviewResourceDrag';
 import { activate, deactivate } from '../src/extension';
@@ -36,6 +36,20 @@ async function until(condition: () => boolean, label = '') {
 }
 
 suite('Beacon attachments', () => {
+	test('settings key reveal addresses the requested provider and includes its identity', async () => fixture(async directory => {
+		const context = mock.reset(directory); const view = mock.makeView();
+		await context.secrets.store(secretName('bailian'), 'bailian-key-for-reveal');
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'settings' }); const panel = mock.panels.at(-1)!; panel.receive({ type: 'ready' });
+			const settings = () => (panel.messages.filter(message => message.type === 'settingsSnapshot').at(-1) as { settings: { revision: number; pending: boolean } } | undefined)?.settings;
+			await until(() => !!settings() && !settings()!.pending);
+			panel.receive({ type: 'connectionKey', provider: 'bailian', action: 'reveal', revision: settings()!.revision, requestId: 810 });
+			await until(() => panel.messages.some(message => message.type === 'connectionKey' && message.requestId === 810));
+			assert.deepStrictEqual(panel.messages.find(message => message.type === 'connectionKey' && message.requestId === 810), { type: 'connectionKey', provider: 'bailian', requestId: 810, revision: settings()!.revision, key: 'bailian-key-for-reveal' });
+			assert.ok(!JSON.stringify(panel.messages.filter(message => message.type === 'settingsSnapshot')).includes('bailian-key-for-reveal'));
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
 	test('settings notifications stay in the settings panel while chat model changes still notify chat', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { requestNotice?: unknown };

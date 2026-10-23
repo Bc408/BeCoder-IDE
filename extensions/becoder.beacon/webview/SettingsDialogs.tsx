@@ -3,13 +3,17 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ModelDiscovery } from '../src/modelConfiguration';
 import { Icon } from './Icon';
-import deepseekLogo from '../resources/deepseek.svg';
+import { providers, type ProviderId } from '../src/connection';
+import { ProviderMark, providerName } from './ProviderIdentity';
 const t = (en: string, cn: string) => document.documentElement.lang.startsWith('zh') ? cn : en;
-export function ProviderSelector() {
+export function ProviderSelector({ value, disabled, onChange }: { value: ProviderId; disabled?: boolean; onChange(value: ProviderId): void }) {
 	const [open, setOpen] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
-	const option = useRef<HTMLButtonElement>(null);
+	const list = useRef<HTMLDivElement>(null);
+	const ids = Object.keys(providers) as ProviderId[];
+	const focus = (index: number) => requestAnimationFrame(() => list.current?.querySelectorAll<HTMLButtonElement>('button')[index]?.focus());
+	useEffect(() => { if (disabled) { setOpen(false); } }, [disabled]);
 	useEffect(() => {
 		if (!open) { return; }
 		const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) { setOpen(false); } };
@@ -18,8 +22,13 @@ export function ProviderSelector() {
 	}, [open]);
 	return <div ref={root} className={'settings-provider-picker' + (open ? ' open' : '')} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setOpen(false); } }} onKeyDown={event => {
 		if (event.key === 'Escape') { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
-		else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') { event.preventDefault(); setOpen(true); requestAnimationFrame(() => option.current?.focus()); }
-	}}><div className="settings-provider-shell"><button ref={trigger} id="settings-provider" type="button" role="combobox" aria-label={t('Provider', '供应商')} aria-expanded={open} aria-controls="settings-providers" aria-haspopup="listbox" onClick={() => setOpen(!open)}><span>DeepSeek</span><Icon name="chevron" /></button><div className="settings-provider-reveal" inert={!open} aria-hidden={!open}><div id="settings-providers" role="listbox" aria-label={t('Providers', '供应商列表')}><button ref={option} type="button" role="option" aria-selected="true" onClick={() => { setOpen(false); trigger.current?.focus(); }}><img src={deepseekLogo} alt="" /><span>DeepSeek</span><Icon name="check" /></button></div></div></div></div>;
+		else if (!disabled && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+			event.preventDefault();
+			const active = [...list.current!.querySelectorAll('button')].indexOf(document.activeElement as HTMLButtonElement);
+			const next = event.key === 'Home' ? 0 : event.key === 'End' ? ids.length - 1 : active < 0 ? ids.indexOf(value) : (active + (event.key === 'ArrowDown' ? 1 : -1) + ids.length) % ids.length;
+			setOpen(true); focus(next);
+		}
+	}}><div className="settings-provider-shell"><button ref={trigger} id="settings-provider" type="button" role="combobox" disabled={disabled} aria-label={t('Provider', '供应商')} aria-expanded={open} aria-controls="settings-providers" aria-haspopup="listbox" onClick={() => setOpen(!open)}><span>{providerName(value)}</span><Icon name="chevron" /></button><div className="settings-provider-reveal" inert={!open} aria-hidden={!open}><div ref={list} id="settings-providers" role="listbox" aria-label={t('Providers', '供应商列表')}>{ids.map(id => <button key={id} type="button" role="option" aria-selected={id === value} onClick={() => { onChange(id); setOpen(false); trigger.current?.focus(); }}><ProviderMark provider={id} /><span>{providerName(id)}</span>{id === value && <Icon name="check" />}</button>)}</div></div></div></div>;
 }
 // Keep settings menus inside the modal layer, outside its scrolling form body.
 export function ModelSelect({ label, value, options, disabled, onChange }: { label: string; value: string; options: { value: string; label: string }[]; disabled?: boolean; onChange(value: string): void }) {

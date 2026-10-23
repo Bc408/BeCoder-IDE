@@ -5,7 +5,7 @@
 
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createGenerator, inspectModel } from '../src/provider';
+import { createGenerator, inspectModel, listModels } from '../src/provider';
 import { parseDeepSeekModels } from '../src/deepseekModels';
 import { providers, type Connection } from '../src/connection';
 import { ModelCapabilityError, resolveCapabilities, serviceCapabilities, defaultCapabilities } from '../src/models';
@@ -24,6 +24,86 @@ async function collect(generate: Generate): Promise<Delta[]> {
 }
 
 suite('Beacon model capabilities', () => {
+	test('explicit unsupported tools override a service feature alias', () => {
+		assert.equal(serviceCapabilities({ tools: false, features: ['function-calling'] })?.tools, false);
+		assert.equal(serviceCapabilities({ tools: 'unsupported', features: ['function-calling'] })?.tools, false);
+		assert.equal(serviceCapabilities({ features: ['function-calling'] })?.tools, true);
+	});
+	test('Ollama merges declared list capacities before applying detail defaults', async () => {
+		const connection: Connection = { provider: 'ollama', ...providers.ollama, model: '', parameters: {} };
+		const result = await listModels(connection, new AbortController().signal, async (_url, options) => {
+			if (!options?.body) { return Response.json({ data: [{ id: 'declared', max_input_tokens: 65536, max_output_tokens: 16384 }, { id: 'defaults', context_window: 131072 }, { id: 'detail-wins', max_output_tokens: 16384 }] }); }
+			const id = JSON.parse(String(options.body)).model;
+			return Response.json({ capabilities: ['completion'], model_info: { 'llama.context_length': id === 'defaults' ? 4096 : 131072, ...(id === 'detail-wins' ? { max_output_tokens: 32768 } : {}) } });
+		});
+		const declared = result.find(model => model.id === 'declared')!.capabilities!;
+		assert.equal(declared.maxInputTokens, 65536); assert.equal(declared.maxOutputTokens, 16384); assert.equal(declared.contextWindow, 131072); assert.equal(declared.tools, false);
+		const defaults = result.find(model => model.id === 'defaults')!.capabilities!;
+		assert.equal(defaults.contextWindow, 4096); assert.equal(defaults.maxInputTokens, 4096); assert.equal(defaults.maxOutputTokens, 4096);
+		assert.equal(result.find(model => model.id === 'detail-wins')!.capabilities!.maxOutputTokens, 32768);
+	});
+	test('cloud discovery validates lists, filters declared non-chat models and preserves service capacities', async () => {
+		for (const provider of ['moonshot', 'bailian'] as const) {
+			const connection: Connection = { provider, baseURL: 'https://gateway.example/v1', model: '', parameters: {}, apiKey: 'fixture' };
+			const entry = { id: ' opaque ', name: 'Friendly', context_window: 131072, max_input_tokens: 120000, max_output_tokens: 16384, input_modalities: ['text'], output_modalities: ['text'] };
+			const result = await listModels(connection, new AbortController().signal, async () => Response.json({ data: [entry, entry, { id: 'embedding', capabilities: ['embedding'] }, { id: 'reranker', purpose: 'rerank', capabilities: [] }, { id: 'picture', output_modalities: ['image'] }, { id: 'sound', input_modalities: ['audio'] }] }));
+			assert.equal(result.length, 1); assert.equal(result[0].id, 'opaque'); assert.equal(result[0].name, 'Friendly');
+			assert.equal(result[0].capabilities?.contextWindow, 131072); assert.equal(result[0].capabilities?.maxInputTokens, 120000); assert.equal(result[0].capabilities?.maxOutputTokens, 16384); assert.equal(result[0].capabilities?.vision, false);
+			for (const data of [[{ id: 'unsafe\nname' }], [{ id: 'x', name: 'unsafe\tname' }], [{ id: 'x', tools: 1 }], [{ id: 'x' }, { id: 'x', vision: false }], Array.from({ length: 2001 }, (_, i) => ({ id: String(i) }))]) {
+				await assert.rejects(listModels(connection, new AbortController().signal, async () => Response.json({ data })), /invalid-model-list/);
+			}
+		}
+	});
+	test('Bailian uses documented pagination and nested capacities and rejects truncated totals', async () => {
+		const connection: Connection = { provider: 'bailian', ...providers.bailian, model: '', parameters: {}, apiKey: 'fixture' };
+		let calls = 0;
+		const result = await listModels(connection, new AbortController().signal, async (url, options) => {
+			calls++; const endpoint = new URL(String(url)); assert.equal(endpoint.pathname, '/api/v1/models'); assert.equal(endpoint.searchParams.get('capabilities'), 'TG'); assert.equal(endpoint.searchParams.get('page_no'), String(calls)); assert.equal(options?.redirect, 'error');
+			return Response.json({ success: true, output: { total: 2, page_no: calls, page_size: 100, models: [{ model: calls === 1 ? 'a' : 'b', name: 'Service name', capabilities: ['TG'], features: ['function-calling'], inference_metadata: { request_modality: ['Text'], response_modality: ['Text'] }, model_info: { context_window: 131072, max_input_tokens: 130048, max_output_tokens: 16384 } }] } });
+		});
+		assert.equal(calls, 2); assert.equal(result.length, 2); assert.equal(result[0].name, 'Service name'); assert.equal(result[0].capabilities?.maxInputTokens, 130048); assert.equal(result[0].capabilities?.vision, false);
+		await assert.rejects(listModels(connection, new AbortController().signal, async () => Response.json({ output: { total: 2, models: [] } })), /invalid-model-list/);
+		await assert.rejects(listModels(connection, new AbortController().signal, async () => Response.json({ output: { total: 2001, models: [] } })), /invalid-model-list/);
+		await assert.rejects(listModels(connection, new AbortController().signal, async () => Response.json({ output: { total: 2, models: [{ model: 'repeated' }] } })), /invalid-model-list/);
+	});
+	test('Ollama discovery needs no key and isolates unavailable detail endpoints while excluding embeddings', async () => {
+		const connection: Connection = { provider: 'ollama', ...providers.ollama, model: '', parameters: {} };
+		const calls: string[] = [];
+		const result = await listModels(connection, new AbortController().signal, async (url, options) => {
+			calls.push(String(url)); assert.equal(new Headers(options?.headers).get('authorization'), null);
+			if (String(url).endsWith('/v1/models')) { return Response.json({ data: [{ id: 'text' }, { id: 'embedding' }, { id: 'old-server' }] }); }
+			assert.equal(String(url), 'http://localhost:11434/api/show'); const body = JSON.parse(String(options?.body)); assert.deepStrictEqual(Object.keys(body), ['model']);
+			if (body.model === 'old-server') { return new Response('private body', { status: 500 }); }
+			return Response.json({ capabilities: body.model === 'embedding' ? ['embedding'] : ['completion'], model_info: { 'qwen.context_length': 8192 } });
+		});
+		assert.equal(calls.length, 4); assert.deepStrictEqual(result.map(model => model.id), ['old-server', 'text']);
+		const text = result.find(model => model.id === 'text')!; assert.equal(text.capabilities?.vision, false); assert.equal(text.capabilities?.reasoning, false); assert.equal(text.capabilities?.tools, false); assert.equal(text.capabilities?.contextWindow, 8192);
+		assert.equal(result.find(model => model.id === 'old-server')?.capabilities?.source, 'default');
+		const partial = await listModels(connection, new AbortController().signal, async (_url, options) => Response.json(options?.body ? { model_info: { 'llama.context_length': 4096 } } : { data: [{ id: 'partial' }] }));
+		assert.equal(partial[0].capabilities?.maxInputTokens, 4096); assert.equal(partial[0].capabilities?.maxOutputTokens, 4096); assert.equal(partial[0].capabilities?.tools, true);
+	});
+	test('Ollama native inspection stays on loopback and respects cancellation', async () => {
+		assert.equal(await inspectModel({ provider: 'ollama', baseURL: 'https://gateway.example/v1', model: 'local' }, new AbortController().signal, async () => { assert.fail('Native endpoint reached a remote gateway'); }), undefined);
+		const controller = new AbortController();
+		await assert.rejects(listModels({ provider: 'ollama', ...providers.ollama, model: '', parameters: {} }, controller.signal, async (_url, options) => {
+			if (!options?.body) { return Response.json({ data: [{ id: 'a' }] }); }
+			controller.abort(); throw controller.signal.reason;
+		}), /abort/i);
+	});
+	test('explicitly disabling reasoning suppresses each provider default through the installed SDK', async () => {
+		for (const provider of ['bailian', 'moonshot', 'ollama'] as const) {
+			const connection: Connection = { provider, ...providers[provider], model: 'opaque', apiKey: provider === 'ollama' ? undefined : 'fixture', parameters: {}, modelSettings: { overrides: { reasoning: false } } };
+			let calls = 0;
+			await collect(createGenerator(async () => connection, async (_url, options) => {
+				calls++; const body = JSON.parse(String(options?.body));
+				if (provider === 'bailian') { assert.equal(body.enable_thinking, false); }
+				if (provider === 'moonshot') { assert.deepStrictEqual(body.thinking, { type: 'disabled' }); }
+				if (provider === 'ollama') { assert.equal(body.reasoning_effort, 'none'); assert.equal(new Headers(options?.headers).get('authorization'), 'Bearer ollama'); }
+				return response([{ content: 'answer' }]);
+			}));
+			assert.equal(calls, 1);
+		}
+	});
 	test('boolean defaults include conservative capacities without a model catalog', () => {
 		assert.deepStrictEqual(resolveCapabilities('deepseek', providers.deepseek.baseURL, 'opaque'), {
 			purpose: 'chat', vision: true, reasoning: true, tools: true, source: 'default',
@@ -54,6 +134,20 @@ suite('Beacon model capabilities', () => {
 			return response([{ content: 'answer' }]);
 		}));
 		assert.equal(requests, 1);
+	});
+	test('disabling DeepSeek reasoning turns off SDK thinking defaults and preserves sampling', async () => {
+		for (const model of ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-reasoner']) {
+			let requests = 0;
+			const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model, apiKey: 'fixture', parameters: { temperature: 0.4, topP: 0.8 }, modelSettings: { overrides: { reasoning: false } } };
+			await collect(createGenerator(async () => connection, async (_url, options) => {
+				requests++;
+				const body = JSON.parse(String(options?.body));
+				assert.deepStrictEqual(body.thinking, { type: 'disabled' });
+				assert.equal(body.temperature, 0.4); assert.equal(body.top_p, 0.8);
+				return response([{ content: 'answer' }]);
+			}));
+			assert.equal(requests, 1);
+		}
 	});
 	test('DeepSeek discovery uses service fields rather than model names', () => {
 		const entry = { id: 'arbitrary', name: 'Friendly', context_window: 1048576, max_input_tokens: 786432, max_output_tokens: 393216, input_modalities: ['text', 'image'], output_modalities: ['text'], effort: { supported_levels: ['low', 'high', 'max'] }, api_capabilities: { anthropic_messages: { tools: true } } };

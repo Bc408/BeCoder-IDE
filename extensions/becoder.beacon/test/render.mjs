@@ -292,8 +292,8 @@ try {
 	const permissions = page.getByRole('dialog', { name: '文件读取权限', exact: true });
 	assert.equal(await permissions.getByRole('button').count(), 3, 'All three permission modes remain visible');
 	assert.ok(await permissions.getByRole('button', { name: /Spot/ }).isDisabled());
-	assert.deepStrictEqual(await permissions.locator('small').allTextContents(), ['当前页面与主动提供材料；不读本地文件', '只读当前 Beacon 工作区', '只读本机与共享目录']);
-	assert.equal(await permissions.locator('.permission-note').textContent(), '敏感文件与其他会话始终隔离，读取内容会发送给所选模型。');
+	assert.deepStrictEqual(await permissions.locator('small').allTextContents(), ['只读已打开文件的无痕模式', '只工作在当前Beacon工作区', '可自由访问本机文件']);
+	assert.equal(await permissions.locator('.permission-menu-heading, .permission-note').count(), 0);
 	assert.equal(await page.locator('.permission-trigger').evaluate(element => getComputedStyle(element).height), '28px');
 	assert.equal(await permissions.evaluate(element => getComputedStyle(element).borderRadius), '12px');
 	assert.ok(await permissions.locator('button').evaluateAll(elements => elements.every(element => element.getBoundingClientRect().height >= 38)), 'Permission choices have a consistent compact click target');
@@ -947,7 +947,7 @@ try {
 	const providerPicker = page.getByRole('combobox', { name: '供应商', exact: true });
 	await providerPicker.click();
 	await page.getByRole('option', { name: 'DeepSeek', exact: true }).waitFor();
-	assert.equal(await page.getByRole('option', { name: 'DeepSeek', exact: true }).count(), 1);
+	assert.equal(await page.getByRole('option').count(), 4);
 	await page.keyboard.press('Escape');
 	assert.equal(await providerPicker.getAttribute('aria-expanded'), 'false');
 	await providerPicker.press('ArrowDown');
@@ -1051,7 +1051,7 @@ try {
 	assert.notEqual(maskedSavedEye, 'none');
 	await page.getByRole('button', { name: '显示密钥', exact: true }).click();
 	const revealRequest = await page.evaluate(() => window.messages.at(-1));
-	await page.evaluate(id => window.fixtureSnapshot({ type: 'connectionKey', requestId: id, revision: 1, key: 'fixture-saved' }, '*'), revealRequest.requestId);
+	await page.evaluate(id => window.fixtureSnapshot({ type: 'connectionKey', provider: 'deepseek', requestId: id, revision: 1, key: 'fixture-saved' }, '*'), revealRequest.requestId);
 	await page.waitForFunction(() => document.querySelector('#connection-key').textContent === 'fixture-saved');
 	assert.equal(await page.getByRole('button', { name: '隐藏密钥', exact: true }).getAttribute('aria-pressed'), 'true');
 	assert.notEqual(await savedEye.evaluate(element => getComputedStyle(element).maskImage), maskedSavedEye, 'Revealing the saved key changes the eye icon');
@@ -1275,6 +1275,7 @@ try {
 	await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
 	// A fresh key opens an isolated input, then chains saved host revisions through discovery and tests.
 	await settingsPublish({ revision: 10, keyConfigured: { deepseek: false }, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: false, models: [] } } });
+	await page.getByRole('button', { name: '添加 API 密钥', exact: true }).waitFor();
 	assert.equal(await page.locator('#connection-key').evaluate(element => getComputedStyle(element).justifyContent), 'flex-start');
 	assert.notEqual(await page.locator('.api-key-mark').evaluate(element => getComputedStyle(element).maskImage), 'none');
 	await page.getByRole('button', { name: '添加 API 密钥', exact: true }).click();
@@ -1348,9 +1349,116 @@ try {
 	await page.getByRole('button', { name: '保存地址', exact: true }).click();
 	assert.equal((await page.evaluate(() => window.messages.at(-1))).revision, 15, 'Independent key changes do not stale a draft address when the saved address is unchanged');
 	await settingsPublish({ revision: 16, providers: { deepseek: { baseURL: 'https://draft.example/v1', enabled: true, models: [] } } }); await settingsAck();
+	await page.getByLabel('API 地址', { exact: true }).fill('https://normalized.example/v1/');
+	await page.getByRole('button', { name: '保存地址', exact: true }).click();
+	await settingsPublish({ revision: 17, providers: { deepseek: { baseURL: 'https://normalized.example/v1', enabled: true, models: [] } } }); await settingsAck();
+	await page.waitForFunction(() => document.querySelector('#connection-address').value === 'https://normalized.example/v1');
+	await page.getByLabel('API 地址', { exact: true }).fill('https://second.example/v1');
+	await page.getByRole('button', { name: '保存地址', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).revision, 17, 'Saving a normalized address adopts the confirmed revision for the next edit');
+	await settingsPublish({ revision: 18, providers: { deepseek: { baseURL: 'https://second.example/v1', enabled: true, models: [] } } }); await settingsAck();
+	await settingsPublish({ revision: 19, providers: { deepseek: { baseURL: 'https://second.example/v1', enabled: true, models: [{ id: 'conflict', name: 'Conflict', parameters: {}, settings: { thinking: 'enabled', effort: 'high' }, discovered: { ...caps, reasoning: false } }] } } });
+	await page.getByRole('button', { name: '编辑 Conflict', exact: true }).click();
+	assert.match(await page.locator('.model-form [role="alert"]').textContent(), /thinking, effort/, 'Opening a refreshed model preserves and exposes its conflicts');
+	assert.ok(await page.getByRole('button', { name: '保存模型', exact: true }).isDisabled());
+	await page.locator('.model-form [role="alert"]').scrollIntoViewIfNeeded();
+	await page.screenshot({ path: path.join(output, 'model-editor-refreshed-conflict.png') });
+	await page.getByRole('button', { name: '恢复模型默认', exact: true }).click();
+	assert.equal(await page.locator('.model-form [role="alert"]').count(), 0, 'Restoring defaults explicitly clears inapplicable thinking settings');
+	await page.getByRole('button', { name: '保存模型', exact: true }).click();
+	const resolvedConflict = await page.evaluate(() => window.messages.at(-1));
+	assert.equal(resolvedConflict.model.settings.thinking, undefined); assert.equal(resolvedConflict.model.settings.effort, undefined);
+	await settingsAck();
 
+	const providerProfiles = {
+		deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [] },
+		bailian: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', enabled: false, models: [{ id: 'shared-id', name: 'Qwen fixture', parameters: {}, settings: {}, discovered: caps }] },
+		moonshot: { baseURL: 'https://api.moonshot.cn/v1', enabled: true, models: [{ id: 'shared-id', name: 'Kimi fixture', parameters: {}, settings: {}, discovered: caps }] },
+		ollama: { baseURL: 'http://localhost:11434/v1', enabled: false, models: [] }
+	};
+	await settingsPublish({ revision: 20, providers: providerProfiles, keyConfigured: { deepseek: true, bailian: true, moonshot: true }, keyPreview: { deepseek: 'ds••••', bailian: 'bl••••', moonshot: 'ms••••' }, providerTest: undefined });
+	const chooseProvider = async name => {
+		await providerPicker.click();
+		await page.getByRole('option', { name, exact: true }).click();
+		assert.equal(await providerPicker.textContent(), name);
+	};
+	await chooseProvider('百炼');
+	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), providerProfiles.bailian.baseURL);
+	assert.equal(await page.getByRole('switch', { name: '启用 百炼', exact: true }).getAttribute('aria-checked'), 'false');
+	await page.getByRole('button', { name: '编辑 Qwen fixture', exact: true }).click();
+	await page.getByLabel('显示名称', { exact: true }).fill('My Qwen');
+	await page.getByRole('button', { name: '保存模型', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'bailian');
+	await settingsAck();
+	await page.getByLabel('API 地址', { exact: true }).fill('https://draft-only.example/v1');
+	assert.ok(await providerPicker.isDisabled(), 'Switching providers cannot silently discard an address draft');
+	await page.getByRole('button', { name: '取消', exact: true }).click();
+	await page.locator('.connection-key-field').hover();
+	await page.getByRole('button', { name: '显示密钥', exact: true }).click();
+	const previousReveal = await page.evaluate(() => window.messages.at(-1));
+	assert.equal(previousReveal.provider, 'bailian');
+	await chooseProvider('Moonshot');
+	assert.equal(await page.locator('#connection-key').textContent(), 'ms••••');
+	await page.evaluate(request => window.fixtureSnapshot({ type: 'connectionKey', provider: request.provider, requestId: request.requestId, revision: 20, key: 'stale-bailian-key' }, '*'), previousReveal);
+	assert.equal(await page.locator('#connection-key').textContent(), 'ms••••', 'Late key results cannot cross providers');
+	await page.locator('.connection-key-field').hover();
+	await page.getByRole('button', { name: '编辑密钥', exact: true }).click();
+	assert.equal((await page.locator('.api-key-heading > span:not(.provider-mark)').allTextContents()).join(''), 'Moonshot· 更换 API 密钥');
+	await page.getByLabel('API 密钥', { exact: true }).fill('moonshot-fixture-key');
+	await page.getByRole('button', { name: '保存并检测', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'moonshot');
+	await settingsPublish({ revision: 21 }); await settingsAck();
+	await page.waitForFunction(() => window.messages.at(-1).type === 'testProvider');
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'moonshot');
+	await settingsPublish({ providerTest: { id: 'moonshot-test', provider: 'moonshot', revision: 21, running: false, models: [{ id: 'shared-id', status: 'success' }] } }); await settingsAck();
+	await page.getByRole('button', { name: '完成', exact: true }).click();
+	await chooseProvider('Ollama');
+	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), 'http://localhost:11434/v1');
+	assert.ok(await page.getByRole('button', { name: '同步模型', exact: true }).isEnabled(), 'Local discovery needs no API key');
+	await page.getByRole('button', { name: '同步模型', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'ollama');
+	assert.ok(await providerPicker.isDisabled(), 'Discovery retains provider ownership');
+	await settingsPublish({ discovery: { id: 'ollama-models', revision: 21, provider: 'ollama', models: [{ id: 'local:latest', provider: 'ollama', name: 'Local fixture' }] } }); await settingsAck();
+	await page.getByRole('checkbox', { name: /Local fixture/ }).check();
+	await page.getByRole('button', { name: '确认', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'ollama');
+	providerProfiles.ollama.models = [{ id: 'local:latest', name: 'Local fixture', parameters: {}, settings: {}, discovered: caps }];
+	providerProfiles.ollama.enabled = true;
+	await settingsPublish({ revision: 22, providers: providerProfiles, discovery: undefined, providerTest: undefined }); await settingsAck();
+	await page.waitForFunction(() => !document.querySelector('.connection-test').disabled);
+	assert.ok(await page.getByRole('button', { name: '测试', exact: true }).isEnabled(), 'Local testing needs no API key');
+	await page.getByRole('button', { name: '测试', exact: true }).click();
+	assert.equal((await page.evaluate(() => window.messages.at(-1))).provider, 'ollama');
+	await settingsPublish({ providerTest: { id: 'ollama-test', provider: 'ollama', revision: 22, running: false, models: [{ id: 'local:latest', status: 'success' }] } }); await settingsAck();
+	for (const [id, name] of [['bailian', '百炼'], ['moonshot', 'Moonshot'], ['ollama', 'Ollama']]) {
+		await chooseProvider(name);
+		for (const width of [900, 360]) {
+			await page.setViewportSize({ width, height: 900 });
+			assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+			await page.screenshot({ path: path.join(output, `provider-${id}-light-${width}.png`), fullPage: true });
+		}
+	}
+	await providerPicker.click();
+	assert.equal(await page.getByRole('option').count(), 4);
+	await page.waitForFunction(() => [...document.querySelectorAll('#settings-providers .provider-mark')].length === 4 && [...document.querySelectorAll('#settings-providers .provider-mark')].every(image => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0));
+	await page.screenshot({ path: path.join(output, 'providers-menu-light-360.png') });
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => { document.body.className = 'vscode-dark'; });
+	await page.addStyleTag({ content: ':root { --vscode-editor-background:#282c34; --vscode-foreground:#d4d5d8; --vscode-descriptionForeground:#a1a5ae; --vscode-input-background:#21252b; --vscode-input-foreground:#d4d5d8; --vscode-widget-border:#3a3e46; --vscode-button-background:#365f88; --vscode-focusBorder:#59a4f9; }' });
+	for (const [id, name] of [['bailian', '百炼'], ['moonshot', 'Moonshot'], ['ollama', 'Ollama']]) {
+		await chooseProvider(name);
+		for (const width of [900, 360]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.screenshot({ path: path.join(output, `provider-${id}-dark-${width}.png`), fullPage: true });
+		}
+	}
+	await providerPicker.click();
+	await page.screenshot({ path: path.join(output, 'providers-menu-dark-360.png') });
+	await page.keyboard.press('Escape');
+	await chooseProvider('DeepSeek');
+	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), providerProfiles.deepseek.baseURL);
 	assert.deepStrictEqual(errors, []);
-	console.log('Production UI: Captain Who-style Markdown/code blocks, exact clipboard, GFM/math, activity lifecycle/timer, reduced motion, scroll escape/return/resize, Chinese/English, themes, history and settings passed. Screenshots: ' + output);
+	console.log('Production UI: Captain Who-style Markdown/code blocks, exact clipboard, GFM/math, activity lifecycle/timer, reduced motion, scroll escape/return/resize, Chinese/English, themes, history and four-provider settings passed. Screenshots: ' + output);
 } catch (error) {
 	const page = browser.contexts()[0]?.pages()[0];
 	if (page) {

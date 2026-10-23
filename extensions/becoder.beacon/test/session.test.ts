@@ -451,10 +451,16 @@ suite('Beacon provider connections', () => {
 		test(provider + ' lists models with isolated credentials and no credential redirects', async () => {
 			const selection = { provider, ...providers[provider], parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' };
 			let pages = 0;
+			const inspected: string[] = [];
 			const result = await listModels(selection, new AbortController().signal, async (url, options) => {
-				pages++;
 				assert.equal(options?.redirect, 'error');
 				assert.equal(new Headers(options?.headers).get('Authorization'), provider === 'ollama' ? null : 'Bearer test-key');
+				if (provider === 'ollama' && options?.method === 'POST') {
+					assert.equal(String(url), 'http://localhost:11434/api/show');
+					inspected.push(JSON.parse(String(options.body)).model);
+					return Response.json({ capabilities: ['completion'] });
+				}
+				pages++;
 				if (provider === 'bailian') {
 					assert.ok(String(url).includes('/api/v1/models?page_no=' + pages));
 					return Response.json({ output: { total: 2, models: [{ model: pages === 1 ? 'b' : 'a' }] } });
@@ -464,6 +470,7 @@ suite('Beacon provider connections', () => {
 			});
 			assert.deepStrictEqual(result.map(({ id, provider }) => ({ id, provider })), [{ id: 'a', provider }, { id: 'b', provider }]);
 			assert.equal(pages, provider === 'bailian' ? 2 : 1);
+			assert.deepStrictEqual(inspected.sort(), provider === 'ollama' ? ['a', 'b'] : []);
 		});
 		if (provider === 'deepseek') { continue; }
 		test(provider + ' streams only answer text through the installed adapter', async () => {

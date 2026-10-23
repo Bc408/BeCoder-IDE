@@ -1608,15 +1608,6 @@ suite('OI extension boundary', () => {
 		assert.match(partCss, /\.monaco-workbench\.windows \{\s*--becoder-windows-window-controls-width:/);
 		const knownStyleVariables = readJson<{ sizes?: readonly string[] }>(path.join(repositoryRoot, 'build', 'lib', 'stylelint', 'vscode-known-variables.json'));
 		assert.ok(knownStyleVariables.sizes?.includes('--becoder-windows-window-controls-width'));
-		for (const cssPath of [
-			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'parts', 'editor', 'media', 'multieditortabscontrol.css'),
-			path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'parts', 'editor', 'media', 'singleeditortabscontrol.css')
-		]) {
-			const css = fs.readFileSync(cssPath, 'utf8');
-			assert.match(css, /\.monaco-workbench\.windows [^{]*\.editor-group-container\.window-controls-overlay-right-host [^{]*\[data-command-id="becoder\.runner\.runWithInput"\] \{\s*margin-right: calc\(var\(--becoder-windows-window-controls-width\) - 82px\)/);
-			assert.doesNotMatch(css, /custom-titlebar-hidden\.windows [^{]*\[data-command-id="becoder\.runner\.runWithInput"\]/);
-		}
-
 		const terminalSource = fs.readFileSync(path.join(extensionPath, 'src', 'bcTerminal.ts'), 'utf8');
 		assert.match(terminalSource, /implements vscode\.Pseudoterminal/);
 		assert.match(terminalSource, /osc633CommandFinished/);

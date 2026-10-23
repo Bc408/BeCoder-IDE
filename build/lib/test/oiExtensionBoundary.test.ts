@@ -1984,6 +1984,8 @@ suite('OI extension boundary', () => {
 			}
 			assert.doesNotMatch(workflow, /--target=42\.6\.0/);
 			assert.match(workflow, /--target=\$electronTarget/);
+			assert.ok(workflow.includes('$nodePtyPrebuild'));
+			assert.ok(workflow.includes('node_modules\\node-pty\\build\\Release'));
 		}
 	});
 });

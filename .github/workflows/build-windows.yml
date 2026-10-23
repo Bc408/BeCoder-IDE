@@ -54,6 +54,13 @@ jobs:
             exec { npm rebuild '@vscode/policy-watcher' '@vscode/spdlog' '@vscode/sqlite3' 'native-keymap' --foreground-scripts }
             exec { npx --yes node-gyp rebuild --directory node_modules/windows-foreground-love "--target=$electronTarget" --dist-url=https://electronjs.org/headers --runtime=electron --arch=x64 }
           }
+          $nodePtyPrebuild = Join-Path 'node_modules\node-pty\prebuilds\win32-x64' 'conpty.node'
+          if (-not (Test-Path -LiteralPath $nodePtyPrebuild -PathType Leaf)) {
+            $nodePtyRelease = 'node_modules\node-pty\build\Release'
+            if (-not (Test-Path -LiteralPath (Join-Path $nodePtyRelease 'conpty.node') -PathType Leaf)) { throw 'node-pty did not produce its Electron native binary.' }
+            New-Item -ItemType Directory -Path (Split-Path $nodePtyPrebuild -Parent) -Force | Out-Null
+            Get-ChildItem -LiteralPath $nodePtyRelease -Force | Copy-Item -Destination (Split-Path $nodePtyPrebuild -Parent) -Recurse -Force
+          }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate source

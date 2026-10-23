@@ -1,5 +1,37 @@
-# Compiler Setup
+# 编译配置与 gch 缓存
 
-BeCoder Runner uses the GCC toolchain bundled with BeCoder. No system compiler setup is required.
+Runner、CPH 和 Notebook 共用 BeCoder 随包的 GCC 编译策略。无需安装或选择系统编译器，原生 PowerShell 的环境不决定这些入口使用的编译器。GCC 编辑器诊断和 clangd 有各自的服务职责，不由本文承诺与所有运行参数同步。
 
-The native PowerShell terminal remains separate and does not influence the compiler used by Runner.
+## 当前设置
+
+在用户设置中配置；Windows 上 Runner 只读取用户级值，不采用工作区覆盖。
+
+| 设置 | 默认值 | 可选值或含义 |
+| --- | --- | --- |
+| `becoder.runner.cStandard` | `c17` | `c11`、`c17`、`c23` |
+| `becoder.runner.cppStandard` | `c++20` | `c++11`、`c++14`、`c++17`、`c++20`、`c++23` |
+| `becoder.runner.cFlags` | `[]` | 逐项校验的额外 C 参数 |
+| `becoder.runner.cppFlags` | `[]` | 逐项校验的额外 C++ 参数 |
+
+编译策略固定加入 `-O2`、`-Wall`、`-DDEBUG` 和 UTF-8 字符集参数。C++ 依次强制包含 `bits/stdc++.h` 与 `bits/debugger.h`；C 不包含这两个 C++ 头文件。不隐式加入 `CPH`、`ONLINE_JUDGE` 宏或解答程序的静态链接参数。CPH 旧的 C/C++ Args 设置不参与此策略。Runner 在私有子进程环境内使用工具链，不修改用户环境变量。
+
+## 主动生成 gch
+
+左下角齿轮菜单的“生成 gch 缓存”按当前用户 C++ 设置生成万能头的预编译缓存。缓存位于随包工具链中 `bits/stdc++.h` 的旁边，文件名为 `stdc++.h.gch`。
+
+- gch 是可丢弃的可选缓存，不随安装包交付，也不是工具链健康检查的必需文件；缺失或参数不兼容时由 GCC 使用普通头文件编译。
+- 每次生成取得本安装跨窗口的独占权，并固定当前参数快照。重复请求立即拒绝，不排队；生成中改设置不改变本次任务。
+- 编译器、头文件、参数、路径归属和可写性通过前置检查后，清除本安装工具链内全部旧 gch 及生成残留，再构建一份万能头缓存。不创建项目头、C 语言、独立 debugger.h 或多配置缓存。
+- 生成只写临时产物，完成后发布并通过 GCC 的命中诊断验证；文件存在或编译器成功退出不足以报告成功。生成期间保持 BeCoder 开启，进度在通知区显示，日志在“BeCoder gch Cache”输出中查看。
+- 前置检查失败不清理旧缓存；首次清理失败即停止。开始生成后失败或中断会清理工具链范围内的 gch，不回滚旧缓存、不自动重试。关闭窗口会终止本次任务并释放占用。
+- 清理不越出本安装工具链、不跟随链接进入外部目录，不触及学生源码、项目设置、系统编译器或另一安装。不可写时明确失败，不自动提权或另选位置。
+
+修改 C++ 设置后，需匹配缓存时再次主动生成；更新或覆盖安装可能删除缓存，不自动迁移或后台重建。生成不改变 Runner、CPH、Notebook 的既有运行、取消、快照及证据语义，也不增加运行等待队列。
+
+## 维护与验证
+
+Runner 拥有参数生成和校验，`becoder.setup` 拥有缓存生成、清理、命中检查及跨窗口互斥，工作台只提供菜单入口。改动这些职责时，应覆盖参数快照、宏/标准变化、无缓存回退、文件/目录型旧缓存、链接、权限/占用失败、生成失败、中断和重复请求；核对 C 路径及三个编译消费者。
+
+性能比较应在相同编译器、参数和源码下预热后交替多次测量，单列编译阶段和中位数；没有受控证据不承诺固定加速倍数。用户从 Run 点击至成功横幅的等待还包含终端、保存、快照及发布，不能当作纯 GCC 耗时，也不能用 C++ 缓存解释 C 编译变慢。
+
+发行载荷、安装及验证边界见[发行维护说明](../../../docs/distribution.md)和[开发指南](../../../docs/development.md)。

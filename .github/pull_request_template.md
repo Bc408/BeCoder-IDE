@@ -1,9 +1,11 @@
-<!--
-BeCoder pull request checklist:
-- Describe the user-visible behavior and the owning product boundary.
-- Link the relevant issue or handoff requirement when one exists.
-- List the exact source checks, tests, package checks, and runtime checks completed.
-- State packaging, bundled-extension, localization, and license impact.
-- Include screenshots for visible UI changes.
-- Do not claim GUI/runtime acceptance from a successful source or Setup build alone.
--->
+## 变更
+
+<!-- 说明具体问题、变更后的行为、所属模块及相关 issue；纯维护变更说明其目的。 -->
+
+## 验证
+
+<!-- 列出实际完成的命令/检查及结果。区分源码、包/Setup、代理运行和负责人验收；注明未验证项。 -->
+
+## 影响
+
+<!-- 有影响时说明打包、内置扩展、本地化及许可变化；可见 UI 变更附截图。删除不适用章节。 -->

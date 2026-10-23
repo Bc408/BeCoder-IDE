@@ -1,11 +1,3 @@
-# Security Policy
+# 安全问题
 
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-
-## Reporting a Vulnerability
-
-Report a vulnerability through the [BeCoder issue tracker](https://github.com/Bc408/BeCoder-IDE/issues).
+本扩展随 BeCoder 维护与发行。漏洞报告入口及说明统一见[项目安全政策](../../SECURITY.md)。

@@ -1,27 +1,29 @@
 # BeCoder vX.Y.Z
 
-<!-- Keep only categories that contain meaningful user-facing changes. -->
+<!-- 仅保留有实际用户变化的分类；写清最终行为，不复制内部执行台账。 -->
 
 ## feat
 
-- Describe new user-visible capabilities.
+- 新增的用户能力。
 
 ## fix
 
-- Describe corrected behavior and compatibility fixes.
+- 修复的问题及兼容性变化。
 
 ## chore
 
-- Describe relevant maintenance changes.
+- 对用户有意义的维护变化。
 
 ## build
 
-- Describe compiler, packaging, or release-pipeline changes that matter to users.
+- 编译器、安装包或发行方式的变化。
 
 ## refactor
 
-- Describe behavior-preserving structural changes when they are relevant to the release.
+- 与本次发行相关的内部结构调整。
 
 ## docs
 
-- Describe documentation changes that matter to users.
+- 使用或开发文档的变化。
+
+<!-- 末尾按实际情况列出 Setup 资产、安装/覆盖注意事项及验证边界；不把构建通过写成 GUI 或负责人验收通过。发布流程见 docs/development.md。 -->

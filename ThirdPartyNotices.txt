@@ -2,6 +2,10 @@ NOTICES
 
 This repository incorporates material as listed below or described in the code.
 
+BeCoder's product license identifier is GPL-3.0-or-later; see the root LICENSE.
+Component-specific licenses and original copyright notices remain applicable.
+For a Chinese license and source index, see licenses/README.md.
+
 GCC 16 Unicode 17 display-width data (GCC diagnostics extension)
 https://github.com/gcc-mirror/gcc/blob/0b1bd1e984db5e9f9ad94f38014e02e528116a79/libcpp/generated_cpp_wcwidth.h
 Generated upstream by contrib/unicode/gen_wcwidth.py using glibc utf8_gen.py.
@@ -10,8 +14,8 @@ TypeScript representation: extensions/becoder.gcc-diagnostics/src/gccDisplayWidt
 This component is not covered by the diagnostic extension's MIT license.
 
 
-The following extensions are bundled by BeCoder. Their source code,
-copyright notices, and license texts are retained in the referenced extension
+The following components are bundled by BeCoder. Their source code,
+copyright notices, and license texts are retained in the referenced component
 directories. This section identifies them explicitly in addition to the
 transitive dependency notices below.
 
@@ -23,6 +27,18 @@ https://github.com/microsoft/vscode
 MIT License
 Copyright (c) 2015 - present Microsoft Corporation
 License text: licenses/MIT-VSCode.txt
+
+---------------------------------------------------------
+
+Electron 43.7.3
+https://github.com/electron/electron/tree/v43.7.3
+
+MIT License
+Copyright (c) Electron contributors; Copyright (c) 2013-2020 GitHub Inc.
+License text: licenses/MIT-Electron.txt
+Electron's bundled Chromium and other dependencies retain their runtime notices.
+
+---------------------------------------------------------
 
 BeCoder Runner 0.3.0 (based on C/C++ Compile Run)
 https://github.com/danielpinto8zz6/c-cpp-compile-run
@@ -45,6 +61,45 @@ React UI dependencies: MIT; Microsoft Codicons font: CC-BY-4.0.
 Dependency notices and attribution: extensions/becoder.cph/ThirdPartyNotices.txt
 Font license: extensions/becoder.cph/licenses/codicons.txt
 Modification and source records: extensions/becoder.cph/UPSTREAM.md
+
+---------------------------------------------------------
+
+Beacon 0.1.0
+https://github.com/Bc408/BeCoder-IDE
+
+BeCoder-authored code: MIT; Copyright (c) BeCoder contributors
+License text: extensions/becoder.beacon/LICENSE
+Adapted Vercel AI Elements and Captain Who code/styles: Apache-2.0.
+License texts: extensions/becoder.beacon/licenses/ai-elements.txt and
+extensions/becoder.beacon/licenses/captain-who.txt
+LobeHub provider marks: MIT; Copyright (c) 2023 LobeHub.
+License text: extensions/becoder.beacon/licenses/lobe-icons.txt
+Pinned sources and modification records: extensions/becoder.beacon/UPSTREAM.md
+The extension build generates dist/ThirdPartyNotices.txt with bundled npm,
+grammar, font, and other dependency notices; component licenses remain separate.
+
+---------------------------------------------------------
+
+BeCoder NoteBook 0.1.0
+https://github.com/Bc408/BeCoder-IDE
+
+GPL-3.0-or-later; Copyright (c) 2026 BeCoder contributors
+License text: extensions/becoder.notebook/LICENSE
+Source path: extensions/becoder.notebook
+Renderer ANSI utilities are reused from extensions/notebook-renderers/src,
+with Microsoft copyright and MIT headers retained; full MIT terms are in
+licenses/MIT-VSCode.txt and the generated extension dist/THIRD_PARTY_NOTICES.txt.
+
+---------------------------------------------------------
+
+BeCoder shared Webview hover helper
+https://github.com/Bc408/BeCoder-IDE
+
+MIT License; Copyright (c) BeCoder contributors
+Source and license: extensions/becoder.shared/browser and
+extensions/becoder.shared/LICENSE
+Consumers bundle the helper and distribute its license as dist/HoverLicense.txt.
+It is shared source, not a separately installed extension.
 
 ---------------------------------------------------------
 
@@ -104,6 +159,16 @@ https://github.com/azemoh/vscode-one-monokai
 MIT License
 Copyright (c) 2018 Joshua Azemoh
 License text: extensions/becoder.one-monokai/LICENSE
+
+---------------------------------------------------------
+
+Seti File Icon Theme 10.0.0
+https://github.com/microsoft/vscode/tree/1.140.0/extensions/theme-seti
+
+MIT License
+Copyright (c) Microsoft Corporation; Copyright (c) 2014 Jesse Weed
+Code - OSS license: licenses/MIT-VSCode.txt
+Seti UI attribution and full license: extensions/theme-seti/ThirdPartyNotices.txt
 
 ---------------------------------------------------------
 

@@ -14,8 +14,13 @@ $requiredFiles = @(
 	'AGENTS.md',
 	'VISION.md',
 	'README.md',
-	'README_cn.md',
-	'SECURITY.md'
+	'README.en.md',
+	'SECURITY.md',
+	'docs/README.md',
+	'docs/getting-started.md',
+	'docs/development.md',
+	'docs/distribution.md',
+	'licenses/README.md'
 )
 
 foreach ($relativePath in $requiredFiles) {
@@ -24,17 +29,21 @@ foreach ($relativePath in $requiredFiles) {
 	}
 }
 
-$readme = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README.md') -Raw -Encoding UTF8
-$readmeCn = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README_cn.md') -Raw -Encoding UTF8
-foreach ($requiredText in @('Code - OSS 1.140.0', 'Open VSX', 'GitHub Issues')) {
+$readme = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README.en.md') -Raw -Encoding UTF8
+$readmeCn = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README.md') -Raw -Encoding UTF8
+foreach ($requiredText in @('Code - OSS', 'Open VSX', 'github.com/Bc408/BeCoder-IDE/issues')) {
 	if ($readme -notmatch [regex]::Escape($requiredText)) {
 		$errors.Add("English README does not mention: $requiredText")
 	}
 }
-foreach ($requiredText in @('Code - OSS 1.140.0', 'Open VSX', 'GitHub Issues')) {
+foreach ($requiredText in @('Code - OSS', 'Open VSX', 'github.com/Bc408/BeCoder-IDE/issues')) {
 	if ($readmeCn -notmatch [regex]::Escape($requiredText)) {
 		$errors.Add("Simplified-Chinese README does not mention: $requiredText")
 	}
+}
+
+if ($readme -notmatch 'README\.md' -or $readmeCn -notmatch 'README\.en\.md') {
+	$errors.Add('The Chinese and English README entry points must link to each other.')
 }
 
 if ($errors.Count -gt 0) {

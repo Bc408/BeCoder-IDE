@@ -1,9 +1,5 @@
-# BeCoder Coding Agent Instructions
+# BeCoder 代理阅读入口
 
-Read repository-root `AGENTS.md`, then `VISION.md`, and follow every current product requirement supplied by the project owner. `VISION.md` owns stable product reasoning, and `AGENTS.md` owns repository workflow and authorization gates. Do not assume that deleted historical stage, handoff, or contract documents remain authoritative.
+先完整阅读根目录 [AGENTS.md](../AGENTS.md) 和 [VISION.md](../VISION.md)，再读取当前源码及项目负责人最新要求。工作流、授权和验证规则由 AGENTS.md 统一维护，本文不另设一套。
 
-For Beacon and BeCoder NoteBook, continue with [the repository design baseline](../docs/beacon/README.md) and its linked documents. They own confirmed future behavior; root and extension READMEs describe the current implementation. Do not treat a current implementation gap as a reversal of the approved design, or treat a design document as proof of implementation. Desktop copies are historical snapshots.
-
-Do not infer BeCoder behavior from historical Visual Studio Code, Code - OSS, ShortestPath, or portable-product documentation. Preserve upstream architecture and required legal provenance where they remain relevant, but do not restore product capabilities that BeCoder has removed.
-
-Before implementation, provide the understanding proof required by `AGENTS.md`. Before tests, follow the Validation Command Preflight in `AGENTS.md`, then check TypeScript compilation through the active build watch task when available or the owning typecheck/Gulp task. Never use `npm run compile` as TypeScript validation. Follow the Windows Setup-only build and handoff boundary in `AGENTS.md`.
+文档导航见 [docs/README.md](../docs/README.md)。Beacon / NoteBook 工作继续阅读[正式设计入口](../docs/beacon/README.md)；设计要求、当前实现和实际验收证据分别判断。历史上游说明、桌面稿或已删除文档不覆盖当前产品规则。

@@ -1,58 +1,70 @@
-# Beacon 与 BeCoder Notebook 当前实现状态
+# Beacon 与 BeCoder NoteBook 当前实现状态
 
-更新：2026-10-20。本文区分已记录实现、当前改造和历史验证。分支为 `codex/BeCoder_Next`；2026-10-15 的验证以当时 `6cf90af024a047d394d3c5f5a968b536294792a8` 及工作树为依据，不能证明本轮代码。三档切换与继承源码已实施并通过所属回归及生产 Webview 渲染检查；staged Windows 构建成功；负责人于 2026-10-20 明确反馈本轮验收通过并授权本地提交及推送对应 GitHub 分支。正式需求以[PRD](prd.md)、[三档专项设计](mode-conversation-design.md)及负责人最新直接决定为准。
+更新：2026-10-23；发布候选源码基线：`e644d508` 加当前未提交修复。本文记录当前源码覆盖和已知验证边界；正式需求见[文档入口](README.md)。源码证据不替代模型调用、应用构建、包/Setup 或 GUI 验收，也不将旧构建推广为当前工作树的验证。
 
-## DeepSeek 设置闭环（2026-10-20）
+## 当前能力与所有者
 
-依据[新设置设计](../../DESIGN.md)实施单连接／单密钥、服务声明能力、候选确认替换、供应商启停、主动批量文本连通测试及取消。新设置页只开放 DeepSeek，其他供应商数据保留而不进入新菜单。模型详情使用独立弹窗、收起的能力修正及保存／取消；能力更新保留生成参数，冲突在请求前反馈。活动回复继续使用固定快照。无模型启停、多密钥、价格或自动连通测试。
+| 能力 | 当前实现与入口 |
+| --- | --- |
+| 模型设置 | [配置](../../extensions/becoder.beacon/src/modelConfiguration.ts)、[能力](../../extensions/becoder.beacon/src/models.ts)和[设置页](../../extensions/becoder.beacon/webview/Settings.tsx)：DeepSeek、百炼、Moonshot、Ollama；单连接/单密钥、候选确认、供应商启停、主动批量测试、布尔能力修正及参数设置 |
+| 工作区与会话 | [协调器](../../src/vs/platform/beacon/node/beaconCoordinator.ts)、[存储](../../src/vs/platform/beacon/node/beaconStore.ts)、[租约](../../src/vs/platform/beacon/node/beaconLease.ts)：窗口独立根、共享最近列表、三档资格、同对话单窗口占用、revision 校验与固定归属；不导入开发期全局历史 |
+| 草稿与模式继承 | [会话历史](../../extensions/becoder.beacon/src/history.ts)及协调器：主页隐藏草稿、首次发送转正、文字/捕获附件保存、最后关闭恢复引用、跨临时/持久化类别的独立快照与按版本消费来源草稿 |
+| 运行证据 | [执行者采集](../../extensions/danielpinto8zz6.c-cpp-compile-run/src/beaconEvidence.ts)：随用户运行记录实际主代码、输入、编译/输出/终态和覆盖；Runner、CPH 各保留最近 10 条 FIFO，Notebook 独立 |
+| 页面读取 | [原生页面入口](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)与[扩展适配](../../extensions/becoder.beacon/src/context.ts)：本窗口已打开文本、Notebook、已加载网页及 PDF 文字；不打开文件或从 backing file 补正文 |
+| 按需工具 | [上下文工具](../../extensions/becoder.beacon/src/contextTools.ts)和[模型入口](../../extensions/becoder.beacon/src/provider.ts)：先给来源/版本和入口元数据，按需读页面或指定运行 revision；运行材料先复制到当前会话再返回 |
+| Notebook | [Notebook 扩展](../../extensions/becoder.notebook/README.md)与[领域工具](../../extensions/becoder.beacon/src/notebookTools.ts)：原生独立编辑、源码关联、用户 input 运行、明确请求的新建/改写、最新完整稿备份与原生保存 |
+| 错误与恢复 | [错误反馈](../../extensions/becoder.beacon/src/toolFeedback.ts)与[连接恢复](../../extensions/becoder.beacon/src/requestRecovery.ts)：已知错误码提供中英文可行动说明；底层异常正文不进入 UI；输出或完成工具后不自动重放 |
 
-本地证据：扩展类型检查、生产 bundle、171 项 Node 回归、零警告 lint、所属 CSS 与生产 Webview 渲染通过。已查看深浅色、宽窄窗口、候选和详情截图。独立只读复审发现的候选永久加载及未声明能力误判，已通过失败到通过的回归修复。客户端类型检查、OI 扩展编译和最终 staged Windows 应用构建均通过。首轮构建后发现存量启用状态边界并补回归修复，最终以 171 项回归及重新执行的客户端检查／OI 编译／staged 构建为准。应用目录为 C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64。
+模型设置的完整现行规则见 [Beacon 使用说明](../../extensions/becoder.beacon/README.md)。能力默认支持，服务明确不支持时关闭；容量缺失时使用 32768 上下文、24576 输入、8192 输出 Token 的可修改默认值。这些默认配置不证明模型实际支持或具有该容量。
 
-未执行真实 DeepSeek 账号／收费调用、桌面 GUI、package 或 Setup，不宣称负责人验收。原始命令、失败与重跑记录在本机 tmp/beacon-deepseek-settings/validation.md，截图为 tmp/beacon-render/deepseek-*.png。下列历史验证不作为本轮设置验证的替代。
+## 当前交互与存储
 
-## 已实现的调用链
+- 工作区选择与历史列表仅在主页显示；详情页宿主也拒绝切根。空白主页不建实体，首次输入/附件可建不进历史的草稿，首次发送按原 ID 转正。返回主页保留详情草稿；主页“新聊天”清空主页草稿。
+- 有效根下三档均可选；Blackout 保留根但不新增工作区资产读取，临时输入/消息只在内存。主动切档保留页面、文字、附件及显式空白；Spot/Flood 共用身份，跨类别后首次接受新问题才独立继承，来源消息不变。完整规则见[模式设计](mode-conversation-design.md)。
+- `.beaconWork/conversations/<id>/conversation.json` 固定属于所选根；同根其他聊天仍可用。真正关闭窗口才发布默认恢复位置，reload 释放所有权但不冒充关窗；自动恢复遇占用静默回主页。只有不再被引用或占用保护的未发送草稿可被淘汰。
+- Runner、CPH、Notebook 执行及必要清理/证据收尾期间，Beacon 使用暗淡禁用发送箭头；仅真实回答显示暂停。无工作区也执行忙碌约束，被拒绝发送不排队或补发。证据采集和发送可用性是不同边界。
+- 页面结果标识页面 version，运行结果标识 producer/revision；`source` 带来源、捕获时间、表示哈希及可得的编译源码哈希。哈希不证明正确或完整；`truncated` 表示返回范围，`source.partial` 表示已知采集遗漏，未确认覆盖时不填完整标记。
+- 运行记录读取固定 revision，先保存为当前会话材料；队列淘汰不破坏该副本。页面、文件、运行记录和会话材料分别授权，不能借 Flood 或页面路径访问别的会话内部资产。
+- 联网个人信息许可由 prompt 引导依据真实用户决定和适用范围；没有独立宿主许可台账、审批门或查询意图分类器。本地根/档位、敏感过滤、会话隔离和学习资产写入仍由宿主约束。
 
-- [窗口协调器](../../src/vs/platform/beacon/node/beaconCoordinator.ts)管理独立 Beacon 根、三档资格、忙时拒绝切根、固定会话归属、同对话单窗口占用及请求 scope 校验。[存储](../../src/vs/platform/beacon/node/beaconStore.ts)与[租约](../../src/vs/platform/beacon/node/beaconLease.ts)负责共享工作区资产和短写协调；无根、根不可用或用户主动 Blackout 时均不新增工作区资产读取；主动切档可保留已加载继承上下文，接受发送后的来源草稿清理由宿主窄入口负责。开发期安装级历史导入已移除。
-- [运行证据生产](../../extensions/danielpinto8zz6.c-cpp-compile-run/src/beaconEvidence.ts)捕获用户发起的 Runner/CPH/Notebook 运行。Runner 与 CPH 各保留最近 10 条 FIFO，Notebook 证据独立；记录主稿快照、哈希、编译配置、输入、真实流、终态与采集覆盖。记录采集超限或失败不停止用户程序，淘汰后迟到输出不重新入队。
-- [页面入口](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)只读取本窗口已有文本模型、Notebook 模型与已加载浏览器页面；不 resolve、打开或从 backing file 补正文。[PDF 桥](../../extensions/becoder.beacon/src/context.ts)使用已有阅读器按物理页提取文字，带页面版本、页数和未就绪反馈。三档均可按需读打开页面，读前后复核身份/版本及受保护资源。
-- [上下文工具](../../extensions/becoder.beacon/src/contextTools.ts)先交付元数据和入口说明，再按需读取页面或指定运行 revision。运行材料先复制到当前会话，再交付模型；本轮分页固定快照，后续可回读本会话 material。模型协议保留已完成的调用和结果，不读其他会话。
-- 上下文阅读结果统一携带 `source`：kind/id/origin、页面 version 或运行 producer/revision、capturedAt、contentSha256、可得的 sourceSha256、表示方法及可得的采集 partial 标记。contentSha256 是完整捕获表示在脱敏/分页前的哈希；sourceSha256 是生产者实际编译主稿的字节哈希。truncated 描述返回范围；source.partial 汇总已知的主稿或事件采集缺失，未建立完整覆盖时省略，不能将尚无终态的材料报为完整。原始材料和队列格式不因此迁移。
-- [模型入口](../../extensions/becoder.beacon/src/provider.ts)沿用 BYOK、能力判断、AI SDK 和已有恢复机制。页面/运行/文件/Notebook 工具的实际失败经[已知错误码](../../extensions/becoder.beacon/src/toolFeedback.ts)进入活动栏，并有中英文可行动说明；底层异常正文不进入 UI。缺少必需 activities 的开发期消息快照不再补为空数组，而作为不可读数据反馈，不覆盖原文件。保存失败与释放失败按实际状态反馈，模型协议仍保存真实结果。
-- 联网个人信息仍须有真实用户的明确许可；最新决定采用 prompt 软约束，引导模型理解已有范围、必要时问询及尊重撤销。不新增宿主许可凭据、审批门或查询意图分类器。页面读权、本地根/档位/会话隔离、敏感过滤与学习资产写入条件继续由已有宿主入口执行。
+## Notebook 与 PDF 的覆盖
 
-## Beacon 主页、历史与档位交互
+`.bcnb` 使用 version 2，支持 C/C++、Markdown 与 `becoder-input`；Markdown 公式/Mermaid、原生图片附件、折叠、插入入口和 Seti 图标已接入。没有旧格式、内嵌 input 或 base64 图片迁移，也没有独立插图按钮。
 
-本轮源码已把“工作区/历史/新聊天”收敛到同一主页，并把已打开聊天拆成明确详情页：
+input 运行上方最近 C/C++ 的最新未保存代码，程序块不自行执行。每份 input 仅保留最近实际结果，输出合并；运行时限 2 秒、输出上限 262144 字节，编译时间单独计算。输入和输出保存在笔记内，符合归属的行为证据独立写入 `.beaconWork`，不挤占 Runner/CPH 队列。
 
-- 工作区选择器仅在主页显示，紧挨连接设置左侧；右锚点固定，悬停向左展开绝对路径、点击整体向下展开。顶部当前项不重复进入最近列表；当前项取消后动画移入最近列表并保持面板打开，最近项删除只移除列表记录。Blackout/故障保持图标与路径说明，三个菜单互斥。详情页收到迟到的 `selectWorkspace` 等工作区消息也会被宿主拒绝。
-- 左下角三档始终显示。无根或根不可用时 Spot/Flood 禁用；首次选根默认 Spot，根间切换保留现有档位。主动 Blackout 保留已选根，但上下文客户端不暴露其历史、记忆、运行材料或文件根。
-- 本轮主动切档改造保留当前页面、文字和已捕获附件，空输入也替换目标侧旧草稿；Spot/Flood 共用身份。跨 Blackout/持久化类别后的首次新问题被接受时才建立独立完整快照，来源消息不变、被消费草稿按版本清除；切回来源类别且尚未发送时继续原对话。Blackout 转入持久化模式后发送明确允许完整临时上下文存入新对话。此路径已有源码回归；根失效仍按异常降级路径退出详情，主页隐藏该根历史，不能与主动切档混为一谈。
-- 详情返回与右上角按钮保存当前草稿并恢复主页草稿；主页“新聊天”才清空文字/附件并删除未发送草稿。首次输入文字或材料建立不进入历史的 draftOnly 对话，首次发送原 ID 转正；空主页不创建实体。Blackout 只用内存草稿。文字与捕获附件统一持久化，输入/附件队列在导航和关闭前交接。
-- 模式、工作区、历史操作在回答、相关运行或必要保存进行时不切换；宿主先完成自己的草稿保存，再刷新原生忙碌状态判断。最近列表移除当前根会取消选择并将它去重置顶，不删除 `.beaconWork`。
+Beacon 工具只接受明确目标和正文/块顺序，不接受模型伪造的 outputs/attempt。新建拒绝覆盖，不产生空占位或旧稿备份；改写先备份最新完整内存稿，再使用原生编辑/保存。运行与改写互斥，dirty 冲突、取消交接及 applied/saved/dirty 如实反馈；失败不自建回滚。
 
-工作区恢复引用由原生宿主记录，扩展 reload 只释放资源，真正窗口关闭才发布默认恢复位置。关闭按宿主观察顺序串行发布，显式空白不回退旧草稿；自动恢复遇占用静默回空白主页。淘汰仅针对不再被恢复引用、活窗口引用或占用保护的未发送 draftOnly 对话；已发送聊天及其草稿不受此清理影响。
+文本、Notebook、PDF 文字选区均可通过“询问 Beacon”加入可查看、移除的草稿，用户发送后才调用模型。PDF 按物理页提取已加载 PDF.js 文档的文字；扫描页可能为空。该路径不含 OCR，也不代表已实现完整图片、公式或版式理解。网页未渲染代码、iframe 和其他未覆盖表示同样不能当作已读取。
 
-2026-10-15 草稿/恢复批次历史验证（不覆盖本轮模式继承改造）：Beacon 类型检查、生产 bundle、142 项 Node 测试、零警告 lint，原生协调器 38 项测试、客户端类型检查及分层检查通过。生产 Webview 的完整 Playwright 渲染与独立工作区交互检查通过，已检查深浅色及窄栏截图。完整应用构建首次因正在运行的输出目录报 EBUSY，关闭后重构成功；最终 staged 构建及绝对路径直接包校验（含编译器）通过。隔离桌面已验证选根自动 Spot、草稿落盘、取消根移入最近项、Blackout 隔离/恢复、正常重启草稿及显式空白恢复。关闭竞态在实际日志发现后改用 onBeforeShutdown 保存，最终构建已验证快速输入后正常关闭的草稿及恢复引用落盘，不再出现原保存调用取消。真实双窗口已验证占用目标静默空白、独立输入、A 先关 B 后关时 B 成为恢复目标且旧草稿淘汰。反向关闭、崩溃及断电等完整矩阵尚未全部做 GUI 验收。记录见本机 tmp/beacon-workspace-drafts/validation.md；无真实账号或付费模型调用。
+## 已有验收与剩余验证
 
+2026-10-20 的三档切换与独立继承改造已完成所属回归、生产 Webview 渲染及 staged Windows 构建，负责人明确反馈该轮体验验收通过。此局部结论保留，不扩大到之后的设置改造、所有异常退出或真实模型质量。
 
-## Notebook 与 PDF 当前能力
+此前草稿/恢复批次做过隔离桌面的选根、保存、Blackout 恢复、正常关窗和部分双窗口检查；这些旧时点证据不等于当前全部组合已验收。模型设置后续已扩展到四家服务，现行源码不能再描述为“仅 DeepSeek”或能力三态；文档清理本身未重新测试服务连接、设置视觉、安装包或 Setup。
 
-`.bcnb` 使用 version 2，独立 C/C++、Markdown 和 becoder-input；原生新建入口、Seti Notebook 图标、输入按钮/插入位置、折叠、Markdown 公式/图示及原生图片附件已接入。没有旧格式/内嵌 input/base64 图片迁移或独立插图按钮。用户运行 input 上方最近 C/C++ 的最新未保存内容；代码块自身不执行。程序输出合并，普通 cout/cerr 采用默认色，debug 的 ANSI 着色由其库提供；状态与 compile/run 时间统一在输出块显示。
+## 2026-10-23 发布前修复
 
-最新提交限制程序运行 2 秒、程序输出 262144 字节，超限结束任务并如实显示；编译时间不计入程序运行时限。编译缓存文件名含笔记名和代码块序号，诊断使用短相对路径，本地头文件及用户程序 cwd 保持所属规则。无需 OS 注册表文件关联，资源管理器类型描述由系统默认行为决定。
+- [会话存储](../../src/vs/platform/beacon/node/beaconStore.ts)删除对话时同时清理该对话专属的 `materials`，保留 `.beaconWork` 内独立资产；平台存储测试已覆盖有效对话和遗留材料清理。
+- [CPH 执行](../../extensions/becoder.cph/src/execution.ts)停止编译器或自定义 Python 检查器时兼容 Windows 的 `SYSTEMROOT` 键，并在 UI 准备阶段收到停止后阻止执行器启动；CPH 全部可重复测试 64 通过，1 个 PCH 集成检查因可选 gch 未生成而明确跳过。
+- [Beacon 工作流](../../.github/workflows/build-windows.yml)和发布工作流通过 `exec.ps1` 传播前面命令的失败，Electron 原生绑定目标从 `.npmrc` 读取；工作流静态检查通过。
+- 根版本元数据已更新为 `2.0.0`。源码检查、生产 Webview 渲染、staged Windows 构建和包验证通过；Setup 已生成，但直接 Setup 验证尚未在当前非管理员 PowerShell 会话执行，负责人 GUI 验收也尚未进行。
 
-Beacon 已有新建和改写 Notebook 的领域入口；只接用户明确目标和正文/块顺序，不接伪造 outputs/attempt。已有笔记先备份最新完整编辑稿，再用原生编辑/保存；首次创建拒绝同名覆盖，没有旧稿备份。运行与改写互斥、其他窗口 dirty 冲突、实际 applied/saved/dirty 状态及取消交接由已有 Notebook/宿主所有者负责。改写失败没有自建回滚。
+## 后续版本开发事项
 
-文本、Notebook 和 PDF 文字选区通过“询问 Beacon”加入草稿，用户发送后才调用模型；预览使用内存内容。PDF 文字抽取不等于 OCR、图片或完整公式/版式理解。
+负责人于 2026-10-23 确认 v2.0.0 以当前已实现能力为交付范围。以下尚未实现需求保留到后续版本，不作为本次发布补功能的前置条件：
 
-## 验证与剩余范围
+- 四平台 OJ 本人同题提交/判题专用适配及真实登录后的完整旅程；当前页面文字读取和公共联网工具不能替代它们。
+- 工作区 tips/status 的主模型简单追加、直接编辑/热更新，用户主动 dream 和可读归档；自动长会话压缩及本会话回读的完整流程。
+- 完整页面视觉材料、图片/公式等覆盖。
+- Notebook 尚未完成的完整流程。
+- 当前 Notebook 工具之外的讲义、图示等学习资产写入和 PRD 中尚未交付的导航/管理能力。
 
-2026-10-20 三档改造最终源码检查：Beacon 类型检查、生产 bundle、159 项 Node 测试与零警告 ESLint 通过；原生基础设施 41 项测试、原生改动路径 ESLint、客户端类型检查、分层检查及 OI 扩展编译通过。CSS stylelint 退出 0，同时报告 193 条设计 token 建议，不能表述为零警告。生产 Webview 完整 Playwright 检查通过，已查看深色 360/760px 和浅色 360px 两种分隔截图；另覆盖相同文字的新输入、迟到发送确认与目的对话快照不误清草稿。独立只读复审发现的切档输入、失败返回、打开历史和确认竞态均已修正并重跑相应回归，最终静态复审无新增阻塞发现。staged Windows 最终重跑退出 0，耗时 91.4 秒；首轮 Gulp 已报告完成，但外层日志打印发生 GBK 编码错误，按验证编排失败单独记录，未冒充成功证据。未运行包验证器或构建 Setup。
+## v2.0.0 当前能力仍需验证
 
-本轮源码回归覆盖双向独立继承、页面/运行材料完整捕获副本、切档往返、来源草稿消费失败反馈、附件不重读、拒绝发送回退及新输入保留、模拟扩展重启后重开和删除来源后的独立性。负责人于 2026-10-20 反馈本轮体验验收通过。代理未执行真实桌面多窗口、根失效/恢复、关闭/崩溃/断电以及真实模型端到端验证；浏览器 mock host 渲染和源码测试不替代这些验证。无真实账号或付费模型调用。命令、失败与重跑记录在本机 tmp/beacon-mode-conversations/validation.md 和 ledger.txt。分隔文案严格使用“已继承上文，开始临时对话”和“已继承上文，建立持久化对话”。
+- 四家服务商真实连接与已实现能力、参数的可用性，密钥临时显示与错误恢复。
+- 当前 Notebook 创建、关联、编辑、备份及运行流程；跨窗口 dirty/运行/保存/取消的真实产品体验。
+- 工作区根失效恢复、反向关窗、重启、崩溃及断电等涉及已交付数据的异常矩阵。
+- 最终候选的源码回归、生产渲染、staged 应用、包/Setup 及负责人验收；范围确认不能替代这些结果。
 
-2026-10-15 前序 Beacon/Notebook 批次历史验证（不覆盖本轮模式继承改造）：所属类型检查、生产 host/UI/worker 构建、完整 133 项扩展测试、零警告 lint、生产 Webview 渲染、原生 35 项测试、客户端类型检查、OI 扩展预发布、Windows staged 应用构建、直接 package 校验、文档结构与 git diff --check 均通过。渲染覆盖中英文、窄侧栏、工作区历史入口、Blackout 历史隐藏、从手动 Blackout 恢复档位及既有高亮/公式/活动/会话/设置功能；截图已检查。没有新增依赖、账号操作或付费模型调用；不宣称真实模型质量或桌面 GUI 验收通过。
-
-历史实际检查保留在专项台账：[Notebook UI](notebook-ui-plan.md)、[Notebook 创建](notebook-create-plan.md)、[渲染审查](render-review-plan.md)、[PDF 页读取](pdf-pages-plan.md)和[PDF 选区](pdf-selection-plan.md)。这些是各批当时的证据，不表示当前工作树已经完成 GUI/模型验收。
-
-完整首版仍须完成四平台 OJ 本人同题材料适配与真实旅程、工作区 tips/status 简单追加、用户主动 dream、完整页面视觉材料及教学质量验证。用户控制记忆质量，不引入复杂自主维护。Notebook 四条完整流程及跨窗口/保存/取消的真实产品验收仍需逐项记录；源码测试、渲染 fixture 和历史应用构建不替代负责人验收。
+后续需求没有被撤回，当前能力也没有因范围冻结而自动验收通过。各项验证只证明实际覆盖范围；执行时记录准确源码、命令、结果和限制。

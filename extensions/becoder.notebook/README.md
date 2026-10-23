@@ -1,23 +1,33 @@
 # BeCoder NoteBook
 
-The native New File list shows **BeCoder Notebook · .bcnb Support**. The **.bcnb Support** settings category controls native image-attachment paste; the Notebook toolbar overflow menu opens this category. Compact layout and insertion/cell toolbars reuse the built-in Notebook settings.
+独立的 `.bcnb` 学习笔记扩展，复用 Code - OSS 原生 Notebook 编辑器。本文说明当前实现；完整产品规则见[正式设计](../../docs/beacon/notebook.md)，剩余工作和验证边界见[实现状态](../../docs/beacon/implementation-status.md)。
 
-原生新建列表显示 **BeCoder Notebook · .bcnb 支持**。设置页提供 **.bcnb 支持** 分类，Notebook 顶部“…”中的“设置”可直达；已有图片附件粘贴能力提供开关，布局设置链接到原生 Notebook 配置。
+## 创建与编辑
 
-Create a `.bcnb` from the native **New File…** list or **Create: New BeCoder Notebook** command, after opening a folder. Empty files created in Explorer open as blank notebooks. `.bcnb` and `.bcnb-backup` reuse the bundled Seti notebook icon in dark and light themes. Input controls follow the interface language; execution headings stay English. Private compilation uses a short relative `<notebook>-code<N>.c/cpp` filename, where N counts C/C++ program blocks. Each run retains its own temporary directory, and the program still runs in the Notebook directory (or the chosen folder for an unsaved Notebook).
+先打开文件夹，再从“新建文件…”列表或“创建：新建 BeCoder Notebook”命令新建。资源管理器中新建的空 `.bcnb` 可直接打开为空白笔记；已有 `.bcnb` 与 `.bcnb-backup` 可独立打开。文件使用 version 2 单文件格式，不迁移开发期旧格式。
 
-打开文件夹后，可从原生“新建文件…”列表或“创建：新建 BeCoder Notebook”命令新建 `.bcnb`；资源管理器中新建的空文件可直接打开为空白笔记。`.bcnb` 与 `.bcnb-backup` 复用深浅主题的 Seti Notebook 图标。输入控制文案跟随界面语言，执行状态行保持英文。缓存源码名为“笔记名-code序号.c/cpp”，序号只计算 C/C++ 程序块；编译诊断使用短相对文件名。每次运行独立临时目录，程序工作目录仍为笔记所在目录（未保存笔记使用选定文件夹）。
+单元格支持 C、C++、Markdown 和独立 input（`becoder-input`）。Markdown 复用随包 KaTeX、字体与 Mermaid；图片在 Markdown 编辑态粘贴为附件，短 `attachment:` 引用和图片数据随同一次原生编辑进入撤销与保存。顶部“…”中的“设置”打开“.bcnb 支持”，可关闭图片附件粘贴；布局复用原生 Notebook 设置。其他语言可用 Markdown 围栏展示，普通编辑器及 ipynb 的语言支持不受此限制。
 
-The `.bcnb` type picker is scoped to C, C++, Markdown and the independently registered `input` (`becoder-input`). Unsupported standalone cell languages and old development plaintext input are rejected, without migration. Input editors keep only text and the native language/control surfaces; English execution state and compile/run timing appear below as a native output. The between-cell insertion toolbar includes input and uses the same native spacing as Jupyter. Markdown reuses bundled KaTeX/font assets and Mermaid rendering; image attachments retain the existing native behavior, with no added insertion flow. Ordinary editor and ipynb languages remain unchanged.
+C/C++ 编辑器右上角提供关联笔记入口，按打开根的 `.notebook/<源码相对路径及完整文件名>.bcnb` 定位。首次创建复制当前代码，之后双方内容独立；源码改名、移动或删除不带动笔记或备份。
 
-`.bcnb` 类型入口仅 C、C++、Markdown 和独立 input（`becoder-input`），不支持其他独立语言块或旧开发 plaintext input，不作迁移。输入编辑框保持正文与原生类型/控制入口，英文状态及编译/运行时间在下方输出呈现。块间插入栏提供输入，间距与定位复用 Jupyter 的原生策略。Markdown 复用随包公式/字体与 Mermaid 渲染；图片保留既有原生能力，不作扩展。普通编辑器与 ipynb 不受影响。验证和代理运行记录见[本批台账](../../docs/beacon/notebook-ui-plan.md)。
+## 用户运行 input
 
-Bundled GPL-3.0-or-later extension for native Code-OSS Notebook documents. The confirmed complete product scope is in [the Notebook design](../../docs/beacon/notebook.md); current implementation and acceptance limits are in [the implementation status](../../docs/beacon/implementation-status.md).
+在程序块下添加 input，点击 input 的运行按钮，捕获其上方最近 C/C++ 程序块与 input 的最新内容，包含未保存修改。程序块之间不共享状态，不拼接；运行不保存整本笔记，不改写原始 C/C++ 文件。每份 input 各自保留最近一次尝试的真实结果、编译时间与运行时间，重跑时替换本份旧结果。
 
-Current source registers `.bcnb` / `.bcnb-backup`, version 2 single-file serialization without development-format migration, new and source-associated Notebook commands, attachment image paste, and independent input cells with plain-text editing. Running an input captures the nearest preceding C/C++ block and that input's current unsaved contents. Each input owns its latest result and separate compile/run timing. Program blocks remain native code editors. It uses the bundled Runner compiler API and Windows input/Job helper, merging program stdout/stderr into one plain ANSI output without stderr styling. The original C/C++ file is never written. Saved Notebook execution uses the Notebook directory; unsaved documents use a selected editor folder. Models have no execution API.
+编译复用 [Runner API 与配置](../danielpinto8zz6.c-cpp-compile-run/docs/COMPILER_SETUP.md)，每次使用独立临时目录和短相对源码名“笔记名-code序号.c/cpp”；序号只计算程序块。程序工作目录为已保存笔记所在目录，未保存笔记使用选定的打开文件夹。读取和编辑不要求 Runner，用户运行需要可用的 Runner 和工作区信任。
 
-Input editing uses the native text editor, dirty state and undo. Pasted images use short attachment references and the existing MIT ipynb Markdown attachment renderer; image references and metadata are applied in one native edit. Output rendering reuses the Microsoft MIT ANSI parser/theme mapping, with a small adapter for split sequences and carried styles; its notices are bundled in dist/renderer.js.LEGAL.txt. Notebook runtime evidence belongs to the initiating window's usable Beacon root only when the saved Notebook lies inside it. Reading/editing does not require Runner. Native save, undo and workspace trust remain Code-OSS responsibilities. GUI responsiveness and image performance still require application acceptance.
+stdout/stderr 合并成普通连续输出，保留 ANSI 颜色，不按流染色。状态标题保持英文，控制文案跟随界面语言；程序运行上限为 2 秒、保留输出上限为 256 KiB，触限停止并如实显示结果。模型没有执行 API。已保存笔记位于当前窗口可用的 Beacon 根内时，用户运行还会形成该区的独立证据，不占 Runner/CPH 近期队列。
 
-Current source exposes explicitly requested new-target creation and existing-target edits to Beacon: a scope-bound resource gate freezes the idle target, captures its complete dirty state into the latest ordinary .bcnb-backup, applies content-only native Notebook edits and reports actual save/dirty/release state. Actual outputs stay host-owned; failure does not add custom rollback. Code/Notebook selection joins a removable draft without automatic sending. New-target creation publishes complete cells through native file creation without an empty placeholder or first-create backup; it requires an opened folder and an explicit .bcnb path or source association. Existing targets are refused, source association uses opened roots, and the parent-folder conflict returns a suggestion without changing folders. PDF text selection now joins the same removable Beacon draft; PDF/page material access is implemented in source, while full OJ-to-Notebook flows and end-to-end acceptance remain first-version work. Source/fixture checks are not GUI, packaged application, model or account acceptance.
+## Beacon 辅助与实现边界
 
-No extension dependencies need installing: `npm run typecheck`, `npm run build`, and `npm test` use existing repository tools. Packaging includes the GPL license, compiled extension, Chinese localization and the Microsoft renderer MIT license in `dist/THIRD_PARTY_NOTICES.txt`; source and test outputs are excluded. Microsoft renderer sources are reused from this checkout's baseline commit `865c504d0795d7b64dc413756916e17ee36696c5`, with their MIT headers retained.
+代码或笔记选区可通过“询问 Beacon”加入可查看、可移除的草稿，由用户发送。模型仅在用户明确请求、目标明确且符合档位范围时创建或修改笔记。
+
+已有目标空闲时，宿主暂时保护该笔记，先将最新完整编辑稿（含未保存内容、附件及真实输出）保存为同目录最近一份 `.bcnb-backup`，再通过原生编辑应用正文修改。实际输出仍由宿主维护；失败不额外回滚，反馈实际保存及未保存状态，结束后释放目标。新目标通过原生文件创建一次写入完整单元格，不先建空白占位、不创建首次备份，也不覆盖已有文件；源码关联只使用编辑器打开根，父目录冲突只返回建议。
+
+四平台 OJ 到笔记的完整旅程、模型效果和完整首版验收仍未完成。源码与 fixture 检查不代表 GUI、安装包、模型或账号验收；图片性能与交互效果需要实际应用验证。
+
+## 开发与许可
+
+在本扩展目录执行 `npm run typecheck`、`npm run build`、`npm test`，复用仓库工具；测试需先构建 `dist-test`，不单独安装扩展依赖。项目验证流程见[开发指南](../../docs/development.md)。
+
+扩展按 GPL-3.0-or-later 分发。Markdown 附件复用 MIT ipynb 渲染器，输出适配器复用 Microsoft MIT ANSI 解析和主题映射；原始版权头保留，打包包含 `dist/THIRD_PARTY_NOTICES.txt` 与 `dist/renderer.js.LEGAL.txt`，源码和测试输出不进入扩展包。

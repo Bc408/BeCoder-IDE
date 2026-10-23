@@ -29,6 +29,19 @@
 			"correspondingSourcePath": "extensions/becoder.beacon"
 		},
 		{
+			"id": "becoder.notebook",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
+			"modificationStatus": "BeCoder-authored native Notebook extension. The output renderer reuses Microsoft MIT-licensed ANSI utilities from extensions/notebook-renderers/src with original copyright headers retained.",
+			"license": "GPL-3.0-or-later AND MIT",
+			"spdxIdentifier": "GPL-3.0-or-later AND MIT",
+			"copyrightNotice": "Copyright (c) 2026 BeCoder contributors; reused ANSI utilities copyright Microsoft Corporation.",
+			"licensePath": "extensions/becoder.notebook/LICENSE",
+			"thirdPartyNoticesPath": "extensions/becoder.notebook/dist/THIRD_PARTY_NOTICES.txt",
+			"correspondingSource": "https://github.com/Bc408/BeCoder-IDE",
+			"correspondingSourcePath": "extensions/becoder.notebook"
+		},
+		{
 			"id": "code-oss",
 			"version": "1.140.0",
 			"source": "https://github.com/microsoft/vscode",

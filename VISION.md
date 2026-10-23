@@ -1,67 +1,51 @@
-# BeCoder Vision
+# BeCoder 产品方向
 
-BeCoder is a self-contained Windows environment for OI, ICPC and everyday C/C++ competitive programming. It combines a prepared editor and toolchain with Beacon, an optional AI companion that helps users understand problems, code and results.
+BeCoder 面向 OI、ICPC 与日常 C/C++ 练习，在 Windows 上提供自包含的编辑、编译、运行、题面阅读和样例测试环境。Beacon 是可选的算法学习助手，模型服务不可用时不影响核心编程流程。
 
-This document describes the product direction. It is not a frozen architecture, a stage checklist or a release-status record. Specific features and implementation choices can evolve with user feedback and the project owner's decisions.
+本文说明产品目的与职责边界，不是功能清单或验收记录。当前行为见[使用文档](docs/README.md)，Beacon 与 NoteBook 的已确认要求见[正式文档](docs/beacon/README.md)，未完成能力见[实现状态](docs/beacon/implementation-status.md)。负责人最新决定优先。
 
-The confirmed Beacon and BeCoder NoteBook design baseline is maintained in [docs/beacon](docs/beacon/README.md). Read its PRD, architecture, Notebook design and research agenda for work in those areas. Root and extension READMEs describe the current implementation, which does not yet implement all of that baseline. The project owner's latest direct decisions take precedence; desktop drafts preserve historical discussion rather than a competing set of current rules.
+## 体验目标
 
-## Purpose
+- **安装即可开始：** 编译器、语言服务与运行环境随产品准备，初学者无需先搭建系统工具链。
+- **熟悉且专注：** 保留成熟编辑器的日常流程，减少竞赛学习所需的切换和重复设置。
+- **反馈清晰：** 输出、进度、停止和失败原因及时可见；不把本地样例通过等同于线上评测通过。
+- **尊重用户资产：** 程序、题目与学习记录归用户；应用私有数据、Beacon 工作区和笔记分别拥有明确的存储边界。
+- **保持独立：** BeCoder 基于 Code - OSS，但不共享系统 Visual Studio Code 的数据或配置。原生终端和可选模型服务保留各自外部依赖。
 
-Make the path from reading a problem to writing, testing and understanding a solution easier. A beginner should be able to install BeCoder and run a first C/C++ program without separately configuring a compiler or language server. An experienced contestant should find a familiar, responsive environment with understandable input, output and errors.
+## 模块职责
 
-BeCoder builds on Code - OSS while maintaining its own defaults, bundled resources, application data and distribution. It serves students, OI/ICPC participants and users who need a portable environment independent of a system Visual Studio Code installation.
-
-## The Experience We Aim For
-
-- **Ready to use:** editing, completion, diagnostics, compilation and sample testing work with the bundled environment.
-- **Focused and familiar:** mature editor workflows remain useful; new features should reduce effort rather than add setup and competing controls.
-- **Clear and responsive:** output appears promptly, ongoing work can be stopped, and failures explain what happened.
-- **Respectful of user work:** source files, project settings and repositories belong to the user. Product maintenance should preserve them.
-- **Self-contained environment and user-owned learning assets:** application settings, extensions and caches stay with the BeCoder installation. The confirmed design keeps persistent Beacon learning assets in the selected workspace's `.beaconWork`, and associated notebooks in the editor folder's separate `.notebook`. Optional services have explicit dependencies. Current data behavior remains documented in the READMEs until the design is implemented.
-
-## Beacon's Role
-
-Beacon is a programming tutor and long-term learning companion. Algorithm tutoring is a permanent core capability: naming, expression or role customization cannot remove it or the product-wide boundary against helping with explicit cheating. It can explain concepts and code, discuss algorithms and complexity, diagnose mistakes, and provide complete solutions during normal learning. Personality and language-style details remain open.
-
-Model access is configured by the user, through a cloud service or a local model. Beacon being unavailable should not interrupt editing, compilation, running or sample testing.
-
-The confirmed design permits authorized context reading and, on an explicit user request, limited writing of learning assets such as notebooks, handouts and diagrams. Beacon also manages its own conversations and workspace memory. It does not create or modify the student's C/C++ source files, autonomously execute or stop programs, log into accounts or submit solutions. Tutorial code in answers or notebooks is distinct from editing the student's source file. Known credential and private files remain excluded, sources and model limitations should be understandable, and internet access should be controllable.
-
-Each window independently selects and remembers a Beacon workspace; recent workspace choices are shared. Selecting a workspace prepares and checks its `.beaconWork` asset directory. Without a usable workspace only `blackout` is available: explicit user materials and authorized content of editor pages currently open in that window, with no free local-file access, workspace-record or memory retrieval, learning-asset writing or local conversation persistence. All three modes may read currently open page content, including unsaved edits, without gaining permission to read its backing file, related files or hidden records. A valid selected workspace permits all three modes; manual `blackout` retains the selection but suspends new workspace asset reads, while already loaded inherited context remains available. `spot` confines automatic file access and learning-asset writing to that root; `flood` extends allowed file locations while retaining the same asset kinds and persistent workspace ownership. A remembered but unavailable root remains selected and visible, with only `blackout` available until access is restored.
-
-History and memory belong to the selected Beacon workspace. Windows using the same workspace share those assets, but a conversation can be open in only one window; another window only receives a notice. Busy windows refuse workspace switches; idle workspace switches show the target history without moving conversations or automatically creating one. Explicit mode changes keep the current page and composer. Spot/Flood share one conversation identity; crossing between Blackout and persistent modes creates an independent full snapshot only when the next new question is accepted. Returning to the source category before sending continues the source conversation. A temporary-to-persistent send explicitly permits the inherited context to be saved; selecting a workspace alone does not. Once a usable workspace is selected, BeCoder records helpful execution evidence as users operate Runner, CPH and Notebook inside that root, without waiting for a chat request or model availability. Runner and CPH retain their separate recent queues for eligible source files; Notebook execution evidence is separate and does not occupy those queues or change each input cell's single recent result. Conversation deletion leaves derived memory, independent learning assets and already inherited independent conversations intact; conversation archives retain their data. Conversations remain isolated, including in `flood`; explicit inheritance copies already loaded context without opening access to other conversations.
-
-Workspace input drafts include text and captured attachments, persist with their conversation, and reuse the same single-window ownership. First input may create a draft conversation hidden from history; the first send promotes it to a regular chat. Returning home preserves the detail draft, while New chat on home clears the home draft. Mode changes carry the current input, including an explicitly empty input, replacing an older target draft. Blackout edits remain in memory; an accepted inherited send clears only the consumed source draft version. Already loaded inherited context may remain visible in Blackout without permission for new workspace reads. The workspace's default restart target follows the last closed window's page and input state, including an explicitly empty input; an occupied automatic restore target silently falls back to home. The [workspace UI and draft design](docs/beacon/workspace-ui-draft-design.md) and [mode and inheritance design](docs/beacon/mode-conversation-design.md) define the latest confirmed rules, not completion or runtime acceptance evidence.
-
-The next technical work should connect the conversation experience with the user's actual code, samples and observed results, using sufficient authorized context and distinguishing execution snapshots from current unsaved edits. Behavior evidence is prepared and persisted before requests; Beacon explains the current situation and authorized reading entrances, letting the model read what it needs. Currently open pages, including personal OJ submission and verdict pages, may be read in all modes with the user's presumed awareness; credential filtering and conversation isolation still apply. Further network queries for personal information require explicit user permission, beyond just contest or OJ scenarios. This rule is guided by the model prompt; it does not introduce a host-side permission ledger, approval gate or query-intent classifier. User permission and limits may be remembered in `teach tips`, but model-authored memory cannot create or expand authorization. The approved memory direction is lightweight workspace memory: the main model simply appends to `teach tips` and `student status`; users review and directly edit the text to judge memory quality. User-triggered `dream` consolidates status with readable archives. BeCoder NoteBook is an independent document capability; Beacon-assisted problem notes are one entry point. Its four complete user flows, four-platform OJ evidence and simple model-written tips additions are confirmed first-version requirements, not generic ideas to postpone. Other version scope and implementation details remain open in the formal documents.
-
-## How the Parts Fit Together
-
-| Part | Main responsibility |
+| 模块 | 职责 |
 | --- | --- |
-| Editor and bundled language services | Code editing, immediate coloring, GCC diagnostics and clangd code intelligence |
-| Runner and BC panel | BeCoder's compile-and-run workflow, program input/output and cancellation |
-| Native terminal | User-directed system commands and the user's environment |
-| Integrated browser and PDF viewer | Reading problem material; the browser also supports explicit problem import |
-| CPH | Imported samples and local sample judging, sharing Runner's compilation policy |
-| Beacon | Conversations, model settings, authorized context, explanations, workspace memory and explicitly requested learning-asset assistance |
-| BeCoder NoteBook | Independent editable learning documents and user-initiated input-cell execution of the preceding C/C++ program; path-based source association with independent content |
-| Selected Beacon workspace | `.beaconWork` assets and valid workspace ownership under the confirmed design, independent of editor folder selection |
-| Editor folder's `.notebook` | Associated `.bcnb` documents, separate from `.beaconWork`; no automatic source rename/move/content synchronization |
-| Installation data | Product settings, extensions and caches; current implementation history remains described in the READMEs |
-| User workspace and online judge | The user's files, account, submissions and final judge results |
+| 编辑器、GCC 诊断与 clangd | 编写代码、语法与编译反馈、补全和导航 |
+| Runner 与 BC 面板 | 用户发起的编译、运行、输入输出和取消 |
+| 原生终端 | 用户直接操作系统命令与环境 |
+| 浏览器、PDF 与 CPH | 阅读题目、显式导入题目、管理样例与本地测试 |
+| BeCoder NoteBook | 独立学习文档、源码关联、用户运行程序块，以及显式的 Beacon 编辑入口 |
+| Beacon | 对话、模型设置、受控上下文、讲解与明确请求的学习资产操作 |
+| 所选 Beacon 工作区 | `.beaconWork` 下的会话、执行证据及设计中的工作区记忆 |
+| 编辑器文件夹 | 学生源码，以及独立 `.notebook` 下的关联笔记 |
+| 安装私有数据 | 产品设置、扩展、缓存和工具链；具体替换与卸载范围见使用指南 |
 
-These responsibilities help guide changes without prescribing a particular module layout. Prefer extending an existing owner and a small interface when that is enough. Use shared logic where behavior is actually shared, rather than building a framework for possible future features.
+## Beacon 的长期方向
 
-## Distribution and Scope
+Beacon 是算法导师和长期学习伙伴。算法教学是固定核心能力；角色表达可以调整，但不能移除教学定位或产品对明确作弊请求的边界。正常学习中可以讨论算法、复杂度、错误及完整解法。
 
-The core C/C++ workflow uses bundled GCC and clangd. Native terminal commands, optional Python checkers and model services retain their explicit external dependencies. BeCoder is distributed as a complete Windows application directory that can be moved as a unit; its setup and data behavior should stay easy to understand.
+Beacon 按授权取得上下文，并在用户明确请求时有限地写入学习资产；不替学生创建或修改 C/C++ 源码，不自主执行或停止程序，不登录账户或提交解答。回答与笔记中的示例代码不等于修改源码文件。
 
-Open VSX and local VSIX installation provide extension choices. Bundled components and third-party extensions retain their own licenses and responsibilities. Product-specific features do not need to recreate every upstream IDE capability; general-purpose MCP, debugging, Git UI and remote development are outside the current product focus.
+每个窗口独立选择 Beacon 工作区。无可用工作区时只允许 Blackout；有效工作区支持 Spot / Flood；手动 Blackout 保留根选择但停止新增工作区资产读取。三档都可读取本窗口当前打开且授权的页面内容，包括未保存文本；页面读权不等于其磁盘文件、目录或引用文件读权。敏感过滤与其他会话隔离始终适用。
 
-## Choosing the Next Step
+历史、草稿和记忆归所选工作区；同一会话只由一个窗口打开。主动切档保持页面与输入，跨临时／持久类别后在首次接受新问题时创建独立快照。工作区选择、模式切换、持久化和继承的完整规则由[专项设计](docs/beacon/mode-conversation-design.md)维护，避免各入口重复定义。
 
-Start from a concrete user problem, inspect the current implementation, and prefer a complete, simple improvement. Keep current behavior and future ideas distinct. Learn from Code - OSS, Cherry Studio, Captain Who and Codex where their solutions fit, without inheriting their entire product architecture.
+后续工作重点是理解用户代码、题目与实际执行证据：记录版本明确的材料，再让模型按需读取。已确认但尚未完成的要求包括四平台 OJ 本人提交／判题材料适配、工作区 tips/status 简单记忆、用户主动 dream 整理与完整视觉材料；保留这些需求不代表其已经实现。
 
-Successful source checks, a built application and a useful experience are different milestones. Product decisions should consider actual behavior and user feedback as well as engineering evidence.
+进一步联网查询个人信息需要真实用户许可及对应范围，由模型遵循提示约束，不新增宿主侧许可台账或查询意图分类器。记忆不能创建或扩张授权；根、档位、敏感信息、会话和资产写入边界仍由宿主执行。完整职责见[架构](docs/beacon/architecture.md)与 [NoteBook 设计](docs/beacon/notebook.md)。
+
+## 演进与发行
+
+2026-10-23 已确认 v2.0.0 以当前已实现能力为交付范围；尚未实现的已确认需求保留到后续版本开发，不要求在 v2.0.0 发布前补齐。现有功能的缺陷修复与发布验收仍需完成，范围及检查边界见[发行维护](docs/distribution.md)。
+
+围绕具体用户问题推进，优先完善已有所有者和小接口，不为潜在需求搭建通用框架。可参考其他项目的成熟组织方式，但不直接继承其全部能力、许可或产品边界。
+
+BeCoder 使用内置 GCC 与 clangd，支持 Open VSX 和本地 VSIX。通用 MCP、Debug/GDB、Source Control/Git 图形界面和远程开发不在当前产品范围；用户仍可在原生终端中使用外部工具。
+
+源码检查、staged 应用、Setup 以及真实运行验收分别成立。发布与安装数据规则见[发行维护](docs/distribution.md)；第三方组件、许可证和对应源码见[许可索引](licenses/README.md)。

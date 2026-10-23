@@ -1,32 +1,29 @@
 # BeCoder Runner
 
-BeCoder Runner is the built-in C and C++ Run surface for BeCoder.
+BeCoder 内置的 C/C++ 编译运行扩展，支持 `.c`、`.cc`、`.cpp`、`.cxx` 文件。
 
-It provides two editor actions:
+## 使用
 
-- **Run** compiles the active source with BeCoder's bundled compiler and starts it in the source directory.
-- **Run With Input** uses an ordinary same-directory file named exactly `input` as standard input.
+| 操作 | 快捷键 | 行为 |
+| --- | --- | --- |
+| Run（运行） | F6 | 保存当前源码，用内置 GCC 编译，在源码目录运行；支持终端交互输入及 `getch()` |
+| Run With Input（使用输入运行） | Shift+F6 | 使用源码同目录、名称严格为 `input` 的普通文件作为标准输入 |
 
-Both actions display program stdout and stderr through ConPTY. Run With Input
-captures `input` before compilation and supplies those bytes through a separate
-stdin pipe, without terminal echo, closing the pipe at EOF. Its Windows input
-helper is compiled during application packaging and ships ready to run; it is
-never compiled on first launch. Executables are still published beside their
-source files and use the existing completion/cancellation cleanup policy.
-Both actions use the packaged native helper to initialize UTF-8 console input
-and output before starting the program. Run keeps console stdin for interactive
-input and `getch()`. Runner uses the bundled ConPTY host so UTF-8 console reads
-also work on Windows 10; native PowerShell settings are unaffected.
-Executable cleanup is independent of temporary build-directory cleanup. Cleanup
-failures identify the retained artifact; BeCoder Runner Trace records the failing
-stage and available filesystem error code. Cancellation still preserves the exe.
+Run With Input 在编译前捕获 `input`，经独立管道输入原始字节，不回显，读完关闭 stdin。两种运行均通过随包原生 helper 初始化 UTF-8 控制台，并用 ConPTY 显示 stdout/stderr；helper 在打包时编译，不在首次启动时编译。运行中可按 Ctrl+C 取消。新的运行请求在忙时立即拒绝，不排队或重放。
 
-Concurrent Run requests are rejected immediately and are never queued or replayed.
-The final `Executable Program Removed` message is published in the same synchronous
-completion step that releases Runner, after applicable evidence and activity cleanup.
+程序的 `.exe` 发布到源码旁，正常完成后清理，取消时保留。可执行文件和临时构建目录分别清理；失败会指出保留的产物，详细阶段和可用的文件系统错误码见“BeCoder Runner Trace”输出。最终 `Executable Program Removed` 与 Runner 释放在同一步完成，发生在适用的证据及活动清理之后。
 
-The BC panel is a BeCoder-owned pseudoterminal. It is not PowerShell and does not execute arbitrary shell commands. Its accepted command set is `run <source>`, `run <source> -WithInput`, `clear`, and `help`.
+## BC 面板与编译设置
 
-The bundled compiler, child environment, command parser, process cancellation, and command history are private to BeCoder Runner. Native PowerShell remains a separate terminal with the user's normal system environment.
+BC 是 Runner 的专用伪终端，只接受：
 
-This extension is derived from C/C++ Compile Run by Daniel Pinto and remains distributed under GPL-3.0. See [LICENSE](LICENSE).
+```text
+run <source>
+run <source> -WithInput
+clear
+help
+```
+
+系统命令请使用独立的原生 PowerShell。Runner 的编译器选择、子进程环境、历史及取消机制由扩展维护，不修改系统 PATH 或 PowerShell 配置。CPH 和 Notebook 复用其编译 API；语言标准、参数及可选 gch 缓存见[编译配置](docs/COMPILER_SETUP.md)。
+
+本扩展派生自 Daniel Pinto 的 C/C++ Compile Run，按 GPL-3.0 分发，见 [LICENSE](LICENSE)。安全问题见[项目安全政策](../../SECURITY.md)。

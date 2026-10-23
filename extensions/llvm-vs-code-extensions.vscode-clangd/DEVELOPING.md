@@ -1,55 +1,16 @@
-# Development
+# BeCoder clangd 扩展开发
 
-A guide of developing `vscode-clangd` extension.
+先读[扩展贡献指南](../CONTRIBUTING.md)及[当前功能与设置](README.md)。本目录是修改后的随包组件，上游独立扩展的市场发布流程不作为 BeCoder 的发行方式。
 
-## Requirements
+在本扩展目录使用现有 scripts：
 
-* VS Code
-* node.js and npm
-
-## Building and running (command line)
-
-```bash
-cd vscode-clangd
-npm install
-npm run compile  # it runs in watch mode, you can hit ctrl-c.
-code --extensionDevelopmentPath=$PWD
+```powershell
+npm run check-ts
+npm run vscode:prepublish
 ```
 
-## Building, running, and debugging (VSCode)
+`check-ts` 做 TypeScript 检查，`vscode:prepublish` 先检查再用 esbuild 生成生产 bundle；`npm run compile` 只生成带 source map 的 bundle，既不 typecheck，也不启动 watch。不要为修改此扩展自动运行 `npm install` 或重写 lock。
 
-- ```bash
-  cd vscode-clangd
-  npm install
-  code .
-  ```
-- with the `vscode-clangd` directory open in VSCode, select
-  `Run => Run Without Debugging` or `Run => Start Debugging`
+`npm test` 会先清理本扩展 `out`、编译测试并启动 Electron 测试宿主。只有授权运行且已明确测试宿主时才执行；`BECODER_TEST_EXECUTABLE` 可指定本地匹配的 BeCoder，否则现有测试入口会下载 VS Code 1.130.0，不能将其结果当作当前 BeCoder 的运行验收。普通源码检查不需要启动该测试。
 
-VSCode will recompile the sources for you before launching.
-If you change dependencies in `package.json`, you should run `npm install`.
-
-## Editing and typechecking
-
-`npm run compile` does not actually typecheck the TypeScript code!
-(It stripts type annotations and bundles it, using `esbuild`).
-You can see diagnostics with `npm run check-ts`.
-
-Using a Typescript-aware editor will show you diagnostics, provide
-go-to-definition etc. VSCode works well, or any LSP-capable editor can use
-[typescript-language-server](https://github.com/typescript-language-server/typescript-language-server).
-
-# Contributing
-
-Please follow the existing code style when contributing to the extension, we
-recommend to run `npm run format` before sending a patch.
-
-# Publish to Marketplace
-
-To create a new release, create a commit that:
-
-- increases the version number in `package.json` and `package-lock.json`
-- updates `CHANGELOG.md` to cover changes since the last release
-
-Our CI will recognize the commit and publish new versions to the VSCode
-Marketplace and the alternative OpenVSX registry.
+项目整体构建、打包及验收边界见[开发指南](../../docs/development.md)。保留原始版权及上游历史 CHANGELOG；当前产品行为由 README 和源码维护。

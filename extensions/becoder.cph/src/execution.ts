@@ -146,6 +146,7 @@ async function runProcess(file: string, args: string[], cwd: string, env: NodeJS
 	return new Promise(resolve => {
 		let startedAt = Date.now();
 		const child = spawn(file, args, { cwd, env, windowsHide: true, shell: false, stdio: 'pipe' });
+		const systemRoot = env.SystemRoot ?? env.SYSTEMROOT ?? env.windir ?? process.env.SystemRoot ?? process.env.SYSTEMROOT ?? process.env.windir;
 		const output: Buffer[][] = [[], []];
 		const sizes = [0, 0];
 		let timedOut = false;
@@ -156,8 +157,8 @@ async function runProcess(file: string, args: string[], cwd: string, env: NodeJS
 		const stop = () => {
 			if (stopping) { return; }
 			stopping = new Promise<void>(done => {
-				if (compiler && child.pid && child.exitCode === null) {
-					const killer = spawn(path.join(env.SystemRoot!, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', shell: false });
+				if (compiler && child.pid && child.exitCode === null && systemRoot) {
+					const killer = spawn(path.join(systemRoot, 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', shell: false });
 					killer.once('error', () => { child.kill(); done(); });
 					killer.once('close', () => { child.kill(); done(); });
 				} else {

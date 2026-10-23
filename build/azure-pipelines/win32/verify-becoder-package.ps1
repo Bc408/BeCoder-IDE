@@ -622,7 +622,7 @@ if (Test-Path -LiteralPath (Join-Path $clangdExtensionPath 'doc-assets')) {
 	throw 'The packaged clangd extension still contains screenshots for removed features.'
 }
 $clangdReadme = Get-Content -LiteralPath (Join-Path $clangdExtensionPath 'README.md') -Raw
-if (-not $clangdReadme.Contains("Visible C/C++ diagnostics belong to BeCoder's bundled GCC") -or
+if (-not $clangdReadme.Contains('可见 C/C++ 诊断由独立的 GCC 诊断扩展负责') -or
 	$clangdReadme.Contains('You will be prompted to download it') -or
 	$clangdReadme.Contains('Format on Type')) {
 	throw 'The packaged clangd README does not describe the BeCoder capability boundary.'
@@ -812,6 +812,7 @@ $componentInventory = Get-Content -LiteralPath (Join-Path $appPath 'resources\oi
 $expectedComponentIds = @(
 	'becoder.cph',
 	'becoder.beacon',
+	'becoder.notebook',
 	'code-oss',
 	'electron',
 	'becoder.runner',

@@ -149,6 +149,11 @@ test('real bundled GCC and pipe helper preserve EOF, stderr, exit125, timeout an
 });
 
 test('real shared compiler hits PCH and preserves debug across supported standards and UTF-8 paths', { timeout: 110000 }, t => {
+	const cachePath = path.join(compilerRoot, 'include', 'c++', '16.2.0', 'x86_64-w64-mingw32', 'bits', 'stdc++.h.gch');
+	if (!fs.existsSync(cachePath)) {
+		t.skip('Requires a user-generated gch cache; packaged toolchains intentionally omit it.');
+		return;
+	}
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-编译 space-'));
 	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 	const source = path.join(root, '测试.cpp');

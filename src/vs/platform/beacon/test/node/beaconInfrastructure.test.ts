@@ -93,6 +93,20 @@ suite('Beacon workspace preparation and assets', () => {
 		assert.deepEqual(await store.listRuntimeRecords('runner'), []); assert.deepEqual(await store.listRuntimeRecords('cph'), []);
 		assert.equal((await store.readMaterial('chat', 'notebook-cell-0-1'))?.code, 'captured cell code');
 	}));
+	test('deleting a conversation removes its exclusive materials without deleting independent assets', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		await store.saveConversation(conversation('chat'), 0);
+		await store.commitRuntimeRecord('runner', { id: 'run', code: 'captured', startedAt: 1, events: [] });
+		await store.consumeRuntimeRecord('chat', 'runner', 'run');
+		const conversationRoot = path.join(root, '.beaconWork', 'conversations', 'chat');
+		const independentAsset = path.join(root, '.beaconWork', 'independent.txt');
+		await fs.writeFile(independentAsset, 'keep');
+		await fs.access(path.join(conversationRoot, 'materials', 'runner-run-1.json'));
+		await store.deleteConversation('chat');
+		await assert.rejects(fs.access(path.join(conversationRoot, 'conversation.json')), { code: 'ENOENT' });
+		await assert.rejects(fs.access(path.join(conversationRoot, 'materials')), { code: 'ENOENT' });
+		assert.equal(await fs.readFile(independentAsset, 'utf8'), 'keep');
+	}));
 	test('a cleanup failure retains the original publication error and saved conversation', async () => fixture(async root => {
 		const binding = await prepareBeaconWorkspace(root, true);
 		const original = new BeaconStore(binding);

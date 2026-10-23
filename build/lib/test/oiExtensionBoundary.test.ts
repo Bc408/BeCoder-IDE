@@ -986,6 +986,7 @@ suite('OI extension boundary', () => {
 		assert.deepStrictEqual(components.map(component => component.id), [
 			'becoder.cph',
 			'becoder.beacon',
+			'becoder.notebook',
 			'code-oss',
 			'electron',
 			'becoder.runner',
@@ -1494,7 +1495,7 @@ suite('OI extension boundary', () => {
 			assert.ok(!fs.existsSync(apiFile));
 		}
 		const readme = fs.readFileSync(path.join(extensionPath, 'README.md'), 'utf8');
-		assert.match(readme, /Visible C\/C\+\+ diagnostics belong to BeCoder's bundled GCC/);
+		assert.match(readme, /可见 C\/C\+\+ 诊断由独立的 GCC 诊断扩展负责/);
 		assert.doesNotMatch(readme, /download it|compile_commands\.json file|Format on Type/);
 		const lockfile = readJson<{ packages?: Record<string, unknown> }>(
 			path.join(extensionPath, 'package-lock.json'));
@@ -1961,6 +1962,7 @@ suite('OI extension boundary', () => {
 
 	test('keeps cloud Release publication explicitly dispatched and stable-only', () => {
 		const releaseWorkflow = fs.readFileSync(path.join(repositoryRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+		const buildWorkflow = fs.readFileSync(path.join(repositoryRoot, '.github', 'workflows', 'build-windows.yml'), 'utf8');
 		assert.match(releaseWorkflow, /^\s{2}workflow_dispatch:\s*$/m);
 		assert.match(releaseWorkflow, /^\s{6}version:\s*$/m);
 		assert.match(releaseWorkflow, /^\s{6}commit:\s*$/m);
@@ -1975,5 +1977,13 @@ suite('OI extension boundary', () => {
 		assert.ok(releaseWorkflow.indexOf('needs: build') < releaseWorkflow.indexOf('gh release create'));
 		assert.match(releaseWorkflow, /^permissions:\s*\n\s{2}contents: read\s*$/m);
 		assert.match(releaseWorkflow, /^\s{4}permissions:\s*\n\s{6}contents: write\s*$/m);
+		for (const workflow of [releaseWorkflow, buildWorkflow]) {
+			assert.match(workflow, /\. build\/azure-pipelines\/win32\/exec\.ps1/);
+			for (const command of ['npm run typecheck-client', 'npm run compile-oi-extensions', 'npm run valid-layers-check', 'npm run gulp vscode-win32-x64-min', 'npm run gulp -- vscode-win32-x64-becoder-setup']) {
+				assert.ok(workflow.includes(`exec { ${command} }`));
+			}
+			assert.doesNotMatch(workflow, /--target=42\.6\.0/);
+			assert.match(workflow, /--target=\$electronTarget/);
+		}
 	});
 });

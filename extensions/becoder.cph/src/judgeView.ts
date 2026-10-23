@@ -75,6 +75,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 	private beaconActivity: string | undefined;
 	private evidence: RuntimeEvidence | undefined;
 	private evidenceError = '';
+	private preparationCancelled = false;
 	get isBusy(): boolean { return this.busy || this.session.busy; }
 	get hasUnsavedEdits(): boolean { return this.dirty; }
 	get source(): string | undefined { return this.session.current?.problem.srcPath; }
@@ -179,7 +180,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		const request = message as { command?: string; revision?: unknown; tests?: unknown; id?: unknown; customCheckerPath?: unknown };
 		if (request.command === 'dirty') { this.dirty = true; return; }
 		if (request.command === 'ready') { await this.publish(); return; }
-		if (request.command === 'stop') { this.session.cancel(); return; }
+		if (request.command === 'stop') { this.preparationCancelled = true; this.session.cancel(); return; }
 		if (request.command === 'settings') { await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:becoder.cph'); return; }
 		if (request.command === 'createProblem') { await vscode.commands.executeCommand('becoder.cph.openCurrent'); return; }
 		if (request.command === 'openChecker') {
@@ -194,6 +195,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		if (!['save', 'run', 'compile', 'delete'].includes(request.command ?? '')) { return; }
 		if (this.isBusy) { return; }
 		this.busy = true;
+		this.preparationCancelled = false;
 		this.savingSamples = request.command === 'save';
 		let failed = false;
 		let beaconActivity: string | undefined;
@@ -203,6 +205,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
 				catch (error) { console.warn('Beacon CPH runtime tracking unavailable', error); }
 			}
+			if (this.preparationCancelled) { throw new Error('CPH request cancelled.'); }
 
 			if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before running samples.')); }
 			if (request.customCheckerPath !== undefined && typeof request.customCheckerPath !== 'string') { throw new Error(vscode.l10n.t('Invalid sample request.')); }
@@ -235,6 +238,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 					try { beaconActivity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source }); }
 					catch (error) { console.warn('Beacon CPH activity tracking unavailable', error); }
 				}
+				if (this.preparationCancelled) { throw new Error('CPH request cancelled.'); }
 				this.message = vscode.l10n.t('Compiling and running samples…');
 				this.beaconActivity = beaconActivity; this.evidence = undefined; this.evidenceError = '';
 				const pending = this.session.run(request.revision, request.tests, request.id as number | undefined, request.command === 'compile', request.customCheckerPath as string | undefined);
@@ -270,6 +274,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				catch (error) { console.warn('Beacon CPH runtime release unavailable', error); }
 			}
 			this.busy = false;
+			this.preparationCancelled = false;
 			this.savingSamples = false;
 			this.phase = undefined;
 			this.activeId = undefined;

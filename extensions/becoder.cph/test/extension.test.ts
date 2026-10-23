@@ -192,3 +192,52 @@ test('judge streams individual results, preserves other results through saves, a
 	await view.runSource(source);
 	assert.strictEqual(messages.at(-1).command, 'requestRun');
 });
+
+test('stopping while the judge prepares prevents a queued run from reaching the executor', async t => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-stop-preparation-')));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const source = path.join(root, 'a.cpp'); fs.writeFileSync(source, '');
+	const store = new ProblemStore(root);
+	const local = await store.createLocal(source);
+	const snapshot = await store.saveSamples(local, [{ id: 0, input: 'a', output: 'a' }]);
+	const messages: any[] = [];
+	let releaseRuntime!: () => void;
+	let judgeCalls = 0;
+	let cancelCalls = 0;
+	const api = {
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: (_key: string, fallback: unknown) => fallback }), openTextDocument: async () => ({ save: async () => true }) },
+		extensions: { getExtension: () => ({ activate: async () => ({}) }) },
+		commands: { executeCommand: async (_id: string, operation: string) => {
+			if (operation === 'beginRuntimeActivity') { return new Promise<string>(resolve => { releaseRuntime = () => resolve('runtime'); }); }
+			return undefined;
+		} },
+		Uri: { file: (fsPath: string) => ({ fsPath }) },
+		l10n: { t: (text: string) => text }
+	};
+	const entry = path.resolve(__dirname, '../src/judgeView.js');
+	const nativeRequire = createRequire(entry);
+	const exports: any = {};
+	new vm.Script(`(function(require,exports){${fs.readFileSync(entry, 'utf8')}\n})`).runInThisContext()((id: string) => {
+		if (id === 'vscode') { return api; }
+		if (id === './execution') {
+			return { CphExecutor: class {
+				async judge() { judgeCalls++; throw new Error('executor must not start after prepare-phase stop'); }
+				cancel() { cancelCalls++; }
+				dispose() { }
+			} };
+		}
+		return nativeRequire(id);
+	}, exports);
+	const view = new exports.JudgeView({ extensionPath: root, globalStorageUri: { fsPath: root } });
+	t.after(() => view.dispose());
+	view.view = { webview: { postMessage: async (message: unknown) => { messages.push(message); return true; } } };
+	await view.openSource(source, false);
+	const running = view.receive({ command: 'run', revision: snapshot.revision, tests: snapshot.problem.tests });
+	await new Promise(resolve => setImmediate(resolve));
+	await view.receive({ command: 'stop' });
+	releaseRuntime();
+	await running;
+	assert.equal(cancelCalls, 1);
+	assert.equal(judgeCalls, 0, 'stop during preparation must retire the request before execution');
+	assert.ok(messages.some(message => message.command === 'failure'));
+});

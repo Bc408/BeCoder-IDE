@@ -178,11 +178,16 @@ export class BeaconStore {
 		const release = await acquireBeaconLease(this.binding.identity, `write:${id}`);
 		try {
 			const current = await this.readConversation(id);
-			if (!current) { return; }
+			if (!current) {
+				try { await fs.rm(path.join(await this.directory(['conversations', id], false), 'materials'), { recursive: true, force: true }); }
+				catch (error) { if (!missing(error)) { throw error; } }
+				return;
+			}
 			const directory = await this.directory(['conversations', id], false);
 			const file = path.join(directory, 'conversation.json');
 			const identity = fileIdentity(await fs.lstat(file));
 			const removed = path.join(directory, `${randomUUID()}.deleted`);
+			await fs.rm(path.join(directory, 'materials'), { recursive: true, force: true });
 			await fs.rename(file, removed);
 			if (fileIdentity(await fs.lstat(removed)) !== identity) { throw new Error('beacon-file-changed'); }
 			await fs.unlink(removed);

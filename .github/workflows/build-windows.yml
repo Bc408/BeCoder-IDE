@@ -41,6 +41,8 @@ jobs:
           . build/azure-pipelines/win32/exec.ps1
           $ErrorActionPreference = 'Stop'
           exec { npm ci }
+          $electronTarget = ((Get-Content -LiteralPath .npmrc | Where-Object { $_ -match '^target=' } | Select-Object -First 1) -replace '^target=', '').Trim().Trim('"')
+          if ($electronTarget -notmatch '^\d+\.\d+\.\d+$') { throw 'Electron target is missing or invalid in .npmrc.' }
           $nativeBindings = @(
             'node_modules\@vscode\policy-watcher\build\Release\vscode-policy-watcher.node',
             'node_modules\@vscode\spdlog\build\Release\spdlog.node',
@@ -50,19 +52,22 @@ jobs:
           )
           if ($nativeBindings.Where({ -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -gt 0) {
             exec { npm rebuild '@vscode/policy-watcher' '@vscode/spdlog' '@vscode/sqlite3' 'native-keymap' --foreground-scripts }
-            exec { npx --yes node-gyp rebuild --directory node_modules/windows-foreground-love --target=42.6.0 --dist-url=https://electronjs.org/headers --runtime=electron --arch=x64 }
+            exec { npx --yes node-gyp rebuild --directory node_modules/windows-foreground-love "--target=$electronTarget" --dist-url=https://electronjs.org/headers --runtime=electron --arch=x64 }
           }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate source
         shell: pwsh
         run: |
-          npm run typecheck-client
-          npm run compile-oi-extensions
-          npm run valid-layers-check
+          . build/azure-pipelines/win32/exec.ps1
+          exec { npm run typecheck-client }
+          exec { npm run compile-oi-extensions }
+          exec { npm run valid-layers-check }
       - name: Build staged BeCoder application
         shell: pwsh
-        run: npm run gulp vscode-win32-x64-min
+        run: |
+          . build/azure-pipelines/win32/exec.ps1
+          exec { npm run gulp vscode-win32-x64-min }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify staged package
@@ -73,11 +78,12 @@ jobs:
       - name: Build and verify BeCoder Setup
         shell: pwsh
         run: |
-          npm run gulp -- vscode-win32-x64-becoder-setup
+          . build/azure-pipelines/win32/exec.ps1
+          exec { npm run gulp -- vscode-win32-x64-becoder-setup }
           $version = node -p "require('./package.json').version"
           $setup = ".build\win32-x64\becoder-setup\BeCoderSetup-x64-$version.exe"
           $packageRoot = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'VSCode-win32-x64'
-          & .\build\azure-pipelines\win32\verify-becoder-setup.ps1 -SetupPath $setup -StagedPackagePath $packageRoot
+          exec { & .\build\azure-pipelines\win32\verify-becoder-setup.ps1 -SetupPath $setup -StagedPackagePath $packageRoot }
       - name: Upload BeCoder Setup
         uses: actions/upload-artifact@v7
         with:

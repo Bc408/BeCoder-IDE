@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="resources/win32/code_150x150.png" width="112" height="112" alt="BeCoder 标志" />
+<img src="src/vs/workbench/browser/media/becoder-icon.png" width="200" height="200" alt="BeCoder 标志" />
 
 # BeCoder
 

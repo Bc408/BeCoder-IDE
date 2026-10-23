@@ -48,7 +48,7 @@ Beacon 工具只接受明确目标和正文/块顺序，不接受模型伪造的
 - [会话存储](../../src/vs/platform/beacon/node/beaconStore.ts)删除对话时同时清理该对话专属的 `materials`，保留 `.beaconWork` 内独立资产；平台存储测试已覆盖有效对话和遗留材料清理。
 - [CPH 执行](../../extensions/becoder.cph/src/execution.ts)停止编译器或自定义 Python 检查器时兼容 Windows 的 `SYSTEMROOT` 键，并在 UI 准备阶段收到停止后阻止执行器启动；CPH 全部可重复测试 64 通过，1 个 PCH 集成检查因可选 gch 未生成而明确跳过。
 - [Beacon 工作流](../../.github/workflows/build-windows.yml)和发布工作流通过 `exec.ps1` 传播前面命令的失败，Electron 原生绑定目标从 `.npmrc` 读取；工作流静态检查通过。
-- 根版本元数据已更新为 `2.0.0`。源码检查、生产 Webview 渲染、staged Windows 构建和包验证通过；Setup 已生成，但直接 Setup 验证尚未在当前非管理员 PowerShell 会话执行，负责人 GUI 验收也尚未进行。
+- 根版本元数据已更新为 `2.0.0`。源码检查、生产 Webview 渲染、staged Windows 构建、包验证，以及 GitHub 托管 Windows runner 上的 Setup 构建和直接安装验证均已通过；负责人 GUI 验收尚未进行。
 
 ## 后续版本开发事项
 

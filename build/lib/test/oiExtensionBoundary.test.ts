@@ -651,6 +651,7 @@ suite('OI extension boundary', () => {
 
 		const preinstall = fs.readFileSync(path.join(repositoryRoot, 'build', 'npm', 'preinstall.ts'), 'utf8');
 		assert.match(preinstall, /if \(!fs\.existsSync\(rcFile\)\) \{\s*return undefined;\s*\}/);
+		assert.equal((preinstall.match(/'install', '--ensure'/g) ?? []).length, 2);
 
 		const launchConfiguration = fs.readFileSync(path.join(repositoryRoot, '.vscode', 'launch.json'), 'utf8');
 		for (const removedLaunchName of [

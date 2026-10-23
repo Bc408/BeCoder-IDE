@@ -143,12 +143,12 @@ function installHeaders() {
 
 	if (local !== undefined) {
 		// Both disturl and target come from a file checked into our repository
-		child_process.execFileSync(node_gyp, ['install', '--devdir', nodeGypDevDir, '--dist-url', local.disturl, local.target], { shell: true, env: nodeGypEnv });
+		child_process.execFileSync(node_gyp, ['install', '--ensure', '--devdir', nodeGypDevDir, '--dist-url', local.disturl, local.target], { shell: true, env: nodeGypEnv });
 	}
 
 	if (remote !== undefined) {
 		// Both disturl and target come from a file checked into our repository
-		child_process.execFileSync(node_gyp, ['install', '--devdir', nodeGypDevDir, '--dist-url', remote.disturl, remote.target], { shell: true, env: nodeGypEnv });
+		child_process.execFileSync(node_gyp, ['install', '--ensure', '--devdir', nodeGypDevDir, '--dist-url', remote.disturl, remote.target], { shell: true, env: nodeGypEnv });
 	}
 
 	// Overlay any custom headers shipped in build/npm/gyp/custom-headers on top of

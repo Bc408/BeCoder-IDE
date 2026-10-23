@@ -117,10 +117,6 @@ $requiredFiles = @(
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\mpfr\COPYING.LESSER',
 	'resources\app\resources\oi-defaults\toolchains\ucrt64-licenses\zstd\LICENSE',
 	'resources\app\node_modules.asar.unpacked\windows-foreground-love\build\Release\foreground_love.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty_console_list.node',
-	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\conpty.dll',
-	'resources\app\node_modules.asar.unpacked\node-pty\prebuilds\win32-x64\conpty\OpenConsole.exe',
 	'resources\app\node_modules.asar.unpacked\node-pty\lib\worker\conoutSocketWorker.js',
 	'resources\app\node_modules.asar.unpacked\node-pty\lib\shared\conout.js',
 	'resources\app\node_modules.asar.unpacked\node-pty\package.json'
@@ -133,6 +129,22 @@ foreach ($relativePath in $requiredFiles) {
 	}
 	if ((Get-Item -LiteralPath $path).Length -eq 0) {
 		throw "Required Windows package file is empty: $relativePath"
+	}
+}
+
+$nodePtyRoot = Join-Path $PackagePath 'resources\app\node_modules.asar.unpacked\node-pty'
+$nodePtyNativeRoots = @(
+	(Join-Path $nodePtyRoot 'prebuilds\win32-x64'),
+	(Join-Path $nodePtyRoot 'build\Release')
+)
+$nodePtyNativeRoot = $nodePtyNativeRoots | Where-Object { Test-Path -LiteralPath (Join-Path $_ 'conpty.node') -PathType Leaf } | Select-Object -First 1
+if (-not $nodePtyNativeRoot) {
+	throw 'The packaged node-pty conpty native module is missing.'
+}
+foreach ($relativePath in @('conpty_console_list.node', 'conpty\conpty.dll', 'conpty\OpenConsole.exe')) {
+	$path = Join-Path $nodePtyNativeRoot $relativePath
+	if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+		throw "The packaged node-pty native payload is incomplete: $relativePath"
 	}
 }
 
@@ -622,6 +634,7 @@ if (Test-Path -LiteralPath (Join-Path $clangdExtensionPath 'doc-assets')) {
 	throw 'The packaged clangd extension still contains screenshots for removed features.'
 }
 $clangdReadme = Get-Content -LiteralPath (Join-Path $clangdExtensionPath 'README.md') -Raw
+# allow-any-unicode-next-line
 if (-not $clangdReadme.Contains('可见 C/C++ 诊断由独立的 GCC 诊断扩展负责') -or
 	$clangdReadme.Contains('You will be prompted to download it') -or
 	$clangdReadme.Contains('Format on Type')) {

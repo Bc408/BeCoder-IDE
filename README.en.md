@@ -57,6 +57,7 @@ Many of BeCoder's core experiences build on the work of open-source authors. Spe
 | [Competitive Companion](https://github.com/jmerle/competitive-companion) | Jasper van Merle and contributors | Problem and sample parsers for multiple online judges |
 | [C/C++ Compile Run](https://github.com/danielpinto8zz6/c-cpp-compile-run) | Daniel Pinto and contributors | The upstream foundation for BeCoder Runner's compile-and-run workflow |
 | [CodeSnap](https://github.com/kufii/CodeSnap) | Adrien Pyke (adpyke) and contributors | Code screenshots and sharing |
+| [One Monokai Theme](https://github.com/azemoh/vscode-one-monokai) | Joshua Azemoh and contributors | The foundation for BeCoder One Monokai's colors and syntax presentation |
 | [PDF Viewer](https://github.com/mathematic-inc/vscode-pdf) / [PDF.js](https://github.com/mozilla/pdf.js) | Mathematic Inc, Mozilla and contributors | The integrated PDF problem viewer and document rendering |
 
 Special thanks to [KevinHuangIsLearning](https://github.com/KevinHuangIsLearning) and the contributors to [ShortestPath IDE](https://github.com/KevinHuangIsLearning/shortestpath-ide). Its exploration of integrating competitive-programming workflows into Code - OSS inspired BeCoder's product direction and user experience.

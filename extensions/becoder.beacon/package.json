@@ -155,6 +155,9 @@
 		"test-render": "node test/render.mjs",
 		"test-attachments-render": "node test/attachments-render.mjs"
 	},
+	"overrides": {
+		"katex": "^0.18.10"
+	},
 	"devDependencies": {
 		"@ai-sdk/deepseek": "3.0.50",
 		"@ai-sdk/openai-compatible": "3.0.55",
@@ -163,7 +166,7 @@
 		"@types/react-dom": "19.3.0",
 		"ai": "7.0.111",
 		"esbuild": "0.28.2",
-		"katex": "0.16.47",
+		"katex": "^0.18.10",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",
 		"react-markdown": "10.1.0",

@@ -57,6 +57,7 @@ BeCoder 的许多核心体验建立在开源作者的工作之上。特别感谢
 | [Competitive Companion](https://github.com/jmerle/competitive-companion) | Jasper van Merle 及贡献者 | 支持多个 OJ 的题目与样例解析器 |
 | [C/C++ Compile Run](https://github.com/danielpinto8zz6/c-cpp-compile-run) | Daniel Pinto 及贡献者 | BeCoder Runner 编译与运行流程的上游基础 |
 | [CodeSnap](https://github.com/kufii/CodeSnap) | Adrien Pyke（adpyke）及贡献者 | 代码截图与分享功能 |
+| [One Monokai Theme](https://github.com/azemoh/vscode-one-monokai) | Joshua Azemoh 及贡献者 | BeCoder One Monokai 配色与语法视觉主题的基础 |
 | [PDF Viewer](https://github.com/mathematic-inc/vscode-pdf) / [PDF.js](https://github.com/mozilla/pdf.js) | Mathematic Inc、Mozilla 及贡献者 | 内置 PDF 题面阅读器与文档渲染能力 |
 
 特别感谢 [KevinHuangIsLearning](https://github.com/KevinHuangIsLearning) 及 [ShortestPath IDE](https://github.com/KevinHuangIsLearning/shortestpath-ide) 的贡献者。该项目将竞赛编程工作流整合进 Code - OSS 的探索，为 BeCoder 的产品方向与使用体验带来了启发。

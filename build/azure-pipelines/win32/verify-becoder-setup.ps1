@@ -19,12 +19,34 @@ if (-not (Test-Path -LiteralPath $SetupPath -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $StagedPackagePath -PathType Container)) {
 	throw "Staged BeCoder package was not found: $StagedPackagePath"
 }
+$SetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
+$packageVersion = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'package.json') -Raw | ConvertFrom-Json).version
+$setupVersionInfo = (Get-Item -LiteralPath $SetupPath).VersionInfo
+$expectedSetupDescription = 'A lightweight C++ competitive programming editor.'
+# allow-any-unicode-next-line
+$expectedSetupCopyright = 'Copyright © 2026 Bc408. All rights reserved.'
+if ($setupVersionInfo.CompanyName.Trim() -ne 'Bc408' -or
+	$setupVersionInfo.FileDescription.Trim() -ne $expectedSetupDescription -or
+	$setupVersionInfo.FileVersion.Trim() -ne $packageVersion -or
+	$setupVersionInfo.ProductName.Trim() -ne 'BeCoder' -or
+	$setupVersionInfo.ProductVersion.Trim() -ne $packageVersion -or
+	$setupVersionInfo.LegalCopyright.Trim() -ne $expectedSetupCopyright) {
+	throw 'BeCoder Setup executable version information is incomplete or inconsistent.'
+}
 
 $setupScriptPath = Join-Path $repositoryRoot 'build\win32\becoder.iss'
 $setupScript = Get-Content -LiteralPath $setupScriptPath -Raw -Encoding utf8
 foreach ($requiredDirective in @(
 	'(?im)^\s*PrivilegesRequired=admin\s*$',
 	'(?im)^\s*AppId=\{#NameLong\}\s*$',
+	('(?im)^\s*' + [regex]::Escape('AppVerName={#NameLong}') + '\s*$'),
+	'(?im)^\s*AppCopyright=Copyright \(C\) 2026 Bc408\. All rights reserved\.\s*$',
+	'(?im)^\s*VersionInfoCompany=Bc408\s*$',
+	'(?im)^\s*VersionInfoDescription=A lightweight C\+\+ competitive programming editor\.\s*$',
+	('(?im)^\s*' + [regex]::Escape('VersionInfoVersion={#Version}.0') + '\s*$'),
+	'(?im)^\s*VersionInfoCopyright=Copyright \(C\) 2026 Bc408\. All rights reserved\.\s*$',
+	('(?im)^\s*' + [regex]::Escape('VersionInfoProductName={#NameLong}') + '\s*$'),
+	('(?im)^\s*' + [regex]::Escape('VersionInfoProductVersion={#Version}') + '\s*$'),
 	'(?im)^\s*UninstallDisplayIcon=\{app\}\\\{#ExeBasename\}\.exe\s*$',
 	'(?im)^\s*ChangesAssociations=no\s*$',
 	'(?im)^\s*ChangesEnvironment=no\s*$'
@@ -417,6 +439,9 @@ try {
 		throw 'BeCoder Native application mode did not create its generated uninstaller files.'
 	}
 	$nativeUninstallEntry = Get-ItemProperty -LiteralPath $nativeRegistrationPath
+	if ($nativeUninstallEntry.DisplayName -ne $stagedProduct.nameLong -or $nativeUninstallEntry.DisplayVersion -ne $packageVersion) {
+		throw 'BeCoder Native application mode registered an unexpected uninstall display name or version.'
+	}
 	if ($nativeUninstallEntry.InstallLocation.TrimEnd('\') -ine $nativeInstallRoot -or
 		$nativeUninstallEntry.UninstallString -ine ('"' + (Join-Path $nativeInstallRoot 'unins000.exe') + '"') -or
 		$nativeUninstallEntry.DisplayIcon -ine (Join-Path $nativeInstallRoot ($stagedProduct.nameShort + '.exe'))) {

@@ -36,10 +36,25 @@ suite('BeCoder native Setup', { skip: process.platform !== 'win32' || process.en
 		const ps = (script: string) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
 			env: { ...process.env, BC_TEST_NAME: name }, encoding: 'utf8', timeout: 15_000, windowsHide: true
 		}).trim();
-		const publicLink = path.join(ps("[Environment]::GetFolderPath('CommonPrograms')"), name + '.lnk');
-		const desktopLink = path.join(ps("[Environment]::GetFolderPath('Desktop')"), name + '.lnk');
-		const registry = () => ps("$p = Get-ItemProperty -LiteralPath ('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + $env:BC_TEST_NAME + '_is1') -ErrorAction SilentlyContinue; if ($p) { $p.InstallLocation }; exit 0");
-		assert.strictEqual(registry(), '');
+		const actualSetupVersionInfo = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$i = (Get-Item -LiteralPath $env:BC_TEST_SETUP).VersionInfo; @{ FileDescription = $i.FileDescription.Trim(); FileVersion = $i.FileVersion.Trim(); ProductName = $i.ProductName.Trim(); ProductVersion = $i.ProductVersion.Trim(); CompanyName = $i.CompanyName.Trim(); LegalCopyright = $i.LegalCopyright.Trim().Replace([string][char]0x00A9, '(C)'); OriginalFilenameBlank = [string]::IsNullOrWhiteSpace($i.OriginalFilename) } | ConvertTo-Json -Compress`], {
+			env: { ...process.env, BC_TEST_SETUP: setup }, encoding: 'utf8', timeout: 15_000, windowsHide: true
+		}).trim();
+		assert.deepStrictEqual(JSON.parse(actualSetupVersionInfo), {
+			FileDescription: 'A lightweight C++ competitive programming editor.',
+			FileVersion: '0.0.0',
+			ProductName: name,
+			ProductVersion: '0.0.0',
+			CompanyName: 'Bc408',
+			LegalCopyright: 'Copyright (C) 2026 Bc408. All rights reserved.',
+			OriginalFilenameBlank: true
+		});
+		const publicLink = path.join(ps('[Environment]::GetFolderPath(\'CommonPrograms\')'), name + '.lnk');
+		const desktopLink = path.join(ps('[Environment]::GetFolderPath(\'Desktop\')'), name + '.lnk');
+		const registry = () => {
+			const value = ps(`$p = Get-ItemProperty -LiteralPath ('HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + $env:BC_TEST_NAME + '_is1') -ErrorAction SilentlyContinue; if ($p) { @{ InstallLocation = $p.InstallLocation; DisplayName = $p.DisplayName; DisplayVersion = $p.DisplayVersion } | ConvertTo-Json -Compress }; exit 0`);
+			return value ? JSON.parse(value) : undefined;
+		};
+		assert.strictEqual(registry(), undefined);
 		assert.ok(!fs.existsSync(publicLink) && !fs.existsSync(desktopLink));
 		const invoke = (file: string, arguments_: string[]) => {
 			const result = spawnSync(file, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ...arguments_], { timeout: 30_000, windowsHide: true });
@@ -51,8 +66,12 @@ suite('BeCoder native Setup', { skip: process.platform !== 'win32' || process.en
 		let nativeUninstalled = false;
 		try {
 			assert.strictEqual(install(native), 0);
-			assert.strictEqual(registry().replace(/\\$/, ''), native);
-			const link = JSON.parse(ps("$s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('CommonPrograms')) ($env:BC_TEST_NAME + '.lnk'))); @{ Target = $s.TargetPath; Working = $s.WorkingDirectory; Arguments = $s.Arguments } | ConvertTo-Json -Compress"));
+			const registration = registry();
+			assert.ok(registration);
+			assert.strictEqual(registration.DisplayName, name);
+			assert.strictEqual(registration.DisplayVersion, '0.0.0');
+			assert.strictEqual(registration.InstallLocation.replace(/\\$/, ''), native);
+			const link = JSON.parse(ps(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('CommonPrograms')) ($env:BC_TEST_NAME + '.lnk'))); @{ Target = $s.TargetPath; Working = $s.WorkingDirectory; Arguments = $s.Arguments } | ConvertTo-Json -Compress`));
 			assert.deepStrictEqual(link, { Target: path.join(native, 'BeCoder.exe'), Working: native, Arguments: '' });
 			assert.ok(fs.existsSync(desktopLink));
 			assert.ok(!fs.existsSync(path.join(native, 'tools', 'becoder-shortcuts.exe')));
@@ -66,12 +85,16 @@ suite('BeCoder native Setup', { skip: process.platform !== 'win32' || process.en
 				assert.ok(!fs.existsSync(path.join(target, 'unins000.exe')));
 			}
 			assert.deepStrictEqual(fs.readFileSync(publicLink), linkBytes);
-			assert.strictEqual(registry().replace(/\\$/, ''), native);
+			const registrationAfterReinstall = registry();
+			assert.ok(registrationAfterReinstall);
+			assert.strictEqual(registrationAfterReinstall.DisplayName, name);
+			assert.strictEqual(registrationAfterReinstall.DisplayVersion, '0.0.0');
+			assert.strictEqual(registrationAfterReinstall.InstallLocation.replace(/\\$/, ''), native);
 			assert.notStrictEqual(install(native), 0, 'Silent replacement still requires consent.');
 			assert.strictEqual(install(native, ['/BECODERALLOWDATALOSS=1']), 0);
 			assert.strictEqual(invoke(path.join(native, 'unins000.exe'), []), 0);
 			nativeUninstalled = true;
-			assert.strictEqual(registry(), '');
+			assert.strictEqual(registry(), undefined);
 			assert.ok(!fs.existsSync(publicLink) && !fs.existsSync(desktopLink));
 			assert.ok(!fs.existsSync(path.join(native, 'data')));
 			for (const target of [portable, portableSecond]) {

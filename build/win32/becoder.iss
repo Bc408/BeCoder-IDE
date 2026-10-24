@@ -1,12 +1,21 @@
 [Setup]
 AppId={#NameLong}
 AppName={#NameLong}
-AppVerName={#NameLong} {#Version}
+AppVerName={#NameLong}
 AppVersion={#Version}
 AppPublisher=Bc408
 AppPublisherURL=https://github.com/Bc408/BeCoder-IDE
 AppSupportURL=https://github.com/Bc408/BeCoder-IDE/issues
 AppUpdatesURL=https://github.com/Bc408/BeCoder-IDE/releases
+AppCopyright=Copyright (C) 2026 Bc408. All rights reserved.
+VersionInfoCompany=Bc408
+VersionInfoDescription=A lightweight C++ competitive programming editor.
+VersionInfoVersion={#Version}.0
+VersionInfoCopyright=Copyright (C) 2026 Bc408. All rights reserved.
+VersionInfoProductName={#NameLong}
+VersionInfoProductVersion={#Version}
+VersionInfoProductTextVersion={#Version}
+VersionInfoTextVersion={#Version}
 DefaultDirName={localappdata}\Programs\BeCoder
 OutputDir={#OutputDir}
 OutputBaseFilename=BeCoderSetup-x64-{#Version}

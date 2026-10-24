@@ -1740,6 +1740,17 @@ suite('OI extension boundary', () => {
 		assert.match(setupScript, /simplifiedChinese\.NativeInstallMode=原生应用版（推荐）/);
 		assert.match(setupScript, /simplifiedChinese\.PortableInstallMode=完全 Portable 版（不写入系统集成）/);
 		assert.match(setupScript, /^AppId=\{#NameLong\}$/m);
+		const setupScriptLines = setupScript.split(/\r?\n/);
+		for (const requiredLine of [
+			'AppVerName={#NameLong}',
+			'AppCopyright=Copyright (C) 2026 Bc408. All rights reserved.',
+			'VersionInfoDescription=A lightweight C++ competitive programming editor.',
+			'VersionInfoVersion={#Version}.0',
+			'VersionInfoCopyright=Copyright (C) 2026 Bc408. All rights reserved.',
+			'VersionInfoProductVersion={#Version}',
+		]) {
+			assert.ok(setupScriptLines.includes(requiredLine), requiredLine);
+		}
 		assert.match(setupScript, /^\[Tasks\]$/m);
 		assert.match(setupScript, /^Name: "desktopicon"; Description: "\{cm:CreateDesktopShortcut\}"$/m);
 		assert.match(setupScript, /SetWindowLongW\(WizardForm\.TasksList\.Handle, -20,\s*GetWindowLongW\(WizardForm\.TasksList\.Handle, -20\) or \$02000000\)/);

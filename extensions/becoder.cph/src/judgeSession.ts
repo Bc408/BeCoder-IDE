@@ -24,7 +24,7 @@ export class JudgeSession {
 	get busy(): boolean { return this.running; }
 	get current(): ProblemSnapshot | undefined { return this.snapshot; }
 
-	constructor(private readonly engine: JudgeEngine, private readonly saveSource: (source: string) => Promise<void>) { }
+	constructor(private readonly engine: JudgeEngine, private readonly saveSource: (source: string) => Promise<void>, private readonly samplesSaved: () => void = () => undefined) { }
 
 	clear(): void {
 		if (this.running || this.disposed) { throw new Error('CPH is busy or closed.'); }
@@ -58,6 +58,7 @@ export class JudgeSession {
 		this.cancelled = false;
 		try {
 			this.snapshot = await this.store.saveSamples(this.snapshot, tests, checker);
+			this.samplesSaved();
 			const snapshot = this.snapshot;
 			const selected = id === undefined ? snapshot.problem.tests : snapshot.problem.tests.filter(sample => sample.id === id);
 			if (!compileOnly && !selected.length) { throw new Error('No sample tests selected.'); }

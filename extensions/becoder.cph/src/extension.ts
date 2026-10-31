@@ -20,10 +20,9 @@ export function activate(context: vscode.ExtensionContext) {
 	const judgeView = new JudgeView(context);
 	context.subscriptions.push(judgeView, vscode.window.registerWebviewViewProvider(JudgeView.id, judgeView, { webviewOptions: { retainContextWhenHidden: vscode.workspace.getConfiguration('becoder.cph').get('general.retainWebviewContext', false) } }));
 	const showAssociated = async (editor: vscode.TextEditor | undefined) => {
-		if (!vscode.workspace.isTrusted || judgeView.isBusy || judgeView.hasUnsavedEdits) { return; }
+		if (!vscode.workspace.isTrusted) { return; }
 		try {
 			if (!editor || editor.document.uri.scheme !== 'file' || !['c', 'cpp'].includes(editor.document.languageId)) {
-				await judgeView.clear();
 				return;
 			}
 			await judgeView.openAssociated(editor.document.uri.fsPath);
@@ -32,11 +31,19 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => { void showAssociated(editor); }));
 	context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(document => {
-		if (judgeView.source === document.uri.fsPath) { void judgeView.clear(); }
+		if (judgeView.associatedSource === document.uri.fsPath) {
+			const editor = vscode.window.activeTextEditor;
+			if (editor && editor.document !== document && editor.document.uri.scheme === 'file' && ['c', 'cpp'].includes(editor.document.languageId)) {
+				void showAssociated(editor);
+			} else { void judgeView.clear().catch(error => vscode.window.showErrorMessage(String(error))); }
+		}
 	}));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => { void judgeView.refreshSource(event.document.uri.fsPath); }));
 	void showAssociated(vscode.window.activeTextEditor);
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.cph.openCurrent', async () => {
-		const document = vscode.window.activeTextEditor?.document;
+		const active = vscode.window.activeTextEditor?.document;
+		const document = active?.uri.scheme === 'file' && ['c', 'cpp'].includes(active.languageId) ? active
+			: judgeView.associatedSource ? await vscode.workspace.openTextDocument(vscode.Uri.file(judgeView.associatedSource)) : undefined;
 		if (!document || document.uri.scheme !== 'file' || !['c', 'cpp'].includes(document.languageId)) {
 			await vscode.window.showInformationMessage(vscode.l10n.t('Open a C or C++ source file first.'));
 			return;

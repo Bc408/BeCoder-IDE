@@ -9,6 +9,7 @@ import * as path from 'path';
 import { test } from 'node:test';
 
 const { JSDOM } = require('jsdom');
+const judgeScript = path.resolve(__dirname, '../../dist/judge.js');
 async function until(predicate: () => boolean): Promise<void> {
 	for (let attempt = 0; attempt < 100; attempt++) {
 		if (predicate()) { return; }
@@ -17,13 +18,78 @@ async function until(predicate: () => boolean): Promise<void> {
 	assert.fail('Webview did not reach expected state.');
 }
 
+test('restored sample drafts flush on focus switch and source status preserves sample edits', async () => {
+	const dom = new JSDOM('<div id="app"></div>', { url: 'https://becoder.invalid/', runScripts: 'outside-only', pretendToBeVisual: true });
+	try {
+		const messages: any[] = [];
+		const state = { revision: 'draft', source: 'a.cpp', name: 'A', busy: false, message: '',
+			cases: [{ id: 0, testcase: { id: 0, input: 'unsaved', output: '2' }, result: null }] };
+		dom.window.translations = { sourceChanged: 'Source changed; results are from the previous run.' };
+		dom.window.acquireVsCodeApi = () => ({ postMessage: (message: unknown) => messages.push(message), getState: () => state, setState: () => undefined });
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
+		await until(() => messages.some(message => message.command === 'ready'));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'sourceStatus', sourceChanged: true } }));
+		await until(() => dom.window.document.body.textContent.includes('Source changed;'));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'requestSave', switching: true } }));
+		await until(() => messages.some(message => message.command === 'save'));
+		assert.equal(messages.find(message => message.command === 'save').tests[0].input, 'unsaved');
+		assert.equal(messages.find(message => message.command === 'save').switching, true);
+		assert.equal(dom.window.document.querySelector('.input-textarea').disabled, true);
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'saved', revision: 'new' } }));
+		await new Promise(resolve => setTimeout(resolve, 20));
+		assert.equal(dom.window.document.querySelector('.input-textarea').disabled, true, 'switch acknowledgment must not reopen editing before the next state');
+	} finally { dom.window.close(); }
+});
+
+test('a queued run is discarded when the CPH source changes', async () => {
+	const dom = new JSDOM('<div id="app"></div>', { url: 'https://becoder.invalid/', runScripts: 'outside-only', pretendToBeVisual: true });
+	try {
+		const messages: any[] = [];
+		const sourceA = { revision: 'a', source: 'a.cpp', name: 'A', busy: true, message: '', cases: [{ id: 0, testcase: { id: 0, input: '1', output: '2' }, result: null }] };
+		dom.window.translations = {};
+		dom.window.acquireVsCodeApi = () => ({ postMessage: (message: unknown) => messages.push(message), getState: () => sourceA, setState: () => undefined });
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
+		await until(() => messages.some(message => message.command === 'ready'));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'requestRun' } }));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'requestSave', switching: true } }));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'saved', revision: 'a-saved' } }));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'state', state: { ...sourceA, revision: 'b', source: 'b.cpp', name: 'B', busy: false } } }));
+		await until(() => dom.window.document.querySelector('.problem-name')?.textContent === 'B');
+		await new Promise(resolve => setTimeout(resolve, 30));
+		assert.equal(messages.some(message => message.command === 'run'), false);
+	} finally { dom.window.close(); }
+});
+
+test('a pending JSON import cannot append samples to a different problem', async () => {
+	const dom = new JSDOM('<div id="app"></div>', { url: 'https://becoder.invalid/', runScripts: 'outside-only', pretendToBeVisual: true });
+	try {
+		const messages: any[] = [];
+		const state = { revision: 'a', source: 'a.cpp', name: 'A', busy: false, message: '', cases: [{ id: 0, testcase: { id: 0, input: 'a', output: '' }, result: null }] };
+		dom.window.translations = {};
+		dom.window.acquireVsCodeApi = () => ({ postMessage: (message: unknown) => messages.push(message), getState: () => state, setState: () => undefined });
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
+		await until(() => messages.some(message => message.command === 'ready'));
+		let finish!: (text: string) => void;
+		const contents = new Promise<string>(resolve => { finish = resolve; });
+		const input = dom.window.document.querySelector('.case-import-input');
+		Object.defineProperty(input, 'files', { configurable: true, value: [{ size: 32, text: () => contents }] });
+		input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+		dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { command: 'state', state: { ...state, source: 'b.cpp', name: 'B', revision: 'b' } } }));
+		await until(() => dom.window.document.querySelector('.problem-name').textContent === 'B');
+		finish('[{"input":"wrong problem","output":""}]');
+		await new Promise(resolve => setTimeout(resolve, 50));
+		assert.equal(dom.window.document.querySelectorAll('.case').length, 1);
+		assert.equal(messages.some(message => message.command === 'dirty'), false);
+	} finally { dom.window.close(); }
+});
+
 test('checker controls retain upstream path, hidden expected output and expandable logs', async () => {
 	const dom = new JSDOM('<div id="app"></div>', { url: 'https://becoder.invalid/', runScripts: 'outside-only', pretendToBeVisual: true });
 	try {
 		const messages: any[] = [];
 		dom.window.translations = {};
 		dom.window.acquireVsCodeApi = () => ({ postMessage: (message: unknown) => messages.push(message), getState: () => undefined, setState: () => undefined });
-		dom.window.eval(fs.readFileSync(path.resolve('extensions/becoder.cph/dist/judge.js'), 'utf8'));
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
 		await until(() => messages.some(message => message.command === 'ready'));
 		const state = { revision: 'checker', source: 'a.cpp', name: 'A', busy: false, message: '', customCheckerPath: 'check.py',
 			cases: [{ id: 0, testcase: { id: 0, input: '1', output: '2' }, result: { pass: false, verdict: 'wrong-answer', stdout: '3', stderr: '', time: 1,
@@ -46,7 +112,7 @@ test('CPH cards display escaped output, save/add/run/stop messages, and retain e
 		const messages: any[] = [];
 		dom.window.translations = {};
 		dom.window.acquireVsCodeApi = () => ({ postMessage: (value: unknown) => messages.push(value), getState: () => undefined, setState: () => undefined });
-		dom.window.eval(fs.readFileSync(path.resolve('extensions/becoder.cph/dist/judge.js'), 'utf8'));
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
 		await until(() => messages.some(message => message.command === 'ready'));
 		const state = { revision: 'one', source: 'C:\\contest\\a.cpp', name: '<img onerror=bad()>', busy: false, message: '',
 			cases: [{ id: 1, testcase: { id: 1, input: '1', output: '2' }, result: { pass: true, verdict: 'passed', stdout: '<script>bad()</script>', stderr: 'debug:1', signal: null, timeOut: false, time: 12 } }] };
@@ -84,7 +150,7 @@ test('web problems link to their source, JSON imports append cases, and single r
 		const messages: any[] = [];
 		dom.window.translations = {};
 		dom.window.acquireVsCodeApi = () => ({ postMessage: (value: unknown) => messages.push(value), getState: () => undefined, setState: () => undefined });
-		dom.window.eval(fs.readFileSync(path.resolve('extensions/becoder.cph/dist/judge.js'), 'utf8'));
+		dom.window.eval(fs.readFileSync(judgeScript, 'utf8'));
 		await until(() => messages.some(message => message.command === 'ready'));
 		const state = { revision: 'web', source: 'C:\\contest\\a.cpp', url: 'https://codeforces.com/problemset/problem/1/A', name: 'A', busy: false, message: '',
 			cases: [0, 1].map(id => ({ id, testcase: { id, input: String(id), output: String(id) }, result: null })) };

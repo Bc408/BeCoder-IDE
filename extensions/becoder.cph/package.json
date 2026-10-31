@@ -50,6 +50,7 @@
 	"scripts": {
 		"compile": "node ../../node_modules/typescript/bin/tsc6 -p ./ && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json",
 		"compile-webview": "node build-webview.mjs",
+		"test-focus": "npm run compile-webview && node ../../node_modules/typescript/bin/tsc6 -p ./tsconfig.test.json && node --test out-test/test/focus.test.js out-test/test/webview.test.js",
 		"compile-parsers": "esbuild companion/entry.ts --bundle --platform=browser --format=iife --global-name=BeCoderCompanion --outfile=dist/problem-parser.js",
 		"vscode:prepublish": "npm run compile && npm run compile-parsers && npm run compile-webview"
 	},

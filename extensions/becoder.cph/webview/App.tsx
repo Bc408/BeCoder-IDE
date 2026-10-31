@@ -26,18 +26,36 @@ function App() {
 	const [checkingId, setCheckingId] = useState<number | null>(null);
 	const [focusId, setFocusId] = useState<number | null>(null);
 	const [requestedRun, setRequestedRun] = useState(false);
+	const [requestedSave, setRequestedSave] = useState(false);
 	const saving = useRef(false);
+	const editVersion = useRef(0);
+	const savedVersion = useRef(0);
+	const switching = useRef(false);
+	const interactionVersion = useRef(0);
+	const sourceRef = useRef(state.source);
+	sourceRef.current = state.source;
+	const markDirty = () => {
+		editVersion.current++;
+		api.postMessage({ command: 'dirty', source: sourceRef.current });
+		setDirty(true);
+	};
 	const checkerInputRef = useRef<HTMLInputElement>(null);
 	const importInputRef = useRef<HTMLInputElement>(null);
 	const updateCheckerPath = (customCheckerPath: string) => {
-		api.postMessage({ command: 'dirty' });
-		setDirty(true);
+		markDirty();
 		setState(previous => ({ ...previous, customCheckerPath }));
 	};
 	const openCheckerFile = () => api.postMessage({ command: 'openChecker' });
 	useEffect(() => {
 		const receive = (event: MessageEvent) => {
 			if (event.data?.command === 'requestRun') { setRequestedRun(true); }
+			if (event.data?.command === 'requestSave') {
+				switching.current = event.data.switching === true;
+				if (switching.current) { interactionVersion.current++; setRequestedRun(false); }
+				if (switching.current) { setState(previous => ({ ...previous, busy: true })); }
+				setRequestedSave(true);
+			}
+			if (event.data?.command === 'sourceStatus') { setState(previous => ({ ...previous, sourceChanged: event.data.sourceChanged })); }
 			if (event.data?.command === 'progress') {
 				const { phase, id } = event.data;
 				setRunTarget(phase === 'compile' ? 'compile' : phase === 'running' ? id : null);
@@ -49,21 +67,27 @@ function App() {
 			}
 			if (event.data?.command === 'running') { setRunTarget(event.data.compileOnly ? 'compile' : Number.isSafeInteger(event.data.id) ? event.data.id : 'all'); setState(previous => ({ ...previous, busy: true })); }
 			if (event.data?.command === 'state') {
+				interactionVersion.current++;
+				switching.current = false;
 				saving.current = false;
 				const next = event.data.state;
+				if (next.source !== sourceRef.current) { setRequestedRun(false); }
 				setRunTarget(next.phase === 'compile' ? 'compile' : next.phase === 'running' ? next.activeId : null);
 				setCheckingId(next.phase === 'checking' ? next.activeId : null);
 				setDirty(false); setState(next); setNotice(''); setFocusId(null);
 			}
 			if (event.data?.command === 'saved') {
 				saving.current = false;
+				setDirty(editVersion.current !== savedVersion.current);
 				setState(previous => ({ ...previous, revision: event.data.revision, message: '' }));
 			}
 			if (event.data?.command === 'failure') {
+				switching.current = false;
 				saving.current = false;
 				setRunTarget(null);
 				setCheckingId(null);
 				setRequestedRun(false);
+				setRequestedSave(false);
 				setDirty(false);
 				setState(previous => ({ ...previous, busy: false, message: event.data.message, revision: event.data.revision ?? previous.revision }));
 			}
@@ -76,20 +100,21 @@ function App() {
 	useEffect(() => { setCheckerVisible(!!state.customCheckerPath); }, [state.source]);
 	useEffect(() => { if (checkerVisible) { checkerInputRef.current?.focus(); } }, [checkerVisible]);
 	useEffect(() => {
-		if (!dirty || state.busy || saving.current) { return; }
+		if ((!dirty && !requestedSave) || (state.busy && !switching.current) || saving.current) { return; }
 		const timer = setTimeout(() => {
 			saving.current = true;
+			savedVersion.current = editVersion.current;
 			setDirty(false);
-			api.postMessage({ command: 'save', revision: state.revision, tests: state.cases.map(item => item.testcase), customCheckerPath: state.customCheckerPath ?? '' });
-		}, 500);
+			api.postMessage({ command: 'save', source: state.source, switching: switching.current, revision: state.revision, tests: state.cases.map(item => item.testcase), customCheckerPath: state.customCheckerPath ?? '' });
+			setRequestedSave(false);
+		}, requestedSave ? 0 : 500);
 		return () => clearTimeout(timer);
-	}, [dirty, state]);
+	}, [dirty, state, requestedSave]);
 	const edit = (id: number, input: string, output: string) => setState(previous => {
 		if (previous.busy) { return previous; }
 		const found = previous.cases.find(item => item.id === id);
 		if (!found || (found.testcase.input === input && found.testcase.output === output)) { return previous; }
-		api.postMessage({ command: 'dirty' });
-		setDirty(true);
+		markDirty();
 		return { ...previous, cases: previous.cases.map(item => item.id === id ? { ...item, testcase: { id, input, output } } : item) };
 	});
 	const send = (command: 'save' | 'run' | 'compile' | 'delete', id?: number) => {
@@ -97,7 +122,8 @@ function App() {
 		setDirty(false);
 		setMenu(false);
 		setState(previous => ({ ...previous, busy: true }));
-		api.postMessage({ command, revision: state.revision, tests: state.cases.map(item => item.testcase), id, customCheckerPath: state.customCheckerPath ?? '' });
+		if (command === 'save') { saving.current = true; savedVersion.current = editVersion.current; }
+		api.postMessage({ command, source: state.source, revision: state.revision, tests: state.cases.map(item => item.testcase), id, customCheckerPath: state.customCheckerPath ?? '' });
 	};
 	useEffect(() => {
 		if (!requestedRun || saving.current || state.busy) { return; }
@@ -109,17 +135,19 @@ function App() {
 		const file = event.target.files?.[0];
 		event.target.value = '';
 		if (!file) { return; }
+		const version = interactionVersion.current;
 		try {
 			if (file.size > 8 * 1024 * 1024) { throw new Error(t('importTooLarge')); }
-			const value = JSON.parse(await file.text());
+			const contents = await file.text();
+			if (version !== interactionVersion.current) { return; }
+			const value = JSON.parse(contents);
 			if (!Array.isArray(value) || !value.length || value.some(item => !item || typeof item.input !== 'string' || typeof item.output !== 'string')) { throw new Error(t('invalidImport')); }
 			if (state.cases.length + value.length > 100) { throw new Error(t('tooManyCases')); }
 			const start = Math.max(0, ...state.cases.map(item => item.id)) + 1;
 			setState(previous => ({ ...previous, cases: [...previous.cases, ...value.map((item, index) => ({ id: start + index, result: null, testcase: { id: start + index, input: item.input, output: item.output } }))] }));
-			api.postMessage({ command: 'dirty' });
-			setDirty(true);
+			markDirty();
 			setNotice(t('testcasesImported').replace('{count}', String(value.length)));
-		} catch (error) { setNotice(error instanceof Error ? error.message : t('invalidImport')); }
+		} catch (error) { if (version === interactionVersion.current) { setNotice(error instanceof Error ? error.message : t('invalidImport')); } }
 	};
 	const passed = state.cases.filter(item => item.result?.pass).length;
 	if (!state.source) {
@@ -139,6 +167,8 @@ function App() {
 			{state.source && <span className={`pass-rate ${state.cases.length > 0 && passed === state.cases.length ? 'pass-all' : ''}`}>{passed} / {state.cases.length} {t('passedRate')}</span>}
 		</div>
 		{(state.message || notice) && <div className='request-status' role='status'>{state.message || notice}</div>}
+		{state.busy && (runTarget !== null || checkingId !== null) && <div className='request-status' role='status'>{t('runningSource').replace('{source}', state.name || state.source)}</div>}
+		{state.sourceChanged && <div className='request-status' role='status'>{t('sourceChanged')}</div>}
 		{state.source && <>
 			<div className='actions'>
 				<div className='split-btn'>
@@ -152,11 +182,10 @@ function App() {
 			</div>
 			{!state.cases.length && <p>{t('noSamples')}</p>}
 			{state.cases.map((item, index) => <CaseView key={`${state.source}:${item.id}`} num={index + 1} case={item}
-				updateCase={edit} rerun={id => send('run', id)} remove={id => { setDirty(true); api.postMessage({ command: 'dirty' }); setState(previous => ({ ...previous, cases: previous.cases.filter(value => value.id !== id) })); }}
+				updateCase={edit} rerun={id => send('run', id)} remove={id => { markDirty(); setState(previous => ({ ...previous, cases: previous.cases.filter(value => value.id !== id) })); }}
 					notify={setNotice} doFocus={focusId === item.id} customCheckerPath={state.customCheckerPath} hideOutputDifference={state.hideOutputDifference} forceRunning={runTarget === item.id} forceChecking={checkingId === item.id} disabled={state.busy} stop={stop} />)}
 			<div className='margin-10'><div className='action-container'><button className='btn btn-green btn-block' aria-label={t('add')} disabled={state.busy || state.cases.length >= 100} onClick={() => setState(previous => {
-				api.postMessage({ command: 'dirty' });
-				setDirty(true);
+				markDirty();
 				const id = Math.max(0, ...previous.cases.map(item => item.id)) + 1;
 				setFocusId(id);
 				return { ...previous, cases: [...previous.cases, { id, result: null, testcase: { id, input: '', output: '' } }] };

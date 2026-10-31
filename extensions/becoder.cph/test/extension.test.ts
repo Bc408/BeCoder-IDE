@@ -22,14 +22,16 @@ test('extension command binds imports to trusted local workspace and disposes re
 	const settings: Record<string, unknown> = {};
 	const errors: string[] = [];
 	let editorChange: (editor: unknown) => void = () => undefined;
+	let documentClose: (document: any) => void = () => undefined;
 	let provider: any;
 	let cursor = -1;
 	const subscriptions: { dispose(): void }[] = [];
 	const workspace = {
-		onDidCloseTextDocument: () => ({ dispose() { } }),
+		onDidCloseTextDocument: (listener: (document: any) => void) => { documentClose = listener; return { dispose() { } }; },
 		getConfiguration: () => ({ get: (key: string, fallback: unknown) => settings[key] ?? fallback }),
 		isTrusted: true,
 		workspaceFolders: [{ uri: { scheme: 'file', fsPath: root } }],
+		onDidChangeTextDocument: () => ({ dispose() { } }),
 		openTextDocument: async (uri: { fsPath: string }) => { opened.push(uri.fsPath); return { uri, getText: () => fs.readFileSync(uri.fsPath, 'utf8'), positionAt: (offset: number) => offset }; }
 	};
 	const api = {
@@ -115,6 +117,15 @@ test('extension command binds imports to trusted local workspace and disposes re
 	editorChange({ document: { uri: { scheme: 'file', fsPath: source }, languageId: 'cpp' } });
 	await new Promise(resolve => setImmediate(resolve));
 	assert.strictEqual(provider.source, source, 'disabled auto-show still follows associated files');
+	editorChange(undefined);
+	await new Promise(resolve => setImmediate(resolve));
+	assert.strictEqual(provider.source, source, 'CPH focus retains the source');
+	editorChange({ document: { uri: { scheme: 'file', fsPath: template }, languageId: 'plaintext' } });
+	await new Promise(resolve => setImmediate(resolve));
+	assert.strictEqual(provider.source, source, 'auxiliary editors retain the source');
+	documentClose({ uri: { scheme: 'file', fsPath: source } });
+	await new Promise(resolve => setImmediate(resolve));
+	assert.strictEqual(provider.source, undefined, 'closing the associated source clears the panel');
 	const unrelated = path.join(root, 'unrelated.cpp'); fs.writeFileSync(unrelated, '');
 	editorChange({ document: { uri: { scheme: 'file', fsPath: unrelated }, languageId: 'cpp' } });
 	await new Promise(resolve => setImmediate(resolve));

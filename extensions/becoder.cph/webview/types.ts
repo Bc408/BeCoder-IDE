@@ -24,5 +24,6 @@ export interface PanelState {
 	phase?: 'compile' | 'running' | 'checking';
 	activeId?: number;
 	message: string;
+	sourceChanged?: boolean;
 	cases: Case[];
 }

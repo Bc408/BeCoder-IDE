@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import * as fs from 'fs';
 import { stripVTControlCharacters } from 'util';
 import * as vscode from 'vscode';
 import { CheckerRun, CphExecutor, JudgeRun } from './execution';
@@ -25,6 +26,8 @@ const labels: Record<string, [string, string]> = {
 	outputDifference: ['Output Difference:', '输出差异：'],
 	customChecker: ['Custom Checker', '自定义判题脚本'], customCheckerEnabled: ['Custom Checker (Enabled)', '自定义判题脚本 (已启用)'],
 	customCheckerPathPlaceholder: ['Full path to Python script', 'Python 脚本的完整路径'],
+	sourceChanged: ['Source changed; results are from the previous run.', '源码已修改，结果来自上次运行。'],
+	runningSource: ['Testing: {source}', '正在评测：{source}'],
 	customCheckerDescription: ['CPH passes the input and actual output file paths to your Python script. Exit code 0 means passed; nonzero means failed. Expected output is ignored.', 'CPH 将输入和程序实际输出的临时文件路径传给 Python 脚本。退出代码 0 表示通过，非零表示失败。预期输出将被忽略。'],
 	checkerLog: ['Checker Log', '判题日志'], checkerInvocation: ['Checker Invocation:', '判题脚本调用：'], checkerOutput: ['Checker Output:', '判题脚本输出：'],
 	checkerExitCode: ['Checker Exit Code:', '退出代码：'], checkerDuration: ['Checker Duration:', '执行耗时：'], openChecker: ['Open the checker script', '打开判题脚本'],
@@ -69,16 +72,25 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 	private savingSamples = false;
 	private disposed = false;
 	private dirty = false;
+	private dirtyVersion = 0;
+	private targetSource: string | undefined;
+	private displayedSource: string | undefined;
+	private saveRequested = false;
+	private switchReady = false;
+	private samplesSaved = false;
+	private runHash: string | undefined;
+	private resultHashes = new Map<number, string>();
+	private readonly cached = new Map<string, { revision: string; results: Map<number, UiResult>; hashes: Map<number, string>; message: string }>();
 	private selectedId: number | undefined;
 	private activeId: number | undefined;
 	private phase: 'compile' | 'running' | 'checking' | undefined;
 	private beaconActivity: string | undefined;
 	private evidence: RuntimeEvidence | undefined;
-	private evidenceError = '';
 	private preparationCancelled = false;
 	get isBusy(): boolean { return this.busy || this.session.busy; }
-	get hasUnsavedEdits(): boolean { return this.dirty; }
+	get hasUnsavedEdits(): boolean { return this.dirty || this.saveRequested; }
 	get source(): string | undefined { return this.session.current?.problem.srcPath; }
+	get associatedSource(): string | undefined { return this.targetSource; }
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		const helper = path.join(context.extensionPath, '..', 'danielpinto8zz6.c-cpp-compile-run', 'dist', 'runner-input.exe');
@@ -87,7 +99,8 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			if (!runner) { throw new Error(vscode.l10n.t('BeCoder Runner compiler is unavailable.')); }
 			const api = await runner.activate();
 			const plan = await api.prepareCapturedCompilation(source, output, session);
-			this.evidence = this.beaconActivity ? api.createEvidence(this.beaconActivity, 'cph', error => { this.evidenceError = vscode.l10n.t('Beacon could not save this run evidence: {0}', error instanceof Error ? error.message : String(error)); }) : undefined;
+			this.runHash = plan.sourceSnapshot ? this.textHash(Buffer.from(plan.sourceSnapshot.bytesBase64, 'base64').toString('utf8')) : this.sourceHash(source);
+			this.evidence = this.beaconActivity ? api.createEvidence(this.beaconActivity, 'cph', error => { console.warn('Beacon CPH evidence unavailable', error); }) : undefined;
 			return plan;
 		}, dataRoot: path.join(context.globalStorageUri.fsPath, 'cph-sessions'), inputHelper: helper,
 			evidence: () => this.evidence,
@@ -104,6 +117,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				if (id === undefined) { return; }
 				const result = this.presentResult(id, sample);
 				this.results.set(id, result);
+				if (this.runHash) { this.resultHashes.set(id, this.runHash); }
 				void this.view?.webview.postMessage({ command: 'result', id, result });
 				this.progress(undefined);
 			},
@@ -115,7 +129,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before running samples.')); }
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(source));
 			if (!await document.save()) { throw new Error(vscode.l10n.t('Could not save the source file.')); }
-		});
+		}, () => { this.samplesSaved = true; });
 	}
 
 	async open(problem: StoredProblem): Promise<void> {
@@ -123,31 +137,97 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 	}
 
 	async openAssociated(source: string): Promise<void> {
-		if (this.session.current?.problem.srcPath === source) { return; }
-		if (!new ProblemStore(path.dirname(source)).load(source)) { await this.clear(); return; }
-		const focus = !this.view && vscode.workspace.getConfiguration('becoder.cph', vscode.Uri.file(source)).get('autoShowJudge', true);
-		await this.openSource(source, focus);
+		this.targetSource = source;
+		await this.followTarget();
 	}
 
 	async clear(): Promise<void> {
-		if (this.isBusy || this.dirty) { return; }
-		this.session.clear();
-		this.results.clear();
-		this.message = '';
+		this.targetSource = undefined;
+		await this.followTarget();
+	}
+
+	private async followTarget(): Promise<void> {
+		if (this.disposed || this.isBusy) { return; }
+		if (this.displayedSource === this.targetSource) {
+			if (this.switchReady) { this.switchReady = false; await this.publish(); }
+			return;
+		}
+		// Freeze and flush the frontend before replacing its state, even if an edit's
+		// dirty notification is still in transit when an earlier autosave completes.
+		if (this.source && this.view && !this.switchReady) {
+			if (!this.saveRequested) {
+				this.saveRequested = true;
+				if (!await this.view.webview.postMessage({ command: 'requestSave', switching: true })) { this.saveRequested = false; }
+			}
+			return;
+		}
+		if (this.dirty) { return; }
+		this.switchReady = false;
+		const source = this.targetSource;
+		try {
+			this.remember();
+			if (source) { this.session.open(source); }
+			else { this.session.clear(); }
+			this.displayedSource = source;
+			this.restore();
+		} catch (error) {
+			// Keep the existing session intact and let the user retry the failed target.
+			this.switchReady = false;
+			this.message = vscode.l10n.t('CPH request failed: {0}', error instanceof Error ? error.message : String(error));
+			await this.publish();
+			return;
+		}
 		await this.publish();
+	}
+
+	private remember(): void {
+		const current = this.session.current;
+		if (current) { this.cached.set(current.problem.srcPath, { revision: current.revision, results: this.results, hashes: this.resultHashes, message: this.message }); }
+	}
+
+	private restore(): void {
+		const current = this.session.current;
+		const cached = current && this.cached.get(current.problem.srcPath);
+		const valid = cached && cached.revision === current?.revision;
+		this.results = valid ? new Map(cached.results) : new Map();
+		this.resultHashes = valid ? new Map(cached.hashes) : new Map();
+		this.message = valid ? cached.message : '';
+	}
+
+	private sourceHash(source: string): string | undefined {
+		try {
+			const document = vscode.workspace.textDocuments?.find(document => document.uri.scheme === 'file' && document.uri.fsPath === source);
+			return this.textHash(document ? document.getText() : fs.readFileSync(source, 'utf8'));
+		} catch { return undefined; }
+	}
+
+	private textHash(text: string): string {
+		return createHash('sha256').update(text.replace(/^\uFEFF/, '')).digest('hex');
+	}
+
+	private sourceChanged(): boolean {
+		const hash = this.source && this.sourceHash(this.source);
+		return this.results.size > 0 && [...this.results.keys()].some(id => !hash || this.resultHashes.get(id) !== hash);
+	}
+
+	async refreshSource(source: string): Promise<void> {
+		if (source === this.source) { await this.view?.webview.postMessage({ command: 'sourceStatus', sourceChanged: this.sourceChanged() }); }
 	}
 
 	async openSource(source: string, focus = true): Promise<void> {
 		if (this.isBusy) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
-		if (this.dirty) { throw new Error(vscode.l10n.t('Save the edited samples before opening another problem.')); }
+		if (this.hasUnsavedEdits) { throw new Error(vscode.l10n.t('Save the edited samples before opening another problem.')); }
+		this.remember();
+		this.targetSource = source;
+		this.displayedSource = source;
 		this.session.open(source);
-		this.results.clear();
-		this.message = '';
+		this.restore();
 		if (focus) { await vscode.commands.executeCommand(`${JudgeView.id}.focus`); }
 		await this.publish();
 	}
 
 	async runSource(source: string): Promise<void> {
+		if (this.saveRequested) { return; }
 		if (this.session.current?.problem.srcPath === source && this.view) {
 			if (this.isBusy && !this.savingSamples) { return; }
 			await this.view.webview.postMessage({ command: 'requestRun' });
@@ -177,9 +257,17 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 
 	private async receive(message: unknown): Promise<void> {
 		if (this.disposed || !message || typeof message !== 'object') { return; }
-		const request = message as { command?: string; revision?: unknown; tests?: unknown; id?: unknown; customCheckerPath?: unknown };
-		if (request.command === 'dirty') { this.dirty = true; return; }
-		if (request.command === 'ready') { await this.publish(); return; }
+		const request = message as { command?: string; revision?: unknown; tests?: unknown; id?: unknown; customCheckerPath?: unknown; source?: unknown; switching?: boolean };
+		if (request.source !== undefined && request.source !== this.source) { return; }
+		if (request.command === 'dirty') { this.dirty = true; this.dirtyVersion++; return; }
+		if (request.command === 'ready') {
+			if (!this.dirty || this.isBusy) { await this.publish(); }
+			if (!this.isBusy && this.source && (this.dirty || this.displayedSource !== this.targetSource)) {
+				this.saveRequested = true;
+				await this.view?.webview.postMessage({ command: 'requestSave', switching: this.displayedSource !== this.targetSource });
+			}
+			return;
+		}
 		if (request.command === 'stop') { this.preparationCancelled = true; this.session.cancel(); return; }
 		if (request.command === 'settings') { await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:becoder.cph'); return; }
 		if (request.command === 'createProblem') { await vscode.commands.executeCommand('becoder.cph.openCurrent'); return; }
@@ -195,6 +283,8 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		if (!['save', 'run', 'compile', 'delete'].includes(request.command ?? '')) { return; }
 		if (this.isBusy) { return; }
 		this.busy = true;
+		const dirtyVersion = this.dirtyVersion;
+		this.samplesSaved = false;
 		this.preparationCancelled = false;
 		this.savingSamples = request.command === 'save';
 		let failed = false;
@@ -225,13 +315,20 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 					} finally { await release(); }
 					this.session.open(snapshot.problem.srcPath);
 					this.results.clear();
+					this.resultHashes.clear();
 					this.dirty = false;
 					this.message = '';
 				}
 			} else if (request.command === 'save') {
-				await this.session.save(request.revision, request.tests, request.customCheckerPath as string | undefined);
-				this.dirty = false;
-				this.message = '';
+				const current = this.session.current;
+				const unchanged = request.switching && current?.revision === request.revision
+					&& JSON.stringify(current.problem.tests) === JSON.stringify(request.tests)
+					&& (current.problem.customCheckerPath ?? '') === (request.customCheckerPath ?? '');
+				if (!unchanged) {
+					await this.session.save(request.revision, request.tests, request.customCheckerPath as string | undefined);
+					this.message = '';
+				}
+				this.dirty = this.dirtyVersion !== dirtyVersion;
 			} else {
 				const source = this.session.current?.problem.srcPath;
 				if (source) {
@@ -240,13 +337,14 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				}
 				if (this.preparationCancelled) { throw new Error('CPH request cancelled.'); }
 				this.message = vscode.l10n.t('Compiling and running samples…');
-				this.beaconActivity = beaconActivity; this.evidence = undefined; this.evidenceError = '';
+				this.beaconActivity = beaconActivity; this.evidence = undefined; this.runHash = undefined;
 				const pending = this.session.run(request.revision, request.tests, request.id as number | undefined, request.command === 'compile', request.customCheckerPath as string | undefined);
 				this.selectedId = request.id as number | undefined;
 				const { run, ids } = await pending;
-				this.dirty = false;
+				this.dirty = this.dirtyVersion !== dirtyVersion;
 				for (const [index, sample] of run.samples.entries()) {
 					this.results.set(ids[index], this.presentResult(ids[index], sample));
+					if (this.runHash) { this.resultHashes.set(ids[index], this.runHash); }
 				}
 				if (run.compile.exitCode !== 0 || run.compile.launchError || run.compile.cancelled || run.compile.timedOut || run.compile.outputLimitExceeded) {
 					this.message = vscode.l10n.t('Compilation did not complete successfully.\n{0}', stripVTControlCharacters(run.compile.launchError ?? run.compile.stderr).slice(0, 100000));
@@ -263,7 +361,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			failed = true;
 			this.message = vscode.l10n.t('CPH request failed: {0}', error instanceof Error ? error.message : String(error));
 		} finally {
-			if (this.evidenceError) { this.message += '\n' + this.evidenceError; }
+			if (this.samplesSaved) { this.dirty = this.dirtyVersion !== dirtyVersion; }
 			this.beaconActivity = undefined; this.evidence = undefined;
 			if (beaconActivity) {
 				try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: beaconActivity }); }
@@ -278,11 +376,14 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			this.savingSamples = false;
 			this.phase = undefined;
 			this.activeId = undefined;
+			this.saveRequested = false;
 			if (failed) {
 				await this.view?.webview.postMessage({ command: 'failure', message: this.message, revision: this.session.current?.revision });
 			} else if (request.command === 'save') {
+				this.switchReady = request.switching === true;
 				await this.view?.webview.postMessage({ command: 'saved', revision: this.session.current?.revision });
 			} else { await this.publish(); }
+			if (!failed || request.command !== 'save') { await this.followTarget(); }
 		}
 	}
 
@@ -308,7 +409,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		const python = vscode.workspace.getConfiguration('becoder.cph').get('language.python.Command', 'python3');
 		await this.view.webview.postMessage({ command: 'state', state: {
 			revision: current?.revision ?? '', name: current?.problem.name ?? '', source: current?.problem.srcPath ?? '', url: current?.problem.url ?? '', local: current?.problem.local === true,
-			busy: this.isBusy, message: this.message, phase: this.phase, activeId: this.activeId,
+			busy: this.isBusy, message: this.message, phase: this.phase, activeId: this.activeId, sourceChanged: this.sourceChanged(),
 			customCheckerPath: current?.problem.customCheckerPath ?? '',
 			pythonCommand: process.platform === 'win32' && python === 'python3' ? 'python' : python,
 			hideOutputDifference: vscode.workspace.getConfiguration('becoder.cph').get('general.hideOutputDifference', true),

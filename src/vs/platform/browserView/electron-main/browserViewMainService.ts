@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from '../../../base/common/event.js';
-import { combinedDisposable, Disposable, DisposableMap } from '../../../base/common/lifecycle.js';
+import { combinedDisposable, Disposable, DisposableMap, toDisposable } from '../../../base/common/lifecycle.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
-import { IBrowserViewBounds, IBrowserViewState, IBrowserViewService, IBrowserViewCaptureScreenshotOptions, IBrowserViewFindInPageOptions, BrowserViewCommandId, IBrowserViewOwner, IBrowserViewInfo, IBrowserViewCreatedEvent, IBrowserViewOpenOptions, IBrowserViewCreateOptions, IBrowserViewWindowConfiguration, IBrowserDeviceProfile } from '../common/browserView.js';
+import { IBrowserViewBounds, IBrowserViewState, IBrowserViewService, IBrowserViewCaptureScreenshotOptions, IBrowserViewFindInPageOptions, BrowserViewCommandId, IBrowserViewOwner, IBrowserViewInfo, IBrowserViewCreatedEvent, IBrowserViewOpenOptions, IBrowserViewCreateOptions, BrowserViewStorageScope, IBrowserViewWindowConfiguration, IBrowserDeviceProfile } from '../common/browserView.js';
 import { clipboard, Menu, MenuItem } from 'electron';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { createDecorator, IInstantiationService } from '../../instantiation/common/instantiation.js';
@@ -24,6 +24,18 @@ import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
 import { promises as fs } from 'fs';
 import { join } from '../../../base/common/path.js';
 import { readBeaconBrowserPage } from '../../beacon/common/beaconBrowserPage.js';
+import { checkAtCoderSourceResponse, extractAtCoderSourceHTML, readAtCoderSubmission } from '../common/atcoderSubmission.js';
+import { atCoderFormScript, atCoderTask, IAtCoderSourcePayload, IAtCoderTaskForm } from '../common/atcoderWorkflow.js';
+import type { IAtCoderShortcutResult } from '../common/atcoderShortcut.js';
+import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt } from './atcoderTransaction.js';
+import { assertLuoguProblem } from '../common/luoguBridge.js';
+import { runOjScript, type OjScriptTask } from './ojScriptTask.js';
+import { createHash } from 'crypto';
+import { LuoguSessionClient } from './luoguSessionClient.js';
+import { fetchLuoguDirect } from './luoguSessionTransport.js';
+import { ILogService } from '../../log/common/log.js';
+// eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs for the bundled OJ extension.
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload } from 'becoder-oj-connect';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -45,6 +57,20 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	private readonly browserViews = this._register(new DisposableMap<string, BrowserView>());
+	private readonly atCoderRequests = new Map<string, AbortController>();
+	private readonly ojReads = new Map<string, { windowId: number; operation?: string; cancel(): void }>();
+	private readonly atCoderAttempts = new Map<string, { context: AtCoderAttempt; viewId: string; windowId: number; timer: ReturnType<typeof setTimeout> }>();
+	private readonly luoguRequests = new Map<string, { requestId: string; windowId: number; controller: AbortController; cancel(): Promise<void> }>();
+	private readonly luoguClients = new Map<string, { windowId: number; session: BrowserSession; client: LuoguSessionClient }>();
+	private readonly luoguCaptchas = new Map<string, { windowId: number; client: LuoguSessionClient; signal: AbortSignal; resolve(answer: string | undefined): void }>();
+	private readonly _onDidRequireLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string; image: string }>());
+	readonly onDidRequireLuoguCaptcha = this._onDidRequireLuoguCaptcha.event;
+	private readonly _onDidCancelLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string }>());
+	readonly onDidCancelLuoguCaptcha = this._onDidCancelLuoguCaptcha.event;
+	private readonly ojSessionWatchers = this._register(new DisposableMap<string>());
+	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' }>());
+	readonly onDidChangeOjSession = this._onDidChangeOjSession.event;
+	private readonly luoguAttempts = new Map<string, { problem: ProblemRef; viewId: string; windowId: number; ownerKey: string; sourceHash: string; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
 	/**
 	 * Per-window configuration applied to the browser views that window owns.
@@ -55,6 +81,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	private readonly _onDidCreateBrowserView = this._register(new Emitter<IBrowserViewCreatedEvent>());
 	readonly onDidCreateBrowserView: Event<IBrowserViewCreatedEvent> = this._onDidCreateBrowserView.event;
+	private readonly _onDidRequireOjInteraction = this._register(new Emitter<{ id: string; windowId: number }>());
+	readonly onDidRequireOjInteraction = this._onDidRequireOjInteraction.event;
 
 	constructor(
 		@IEnvironmentMainService private readonly environmentMainService: IEnvironmentMainService,
@@ -62,9 +90,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		@IWindowsMainService private readonly windowsMainService: IWindowsMainService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@INativeHostMainService private readonly nativeHostMainService: INativeHostMainService,
-		@IApplicationStorageMainService private readonly applicationStorageMainService: IApplicationStorageMainService
+		@IApplicationStorageMainService private readonly applicationStorageMainService: IApplicationStorageMainService,
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
+		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); }));
 	}
 
 	async getOrCreateBrowserView(id: string, options: IBrowserViewCreateOptions): Promise<IBrowserViewState> {
@@ -289,13 +319,263 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		}
 	}
 
+	/** Fixed owned script resources only. No operation name or script is exposed through the service API. */
+	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem' | 'readAtCoderLogin' | 'logoutAtCoder', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
+		const view = this._getBrowserView(id);
+		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
+		const contents = view.getWebContentsView().webContents;
+		const canonical = (value: string) => { const url = new URL(value); url.hash = ''; return url.href; };
+		const available = () => !contents.isDestroyed() && !contents.isLoading() && canonical(contents.getURL()) === canonical(expectedURL);
+		if (!available()) { throw new Error('oj-connect-page-changed'); }
+		const origin = new URL(expectedURL).origin;
+		if (origin !== 'https://www.luogu.com.cn' && origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
+		let changed = false;
+		const stop = () => { changed = true; task.controller.abort(new Error('oj-connect-page-changed')); };
+		const watcher = combinedDisposable(view.onDidClose(stop), view.onDidNavigate(stop));
+		this.ojReads.set(requestId, { windowId, operation, cancel: stop });
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const result = await runOjScript(task, async () => {
+				const script = await fs.readFile(join(this.environmentMainService.appRoot, 'extensions', 'becoder.oj-connect', 'dist', 'site-scripts.js'), 'utf8');
+				if (changed || !available()) { throw new Error('oj-connect-page-changed'); }
+				return script;
+			}, script => {
+				const code = `if (!globalThis.BeCoderOj) { ${script} }\nBeCoderOj.${operation}(${JSON.stringify(input)},${JSON.stringify(requestId)})`;
+				timer = setTimeout(() => task.controller.abort(new Error('oj-connect-operation-timeout')), timeoutMs);
+				return contents.executeJavaScriptInIsolatedWorld(1006, [{ code }]);
+			});
+			if (changed || !available()) { throw new Error('oj-connect-page-changed'); }
+			if (new TextEncoder().encode(JSON.stringify(result)).length > 8 * 1024 * 1024) { throw new Error('oj-connect-response-too-large'); }
+			return result;
+		} finally {
+			this.ojReads.delete(requestId);
+			if (timer) { clearTimeout(timer); } watcher.dispose();
+			if (task.dispatched && !contents.isDestroyed()) {
+				const cancel = 'cancelOjRead';
+				await contents.executeJavaScriptInIsolatedWorld(1006, [{ code: `globalThis.BeCoderOj?.${cancel}(${JSON.stringify(requestId)})` }]).catch(() => undefined);
+			}
+		}
+	}
+
+	async cancelOjOperations(windowId: number): Promise<void> {
+		for (const request of this.luoguRequests.values()) { if (request.windowId === windowId) { await request.cancel(); } }
+		for (const [key, entry] of this.luoguClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.luoguClients.delete(key); } }
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId) { request.cancel(); } }
+		for (const [id, request] of this.atCoderRequests) {
+			try { if (this._getBrowserView(id).owner.mainWindowId === windowId) { request.abort(); } }
+			catch { request.abort(); }
+		}
+		for (const [key, attempt] of this.atCoderAttempts) { if (attempt.windowId === windowId) { clearTimeout(attempt.timer); this.atCoderAttempts.delete(key); } }
+		for (const [key, attempt] of this.luoguAttempts) { if (attempt.windowId === windowId) { clearTimeout(attempt.timer); this.luoguAttempts.delete(key); } }
+	}
+
+	async cancelOjPreparations(windowId: number): Promise<void> {
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId && request.operation === 'prepareLuogu') { request.cancel(); } }
+	}
+
+	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
+		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
+		if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
+		const actualURL = this._getBrowserView(id).getWebContentsView().webContents.getURL();
+		if (problem.site === 'atcoder') {
+			const current = atCoderTask(actualURL);
+			if (!current || current.contestId + '/' + current.taskId !== problem.nativeId) { throw new Error('oj-connect-page-changed'); }
+		}
+		// Canonical problem identity and the exact document being observed are separate.
+		return await this._runOjRead(id, windowId, actualURL, 'readAtCoderProblem', problem) as ProblemDocument;
+	}
+
+	async watchOjSession(id: string, windowId: number): Promise<void> {
+		const view = this._getBrowserView(id);
+		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
+		if (this.ojSessionWatchers.has(id)) { return; }
+		const cookies = view.getWebContentsView().webContents.session.cookies;
+		const observed = new Map<string, string>();
+		const changed = (_event: Electron.Event, cookie: Electron.Cookie, _cause: string, removed: boolean) => {
+			const domain = cookie.domain?.replace(/^\./, '');
+			const site = domain === 'luogu.com.cn' || domain === 'www.luogu.com.cn' ? 'luogu' : domain === 'atcoder.jp' ? 'atcoder' : undefined;
+			if (site && (site === 'luogu' ? ['_uid', '__client_id'].includes(cookie.name) : cookie.name === 'REVEL_SESSION')) {
+				const key = domain + ':' + cookie.name, digest = String(removed) + ':' + createHash('sha256').update(cookie.value).digest('hex');
+				if (observed.get(key) === digest) { return; }
+				observed.set(key, digest); this._onDidChangeOjSession.fire({ windowId, site });
+			}
+		};
+		cookies.on('changed', changed);
+		const closed = view.onDidClose(() => this.ojSessionWatchers.deleteAndDispose(id));
+		this.ojSessionWatchers.set(id, combinedDisposable(closed, toDisposable(() => cookies.removeListener('changed', changed))));
+	}
+
+	async openLuoguSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
+		const window = this.windowsMainService.getWindowById(windowId);
+		if (!window) { throw new Error('oj-connect-owner'); }
+		this._ensureWindowCloseSubscription(windowId);
+		if (scope !== BrowserViewStorageScope.Global && scope !== BrowserViewStorageScope.Workspace) { throw new Error('OJ Connect requires a persistent browser session.'); }
+		if (scope === BrowserViewStorageScope.Workspace && !window.openedWorkspace?.id) { throw new Error('oj-connect-workspace-session-required'); }
+		const session = BrowserSession.getOrCreate(this.instantiationService, '', { scope }, this.environmentMainService.workspaceStorageHome, window.openedWorkspace?.id);
+		session.connectStorage(this.applicationStorageMainService);
+		const key = windowId + ':' + session.id;
+		if (!this.luoguClients.has(key)) {
+			const relevantCookies = async () => (await session.electronSession.cookies.get({ url: 'https://www.luogu.com.cn/' })).filter(cookie => ['_uid', '__client_id'].includes(cookie.name)).map(cookie => [cookie.domain, cookie.path, cookie.name, cookie.value].join(':')).sort().join('\n');
+			let cookieState = createHash('sha256').update(await relevantCookies()).digest('hex');
+			if (!this.windowsMainService.getWindowById(windowId)) { throw new Error('oj-connect-owner'); }
+			if (this.luoguClients.has(key)) { return session.id; }
+			const client = new LuoguSessionClient({
+				trace: (event, details) => this.logService.info('[OJ Connect Luogu]', event, { windowId, ...details }),
+				synchronizeSession: async () => {
+					const next = createHash('sha256').update(await relevantCookies()).digest('hex');
+					this.logService.info('[OJ Connect Luogu]', 'pre-submit-session', { windowId, credentialsChanged: next !== cookieState });
+					if (next !== cookieState) { cookieState = next; client.invalidate(); this._onDidChangeOjSession.fire({ windowId, site: 'luogu' }); }
+				},
+				createSocket: async () => {
+					// Upstream websocket.ts uses _uid/__client_id on the fixed record channel.
+					// Credentials remain in main; the extension receives semantic records only.
+					const cookies = await session.electronSession.cookies.get({ url: 'https://www.luogu.com.cn/' });
+					const cookie = cookies.filter(value => ['_uid', '__client_id'].includes(value.name)).map(value => value.name + '=' + value.value).join('; ');
+					const { default: WebSocket } = await import('ws');
+					const socket = new WebSocket('wss://ws.luogu.com.cn/ws', { headers: { cookie }, handshakeTimeout: 6000 });
+					socket.on('error', () => undefined); // Closing a connecting ws must never crash main.
+					return socket as unknown as globalThis.WebSocket;
+				},
+				fetch: (url, init) => this.fetchLuogu(session.electronSession, url, init),
+				onSessionChange: listener => {
+					let timer: ReturnType<typeof setTimeout> | undefined, disposed = false;
+					const changed = (_event: Electron.Event, cookie: Electron.Cookie) => {
+						const domain = cookie.domain?.replace(/^\./, '');
+						if ((domain !== 'luogu.com.cn' && domain !== 'www.luogu.com.cn') || !['_uid', '__client_id'].includes(cookie.name)) { return; }
+						if (timer) { clearTimeout(timer); }
+						timer = setTimeout(() => { timer = undefined; void relevantCookies().then(value => {
+							const next = createHash('sha256').update(value).digest('hex');
+							if (!disposed && next !== cookieState) { cookieState = next; listener(); this._onDidChangeOjSession.fire({ windowId, site: 'luogu' }); }
+						}).catch(() => undefined); }, 0);
+					};
+					session.electronSession.cookies.on('changed', changed);
+					return toDisposable(() => { disposed = true; if (timer) { clearTimeout(timer); } session.electronSession.cookies.removeListener('changed', changed); });
+				},
+				askCaptcha: async (requestId, signal) => {
+					this.logService.info('[OJ Connect Luogu]', 'captcha-prompt-start', { windowId, requestId });
+					const image = await client.captcha(signal); signal.throwIfAborted();
+					return new Promise<string | undefined>(resolve => {
+						let settled = false;
+						const done = (answer: string | undefined) => {
+							if (settled) { return; }
+							settled = true;
+							signal.removeEventListener('abort', cancel); this.luoguCaptchas.delete(requestId);
+							// Normal answers already dispose their own panel, as upstream does.
+							// A delayed cross-process cancel must not close the next captcha round.
+							if (answer === undefined) { this._onDidCancelLuoguCaptcha.fire({ windowId, requestId }); }
+							resolve(answer);
+						};
+						const cancel = () => done(undefined);
+						this.luoguCaptchas.set(requestId, { windowId, client, signal, resolve: done });
+						signal.addEventListener('abort', cancel, { once: true });
+						if (signal.aborted) { cancel(); } else { this._onDidRequireLuoguCaptcha.fire({ windowId, requestId, image }); }
+					});
+				}
+			});
+			this.luoguClients.set(key, { windowId, session, client });
+		}
+		return session.id;
+	}
+	private luoguClient(id: string, windowId: number): LuoguSessionClient {
+		const entry = this.luoguClients.get(windowId + ':' + id);
+		if (!entry || !this.windowsMainService.getWindowById(windowId)) { throw new Error('oj-connect-owner'); }
+		return entry.client;
+	}
+	private fetchLuogu(session: Electron.Session, url: string, init: RequestInit): Promise<Response> {
+		if (url === 'https://www.luogu.com.cn/auth/logout') {
+			// Explicit session mutation keeps Chromium's Set-Cookie handling so the
+			// integrated browser signs out too. Never fall back here after a failed POST.
+			return session.fetch(url, init);
+		}
+		// Match upstream proxy:false only for fixed Luogu operations. The browser
+		// Session remains the credential authority; its proxy settings are untouched.
+		return fetchLuoguDirect(session, url, init);
+	}
+	async getLuoguCaptcha(windowId: number, requestId: string): Promise<string> {
+		const pending = this.luoguCaptchas.get(requestId);
+		if (!pending || pending.windowId !== windowId) { throw new Error('luogu-captcha-expired'); }
+		return pending.client.captcha(pending.signal);
+	}
+	async answerLuoguCaptcha(windowId: number, requestId: string, answer: string | undefined): Promise<void> {
+		const pending = this.luoguCaptchas.get(requestId);
+		if (!pending || pending.windowId !== windowId) { return; }
+		if (answer !== undefined && (typeof answer !== 'string' || answer.length > 256)) { throw new Error('luogu-invalid-captcha'); }
+		this.logService.info('[OJ Connect Luogu]', 'captcha-answer', { windowId, requestId, cancelled: answer === undefined, length: answer?.length ?? 0 });
+		pending.resolve(answer);
+	}
+	async updateLuoguSession(id: string, windowId: number, operation: 'logoutLuogu' | 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void> {
+		const client = this.luoguClient(id, windowId);
+		if (operation === 'logoutLuogu') { await client.logout(new AbortController().signal); }
+		else if (operation === 'invalidateLuoguSession') { client.invalidate(); }
+		else if (operation === 'releaseLuoguRecord' && record) { assertLuoguProblem(record.problem); client.releaseRecord(record); }
+		else { throw new Error('oj-connect-operation'); }
+	}
+	async logoutOjSite(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<void> {
+		if (site === 'luogu') { await this.luoguClient(id, windowId).logout(new AbortController().signal); return; }
+		if (site !== 'atcoder') { throw new Error('oj-connect-site'); }
+		const url = this._getBrowserView(id).getURL();
+		if (new URL(url).origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
+		await this._runOjRead(id, windowId, url, 'logoutAtCoder', null);
+	}
+	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<LoginSummary> {
+		if (site === 'luogu') { return this.luoguClient(id, windowId).login(new AbortController().signal); }
+		const url = this._getBrowserView(id).getURL();
+		if (site !== 'atcoder' || new URL(url).origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
+		return await this._runOjRead(id, windowId, url, 'readAtCoderLogin', null) as LoginSummary;
+	}
+	async prepareLuoguTask(id: string, windowId: number, problem: ProblemRef): Promise<{ languages: readonly LanguageOption[]; hasDraft: boolean; ownerKey: string }> {
+		assertLuoguProblem(problem);
+		const key = generateUuid(), controller = new AbortController();
+		this.ojReads.set(key, { windowId, operation: 'prepareLuogu', cancel: () => controller.abort() });
+		try { return await this.luoguClient(id, windowId).prepare(problem, controller.signal); }
+		finally { this.ojReads.delete(key); }
+	}
+	async submitLuoguTask(id: string, windowId: number, problem: ProblemRef, payload: ILuoguSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome> {
+		assertLuoguProblem(problem); const client = this.luoguClient(id, windowId), key = windowId + ':' + id;
+		if (this.luoguRequests.has(key)) { throw new Error('luogu-submission-busy'); }
+		if (!/^[1-9]\d*$/.test(ownerKey) || !requestId || requestId.length > 200 || !payload || typeof payload.source !== 'string' || !payload.source.trim() || new TextEncoder().encode(payload.source).length > 1024 * 1024 || !/^\d+(?::o2)?$/.test(payload.languageId)) { throw new Error('luogu-invalid-payload'); }
+		const controller = new AbortController(), startedAt = Date.now();
+		this.luoguRequests.set(key, { windowId, requestId, controller, cancel: async () => controller.abort(new Error('luogu-submission-cancelled')) });
+		try {
+			const outcome = await client.submit(problem, { ...payload }, ownerKey, requestId, controller.signal);
+			if (outcome.kind === 'unconfirmed') {
+				const timer = setTimeout(() => this.luoguAttempts.delete(requestId), 600000);
+				this.luoguAttempts.set(requestId, { problem, viewId: id, windowId, ownerKey, startedAt, timer, sourceHash: createHash('sha256').update(payload.source.replace(/\r\n/g, '\n')).digest('hex') });
+			}
+			return outcome;
+		} finally { this.luoguRequests.delete(key); }
+	}
+	async cancelLuoguTask(id: string, windowId: number, requestId: string): Promise<void> {
+		this.luoguClient(id, windowId); const request = this.luoguRequests.get(windowId + ':' + id);
+		if (request?.requestId === requestId) { await request.cancel(); }
+	}
+	async readLuoguRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot> {
+		assertLuoguProblem(record.problem);
+		if (!/^[1-9]\d*$/.test(record.id) || record.url !== 'https://www.luogu.com.cn/record/' + record.id) { throw new Error('luogu-invalid-record'); }
+		return this.luoguClient(id, windowId).readRecord(record, new AbortController().signal);
+	}
+	async reconcileLuoguAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome> {
+		const entry = this.luoguAttempts.get(attemptId);
+		if (!entry || entry.windowId !== windowId) { throw new Error('luogu-attempt-unavailable'); }
+		for (const view of this.browserViews.values()) {
+			if (view.owner.mainWindowId !== windowId || view.session.id !== entry.viewId || !/^https:\/\/www\.luogu\.com\.cn\/record\/[1-9]\d*$/.test(view.getURL())) { continue; }
+			const checked = await this.luoguClient(entry.viewId, windowId).inspectReceipt(entry.problem, view.getURL(), new AbortController().signal);
+			if (checked.ownerKey === entry.ownerKey && checked.sourceHash === entry.sourceHash && checked.submitTime * 1000 >= entry.startedAt - 5000) { clearTimeout(entry.timer); this.luoguAttempts.delete(attemptId); return { kind: 'record', record: checked.record }; }
+		}
+		return { kind: 'unconfirmed', problem: entry.problem, attemptId, message: 'Open the new official record to continue verification.' };
+	}
+
 	async readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string> {
 		const view = this._getBrowserView(id);
 		const contents = view.getWebContentsView().webContents;
 		return readBeaconBrowserPage({
 			ownerWindowId: view.owner.mainWindowId,
 			url: () => contents.getURL(), loading: () => contents.isLoading(), closed: () => contents.isDestroyed(),
-			watchChange: listener => combinedDisposable(view.onDidNavigate(listener), view.onDidClose(listener)),
+			watchChange: listener => {
+				const requestId = generateUuid();
+				this.ojReads.set(requestId, { windowId, cancel: listener });
+				return combinedDisposable(view.onDidNavigate(listener), view.onDidClose(listener), toDisposable(() => this.ojReads.delete(requestId)));
+			},
 			read: code => contents.executeJavaScriptInIsolatedWorld(1003, [{ code }])
 		}, windowId, expectedURL);
 	}
@@ -304,12 +584,137 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return this._getBrowserView(id).clearStorage();
 	}
 
+	async readAtCoderSubmission(id: string, windowId: number, expectedURL: string, allowMissingSource = false): Promise<string> {
+		const view = this._getBrowserView(id);
+		const contents = view.getWebContentsView().webContents;
+		const snapshot = await readAtCoderSubmission({
+			ownerWindowId: view.owner.mainWindowId,
+			url: () => contents.getURL(), loading: () => contents.isLoading(), closed: () => contents.isDestroyed(),
+			watchChange: listener => combinedDisposable(view.onDidNavigate(listener), view.onDidClose(listener)),
+			read: async (code, signal) => {
+				// Only the current official detail, using its actual session. Never follow a login redirect.
+				const url = new URL(expectedURL);
+				url.search = '';
+				url.hash = '';
+				// Electron 43 Response.url is documented as incorrect. Reject redirects in the transport instead.
+				const response = await contents.session.fetch(url.href, { method: 'GET', redirect: 'error', signal, headers: { Accept: 'text/html' } });
+				checkAtCoderSourceResponse(response);
+				const reader = response.body?.getReader();
+				if (!reader) { throw new Error('atcoder-source-response'); }
+				const chunks: Uint8Array[] = [];
+				let size = 0;
+				try {
+					while (true) {
+						const part = await reader.read();
+						if (part.done) { break; }
+						size += part.value.byteLength;
+						if (size > 4 * 1024 * 1024) { throw new Error('atcoder-source-too-large'); }
+						chunks.push(part.value);
+					}
+				} finally {
+					await reader.cancel().catch(() => undefined);
+				}
+				let sourceHTML: string;
+				try { sourceHTML = extractAtCoderSourceHTML(Buffer.concat(chunks).toString('utf8')); }
+				catch (error) { if (!allowMissingSource) { throw error; } sourceHTML = ''; }
+				if (signal?.aborted || contents.isDestroyed() || contents.isLoading() || contents.getURL() !== expectedURL) { throw new Error('atcoder-changed'); }
+				return contents.executeJavaScriptInIsolatedWorld(1004, [{ code: code.replace('const sourceHTML = null;', `const sourceHTML = ${JSON.stringify(sourceHTML)};`) }]);
+			}
+		}, windowId, expectedURL, 10000, allowMissingSource);
+		return JSON.stringify({ ...snapshot, sessionScope: view.session.storageScope }, null, '\t');
+	}
+
+	async readAtCoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot> {
+		const task = atCoderTask(record?.problem?.url ?? '');
+		if (!task || record.problem.site !== 'atcoder' || record.problem.nativeId !== task.contestId + '/' + task.taskId || !/^[1-9]\d*$/.test(record.id) || record.url !== `https://atcoder.jp/contests/${task.contestId}/submissions/${record.id}`) { throw new Error('atcoder-invalid-record'); }
+		const snapshot = JSON.parse(await this.readAtCoderSubmission(id, windowId, record.url, true));
+		if (snapshot.taskUrl !== record.problem.url) { throw new Error('atcoder-record-task-mismatch'); }
+		const info = (labels: string[]) => snapshot.info.find((row: string[]) => labels.includes(row[0]))?.[1] as string | undefined;
+		const rawStatus = snapshot.status;
+		const phase = /^(AC|WA|CE|RE|TLE|MLE|OLE|IE|QLE)$/.test(rawStatus) ? 'finished' : /^(WJ|Waiting)$/.test(rawStatus) ? 'queued' : /^(WR|Judging|\d+\s*\/\s*\d+.*)$/.test(rawStatus) ? 'judging' : 'unknown';
+		return { ref: record, phase, rawStatus, owner: snapshot.owner, language: info(['Language', '言語']), score: info(['Score', '得点']), time: info(['Exec Time', '実行時間']), memory: info(['Memory', 'メモリ']),
+			submittedAt: info(['Submission Time', '提出日時']), codeLength: info(['Code Size', 'コード長']), ...(snapshot.sourceRepresentation !== 'unavailable' ? { source: snapshot.source } : {}),
+			groups: snapshot.tests.length ? [{ name: 'Test Cases', rows: snapshot.tests }] : [], sourceVerification: snapshot.sourceRepresentation === 'unavailable' ? 'unavailable' : 'not-checked' };
+	}
+
+	async reconcileAtCoderAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome> {
+		const entry = this.atCoderAttempts.get(attemptId);
+		if (!entry || entry.windowId !== windowId) { throw new Error('atcoder-attempt-unavailable'); }
+		const task = atCoderTask(entry.context.taskURL)!;
+		const problem: ProblemRef = { site: 'atcoder', nativeId: task.contestId + '/' + task.taskId, url: entry.context.taskURL };
+		const view = this._getBrowserView(entry.viewId);
+		if (view.owner.mainWindowId !== windowId) { throw new Error('atcoder-owner'); }
+		const result = await reconcileAtCoderTransaction({ view }, entry.context);
+		if (result.verified && result.id && result.url) {
+			clearTimeout(entry.timer); this.atCoderAttempts.delete(attemptId);
+			await view.loadURL(result.url).catch(() => undefined);
+			return { kind: 'record', record: { problem, id: result.id, url: result.url } };
+		}
+		return { kind: 'unconfirmed', problem, attemptId, message: result.status };
+	}
+
 	async setBrowserZoomIndex(id: string, zoomIndex: number): Promise<void> {
 		return this._getBrowserView(id).setBrowserZoomIndex(zoomIndex);
 	}
 
+	async prepareAtCoderTask(id: string, windowId: number, expectedURL: string, payload?: IAtCoderSourcePayload): Promise<IAtCoderTaskForm> {
+		const view = this._getBrowserView(id);
+		if (view.owner.mainWindowId !== windowId) { throw new Error('atcoder-owner'); }
+		const code = atCoderFormScript(expectedURL, payload);
+		const contents = view.getWebContentsView().webContents;
+		const available = () => !contents.isDestroyed() && !contents.isLoading() && contents.getURL() === expectedURL;
+		if (!available()) { throw new Error('atcoder-page-changed'); }
+		let changed = false;
+		const watch = combinedDisposable(view.onDidNavigate(() => { changed = true; }), view.onDidClose(() => { changed = true; }));
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const result: unknown = await Promise.race([
+				contents.executeJavaScriptInIsolatedWorld(1005, [{ code }]),
+				new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('atcoder-form-timeout')), 6000); })
+			]);
+			if (changed || !available()) { throw new Error('atcoder-page-changed'); }
+			if (!result || typeof result !== 'object') { throw new Error('atcoder-form-invalid'); }
+			const data = result as IAtCoderTaskForm;
+			if (typeof data.hasDraft !== 'boolean' || !Array.isArray(data.languages) || data.languages.length > 100 || data.languages.some(option => !/^\d+$/.test(option.id) || typeof option.label !== 'string' || option.label.length > 200)) { throw new Error('atcoder-form-invalid'); }
+			return data;
+		} finally {
+			if (timer) { clearTimeout(timer); }
+			watch.dispose();
+		}
+	}
+
 	async setDeviceEmulation(id: string, device: IBrowserDeviceProfile | undefined): Promise<void> {
 		return this._getBrowserView(id).emulator.setDevice(device);
+	}
+
+	async cancelAtCoderTask(id: string, windowId: number): Promise<void> {
+		if (this._getBrowserView(id).owner.mainWindowId !== windowId) { throw new Error('atcoder-owner'); }
+		this.atCoderRequests.get(id)?.abort();
+	}
+
+	async submitAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult> {
+		return runAtCoderTransaction({ view: this._getBrowserView(id), requests: this.atCoderRequests,
+			prepare: value => this.prepareAtCoderTask(id, windowId, expectedURL, value),
+			readRecord: url => this.readAtCoderSubmission(id, windowId, url),
+			onInteraction: () => this._onDidRequireOjInteraction.fire({ id, windowId })
+		}, id, windowId, expectedURL, payload);
+	}
+
+	async sendAndConfirmAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome> {
+		let attempt: AtCoderAttempt | undefined;
+		const result = await runAtCoderTransaction({ view: this._getBrowserView(id), requests: this.atCoderRequests,
+			prepare: value => this.prepareAtCoderTask(id, windowId, expectedURL, value),
+			readRecord: url => this.readAtCoderSubmission(id, windowId, url), onAttempt: value => { attempt = value; },
+			onInteraction: () => this._onDidRequireOjInteraction.fire({ id, windowId })
+		}, id, windowId, expectedURL, payload, true);
+		const task = atCoderTask(expectedURL)!;
+		const problem: ProblemRef = { site: 'atcoder', nativeId: task.contestId + '/' + task.taskId, url: expectedURL };
+		if (result.verified && result.id && result.url) { return { kind: 'record', record: { problem, id: result.id, url: result.url } }; }
+		if (!attempt) { return { kind: 'not-sent', reason: result.status }; }
+		const context = attempt as AtCoderAttempt;
+		const timer = setTimeout(() => this.atCoderAttempts.delete(context.id), 600000);
+		this.atCoderAttempts.set(context.id, { context, viewId: id, windowId, timer });
+		return { kind: 'unconfirmed', problem, attemptId: context.id, message: result.status };
 	}
 
 	async trustCertificate(id: string, host: string, fingerprint: string): Promise<void> {
@@ -377,6 +782,10 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		}
 		const onWindowGone = Event.any(window.onDidClose, window.onDidDestroy);
 		this._windowCloseSubscriptions.set(windowId, Event.once(onWindowGone)(() => {
+			void this.cancelOjOperations(windowId).catch(() => undefined);
+			for (const [key, attempt] of this.atCoderAttempts) {
+				if (attempt.windowId === windowId) { clearTimeout(attempt.timer); this.atCoderAttempts.delete(key); }
+			}
 			this._windowCloseSubscriptions.deleteAndDispose(windowId);
 			if (this._windowConfigurations.delete(windowId)) {
 				this._recomputeTrustedFileRoots();

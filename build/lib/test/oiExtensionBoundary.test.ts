@@ -41,6 +41,28 @@ interface IExtensionManifest {
 const repositoryRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 const extensionsRoot = path.join(repositoryRoot, 'extensions');
 
+test('OJ Connect is an independently built, localized built-in with a native browser bridge', () => {
+	const extensionRoot = path.join(extensionsRoot, 'becoder.oj-connect');
+	const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));
+	assert.strictEqual(`${manifest.publisher}.${manifest.name}`, 'becoder.oj-connect');
+	assert.strictEqual(manifest.main, './out/extension.js');
+	const rootPackage = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'));
+	assert.ok(rootPackage.scripts['compile-oi-extensions'].includes('npm --prefix extensions/becoder.oj-connect run vscode:prepublish'));
+	const classification = fs.readFileSync(path.join(repositoryRoot, 'build/lib/extensions.ts'), 'utf8');
+	assert.match(classification, /prebuiltOIDistributionExtensions[\s\S]*?'becoder\.oj-connect'/);
+	const english = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.nls.json'), 'utf8'));
+	const chinese = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.nls.zh-cn.json'), 'utf8'));
+	assert.deepStrictEqual(Object.keys(english).sort(), Object.keys(chinese).sort());
+	assert.ok(fs.existsSync(path.join(extensionRoot, 'LICENSE')));
+	const inventory = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'resources/oi-defaults/BUNDLED-COMPONENTS.json'), 'utf8'));
+	assert.strictEqual(inventory.components.find((component: { id: string }) => component.id === 'becoder.oj-connect')?.version, manifest.version);
+	const verifier = fs.readFileSync(path.join(repositoryRoot, 'build/azure-pipelines/win32/verify-becoder-package.ps1'), 'utf8');
+	assert.ok(verifier.includes('extensions\\becoder.oj-connect\\out\\extension.js'));
+	for (const asset of ['out\\markdown.js', 'dist\\site-scripts.js', 'dist\\webview.js', 'dist\\webview.css', 'dist\\katex.min.css', 'dist\\fonts\\KaTeX_Main-Regular.woff2']) {
+		assert.ok(verifier.includes('extensions\\becoder.oj-connect\\' + asset));
+	}
+});
+
 function readJson<T>(filePath: string): T {
 	return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }
@@ -985,6 +1007,7 @@ suite('OI extension boundary', () => {
 		}>(path.join(repositoryRoot, 'resources', 'oi-defaults', 'BUNDLED-COMPONENTS.json'));
 		const components = inventory.components ?? [];
 		assert.deepStrictEqual(components.map(component => component.id), [
+			'becoder.oj-connect',
 			'becoder.cph',
 			'becoder.beacon',
 			'becoder.notebook',

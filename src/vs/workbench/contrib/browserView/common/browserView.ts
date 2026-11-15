@@ -146,6 +146,7 @@ export const IBrowserViewWorkbenchService = createDecorator<IBrowserViewWorkbenc
  * This service manages browser view models that proxy to the main process browser view service.
  */
 export interface IBrowserViewWorkbenchService {
+	resolveStorageScope(): Promise<BrowserViewStorageScope>;
 	readonly _serviceBrand: undefined;
 
 	/**

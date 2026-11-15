@@ -2,6 +2,20 @@
 	"schemaVersion": 1,
 	"components": [
 		{
+			"id": "becoder.oj-connect",
+			"version": "0.1.0",
+			"source": "https://github.com/Bc408/BeCoder-IDE",
+			"modificationStatus": "BeCoder common OJ workflow and native sessions; retained problem/record UI aligned to vscode-luogu 4.20.0 with its host Markdown renderer and shared data, localized copy controls and same-source CPH. See UPSTREAM.md.",
+			"license": "GPL-3.0-or-later AND MIT AND ISC AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause",
+			"spdxIdentifier": "GPL-3.0-or-later AND MIT AND ISC AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause",
+			"copyrightNotice": "Copyright (c) 2026 BeCoder contributors; Copyright (c) 2018 引领天下 (MIT UI); Microsoft task helper and bundled dependency notices in ThirdPartyNotices.txt.",
+			"licensePath": "extensions/becoder.oj-connect/LICENSE",
+			"thirdPartyNoticesPath": "extensions/becoder.oj-connect/ThirdPartyNotices.txt",
+			"correspondingSource": "https://github.com/Bc408/BeCoder-IDE",
+			"correspondingSourcePath": "extensions/becoder.oj-connect",
+			"upstream": "https://github.com/yltx/vscode-luogu/tree/987ca974b5419230a07b59a195ec44026e16f6f4"
+		},
+		{
 			"id": "becoder.cph",
 			"version": "0.1.0",
 			"source": "https://github.com/Bc408/BeCoder-IDE",

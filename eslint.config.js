@@ -293,6 +293,13 @@ export default defineConfig(
 		}
 	},
 	{
+		// OJ Connect is BeCoder GPL code with a separately attributed MIT task helper.
+		files: ['extensions/becoder.oj-connect/{src,test,webview,site-scripts}/**/*.{ts,tsx}'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*(?:GPL-3\\.0-or-later|MIT License))[\\s\\S]*$' }]
+		}
+	},
+	{
 		'files': [
 			'extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerInputControl.ts',
 			'extensions/danielpinto8zz6.c-cpp-compile-run/src/terminalOutputBoundary.ts',

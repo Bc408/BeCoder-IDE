@@ -8,6 +8,8 @@ BeCoder 是 Code - OSS 的 Windows 产品分支。核心 TypeScript 位于 `src/
 
 开始前完整阅读 [AGENTS.md](../AGENTS.md) 与 [VISION.md](../VISION.md)。涉及 Beacon / NoteBook 时，再阅读[正式文档入口](beacon/README.md)及对应模块。负责人最新决定优先；当前代码、正式需求与运行验收分别记录。
 
+OJ Connect 工作先阅读[产品与开发入口](oj-connect/README.md)和[技术架构](oj-connect/architecture.md)。AtCoder 第一阶段已将用户工作流迁入内置扩展，真实浏览器事务仍由核心宿主执行；不能把后续的独立题面、评测页和五站接入写成现有功能。
+
 ## 准备环境
 
 在 Windows 上使用 PowerShell，安装与 [.nvmrc](../.nvmrc) 一致的 Node.js（当前为 24.17.0）。原生模块编译需要 Python 与 Visual Studio C++ 构建工具；Electron 目标由 [.npmrc](../.npmrc) 固定，不随意切换为系统 Node ABI。

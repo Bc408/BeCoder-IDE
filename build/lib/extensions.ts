@@ -47,6 +47,7 @@ export const excludedForOIDistribution = new Set([
 // source trees in the built-in payload, but do not run VS Code's TypeScript tasks over
 // them (they use independent toolchains and output layouts).
 export const prebuiltOIDistributionExtensions = new Set([
+	'becoder.oj-connect',
 	'becoder.beacon',
 	'becoder.cph',
 	'becoder.notebook',

@@ -1,0 +1,203 @@
+{
+	"name": "oj-connect",
+	"publisher": "becoder",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"license": "GPL-3.0-or-later",
+	"engines": {
+		"vscode": "^1.130.0"
+	},
+	"main": "./out/extension.js",
+	"l10n": "./l10n",
+	"activationEvents": [
+		"onLanguage:c",
+		"onLanguage:cpp",
+		"onCommand:_becoder.ojConnect.importFromBrowser"
+	],
+	"contributes": {
+		"keybindings": [
+			{
+				"command": "becoder.ojConnect.submit",
+				"key": "ctrl+alt+s",
+				"when": "editorTextFocus && (editorLangId == c || editorLangId == cpp)"
+			},
+			{
+				"command": "becoder.ojConnect.showProblem",
+				"key": "ctrl+alt+p",
+				"when": "editorTextFocus && (editorLangId == c || editorLangId == cpp)"
+			}
+		],
+		"commands": [
+			{
+				"command": "becoder.ojConnect.submit",
+				"title": "%submit%",
+				"category": "OJ Connect"
+			},
+			{
+				"command": "becoder.ojConnect.stopSubmission",
+				"title": "%stop%",
+				"category": "OJ Connect"
+			},
+			{
+				"command": "becoder.ojConnect.showProblem",
+				"title": "%showProblem%",
+				"category": "OJ Connect"
+			},
+			{
+				"command": "becoder.ojConnect.continueQuery",
+				"title": "%continueQuery%",
+				"category": "OJ Connect"
+			},
+			{
+				"command": "becoder.ojConnect.login",
+				"title": "%login%",
+				"category": "OJ Connect",
+				"icon": "$(sign-in)"
+			},
+			{
+				"command": "becoder.ojConnect.logout",
+				"title": "%logout%",
+				"category": "OJ Connect",
+				"icon": "$(sign-out)"
+			},
+			{
+				"command": "becoder.ojConnect.refreshAccounts",
+				"title": "%refreshAccounts%",
+				"category": "OJ Connect",
+				"icon": "$(refresh)"
+			}
+		],
+		"configuration": {
+			"title": "%configurationTitle%",
+			"properties": {
+				"becoder.ojConnect.directories": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "%directories%",
+					"default": {
+						"luogu": "luogu",
+						"codeforces": "codeforces",
+						"atcoder": "atcoder",
+						"lanqiao": "lanqiao",
+						"nowcoder": "nowcoder"
+					},
+					"properties": {
+						"luogu": {
+							"type": "string",
+							"description": "%luoguDirectory%"
+						},
+						"codeforces": {
+							"type": "string",
+							"description": "%codeforcesDirectory%"
+						},
+						"atcoder": {
+							"type": "string",
+							"description": "%atcoderDirectory%"
+						},
+						"lanqiao": {
+							"type": "string",
+							"description": "%lanqiaoDirectory%"
+						},
+						"nowcoder": {
+							"type": "string",
+							"description": "%nowcoderDirectory%"
+						}
+					}
+				}
+			}
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "becoder-oj-connect",
+					"title": "OJ Connect",
+					"icon": "resources/oj-connect.svg"
+				}
+			]
+		},
+		"views": {
+			"becoder-oj-connect": [
+				{
+					"id": "becoder.ojConnect.accounts",
+					"name": "%accounts%"
+				}
+			]
+		},
+		"menus": {
+			"commandPalette": [
+				{ "command": "becoder.ojConnect.login", "when": "false" },
+				{ "command": "becoder.ojConnect.logout", "when": "false" }
+			],
+			"view/item/context": [
+				{
+					"command": "becoder.ojConnect.login",
+					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.(signed-out|unknown)$/",
+					"group": "inline@1"
+				},
+				{
+					"command": "becoder.ojConnect.logout",
+					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.signed-in$/",
+					"group": "inline@1"
+				},
+				{
+					"command": "becoder.ojConnect.login",
+					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.(signed-out|unknown)$/",
+					"group": "account@1"
+				},
+				{
+					"command": "becoder.ojConnect.logout",
+					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.signed-in$/",
+					"group": "account@1"
+				}
+			],
+			"view/title": [
+				{
+					"command": "becoder.ojConnect.refreshAccounts",
+					"when": "view == becoder.ojConnect.accounts",
+					"group": "navigation"
+				}
+			]
+		}
+	},
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": false
+		},
+		"virtualWorkspaces": false
+	},
+	"scripts": {
+		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json --noEmit && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.site-scripts.json && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json",
+		"build": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json && npm run compile-site-scripts && npm run compile-webview",
+		"test": "npm run compile-site-scripts && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.test.json && node --test out-test/test/*.test.js",
+		"vscode:prepublish": "npm run build",
+		"compile-site-scripts": "node build-site-scripts.mjs",
+		"compile-webview": "node build-webview.mjs",
+		"test-render": "node test/render.mjs"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Bc408/BeCoder-IDE.git"
+	},
+	"devDependencies": {
+		"@luogu-saver-next/markdown-renderer": "1.0.3",
+		"@types/hast": "3.0.4",
+		"@types/react": "18.3.31",
+		"@types/react-dom": "18.3.7",
+		"dompurify": "3.4.17",
+		"esbuild": "0.28.2",
+		"hast-util-from-html": "2.0.2",
+		"hast-util-to-html": "9.0.5",
+		"highlight.js": "11.9.0",
+		"jsdom": "26.1.0",
+		"katex": "0.18.10",
+		"parse5": "7.3.0",
+		"react": "18.3.1",
+		"react-dom": "18.3.1",
+		"remark-parse": "11.0.0",
+		"unified": "11.0.5"
+	},
+	"overrides": {
+		"katex": "$katex"
+	}
+}

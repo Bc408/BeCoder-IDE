@@ -1,0 +1,10 @@
+node_modules/**
+out-test/**
+test/**
+src/**
+site-scripts/**
+webview/**
+**/*.map
+tsconfig*.json
+build-*.mjs
+package-lock.json

@@ -211,7 +211,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 					{
 						owner: this._getDefaultOwner(),
 						sessionOptions: {
-							scope: await this._resolveStorageScope()
+							scope: await this.resolveStorageScope()
 						},
 						initialState: {
 							url: initialState?.url,
@@ -249,7 +249,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		return { mainWindowId: this._mainWindowId };
 	}
 
-	private async _resolveStorageScope(): Promise<BrowserViewStorageScope> {
+	async resolveStorageScope(): Promise<BrowserViewStorageScope> {
 		let dataStorage = this.configurationService.getValue<BrowserViewStorageScope | 'default'>(
 			'workbench.browser.dataStorage'
 		) ?? 'default';

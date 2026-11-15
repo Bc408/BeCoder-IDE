@@ -3,10 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs shared with the bundled OJ extension.
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, ILuoguSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
 import { Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
 import { IPermissionCategoryState, ISerializedBrowserPermissionsSnapshot, IBrowserDeviceCandidate, BrowserDeviceType, PermissionCategory } from './browserPermissions.js';
+import type { IAtCoderTaskForm, IAtCoderSourcePayload } from './atcoderWorkflow.js';
+import type { IAtCoderShortcutResult } from './atcoderShortcut.js';
 
 const commandPrefix = 'workbench.action.browser';
 export enum BrowserViewCommandId {
@@ -30,6 +34,7 @@ export enum BrowserViewCommandId {
 	OpenExternal = `${commandPrefix}.openExternal`,
 	OpenSettings = `${commandPrefix}.openSettings`,
 	ImportProblem = `${commandPrefix}.importProblem`,
+	ReadAtCoderSubmission = `${commandPrefix}.readAtCoderSubmission`,
 
 	// Favorites
 	ToggleFavorite = `${commandPrefix}.toggleFavorite`,
@@ -338,6 +343,16 @@ export interface IBrowserViewService {
 	 * Fires when a new browser view is created from an internal source (e.g. CDP or window.open).
 	 */
 	onDidCreateBrowserView: Event<IBrowserViewCreatedEvent>;
+	readonly onDidRequireLuoguCaptcha: Event<{ windowId: number; requestId: string; image: string }>;
+	readonly onDidCancelLuoguCaptcha: Event<{ windowId: number; requestId: string }>;
+	openLuoguSession(windowId: number, scope: BrowserViewStorageScope): Promise<string>;
+	getLuoguCaptcha(windowId: number, requestId: string): Promise<string>;
+	answerLuoguCaptcha(windowId: number, requestId: string, answer: string | undefined): Promise<void>;
+	readonly onDidRequireOjInteraction: Event<{ id: string; windowId: number }>;
+	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' }>;
+	watchOjSession(id: string, windowId: number): Promise<void>;
+	logoutOjSite(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<void>;
+	updateLuoguSession(id: string, windowId: number, operation: 'logoutLuogu' | 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void>;
 
 	/**
 	 * Dynamic events that return an Event for a specific browser view ID.
@@ -489,6 +504,27 @@ export interface IBrowserViewService {
 	parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }>;
 	/** Rendered content of an already loaded view; does not navigate or fetch. */
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
+	/** Experimental current-detail snapshot; fixed same-detail source GET in the actual view session. */
+	readAtCoderSubmission(id: string, windowId: number, expectedURL: string): Promise<string>;
+
+	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
+	cancelOjOperations(windowId: number): Promise<void>;
+	cancelOjPreparations(windowId: number): Promise<void>;
+	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<LoginSummary>;
+	prepareLuoguTask(id: string, windowId: number, problem: ProblemRef): Promise<{ languages: readonly LanguageOption[]; hasDraft: boolean; ownerKey: string }>;
+	submitLuoguTask(id: string, windowId: number, problem: ProblemRef, payload: ILuoguSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome>;
+	cancelLuoguTask(id: string, windowId: number, requestId: string): Promise<void>;
+	readLuoguRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	reconcileLuoguAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome>;
+
+	/** User-triggered inspection/filling of the current task form. Never sends a submission. */
+	prepareAtCoderTask(id: string, windowId: number, expectedURL: string, payload?: IAtCoderSourcePayload): Promise<IAtCoderTaskForm>;
+	/** Explicit user action: prepare/send once, then resolve a verified new record. */
+	submitAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult>;
+	sendAndConfirmAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome>;
+	readAtCoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	reconcileAtCoderAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome>;
+	cancelAtCoderTask(id: string, windowId: number): Promise<void>;
 
 	/**
 	 * Clear all storage data for the global browser session

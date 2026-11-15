@@ -1,0 +1,64 @@
+/* Copyright (c) BeCoder contributors. Licensed under GPL-3.0-or-later. */
+@import './luogu/common.css';
+@import './luogu/markdown.css';
+
+@import './luogu/uiToolkit.css';
+@import './luogu/problem.css';
+@import './luogu/submissionControls.css';
+@import './luogu/record.css';
+body { margin: 0; padding: 0 20px 24px; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); font: var(--vscode-font-size, 13px)/1.5 var(--vscode-font-family, sans-serif); }
+a { color: var(--vscode-textLink-foreground, #3794ff); }
+select { max-width: min(100%, 300px); }
+#app { overflow-wrap: anywhere; }
+.problem-limits:empty { display: none; }
+.problemSamples > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+.sample-grid > div { min-width: 0; }
+pre code { font-family: var(--vscode-editor-font-family, monospace); }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px; }
+.notice { padding: 8px 12px; border-left: 3px solid var(--vscode-focusBorder); }
+pre > div.copyButton { opacity: 0; } pre:hover > div.copyButton, pre:focus-within > div.copyButton { opacity: 1; visibility: visible; }
+@media (max-width: 400px) { .problemSamples > div { grid-template-columns: minmax(0, 1fr) !important; } }
+
+
+
+pre.markdown-code,
+pre[is='copyable-pre'] {
+  min-height: 24px;
+  position: relative;
+}
+
+pre.markdown-code > .copyButton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  visibility: hidden;
+}
+
+pre.markdown-code:hover > .copyButton,
+pre.markdown-code:focus-within > .copyButton {
+  visibility: visible;
+}
+
+pre > .copyButton .vscode-button {
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 0 2px 0 2px;
+  color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+  background: var(--vscode-button-secondaryBackground, #7f7f7f26);
+}
+
+pre > .copyButton svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+pre.markdown-code .copyButton [data-copied='true'] {
+  animation: copyButtonSuccessAnimationBegin 1s;
+}
+
+.markdown-copy-error {
+  color: var(--vscode-errorForeground);
+}

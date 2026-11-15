@@ -1,0 +1,24 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"rootDir": ".",
+		"lib": [
+			"ES2024",
+			"DOM",
+			"DOM.Iterable"
+		],
+		"types": [],
+		"jsx": "react",
+		"esModuleInterop": true,
+		"typeRoots": [
+			"./node_modules/@types",
+			"../../node_modules/@types"
+		]
+	},
+	"include": [
+		"webview/**/*",
+		"src/views/model.ts",
+		"../../src/typings/becoder-oj-connect.d.ts"
+	]
+}

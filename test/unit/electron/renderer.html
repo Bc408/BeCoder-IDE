@@ -93,7 +93,8 @@
 		const builtin = require('module').builtinModules.filter(mod => !mod.startsWith('_') && !mod.startsWith('electron/js2c/')).sort();
 		const dependencies = Object.keys(require('../../../package.json').dependencies).sort();
 		const optionalDependencies = Object.keys(require('../../../package.json').optionalDependencies).sort();
-		const dependenciesRemote = Object.keys(require('../../../remote/package.json').dependencies).sort();
+		const remoteManifestPath = require('path').join(__dirname, '../../../remote/package.json');
+		const dependenciesRemote = require('fs').existsSync(remoteManifestPath) ? Object.keys(require(remoteManifestPath).dependencies || {}).sort() : [];
 
 		for (const name of new Set([].concat(builtin, dependencies, optionalDependencies, dependenciesRemote))) {
 			const url = asRequireBlobUri(name);

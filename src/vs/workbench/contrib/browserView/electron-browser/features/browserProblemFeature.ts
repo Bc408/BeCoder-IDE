@@ -44,6 +44,21 @@ class ImportProblemAction extends Action2 {
 		const service = ProxyChannel.toService<IBrowserViewService>(accessor.get(IMainProcessService).getChannel(ipcBrowserViewChannelName));
 		this.busy = true;
 		try {
+			const model = editor.model, page = new URL(model.url);
+			// These two sites share OJ Connect's source + statement flow. Other CPH parsers stay intact.
+			let problem;
+			if (page.origin === 'https://www.luogu.com.cn' && /^\/problem\/(?:P|B|U|T|CF|SP|UVA|AT_)[A-Za-z0-9_]+$/.test(page.pathname)) {
+				const pid = page.pathname.split('/')[2], contest = page.searchParams.get('contestId');
+				problem = { site: 'luogu' as const, nativeId: pid + (contest ? '@' + contest : ''), url: page.origin + page.pathname + (contest ? '?contestId=' + contest : '') };
+			} else if (page.origin === 'https://atcoder.jp' && /^\/contests\/[A-Za-z0-9_-]+\/tasks\/[A-Za-z0-9_-]+\/?$/.test(page.pathname)) {
+				const parts = page.pathname.split('/'); problem = { site: 'atcoder' as const, nativeId: parts[2] + '/' + parts[4], url: page.origin + page.pathname.replace(/\/$/, '') };
+			}
+			if (problem) {
+				const document = await service.readOjProblem(model.id, mainWindow.vscodeWindowId, problem);
+				if (editor.model !== model || model.loading || new URL(model.url).pathname.replace(/\/$/, '') !== page.pathname.replace(/\/$/, '')) { throw new Error(localize('browser.problem.changed', 'The problem page changed during import.')); }
+				await commands.executeCommand('_becoder.ojConnect.importFromBrowser', document);
+				return;
+			}
 			const result = await service.parseProblem(editor.model.id, mainWindow.vscodeWindowId);
 			const imported = await commands.executeCommand<{ problem: { srcPath: string } } | undefined>('_becoder.cph.importProblem', result.json, result.url);
 			if (imported && browserInput && groups.getGroup(browserGroup.id) === browserGroup && browserGroup.contains(browserInput)) {

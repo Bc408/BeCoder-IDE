@@ -1,0 +1,171 @@
+/* Copyright (c) 2018 引领天下. MIT License. Derived from vscode-luogu v4.18.2; see UPSTREAM.md. */
+:root {
+  /* 默认字体有些不和谐 */
+  --luogu-font: -apple-system, BlinkMacSystemFont, 'San Francisco',
+    'Helvetica Neue', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK',
+    'Source Han Sans', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  display: block;
+  width: 100%;
+  overflow: auto;
+  word-break: keep-all;
+  margin: 10px 0;
+}
+
+th,
+td {
+  border: 1px solid var(--vscode-panel-border, #7f7f7f55);
+  padding: 6px 13px;
+}
+
+blockquote {
+  padding: 10px 20px;
+  margin: 0 0 20px;
+  border-left: 4px solid var(--vscode-textLink-foreground, #3498db);
+}
+
+pre {
+  margin: 0.5em 0;
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--vscode-panel-border, #7f7f7f55);
+  border-radius: 3px;
+  overflow: auto;
+  position: relative;
+  font-size: 0.875em !important;
+}
+pre > code {
+  background-color: var(--vscode-editor-background) !important;
+  padding: 0 !important;
+  display: block;
+  overflow-x: auto;
+}
+:not(pre) > code {
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+pre[is='copyable-pre'] {
+  min-height: 16px;
+  min-width: 16px;
+  position: relative;
+  > div.copyButton {
+    position: absolute;
+    top: 0;
+    right: 0;
+    visibility: hidden;
+    > .vscode-button {
+      margin: 0;
+      > .animate {
+        animation: copyButtonSuccessAnimationBegin 1s;
+      }
+    }
+  }
+  &:hover > div.copyButton {
+    visibility: visible;
+  }
+}
+@keyframes copyButtonSuccessAnimationBegin {
+  10% {
+    color: #07f;
+  }
+  90% {
+    color: #07f;
+  }
+  100% {
+    color: unset;
+  }
+}
+
+.tag {
+  display: inline-block;
+  padding: 0 8px;
+  box-sizing: border-box;
+  font-weight: 400;
+  line-height: 1.5;
+  border-radius: 2px;
+  font-size: 0.875em;
+  color: white;
+  margin: 2px;
+  line-height: 1.5;
+}
+
+
+hr {
+  margin-top: 16px;
+  margin-bottom: 16px;
+  border: none;
+  border-bottom: solid 1px #7f7f7f7f;
+}
+
+.username {
+  display: inline-flex;
+  text-decoration: none;
+  align-items: center;
+  > .username-name {
+    font-weight: bold;
+    font-size: 13px;
+    font-family: var(--luogu-font);
+    line-height: 1.5;
+  }
+  > .ccfsvg,
+  .username-name {
+    margin-left: 2px;
+    margin-right: 2px;
+  }
+}
+
+.usericon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.copy-button {
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  border-top-left-radius: 0px;
+  border-bottom-right-radius: 0px;
+}
+
+.captcha {
+  width: 90px;
+  height: 35px;
+}
+
+a {
+  text-decoration: none;
+}
+.problemNameWithDifficulty {
+  > :first-child {
+    font-weight: bold;
+  }
+}
+
+.spinner {
+  display: inline-block;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid transparent;
+  border-radius: 100%;
+  animation: spin 1.5s linear infinite;
+}
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+article img {
+  max-width: 100%;
+  height: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}

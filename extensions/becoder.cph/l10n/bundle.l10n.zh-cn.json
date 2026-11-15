@@ -26,5 +26,8 @@
 	"{0} / {1} samples passed.": "{0} / {1} 个样例通过。",
 	"CPH request failed: {0}": "CPH 请求失败：{0}",
 	"BeCoder Runner compiler is unavailable.": "BeCoder Runner 编译接口不可用。",
-	"Beacon could not save this run evidence: {0}": "Beacon 未能保存本次运行证据：{0}"
+	"Beacon could not save this run evidence: {0}": "Beacon 未能保存本次运行证据：{0}",
+	"CPH is busy, has unsaved samples, or the workspace is untrusted.": "CPH 正忙、存在未保存样例，或当前工作区尚未受信任。",
+	"The source must be inside an open workspace folder.": "源码必须位于已打开的工作区文件夹中。",
+	"Missing website limits use CPH local defaults: time {0} ms, memory {1} MiB.": "网站未提供的限制使用 CPH 本地默认值：时间 {0} 毫秒，内存 {1} MiB。"
 }

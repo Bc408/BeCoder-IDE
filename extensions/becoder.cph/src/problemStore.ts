@@ -6,11 +6,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash, randomUUID } from 'crypto';
-import { ImportedProblem, parseImportedProblem, problemIdentity } from './problem';
+import { ImportedProblem, parseImportedProblem, problemIdentity, sampleProblem, CphSampleProblem } from './problem';
 import { acquireWorkspaceLease } from './workspaceLease';
 import { SourcePreferences } from './importPreferences';
 
 export interface StoredProblem extends ImportedProblem {
+	readonly localLimitDefaults?: readonly ('time' | 'memory')[];
 	readonly customCheckerPath?: string;
 	readonly srcPath: string;
 	readonly tests: readonly { readonly id: number; readonly input: string; readonly output: string }[];
@@ -113,7 +114,9 @@ export class ProblemStore {
 			throw new ProblemStoreError('invalid-data', 'Duplicate sample identifiers.');
 		}
 		// Persisted user edits retain exact bytes; import normalization is not an edit.
+		if (value.localLimitDefaults !== undefined && (!Array.isArray(value.localLimitDefaults) || value.localLimitDefaults.some((item: unknown) => item !== 'time' && item !== 'memory'))) { throw new ProblemStoreError('invalid-data', 'Invalid local limit defaults.'); }
 		return { ...clean, url: value.local === true ? value.url : clean.url, local: value.local === true, srcPath: value.srcPath,
+			...(value.localLimitDefaults !== undefined ? { localLimitDefaults: value.localLimitDefaults } : {}),
 			...(value.customCheckerPath !== undefined ? { customCheckerPath: value.customCheckerPath } : {}),
 			tests: value.tests.map((item: { id: number; input: string; output: string }) => ({ id: item.id, input: item.input, output: item.output })) };
 	}
@@ -236,11 +239,20 @@ export class ProblemStore {
 		}
 	}
 
+	async importSamplesForSource(source: string, input: CphSampleProblem, confirmReplacement: (existing: StoredProblem) => Promise<boolean>, signal?: AbortSignal): Promise<ImportResult> {
+		this.checkRoot();
+		if (path.dirname(source) !== this.root || !/\.(c|cpp|cc|cxx)$/i.test(source)) { throw new ProblemStoreError('unsafe-path', source); }
+		ordinary(source);
+		const parsed = sampleProblem(input);
+		return this.importProblem(parsed.problem, confirmReplacement, signal, undefined, { source, defaults: parsed.defaults });
+	}
+
 	async importProblem(
 		input: ImportedProblem,
 		confirmReplacement: (existing: StoredProblem) => Promise<boolean>,
 		signal?: AbortSignal,
-		sourcePreferences?: SourcePreferences
+		sourcePreferences?: SourcePreferences,
+		target?: { source: string; defaults: readonly ('time' | 'memory')[] }
 	): Promise<ImportResult> {
 		// Revalidate even if invoked from a future internal command rather than browser.
 		const problem = parseImportedProblem(JSON.stringify({ ...input, name: sourcePreferences?.name ?? input.name }), input.url);
@@ -266,7 +278,8 @@ export class ProblemStore {
 		};
 		try {
 			check();
-			const existing = this.find(problem.url);
+			const exact = target ? this.load(target.source) : undefined;
+			const existing = target ? exact && { file: exact.metadataPath, raw: readMetadata(exact.metadataPath), problem: exact.problem } : this.find(problem.url);
 			if (existing) {
 				const accepted = await confirmReplacement(structuredClone(existing.problem));
 				check();
@@ -277,7 +290,7 @@ export class ProblemStore {
 				if (!accepted) {
 					return { kind: 'kept', problem: existing.problem };
 				}
-				const replacement = { ...this.withSource(problem, existing.problem.srcPath), customCheckerPath: existing.problem.customCheckerPath };
+				const replacement = { ...this.withSource(problem, existing.problem.srcPath), customCheckerPath: existing.problem.customCheckerPath, ...(target ? { localLimitDefaults: target.defaults } : {}) };
 				const temporary = path.join(this.dataDirectory, `.becoder-${token}.tmp`);
 				fs.writeFileSync(temporary, JSON.stringify(replacement), { flag: 'wx' });
 				const temporaryIdentity = ordinary(temporary);
@@ -299,10 +312,10 @@ export class ProblemStore {
 				return { kind: 'replaced', problem: replacement };
 			}
 			const stem = safeSourceName(sourcePreferences?.stem ?? problem.name);
-			const source = path.join(this.root, `${stem}.${sourcePreferences?.language ?? 'cpp'}`);
-			const stored = this.withSource(problem, source);
+			const source = target?.source ?? path.join(this.root, `${stem}.${sourcePreferences?.language ?? 'cpp'}`);
+			const stored = { ...this.withSource(problem, source), ...(target ? { localLimitDefaults: target.defaults } : {}) };
 			check();
-			if (!fs.existsSync(source)) {
+			if (!target && !fs.existsSync(source)) {
 				const contents = sourcePreferences?.initialize?.(stored) ?? sourcePreferences?.contents ?? '';
 				check();
 				try { fs.writeFileSync(source, contents, { flag: 'wx' }); }

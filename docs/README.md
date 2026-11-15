@@ -16,6 +16,9 @@
 ## 开发与维护
 
 - [开发指南](development.md)：工程入口、检查和构建。
+- [OJ Connect 产品与开发入口](oj-connect/README.md)：已确认的快捷键刷题流程、目录规则、内置扩展方向和当前实现状态；[技术架构](oj-connect/architecture.md)说明职责与迁移验收。
+- [OJ 接入技术可行性审查](oj-connect-feasibility.md)：候选路线、源码接点、证据范围和真实账号验证缺口；不代表已实现。
+- [AtCoder MVP 过程与验收](oj-connect-basic-flow.md)：早期核心侧增量、失败修正与真实旅程证据，按各节时点阅读。
 - [发行与安装维护](distribution.md)：安装模式、数据所有权与打包约束。
 - [产品方向](../VISION.md)：目的与模块职责。
 - [仓库工作规则](../AGENTS.md)：开发授权、验证与交付边界。

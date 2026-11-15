@@ -6,11 +6,14 @@
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { IBrowserViewWorkbenchService, IBrowserViewModel, IBrowserEditorViewState } from '../common/browserView.js';
 import type { PreferredGroup } from '../../../services/editor/common/editorService.js';
+import { BrowserViewStorageScope } from '../../../../platform/browserView/common/browserView.js';
 import { Event } from '../../../../base/common/event.js';
 import { BrowserEditorInput } from '../common/browserEditorInput.js';
 
 class WebBrowserViewWorkbenchService implements IBrowserViewWorkbenchService {
 	declare readonly _serviceBrand: undefined;
+
+	async resolveStorageScope(): Promise<BrowserViewStorageScope> { return BrowserViewStorageScope.Ephemeral; }
 
 	readonly onDidChangeBrowserViews = Event.None;
 

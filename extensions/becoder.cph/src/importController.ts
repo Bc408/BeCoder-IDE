@@ -22,6 +22,7 @@ export class ImportController {
 	private disposed = false;
 
 	constructor(private readonly host: ImportHost) { }
+	get isBusy(): boolean { return !!this.active; }
 
 	async import(json: string, pageUrl: string): Promise<ImportResult | undefined> {
 		if (this.disposed || this.active) {

@@ -10,6 +10,7 @@ import { ImportController } from './importController';
 import { ImportResult, ProblemStore } from './problemStore';
 import { JudgeView } from './judgeView';
 import { fillTemplate, problemFileStem, problemDisplayName } from './importPreferences';
+import { CphSampleProblem } from './problem';
 
 export const importProblemCommand = '_becoder.cph.importProblem';
 
@@ -126,6 +127,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(controller);
 	context.subscriptions.push(vscode.commands.registerCommand(importProblemCommand, async (json: unknown, pageUrl: unknown) => {
+		if (preciseImport) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.isBusy) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.hasUnsavedEdits) { throw new Error(vscode.l10n.t('Save the edited samples before opening another problem.')); }
 		if (!vscode.workspace.isTrusted) {
@@ -135,6 +137,23 @@ export function activate(context: vscode.ExtensionContext) {
 			throw new Error(vscode.l10n.t('Invalid problem import request.'));
 		}
 		return controller.import(json, pageUrl);
+	}));
+	let preciseImport = false;
+	context.subscriptions.push(vscode.commands.registerCommand('_becoder.cph.importSamplesForSource', async (raw: unknown) => {
+		if (!vscode.workspace.isTrusted || preciseImport || controller.isBusy || judgeView.isBusy || judgeView.hasUnsavedEdits) { throw new Error(vscode.l10n.t('CPH is busy, has unsaved samples, or the workspace is untrusted.')); }
+		if (!raw || typeof raw !== 'object' || typeof (raw as { sourceUri?: unknown }).sourceUri !== 'string') { throw new Error(vscode.l10n.t('Invalid problem import request.')); }
+		const input = raw as { sourceUri: string; problem: CphSampleProblem }, uri = vscode.Uri.parse(input.sourceUri);
+		if (uri.scheme !== 'file' || !vscode.workspace.getWorkspaceFolder(uri)) { throw new Error(vscode.l10n.t('The source must be inside an open workspace folder.')); }
+		preciseImport = true;
+		try {
+			const result = await new ProblemStore(path.dirname(uri.fsPath)).importSamplesForSource(uri.fsPath, input.problem, async existing => {
+				const replace = vscode.l10n.t('Replace Samples');
+				return await vscode.window.showWarningMessage(vscode.l10n.t('This problem already exists. Replace its samples? Your source code will be kept.'), { modal: true, detail: existing.srcPath }, replace) === replace;
+			});
+			if (result.problem.localLimitDefaults?.length) { void vscode.window.showInformationMessage(vscode.l10n.t('Missing website limits use CPH local defaults: time {0} ms, memory {1} MiB.', String(result.problem.timeLimit), String(result.problem.memoryLimit))); }
+			// Do not run the source-template or placeholder initialization used by direct imports.
+			imported.fire(result); await judgeView.open(result.problem); return result;
+		} finally { preciseImport = false; }
 	}));
 	return { onDidImportProblem: imported.event };
 }

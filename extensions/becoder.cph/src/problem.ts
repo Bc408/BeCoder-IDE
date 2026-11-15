@@ -8,6 +8,26 @@ export interface Sample {
 	readonly output: string;
 }
 
+/** Explicit OJ Connect samples for an already selected source. Missing limits stay distinguishable. */
+export interface CphSampleProblem {
+	readonly name: string;
+	readonly group: string;
+	readonly url: string;
+	readonly interactive: boolean;
+	readonly tests: readonly Sample[];
+	readonly timeLimitMs?: number;
+	readonly memoryLimitMiB?: number;
+}
+
+export function sampleProblem(input: CphSampleProblem): { problem: ImportedProblem; defaults: ('time' | 'memory')[] } {
+	const defaults: ('time' | 'memory')[] = [];
+	if (input.timeLimitMs === undefined) { defaults.push('time'); }
+	if (input.memoryLimitMiB === undefined) { defaults.push('memory'); }
+	const problem = parseImportedProblem(JSON.stringify({ name: input.name, group: input.group, url: input.url, interactive: input.interactive, tests: input.tests,
+		timeLimit: input.timeLimitMs ?? 3000, memoryLimit: input.memoryLimitMiB ?? 1024, batch: { id: 'oj-connect', size: 1 }, input: { type: 'stdin' }, output: { type: 'stdout' }, testType: 'single' }), input.url);
+	return { problem, defaults };
+}
+
 /** Page data only. Local paths and compiler options never come from a page. */
 export interface ImportedProblem {
 	readonly name: string;

@@ -25,6 +25,21 @@ function problem(url = 'https://codeforces.com/problemset/problem/1/A'): Importe
 	};
 }
 
+test('precise source samples never rebind a sibling solution or initialize source bytes', async t => {
+	const root = workspace(t), store = new ProblemStore(root);
+	const a = path.join(root, 'a.cpp'), b = path.join(root, 'b.cpp');
+	fs.writeFileSync(a, '$CURSOR_PLACEHOLDER\r\nA'); fs.writeFileSync(b, 'B');
+	const input = { name: 'A+B', group: 'luogu', url: 'https://www.luogu.com.cn/problem/P1001', interactive: false, tests: [{ input: ' 1\n', output: '' }] };
+	await store.importSamplesForSource(a, input, async () => true);
+	await store.importSamplesForSource(b, input, async () => true);
+	assert.strictEqual(store.load(a)?.problem.srcPath, a); assert.strictEqual(store.load(b)?.problem.srcPath, b);
+	assert.deepStrictEqual(store.load(a)?.problem.localLimitDefaults, ['time', 'memory']);
+	assert.strictEqual(fs.readFileSync(a, 'utf8'), '$CURSOR_PLACEHOLDER\r\nA');
+	const before = fs.readFileSync(path.join(root, '.cph', metadataName(a)), 'utf8');
+	assert.strictEqual((await store.importSamplesForSource(a, { ...input, tests: [] }, async () => false)).kind, 'kept');
+	assert.strictEqual(fs.readFileSync(path.join(root, '.cph', metadataName(a)), 'utf8'), before);
+});
+
 test('creates C++ source and CPH-compatible metadata inside selected workspace', async t => {
 	const root = workspace(t);
 	const result = await new ProblemStore(root).importProblem(problem(), async () => assert.fail('new import must not confirm'));

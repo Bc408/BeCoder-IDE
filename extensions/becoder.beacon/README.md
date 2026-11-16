@@ -72,7 +72,7 @@ Spot/Flood 下，Beacon 可按明确请求创建/改写 `.bcnb`，使用打开�
 
 ## 对话与连接恢复
 
-支持流式多轮、代码高亮/复制/换行、公式、默认折叠思考、活动提示和滚动跟随。暂停保留已输出内容；继续以已有上下文发起新请求接到同一回答；重新回答按原问题重建后续分支。已完成工具结果进入会话协议，后续不重复冒充新读取。
+支持流式多轮、代码高亮/复制/换行、公式、默认折叠思考、活动提示和滚动跟随。正文与 OJ Connect 共用内容解析和增量代码展示，代码使用固定 One Monokai 配色；新增原文先显示，语法资源从本地按需加载，流式解析与动画分离。暂停保留已输出内容；继续以已有上下文发起新请求接到同一回答；重新回答按原问题重建后续分支。已完成工具结果进入会话协议，后续不重复冒充新读取。
 
 尚未交付文字、思考或工具活动时，临时网络/限流/过载可自动恢复，整轮至多两次重试、累计等待不超过 10 秒，保留原模型和三分钟期限；停止取消请求及等待。鉴权、余额、参数、证书等错误不自动重试；已输出内容或完成工具不自动重放。最终故障保留手动重试。连接诊断仅记服务商/随机请求标识、分类、次数与耗时，不记提示词、图片、密钥、地址或响应正文。
 
@@ -87,5 +87,7 @@ Beacon is BeCoder's programming tutor. Open it from the upper-right editor butto
 Model capabilities are boolean and default to supported unless explicitly denied; missing capacities use editable defaults of 32768 context, 24576 input and 8192 output tokens. These defaults do not verify a model's actual abilities. Confirmation replaces membership/capabilities, clears manual capability corrections and retains same-ID names/generation settings. Invalid retained parameters block the next request; active replies keep their original configuration snapshot.
 
 Each window selects an independent Beacon workspace. Blackout keeps temporary chat in memory and reads only provided/open-page/already-loaded material; Spot confines file and learning-asset access to the selected root; Flood broadens allowed file locations while preserving credential, conversation and write restrictions. Mode changes preserve the composer and create independent inherited snapshots on the first accepted cross-category send. Execution activities disable sending without queuing or replay. Open-page access never grants backing-file or hidden-record access.
+
+Message Markdown and incremental code rendering share the OJ Connect content core. Code uses fixed One Monokai colors; source appears before local grammar loading and syntax coloring. Streaming parsing is separate from text animation.
 
 Explicitly requested Notebook creation/editing is available, with complete pre-edit backup and native save. Beacon does not edit student source, execute programs, log in or submit. Dedicated four-platform OJ retrieval, workspace memory/dream, long-chat compression and complete visual page materials remain incomplete. See [implementation status](../../docs/beacon/implementation-status.md), [formal requirements](../../docs/beacon/README.md) and the [English project guide](../../README.en.md). Tests and older builds do not establish current live-model or runtime acceptance.

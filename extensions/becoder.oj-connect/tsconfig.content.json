@@ -1,0 +1,15 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"rootDir": "..",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ES2024", "DOM"],
+		"paths": {
+			"hast": ["./node_modules/@types/hast"],
+			"*": ["./node_modules/*", "../../node_modules/*"]
+		}
+	},
+	"include": ["../becoder.shared/content/**/*.ts", "../becoder.shared/build/**/*.mts", "test/content-parser.mts"]
+}

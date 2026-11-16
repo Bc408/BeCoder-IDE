@@ -39,14 +39,14 @@ export class Panel implements vscode.Disposable {
 		this.panel = vscode.window.createWebviewPanel('becoder.ojConnect.' + state.kind, state.kind === 'problem' ? state.problem!.title : '#' + state.record!.id, { viewColumn: side ?? vscode.ViewColumn.Beside, preserveFocus: false }, { enableScripts: true, localResourceRoots: [resources] });
 		const webview = this.panel.webview, nonce = randomBytes(20).toString('hex');
 		const resource = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(resources, name));
-		webview.html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; connect-src 'none';"><link rel="stylesheet" href="${resource('katex.min.css')}"><link rel="stylesheet" href="${resource('webview.css')}"></head><body><main id="app"></main><script nonce="${nonce}">window.__OJ_STATE__=${safeState(state)};</script><script nonce="${nonce}" src="${resource('webview.js')}"></script></body></html>`;
+		webview.html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; connect-src ${webview.cspSource}; worker-src blob:;"><link rel="stylesheet" href="${resource('katex.min.css')}"><link rel="stylesheet" href="${resource('webview.css')}"></head><body><main id="app"></main><script nonce="${nonce}">window.__OJ_STATE__=${safeState(state)};</script><script nonce="${nonce}" src="${resource('webview.js')}"></script></body></html>`;
 		this.subscriptions.push(webview.onDidReceiveMessage(raw => {
 			const request = raw && raw.type === 'ojAction' && typeof raw.uuid === 'string' && /^[a-f0-9-]{36}$/i.test(raw.uuid) && Object.keys(raw).length === 3 ? raw : undefined;
 			const value = panelMessage(request ? request.data : raw); if (!value || this.closed) { return; }
 			if (value.action === 'ready') { this.update({}); return; }
-			const respond = (error?: string, data?: string) => { if (request && !this.closed) { void webview.postMessage({ uuid: request.uuid, data, error }); } };
-			const operation = value.action === 'renderMarkdown' ? markdownService.render(value.markdown) : action(value);
-			void operation.then(data => respond(undefined, typeof data === 'string' ? data : undefined), error => {
+			const respond = (error?: string, data?: unknown) => { if (request && !this.closed) { void webview.postMessage({ uuid: request.uuid, data, error }); } };
+			const operation = value.action === 'renderContent' ? value.format === 'markdown' ? markdownService.renderTree(value.content) : markdownService.renderHtmlTree(value.content, this.state.problem?.ref.url ?? 'https://invalid.invalid/') : action(value);
+			void operation.then(data => respond(undefined, data), error => {
 				const message = userError(error); void vscode.window.showErrorMessage(vscode.l10n.t('OJ Connect: {0}', message)); respond(message);
 			});
 		}), this.panel.onDidDispose(() => { this.closed = true; onClose(); this.subscriptions.splice(0).forEach(value => value.dispose()); }));

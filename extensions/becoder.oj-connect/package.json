@@ -126,8 +126,14 @@
 		},
 		"menus": {
 			"commandPalette": [
-				{ "command": "becoder.ojConnect.login", "when": "false" },
-				{ "command": "becoder.ojConnect.logout", "when": "false" }
+				{
+					"command": "becoder.ojConnect.login",
+					"when": "false"
+				},
+				{
+					"command": "becoder.ojConnect.logout",
+					"when": "false"
+				}
 			],
 			"view/item/context": [
 				{
@@ -167,9 +173,9 @@
 		"virtualWorkspaces": false
 	},
 	"scripts": {
-		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json --noEmit && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.site-scripts.json && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json",
+		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json --noEmit && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.site-scripts.json && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.webview.json && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.content.json",
 		"build": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json && npm run compile-site-scripts && npm run compile-webview",
-		"test": "npm run compile-site-scripts && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.test.json && node --test out-test/test/*.test.js",
+		"test": "npm run compile-site-scripts && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.test.json && node --test out-test/test/*.test.js && node test/content-parser.mts",
 		"vscode:prepublish": "npm run build",
 		"compile-site-scripts": "node build-site-scripts.mjs",
 		"compile-webview": "node build-webview.mjs",
@@ -180,22 +186,32 @@
 		"url": "https://github.com/Bc408/BeCoder-IDE.git"
 	},
 	"devDependencies": {
-		"@luogu-saver-next/markdown-renderer": "1.0.3",
+		"@shikijs/langs": "3.23.0",
 		"@types/hast": "3.0.4",
 		"@types/react": "18.3.31",
 		"@types/react-dom": "18.3.7",
-		"dompurify": "3.4.17",
 		"esbuild": "0.28.2",
 		"hast-util-from-html": "2.0.2",
-		"hast-util-to-html": "9.0.5",
-		"highlight.js": "11.9.0",
 		"jsdom": "26.1.0",
 		"katex": "0.18.10",
-		"parse5": "7.3.0",
+		"property-information": "7.2.0",
 		"react": "18.3.1",
 		"react-dom": "18.3.1",
+		"rehype-autolink-headings": "7.1.0",
+		"rehype-katex": "7.0.1",
+		"rehype-raw": "7.0.0",
+		"rehype-sanitize": "6.0.0",
+		"rehype-slug": "6.0.0",
+		"remark-breaks": "4.0.0",
+		"remark-directive": "4.0.0",
+		"remark-gfm": "4.0.1",
+		"remark-math": "6.0.0",
 		"remark-parse": "11.0.0",
-		"unified": "11.0.5"
+		"remark-rehype": "11.1.2",
+		"remark-smartypants": "3.0.3",
+		"unified": "11.0.5",
+		"unist-util-visit": "5.2.0",
+		"vfile": "6.0.3"
 	},
 	"overrides": {
 		"katex": "$katex"

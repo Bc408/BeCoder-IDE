@@ -8,11 +8,13 @@ import * as assert from 'node:assert/strict';
 import { ChatSession, type Generate } from '../src/session';
 import { createGenerator, listModels } from '../src/provider';
 import { normalizeBaseURL, providers, secretName, type ProviderId } from '../src/connection';
-import { normalizeMath } from '../webview/math';
+import { normalizeMath } from '../../becoder.shared/content/math';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { readFileSync } from 'fs';
-import { createSyntaxRegistry, IncrementalSyntax } from '../webview/syntax';
-import { languages } from 'beacon-syntax-assets';
+import { createSyntaxRegistry as createRegistry, IncrementalSyntax } from '../../becoder.shared/browser/content/syntax';
+import { languages, grammars } from 'beacon-syntax-assets';
+
+const createSyntaxRegistry = (wasm: ArrayBuffer) => createRegistry(wasm, async scope => grammars.find(grammar => grammar.scopeName === scope) ?? null);
 import { toolErrorCode, toolErrorMessage } from '../src/toolFeedback';
 
 suite('Beacon safe tool feedback', () => {
@@ -30,6 +32,37 @@ suite('Beacon safe tool feedback', () => {
 });
 
 suite('Beacon default TextMate syntax', () => {
+	test('adjacent tokens with identical presentation share one run without changing source', async () => {
+		const syntax = new IncrementalSyntax({ tokenizeLine2() { return { tokens: new Uint32Array([0, 1 << 15, 1, 1 << 15, 2, (2 << 15) | (1 << 11), 3, (2 << 15) | (1 << 11)]), ruleStack: null, stoppedEarly: false }; } } as never, ['', '#bbb', '#abc']);
+		assert.deepStrictEqual((await syntax.update('a b;')).lines, [[{ content: 'a ', color: '#bbb', fontStyle: 0 }, { content: 'b;', color: '#abc', fontStyle: 1 }]]);
+	});
+	test('ordinary long code continues across worker slices instead of losing completed lines', async context => {
+		let clock = 0, yields = 0;
+		context.mock.method(performance, 'now', () => clock);
+		const syntax = new IncrementalSyntax({
+			tokenizeLine2() {
+				clock += 10;
+				return { tokens: new Uint32Array([0, 1 << 15]), ruleStack: null, stoppedEarly: false };
+			}
+		} as never, ['', '#bbb']);
+		const source = Array.from({ length: 200 }, (_, index) => `int value${index};`).join('\n');
+		const result = await syntax.patch(source, async () => { yields++; clock += 100; });
+		assert.ok(yields > 1, 'A long task yields before continuing its remaining lines');
+		assert.equal(result.lines.map(line => line.map(token => token.content).join('')).join('\n'), source);
+		const appended = await syntax.patch(source + '\nint next;', async () => { yields++; });
+		assert.equal(appended.start, 200);
+		assert.equal(appended.lines[0].map(token => token.content).join(''), 'int next;');
+	});
+	test('a stopped syntax line still rejects the snapshot instead of publishing partial tokens', async () => {
+		const syntax = new IncrementalSyntax({ tokenizeLine2() { return { tokens: new Uint32Array([0, 1 << 15]), ruleStack: null, stoppedEarly: true }; } } as never, ['', '#bbb']);
+		await assert.rejects(() => syntax.patch('unsafe'), /syntax-time-budget/);
+	});
+	test('pathological total syntax computation still has a finite budget', async context => {
+		let clock = 0;
+		context.mock.method(performance, 'now', () => clock);
+		const syntax = new IncrementalSyntax({ tokenizeLine2() { clock += 1000; return { tokens: new Uint32Array([0, 1 << 15]), ruleStack: null, stoppedEarly: false }; } } as never, ['', '#bbb']);
+		await assert.rejects(() => syntax.patch(Array(20).fill('slow').join('\n'), async () => {}), /syntax-time-budget/);
+	});
 	test('every fence language has a working grammar and preserves incremental source exactly', async () => {
 		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
 		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
@@ -41,11 +74,30 @@ suite('Beacon default TextMate syntax', () => {
 				assert.ok(grammar, scope);
 				const tokenizer = new IncrementalSyntax(grammar, registry.getColorMap());
 				const source = 'value = 42;\n"hello"\n';
-				tokenizer.update(source.slice(0, 8));
-				const result = tokenizer.update(source);
+				await tokenizer.update(source.slice(0, 8));
+				const result = await tokenizer.update(source);
 				assert.equal(result.lines.map(line => line.map(token => token.content).join('')).join('\n'), source, scope);
-				assert.deepStrictEqual(result, new IncrementalSyntax(grammar, registry.getColorMap()).update(source), scope);
+				assert.deepStrictEqual(result, await new IncrementalSyntax(grammar, registry.getColorMap()).update(source), scope);
 			}
+		} finally { registry.dispose(); }
+	});
+	test('worker patches transfer changed lines and retain stable syntax state', async () => {
+		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
+		const registry = await createSyntaxRegistry(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
+		try {
+			const grammar = (await registry.loadGrammar('source.cpp'))!;
+			const syntax = new IncrementalSyntax(grammar, registry.getColorMap());
+			const prefix = 'int first = 1;\nint second = 2;';
+			assert.equal((await syntax.patch(prefix)).start, 0);
+			const appended = await syntax.patch(prefix + '\nint third = 3;');
+			assert.equal(appended.start, 2);
+			assert.equal(appended.lineCount, 3);
+			assert.equal(appended.lines.length, 1, 'Do not serialize the stable prefix again');
+			assert.deepEqual((await syntax.patch(prefix + '\nint third = 3;')).lines, []);
+			assert.equal((await syntax.patch(prefix)).lineCount, 2, 'Shortening removes old lines');
+			const replacement = await syntax.patch('/* comment\nint second = 2;');
+			assert.equal(replacement.start, 0);
+			assert.deepEqual(replacement.lines, (await new IncrementalSyntax(grammar, registry.getColorMap()).update('/* comment\nint second = 2;')).lines);
 		} finally { registry.dispose(); }
 	});
 	test('Python and Shell use the BeCoder grammar scopes and One Monokai during unfinished multiline output', async () => {
@@ -61,9 +113,9 @@ suite('Beacon default TextMate syntax', () => {
 				const tokenizer = new IncrementalSyntax(grammar, registry.getColorMap());
 				for (let length = 1; length <= source.length; length += 3) {
 					const text = source.slice(0, length);
-					assert.deepStrictEqual(tokenizer.update(text), new IncrementalSyntax(grammar, registry.getColorMap()).update(text));
+					assert.deepStrictEqual(await tokenizer.update(text), await new IncrementalSyntax(grammar, registry.getColorMap()).update(text));
 				}
-				assert.ok(tokenizer.update(source).lines.flat().some(token => token.color.toLowerCase() !== '#bbbbbb'));
+				assert.ok((await tokenizer.update(source)).lines.flat().some(token => token.color.toLowerCase() !== '#bbbbbb'));
 			}
 		} finally { registry.dispose(); }
 	});
@@ -78,20 +130,20 @@ suite('Beacon default TextMate syntax', () => {
 				const code = '#define VALUE \\\n1\n/* comment\nstill comment */\nint value = 42;\nconst char* s = "hello";\n';
 				for (let length = 1; length <= code.length; length += 3) {
 					const text = code.slice(0, length);
-					assert.deepStrictEqual(tokenizer.update(text), new IncrementalSyntax(grammar, colors).update(text));
+					assert.deepStrictEqual(await tokenizer.update(text), await new IncrementalSyntax(grammar, colors).update(text));
 				}
-				const complete = tokenizer.update(code);
+				const complete = await tokenizer.update(code);
 				assert.equal(complete.lines.map(line => line.map(token => token.content).join('')).join('\n'), code);
-				const continued = tokenizer.update(code + 'value++;');
+				const continued = await tokenizer.update(code + 'value++;');
 				assert.strictEqual(continued.lines[0], complete.lines[0], 'Unchanged lines retain their token objects');
-				assert.deepStrictEqual(tokenizer.update('int other;'), new IncrementalSyntax(grammar, colors).update('int other;'));
+				assert.deepStrictEqual(await tokenizer.update('int other;'), await new IncrementalSyntax(grammar, colors).update('int other;'));
 				assert.ok(complete.lines.flat().some(token => token.content.includes('42') && token.color.toLowerCase() === '#c678dd'), 'Numbers use the editor One Monokai token rule');
 			}
 			const grammar = (await registry.loadGrammar('source.cpp'))!;
 			const raw = 'auto s = R"tag(first\nsecond)tag";\n';
 			const incremental = new IncrementalSyntax(grammar, registry.getColorMap());
-			incremental.update(raw.slice(0, 22));
-			assert.deepStrictEqual(incremental.update(raw), new IncrementalSyntax(grammar, registry.getColorMap()).update(raw));
+			await incremental.update(raw.slice(0, 22));
+			assert.deepStrictEqual(await incremental.update(raw), await new IncrementalSyntax(grammar, registry.getColorMap()).update(raw));
 		} finally { registry.dispose(); }
 	});
 });
@@ -192,6 +244,12 @@ suite('Beacon shared history', () => {
 });
 
 suite('Beacon math delimiters', () => {
+	test('source without math delimiters stays verbatim, including unfinished fences and CRLF', () => {
+		for (const source of ['plain [text] (text)', '```cpp\r\nconst char* path = "C:\\\\temp";\r\n', '  ~~~~cpp\n`unfinished\n', '\\) \\] \\\\ escaped', '    indented\r\n\tcode\n']) {
+			assert.equal(normalizeMath(source), source);
+			assert.equal(normalizeMath(source, true), source);
+		}
+	});
 	test('streaming math preserves indented code and following prose', () => {
 		for (const source of ['    echo $HOME', '\techo $HOME\n\nNext paragraph.', '    \\(literal\n\nNext paragraph.']) {
 			assert.equal(normalizeMath(source, true), source);

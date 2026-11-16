@@ -1,0 +1,11 @@
+/* Copyright (c) BeCoder contributors. Licensed under MIT. */
+pre.becoder-syntax,
+.becoder-syntax .code-scroller {
+	color: #bbb;
+	background: #282c34;
+}
+
+pre.becoder-syntax > code {
+	color: inherit;
+	background: transparent;
+}

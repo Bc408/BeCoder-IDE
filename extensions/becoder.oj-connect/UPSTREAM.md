@@ -4,13 +4,11 @@ OJ Connect 的共同模型、控制器、目录识别、适配器、网页脚本
 
 最新对齐基准为完整克隆的 vscode-luogu v4.20.0 / `987ca974b5419230a07b59a195ec44026e16f6f4`，`luogu-api-docs` 子模块固定 `b7119385f9482528e71c736ed606241ef302019a`。最初协议调查使用负责人提供的 4.18.2 VSIX；本轮按完整项目的 4.20.0 保留范围复核。核心交题按 submitCode 的请求字段、rid 回执和验证码续交行为接入；评测读取迁入 fetchResult 的 `_contentOnly=1` 路径及 data/currentData 选择。实际请求改用内置浏览器 session，原 MIT 声明保留于 ThirdPartyNotices.txt。没有复制图标或迁入社交、比赛管理、题库、专栏及独立账号存储。协议证据见 [审查记录](../../docs/oj-connect/luogu-protocol-evidence.md)。
 
-Markdown 直接复用 4.20.0 的 `src/utils/markdown.ts`、`markdownService.ts`、`webview/markdownViewer/codeCopy.ts` 与 `resources/markdown.css`。使用同一 `@luogu-saver-next/markdown-renderer` 1.0.3（Shiki、remark／rehype），扩展宿主按需渲染并复用其有界缓存／并发去重，Webview 通过固定 `renderMarkdown` 消息读取结果。实际运行入口和 renderer 分别静态打包为 `out/extension.js` 与 `out/markdown.js`，不依赖产品中的 node_modules。
+内容渲染核心现由 `../becoder.shared/content/parser.ts` 统一维护。洛谷 AST 转换提取自 `@luogu-saver-next/markdown-renderer` 1.0.3（Copyright 2026 Federico2903，MIT，完整许可为共享目录的 LICENSE.luogu-markdown），保留数学保护、合并表格、指令、提示块、标题及安全嵌入行为。`src/markdown.ts` 是薄适配，`MarkdownService` 保留上游 4.20.0 的有界缓存／并发去重；固定 `renderContent` 消息传安全 HAST，不再传回高亮 HTML 并二次解析。
 
-AtCoder 原始 HTML 保留 DOMPurify 3.4.17（选择 Apache-2.0）和 KaTeX 0.18.10；不作为 Markdown 重解析。KaTeX 的 scoped override 统一为 0.18.10，使字体与两条渲染链匹配并避开旧子依赖公告。本轮 npm audit 为 0 vulnerabilities。Highlight.js 11.9.0 继续处理 HTML 与上游 Shiki 未高亮的已知代码语言（例如 PHP），使用原 Base16 明暗主题；Shiki 采用上游 Github 明暗主题。
+AtCoder 原始 HTML 直接经同一 HAST 清洗／KaTeX 管线，不转成 Markdown。作者样式在生成可信公式样式之前清洗；重复属性由解析器处理。样例、CPH 和提交源码仍由原业务所有者保留。代码中的尾部换行和空白精确保留。
 
-源码、原始样例及 CPH 文本不经过题面渲染器。正文复制按上游 4.20.0 读取显示代码文本；Shiki 可能移除代码块末尾的换行。公式内转义美元符号的个别输入仍有上游相同行为，不新增自制解析补丁。
-
-必要隔离：进入上游前按 Markdown AST 定位原始 HTML，再用 parse5 源码位置将作者 style 属性置空（保留空的首属性，使重复属性不能重新生效）；不修改代码字面量或公式／Shiki 生成样式。上游 sanitization、HTTPS 链接约束、嵌入转原站链接及宿主 CSP 共同保留既有边界。没有导入上游账号 Cookie 存储、图标或已裁掉的外围入口。
+代码展示共用 `../becoder.shared/browser/content` 的增量 TextMate／Oniguruma Worker，固定 BeCoder One Monokai 配色。构建优先内置语法，附加语言使用 @shikijs/langs 资源，语法和 WASM 只从本地按需加载。移除 Shiki 渲染引擎、highlight.js 与 DOMPurify 重复路径；作者内容的清洗边界继续由共享管线维护。字体及数学引擎统一固定 KaTeX 0.18.10。
 
 实际打包版本和 SPDX 声明由构建汇总宿主、renderer 与 Webview 的真实依赖，按最近 node_modules 目录及 name/version 区分嵌套版本，生成 `dist/dependencies.json`；完整许可证和归属在 ThirdPartyNotices.txt。未随 npm 包提供的 remark-math/retext 许可从其官方仓库 license 补齐。esbuild、jsdom 与类型包仅用于开发；所有版本由本扩展 package-lock.json 固定。
 
@@ -42,10 +40,10 @@ Webview 使用同一 React 18 系列运行时（固定 react/react-dom 18.3.1）
 
 | 上游 | 本地 | 修改 |
 | --- | --- | --- |
-| src/utils/markdown.ts | src/markdown.ts | 保留渲染及嵌入／提示块适配，增加原始作者 style 隔离、HTTPS 约束及 TS6 类型适配 |
+| src/utils/markdown.ts | src/markdown.ts | 薄适配共享安全 HAST；共享核心保留上游方言与作者样式隔离 |
 | src/utils/markdownService.ts | src/markdownService.ts | 保留按需加载、SHA256 缓存、有界淘汰、并发去重和 clear 语义；加载入口适配本产品 CommonJS 分包 |
 | webview/markdownViewer/codeCopy.ts | webview/luogu/codeCopy.ts | 保留复制／失败／卸载生命周期，以既有本地化文字替代额外图标包 |
-| resources/markdown.css、markdownViewer/markdown.css | webview/luogu/markdown.css、styles.css | 保留 Shiki 明暗主题、提示块、表格及右上角复制控件样式，适配宿主实时主题属性 |
+| resources/markdown.css、markdownViewer/markdown.css | webview/luogu/markdown.css、styles.css | 保留提示块、表格及右上角复制控件样式；代码色板由共享固定主题替代 |
 
 4.20.0 的题解工具条和关注犇犇优化属于已移除能力，未迁入。原有题面、样例、提交控件和评测卡片仍来自先前迁入的原组件；按完整 4.20.0 比对保留核心结构，不用版本升级重新引入外围入口。
 

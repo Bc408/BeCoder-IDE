@@ -10,7 +10,8 @@ import { VSCodeButton, VSCodeDropdown, VSCodeOption } from './uiToolkit';
 import SubmissionControls from './submissionControls';
 import type { PanelState } from '../../src/views/model';
 import type { Section } from '../../src/domain';
-import { renderContent, highlightCodeBlocks } from '../content';
+import { contentFragment, highlightCodeBlocks } from '../content';
+import type { Root } from 'hast';
 import send from '../request';
 import './copyablePre';
 import { installCodeCopyButtons } from './codeCopy';
@@ -19,7 +20,7 @@ import { CphIcon, Tag } from './presentation';
 function Content({ section, url }: { section: Section; url: string }) {
 	const root = useRef<HTMLElement>(null);
 	useEffect(() => {
-		let disposed = false, cleanup: (() => void) | undefined;
+		let disposed = false, cleanup: (() => void) | undefined, syntax: { dispose(): void } | undefined;
 		const article = root.current!;
 		article.replaceChildren();
 		article.setAttribute('aria-busy', 'true');
@@ -28,10 +29,10 @@ function Content({ section, url }: { section: Section; url: string }) {
 		pending.textContent = window.__OJ_STATE__.labels.rendering;
 		article.append(pending);
 		const render = async () => {
-			const html = section.format === 'markdown' ? await send<string>({ action: 'renderMarkdown', markdown: section.content }) : undefined;
+			const tree = await send<Root>({ action: 'renderContent', content: section.content, format: section.format });
 			if (disposed) { return; }
-			if (html !== undefined) { article.innerHTML = html; highlightCodeBlocks(article); }
-			else { article.replaceChildren(renderContent(section.content, url)); }
+			article.replaceChildren(contentFragment(tree));
+			syntax = highlightCodeBlocks(article);
 			article.setAttribute('aria-busy', 'false');
 			cleanup = installCodeCopyButtons(article, window.__OJ_STATE__.labels);
 		};
@@ -44,7 +45,7 @@ function Content({ section, url }: { section: Section; url: string }) {
 				article.replaceChildren(error);
 			}
 		});
-		return () => { disposed = true; cleanup?.(); };
+		return () => { disposed = true; syntax?.dispose(); cleanup?.(); };
 	}, [section.format, section.content, url]);
 	return <article className={'luogu-markdown'} ref={root} />;
 }

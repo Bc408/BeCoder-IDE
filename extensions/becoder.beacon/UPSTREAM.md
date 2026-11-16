@@ -20,9 +20,9 @@ transport, stream rollback or provider cooldown service is imported.
 - https://github.com/vercel/ai-elements/blob/main/packages/elements/src/message.tsx
 - Copyright 2023 Vercel, Inc.; Apache-2.0 (full notice in `licenses/ai-elements.txt`).
 
-Modifications: replaced Tailwind/shadcn styling and buttons with the BeCoder Webview theme, localized scroll control, omitted downloads, message branches and Mermaid; retained StickToBottom and replaced Streamdown's renderer composition with the Captain Who-style React Markdown plugin pipeline. The composer is a BeCoder textarea with IME handling, not the upstream rich composer.
+Modifications: replaced Tailwind/shadcn styling and buttons with the BeCoder Webview theme, localized scroll control, omitted downloads, message branches and Mermaid; retained StickToBottom and replaced Streamdown's renderer composition with the shared unified/remark/rehype content pipeline. The composer is a BeCoder textarea with IME handling, not the upstream rich composer.
 
-Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek and OpenAI-compatible providers, React Markdown, KaTeX and their bundled transitive dependencies retain their own licenses.
+Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek and OpenAI-compatible providers, unified/remark/rehype, KaTeX and their bundled transitive dependencies retain their own licenses.
 
 No Codex or Trae proprietary code or assets are included.
 
@@ -47,14 +47,18 @@ The text shimmer and typing indicator CSS in `webview/beacon.css` adapt
 `ChatConversationPage.agent.css` and `ConversationScrollToBottomButton.css` under Apache-2.0.
 The original license is in `licenses/captain-who.txt`; modifications map colors to VS Code
 theme tokens and keep Beacon's control placement. `ResponseActivity.tsx` implements the observed
-activity lifecycle. `elements.tsx` uses `react-markdown`, `remark-gfm`, `remark-math`,
-`remark-breaks` and KaTeX for the rendering pipeline. Formula slots retain their last valid
+activity lifecycle. `elements.tsx` uses the fixed Beacon entry in `../becoder.shared/content/parser.ts`
+(unified, remark-gfm/math/breaks and rehype-sanitize) and KaTeX for the rendering pipeline.
+The shared parser retains Luogu renderer MIT provenance in LICENSE.luogu-markdown,
+while Beacon's bundled entry excludes Luogu-only HTML/directive transformations. Formula slots retain their last valid
 KaTeX result while an appended command or group is incomplete; invalid final expressions
 remain ordinary readable text. `CodeBlock.tsx` adapts Captain Who's
 code-card layout, wrapping/copy controls and stable streaming-highlight behavior while using
-Beacon's shared incremental TextMate Worker. No Electron/Rust services are imported.
+BeCoder's shared incremental TextMate Worker. No Electron/Rust services are imported.
 
 Some npm packages omit their repository license file. The notice generator uses the Vercel AI repository Apache-2.0 license for `@ai-sdk/provider-utils`, and `licenses/remark-math.txt` for `remark-math` (source: https://github.com/remarkjs/remark-math/blob/main/license, retrieved 2026-09-23).
+
+OJ Connect and Beacon share Markdown parsing policies, math normalization, language resolution, and the incremental code renderer. Beacon retains its own safe content policy, prose animation and message container; transport updates are coalesced for 16ms rather than parsing on each animation frame. Original code text is authoritative and remains visible while coloring runs.
 
 All code languages share the incremental renderer using pinned root `vscode-textmate`, `vscode-oniguruma` and its WASM, with the default token rules under `extensions/becoder.one-monokai`. Build-time language discovery prefers the repository's bundled grammar contributions (including Better C++ Syntax, MagicPython and embedded/injection grammars); additional fence languages use the directly pinned `@shikijs/langs` grammar assets. Shiki rendering engines and themes are not dependencies of Beacon. Built-in grammar upstream notices, additional LaTeX licenses, @shikijs/langs and Better C++ Syntax/One Monokai licenses ship in ThirdPartyNotices. No semantic or user-theme customization is applied.
 

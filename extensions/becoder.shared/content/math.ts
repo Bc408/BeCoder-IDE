@@ -1,4 +1,4 @@
-/* Copyright (c) BeCoder contributors. Licensed under MIT. */
+/* Copyright (c) BeCoder contributors. MIT License. See ../LICENSE. */
 
 function isEscaped(source: string, index: number): boolean {
 	let slashes = 0;
@@ -85,6 +85,7 @@ function closeOpenMath(source: string): string {
 }
 
 export function normalizeMath(source: string, streaming = false): string {
+	if (!source.includes('$') && !source.includes('\\(') && !source.includes('\\[')) { return source; }
 	source = streaming ? closeOpenMath(source) : source;
 	let result = '';
 	let index = 0;

@@ -6,42 +6,16 @@
  */
 import { Children, createContext, isValidElement, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { toJsxRuntime } from 'hast-util-to-jsx-runtime';
+import { Fragment, jsx, jsxs } from 'react/jsx-runtime';
+import { parseBeaconMarkdown } from 'becoder-content';
 import katex from 'katex';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import type { Root, Element, Text } from 'hast';
 import { CodeBlock } from './CodeBlock';
-import { normalizeMath } from './math';
 import { Icon } from './Icon';
 
-const remarkPlugins = [remarkGfm, remarkMath, remarkBreaks];
-const rehypePlugins: NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']> = [rehypeMathExpressions, rehypeStreamingText];
 const StreamingContext = createContext(false);
 const ReducedMotionContext = createContext(false);
-
-/** Keep raw math in stable React slots instead of creating KaTeX error nodes. */
-function rehypeMathExpressions() {
-	return (tree: Root) => {
-		const visit = (parent: Root | Element) => {
-			parent.children = parent.children.map(child => {
-				if (child.type !== 'element') { return child; }
-				const expression = child.tagName === 'pre' ? child.children.find(node => node.type === 'element' && node.tagName === 'code') : child;
-				if (expression?.type === 'element') {
-					const classes = expression.properties.className as string[] | undefined;
-					if (classes?.some(name => ['language-math', 'math-inline', 'math-display'].includes(name))) {
-						const display = child.tagName === 'pre' || classes.includes('math-display');
-						return { type: 'element', tagName: 'span', properties: { className: ['math-formula', display ? 'math-display' : 'math-inline'] }, children: expression.children } as Element;
-					}
-				}
-				visit(child);
-				return child;
-			});
-		};
-		visit(tree);
-	};
-}
 
 function MathFormula({ expression, display }: { expression: string; display: boolean }) {
 	const streaming = useContext(StreamingContext);
@@ -79,7 +53,8 @@ function rehypeStreamingText() {
 function StreamingSpan({ children, node: _node, ...props }: ComponentProps<'span'> & { node?: unknown }) {
 	const streaming = useContext(StreamingContext);
 	const reduced = useContext(ReducedMotionContext);
-	const text = Children.toArray(children).join('');
+	const target = Children.toArray(children).join('');
+	const text = useStreamingText(target, streaming, reduced);
 	const history = useRef({ text: '', prefix: '', runs: [] as { id: number; text: string; at: number }[], next: 0 });
 	const [visible, setVisible] = useState(history.current);
 	useLayoutEffect(() => {
@@ -140,12 +115,6 @@ function useStreamingText(text: string, streaming: boolean, reduced: boolean) {
 			let end = Math.floor(cursor.current);
 			// Never paint half of a UTF-16 surrogate pair.
 			if (end > 0 && end < source.length && /[\uD800-\uDBFF]/.test(source[end - 1])) { end--; }
-			// Reveal fence lines together. Painting one or two closing markers as
-			// code briefly adds a row which disappears when the fence completes.
-			const lineStart = end > 0 ? source.lastIndexOf('\n', end - 1) + 1 : 0;
-			const lineEnd = source.indexOf('\n', lineStart);
-			const line = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd);
-			if ((/^ {0,3}(?:`{3,}|~{3,})/.test(line) || /^ {0,3}(?:`{1,2}|~{1,2})$/.test(line)) && (lineEnd < 0 || end <= lineEnd)) { end = lineStart; }
 			setVisible(source.slice(0, end));
 			last = Math.max(last, now);
 			if (cursor.current < source.length) { frame.current = requestAnimationFrame(paint); }
@@ -171,7 +140,7 @@ function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> 
 	return <CodeBlock text={readCode(codeProps.children)} language={language} streaming={streaming} />;
 }
 
-const components: Components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan, a: ({ title, node: _node, ...props }) => <a {...props} data-becoder-tooltip={title} /> };
+const components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan, a: ({ title, node: _node, ...props }: ComponentProps<'a'> & { node?: unknown }) => <a {...props} data-becoder-tooltip={title} /> };
 
 export function Conversation(props: ComponentProps<typeof StickToBottom>) {
 	const reduced = useReducedMotion();
@@ -206,6 +175,24 @@ export function ConversationScrollButton({ label, streaming }: { label: string; 
 
 export const MessageResponse = memo(function MessageResponse({ children, streaming }: { children: string; streaming: boolean }) {
 	const reduced = useReducedMotion();
-	const text = useStreamingText(children, streaming, reduced);
-	return <ReducedMotionContext.Provider value={reduced}><StreamingContext.Provider value={streaming}><div className="markdown" data-streaming={streaming || undefined}><ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>{normalizeMath(text, streaming)}</ReactMarkdown></div></StreamingContext.Provider></ReducedMotionContext.Provider>;
+	// Batch transport bursts for one frame. Animation stays inside parsed text
+	// leaves and never drives another whole-message Markdown parse.
+	const [settled, setSettled] = useState(children);
+	const latest = useRef(children);
+	latest.current = children;
+	const text = !streaming || !children.startsWith(settled) ? children : settled;
+	const timer = useRef<number | undefined>(undefined);
+	useEffect(() => {
+		if (!streaming) { window.clearTimeout(timer.current); timer.current = undefined; setSettled(children); return; }
+		if (children !== settled && timer.current === undefined) {
+			timer.current = window.setTimeout(() => { timer.current = undefined; setSettled(latest.current); }, 16);
+		}
+	}, [children, settled, streaming]);
+	useEffect(() => () => window.clearTimeout(timer.current), []);
+	const content = useMemo(() => {
+		const tree = parseBeaconMarkdown(text, { streaming });
+		rehypeStreamingText()(tree);
+		return toJsxRuntime(tree, { Fragment, jsx, jsxs, components, passNode: true });
+	}, [text, streaming]);
+	return <ReducedMotionContext.Provider value={reduced}><StreamingContext.Provider value={streaming}><div className="markdown" data-streaming={streaming || undefined}>{content}</div></StreamingContext.Provider></ReducedMotionContext.Provider>;
 });

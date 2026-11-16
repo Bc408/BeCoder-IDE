@@ -65,7 +65,9 @@ try {
 			const result = { frames: 0, plainFrames: 0, heightRegressions: 0, liveUpdates: 0, worstStallMs: 0 };
 			let lastAdvance = performance.now();
 			const timer = setInterval(() => {
-				end = Math.min(source.length, end + 2);
+				// Include enough transport updates for the shortest fixture to observe
+				// several paints under the bounded Markdown batching interval.
+				end = Math.min(source.length, end + 1);
 				window.postMessage({ type: 'snapshot', configured: true, busy: true, messages: [{ id: 100, role: 'assistant', text: source.slice(0, end), reasoning: '', activities: [], status: 'streaming', createdAt: Date.now() }] }, '*');
 				if (end === source.length) { sending = false; clearInterval(timer); }
 			}, 16);
@@ -92,7 +94,7 @@ try {
 		}, { fence, prefix, rest });
 		assert.equal(stability.plainFrames, 0, language);
 		assert.equal(stability.heightRegressions, 0, language);
-		assert.ok(stability.liveUpdates > 5, language);
+		assert.ok(stability.liveUpdates > 5, JSON.stringify({ language, ...stability }));
 		assert.ok(stability.worstStallMs < 250, language);
 		await page.locator('.code-block').screenshot({ path: path.join(output, `${language}-live.png`) });
 		await publish(fence + prefix + rest, 'stopped');

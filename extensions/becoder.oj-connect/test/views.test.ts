@@ -20,10 +20,11 @@ test('webview state cannot terminate its script and actions cannot inject a sour
 	assert.strictEqual(panelMessage({ action: 'selectLocale', locale: 1 }), undefined);
 	assert.deepStrictEqual(panelMessage({ action: 'selectLocale', locale: 'ja' }), { action: 'selectLocale', locale: 'ja' });
 	assert.deepStrictEqual(panelMessage({ action: 'ready' }), { action: 'ready' });
-	assert.deepStrictEqual(panelMessage({ action: 'renderMarkdown', markdown: 'text' }), { action: 'renderMarkdown', markdown: 'text' });
-	assert.strictEqual(panelMessage({ action: 'renderMarkdown', markdown: 1 }), undefined);
-	assert.strictEqual(panelMessage({ action: 'renderMarkdown', markdown: 'text', command: 'evil' }), undefined);
-	assert.strictEqual(panelMessage({ action: 'renderMarkdown', markdown: 'x'.repeat(8 * 1024 * 1024 + 1) }), undefined);
+	assert.deepStrictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'text' }), { action: 'renderContent', format: 'markdown', content: 'text' });
+	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 1 }), undefined);
+	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'text', command: 'evil' }), undefined);
+	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'invalid', content: 'text' }), undefined);
+	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'x'.repeat(8 * 1024 * 1024 + 1) }), undefined);
 });
 
 test('a reconstructed webview receives the latest host state after ready', async () => {

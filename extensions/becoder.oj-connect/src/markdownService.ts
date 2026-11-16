@@ -5,17 +5,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createHash } from 'crypto';
+import type { Root } from 'hast';
 
 type Renderer = Pick<
 	typeof import('./markdown'),
-	'default' | 'renderInlineMarkdown'
+	'renderMarkdownTree' | 'renderHtmlTree'
 >;
 
-/** One lazy renderer and a bounded HTML cache per extension host. */
+type Content = Root;
+type Format = 'tree' | 'html-tree';
+
+/** One lazy parser with bounded content caching and in-flight request sharing. */
 export class MarkdownService {
 	private renderer: Promise<Renderer> | undefined;
-	private readonly pending = new Map<string, Promise<string>>();
-	private readonly cache = new Map<string, { html: string; bytes: number }>();
+	private readonly pending = new Map<string, Promise<Content>>();
+	private readonly cache = new Map<string, { content: Content; bytes: number }>();
 	private cacheBytes = 0;
 	private generation = 0;
 
@@ -26,17 +30,25 @@ export class MarkdownService {
 		private readonly maxBytes = 8 * 1024 * 1024
 	) {}
 
-	render(markdown: string, inline = false): Promise<string> {
-		if (!markdown) { return Promise.resolve(''); }
+	renderTree(markdown: string): Promise<Root> {
+		return this.renderCached(markdown, 'tree') as Promise<Root>;
+	}
+
+	renderHtmlTree(html: string, baseURL: string): Promise<Root> {
+		return this.renderCached(html, 'html-tree', baseURL) as Promise<Root>;
+	}
+
+	private renderCached(markdown: string, format: Format, baseURL = ''): Promise<Content> {
+		if (!markdown) { return Promise.resolve({ type: 'root', children: [] }); }
 		const key = createHash('sha256')
-			.update(inline ? 'inline\0' : 'block\0')
+			.update(format + '\0' + baseURL + '\0')
 			.update(markdown)
 			.digest('hex');
 		const cached = this.cache.get(key);
 		if (cached) {
 			this.cache.delete(key);
 			this.cache.set(key, cached);
-			return Promise.resolve(cached.html);
+			return Promise.resolve(cached.content);
 		}
 		const pending = this.pending.get(key);
 		if (pending) { return pending; }
@@ -47,19 +59,15 @@ export class MarkdownService {
 			throw error;
 		});
 		const task = this.renderer
-			.then(renderer =>
-				inline
-					? renderer.renderInlineMarkdown(markdown)
-					: renderer.default(markdown)
-			)
-			.then(html => {
-				// The upstream package can also report a render failure as HTML.
-				if (generation === this.generation && !html.startsWith('<p>渲染失败：'))
-					{this.remember(key, html); }
-				return html;
+			.then(renderer => {
+				return format === 'tree' ? renderer.renderMarkdownTree(markdown) : renderer.renderHtmlTree(markdown, baseURL);
+			})
+			.then(content => {
+				if (generation === this.generation) { this.remember(key, content); }
+				return content;
 			})
 			.finally(() => {
-				if (this.pending.get(key) === task) {this.pending.delete(key); }
+				if (this.pending.get(key) === task) { this.pending.delete(key); }
 			});
 		this.pending.set(key, task);
 		return task;
@@ -72,26 +80,23 @@ export class MarkdownService {
 		this.cacheBytes = 0;
 	}
 
-	private remember(key: string, html: string) {
+	private remember(key: string, content: Content) {
 		// Budget UTF-16 text storage, including the hashed key; object overhead is extra.
-		const bytes = (key.length + html.length) * 2;
+		const bytes = (key.length + JSON.stringify(content).length) * 2;
 		if (this.maxEntries < 1 || bytes > this.maxBytes) { return; }
 		while (
 			this.cache.size >= this.maxEntries ||
 			this.cacheBytes + bytes > this.maxBytes
 		) {
 			const oldest = this.cache.entries().next().value;
-			if (!oldest) {break; }
+			if (!oldest) { break; }
 			this.cache.delete(oldest[0]);
 			this.cacheBytes -= oldest[1].bytes;
 		}
-		this.cache.set(key, { html, bytes });
+		this.cache.set(key, { content, bytes });
 		this.cacheBytes += bytes;
 	}
 }
 
 const markdownService = new MarkdownService();
 export default markdownService;
-
-export const renderInlineMarkdown = (markdown: string) =>
-	markdownService.render(markdown, true);

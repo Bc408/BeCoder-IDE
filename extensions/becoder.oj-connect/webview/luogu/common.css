@@ -38,7 +38,7 @@ pre {
   font-size: 0.875em !important;
 }
 pre > code {
-  background-color: var(--vscode-editor-background) !important;
+  background-color: var(--vscode-editor-background);
   padding: 0 !important;
   display: block;
   overflow-x: auto;

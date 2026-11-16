@@ -1,18 +1,19 @@
-/* Copyright (c) BeCoder contributors. Licensed under MIT. */
+/* Copyright (c) BeCoder contributors. MIT License. See ../../LICENSE. */
 import { INITIAL, Registry, type IGrammar, type IRawGrammar, type IRawTheme, type StateStack } from 'vscode-textmate';
 import { createOnigScanner, createOnigString, loadWASM } from 'vscode-oniguruma';
-import { grammars, injections, theme } from 'beacon-syntax-assets';
+import { injections, theme } from 'becoder-syntax-assets';
 
 export interface SyntaxToken { content: string; color: string; fontStyle: number }
 export interface SyntaxResult { text: string; lines: SyntaxToken[][] }
+export interface SyntaxPatch { start: number; lineCount: number; lines: SyntaxToken[][] }
 
 /** Same grammar, regex engine and default token theme as BeCoder's first editor pass. */
-export async function createSyntaxRegistry(wasm: ArrayBuffer): Promise<Registry> {
+export async function createSyntaxRegistry(wasm: ArrayBuffer, loadGrammar: (scope: string) => Promise<IRawGrammar | null>): Promise<Registry> {
 	await loadWASM(wasm);
 	return new Registry({
 		onigLib: Promise.resolve({ createOnigScanner, createOnigString }),
-		theme: { settings: [{ settings: { foreground: theme.colors['editor.foreground'] ?? '#BBBBBB', background: theme.colors['editor.background'] } }, ...theme.tokenColors.filter(rule => rule.scope)] } as IRawTheme,
-		loadGrammar: async scope => (grammars.find(grammar => grammar.scopeName === scope) as IRawGrammar | undefined) ?? null,
+		theme: { settings: [{ settings: { foreground: theme.colors['editor.foreground'] ?? '#BBBBBB', background: theme.colors['editor.background'] } }, ...theme.tokenColors.filter(rule => rule.scope)] } satisfies IRawTheme,
+		loadGrammar,
 		getInjections: scope => scope.split('.').flatMap((_, index, parts) => injections[parts.slice(0, index + 1).join('.')] ?? [])
 	});
 }
@@ -22,10 +23,17 @@ export class IncrementalSyntax {
 	private states: StateStack[] = [];
 	private lines: SyntaxToken[][] = [];
 	constructor(private readonly grammar: IGrammar, private readonly colors: string[]) { }
-	update(text: string): SyntaxResult {
-		const began = performance.now();
-		// Oniguruma compiles grammar regexes lazily. Cold compilation needs a separate
-		// budget from warm incremental updates; it remains isolated from UI painting.
+	async patch(text: string, yieldTask?: () => Promise<void>): Promise<SyntaxPatch> {
+		const source = text.split('\n');
+		let start = 0;
+		while (start < source.length && start < this.source.length && source[start] === this.source[start]) { start++; }
+		const result = await this.update(text, yieldTask);
+		return { start, lineCount: result.lines.length, lines: result.lines.slice(start) };
+	}
+	async update(text: string, yieldTask = () => typeof scheduler !== 'undefined' ? scheduler.yield() : new Promise<void>(resolve => setTimeout(resolve, 0))): Promise<SyntaxResult> {
+		let sliceStart = performance.now(), computeMs = 0;
+		// Cold grammar compilation is independent of painting. Ordinary long blocks
+		// continue across slices; only pathological total computation is abandoned.
 		const cold = this.source.length === 0;
 		const source = text.split('\n');
 		let start = 0;
@@ -33,7 +41,13 @@ export class IncrementalSyntax {
 		this.states.length = start;
 		this.lines.length = start;
 		for (let index = start; index < source.length; index++) {
-			if (performance.now() - began > (cold ? 1500 : 500)) { throw new Error('syntax-time-budget'); }
+			const elapsed = performance.now() - sliceStart;
+			if (computeMs + elapsed > 5000) { throw new Error('syntax-time-budget'); }
+			if (elapsed >= 12) {
+				computeMs += elapsed;
+				await yieldTask();
+				sliceStart = performance.now();
+			}
 			const line = source[index];
 			const result = this.grammar.tokenizeLine2(line, index ? this.states[index - 1] : INITIAL, cold ? 200 : 100);
 			// A timed-out line has an unreliable continuation state: fail the whole snapshot.
@@ -45,7 +59,10 @@ export class IncrementalSyntax {
 				const end = token + 2 < result.tokens.length ? result.tokens[token + 2] : line.length;
 				if (begin >= line.length) { continue; }
 				const metadata = result.tokens[token + 1];
-				tokens.push({ content: line.slice(begin, end), color: this.colors[(metadata >>> 15) & 511], fontStyle: (metadata >>> 11) & 15 });
+				const content = line.slice(begin, end), color = this.colors[(metadata >>> 15) & 511], fontStyle = (metadata >>> 11) & 15;
+				const previous = tokens[tokens.length - 1];
+				if (previous?.color === color && previous.fontStyle === fontStyle) { previous.content += content; }
+				else { tokens.push({ content, color, fontStyle }); }
 			}
 			this.lines.push(tokens);
 		}

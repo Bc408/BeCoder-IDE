@@ -293,6 +293,13 @@ export default defineConfig(
 		}
 	},
 	{
+		// Shared content is separately attributed BeCoder/upstream MIT code.
+		files: ['extensions/becoder.shared/{browser/content,content,build}/**/*.{ts,mts}'],
+		rules: {
+			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*MIT License)[\\s\\S]*$' }]
+		}
+	},
+	{
 		// OJ Connect is BeCoder GPL code with a separately attributed MIT task helper.
 		files: ['extensions/becoder.oj-connect/{src,test,webview,site-scripts}/**/*.{ts,tsx}'],
 		rules: {

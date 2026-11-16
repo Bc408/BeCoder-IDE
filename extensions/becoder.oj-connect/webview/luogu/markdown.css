@@ -5,29 +5,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /* Presentation for @luogu-saver-next/markdown-renderer in VS Code webviews. */
-.shiki,
-.shiki span {
-  color: var(--shiki-light);
-  font-style: var(--shiki-light-font-style);
-  font-weight: var(--shiki-light-font-weight);
-  text-decoration: var(--shiki-light-text-decoration);
-}
 
-body:is(.vscode-dark, .vscode-high-contrast, [data-vscode-theme-kind="vscode-dark"], [data-vscode-theme-kind="vscode-high-contrast"]) .shiki,
-body:is(.vscode-dark, .vscode-high-contrast, [data-vscode-theme-kind="vscode-dark"], [data-vscode-theme-kind="vscode-high-contrast"]) .shiki span {
-  color: var(--shiki-dark);
-  font-style: var(--shiki-dark-font-style);
-  font-weight: var(--shiki-dark-font-weight);
-  text-decoration: var(--shiki-dark-text-decoration);
-}
-
-pre.shiki {
-  background-color: var(--vscode-textCodeBlock-background) !important;
-}
-
-pre.shiki > code {
-  background-color: transparent !important;
-}
 
 .md-align-left {
   text-align: left;

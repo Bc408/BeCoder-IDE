@@ -89,7 +89,6 @@ summary { cursor: pointer; padding: 4px 0; }
 .markdown a:hover { text-decoration: underline; }
 .markdown .katex-display { max-width: 100%; overflow-x: hidden; overflow-y: hidden; margin: .9em 0; }
 .markdown .katex-display > .katex { max-width: 100%; white-space: normal; }
-.vscode-dark .code-line > span, .vscode-high-contrast .code-line > span { color: var(--token-dark) !important; }
 .message-status { color: var(--vscode-descriptionForeground); font-size: 12px; }
 .scroll-bottom { position: absolute; bottom: 10px; left: calc(50% - 16px); border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; background: var(--vscode-editor-background); box-shadow: 0 2px 8px var(--vscode-widget-shadow); }
 footer { padding: 6px 12px 8px; flex: 0 0 auto; }
@@ -139,7 +138,6 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .markdown .code-block.is-wrapped pre { width: 100%; max-width: 100%; }
 .markdown .code-block.is-wrapped pre code { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .code-line { background: transparent; }
-.becoder-syntax .code-scroller { color: #bbb; }
 .markdown .inline-code { font-size: .92em; }
 .markdown .katex-display { margin: 18px 0; }
 .math-pending { color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }

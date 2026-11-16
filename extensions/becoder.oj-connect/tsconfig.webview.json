@@ -2,7 +2,11 @@
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"noEmit": true,
-		"rootDir": ".",
+		"paths": {
+			"property-information": ["./node_modules/property-information"],
+			"hast": ["./node_modules/@types/hast"]
+		},
+		"rootDir": "..",
 		"lib": [
 			"ES2024",
 			"DOM",
@@ -17,6 +21,7 @@
 		]
 	},
 	"include": [
+		"../becoder.shared/browser/content/assets.d.ts",
 		"webview/**/*",
 		"src/views/model.ts",
 		"../../src/typings/becoder-oj-connect.d.ts"

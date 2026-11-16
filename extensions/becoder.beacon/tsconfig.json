@@ -23,9 +23,11 @@
 	},
 	"include": [
 		"src/**/*.ts",
+		"../becoder.shared/browser/content/assets.d.ts",
 		"webview/**/*.ts",
 		"webview/**/*.tsx",
 		"test/**/*.ts",
+		"test/**/*.mts",
 		"../../src/vscode-dts/vscode.d.ts"
 	]
 }

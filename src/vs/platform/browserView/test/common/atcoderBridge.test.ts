@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import * as sinon from 'sinon';
 import { AtCoderBridgeController, AtCoderPageGeneration, type IAtCoderBridgePorts } from '../../common/atcoderBridge.js';
 
 // Every controller's timers are explicitly released in teardown.
@@ -19,24 +20,22 @@ suite('AtCoder extension bridge', () => {
 		const page = await f.bridge.openTask(url, 'file:///test.cpp');
 		generations.didNavigate('native-view');
 		generations.didNavigate('native-view');
-		await assert.rejects(f.bridge.submit(page, payload), /changed/);
+		await assert.rejects(f.bridge.sendAndConfirm(page, payload), /changed/);
 		assert.strictEqual(f.calls(), 0);
 	});
 	function fixture() {
 		let current = true, calls = 0, cancelled = 0;
-		const shown: unknown[] = [];
 		const ports: IAtCoderBridgePorts = {
 			openTask: async () => ({ viewId: 'native-view', url }),
 			inspectTask: async () => ({ languages: [{ id: '6017', label: 'C++23' }], hasDraft: false }),
-			submit: async () => { calls++; return { id: '11', url: 'https://atcoder.jp/contests/abc086/submissions/11', status: 'AC', verified: true }; },
+			sendAndConfirm: async () => { calls++; return { kind: 'record', record: { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url }, id: '11', url: 'https://atcoder.jp/contests/abc086/submissions/11' } }; },
 			cancel: async () => { cancelled++; },
-			revealResult: async (_page, receipt) => { shown.push(receipt); },
 			newHandle: () => String(controllers.length) + '-handle',
 			isPageCurrent: () => current
 		};
 		const bridge = new AtCoderBridgeController(ports);
 		controllers.push(bridge);
-		return { bridge, ports, shown, calls: () => calls, cancelled: () => cancelled, change: () => { current = false; } };
+		return { bridge, ports, calls: () => calls, cancelled: () => cancelled, change: () => { current = false; } };
 	}
 	test('a disposed late open cannot cancel a newer transaction on the reused native view', async () => {
 		const old = fixture(), newer = fixture();
@@ -46,36 +45,60 @@ suite('AtCoder extension bridge', () => {
 		const opening = old.bridge.openTask(url, 'file:///old.cpp');
 		await old.bridge.dispose();
 		const page = await newer.bridge.openTask(url, 'file:///new.cpp');
-		let finishSubmit!: (value: { status: string; verified: boolean }) => void;
-		newer.ports.submit = () => new Promise(resolve => { finishSubmit = resolve; });
-		const submitting = newer.bridge.submit(page, payload);
+		let finishSubmit!: (value: Awaited<ReturnType<NonNullable<IAtCoderBridgePorts['sendAndConfirm']>>>) => void;
+		newer.ports.sendAndConfirm = () => new Promise(resolve => { finishSubmit = resolve; });
+		const submitting = newer.bridge.sendAndConfirm(page, payload);
 		finishOpen({ viewId: 'native-view', url });
 		await assert.rejects(opening, /stopped/);
 		assert.strictEqual(newer.cancelled(), 0);
-		finishSubmit({ status: 'AC', verified: true });
-		assert.strictEqual((await submitting).status, 'AC');
+		finishSubmit({ kind: 'not-sent', reason: 'cancelled' });
+		assert.strictEqual((await submitting).kind, 'not-sent');
 	});
 	teardown(async () => { await Promise.all(controllers.splice(0).map(item => item.dispose())); });
+	test('preparation expiry cannot cancel a consumed submission or release its receipt page', async () => {
+		const clock = sinon.useFakeTimers();
+		try {
+			const f = fixture();
+			let released = 0;
+			f.ports.release = () => { released++; };
+			const page = await f.bridge.openTask(url, 'file:///test.cpp');
+			await clock.tickAsync(119000);
+			let finish!: (value: Awaited<ReturnType<NonNullable<IAtCoderBridgePorts['sendAndConfirm']>>>) => void;
+			f.ports.sendAndConfirm = () => new Promise(resolve => { finish = resolve; });
+			const pending = f.bridge.sendAndConfirm(page, payload);
+			await clock.tickAsync(2000);
+			assert.strictEqual(f.cancelled(), 0);
+			assert.strictEqual(released, 0);
+			finish({ kind: 'not-sent', reason: 'cancelled' });
+			assert.strictEqual((await pending).kind, 'not-sent');
+			await f.bridge.release(page);
+			assert.strictEqual(released, 1);
+		} finally {
+			clock.restore();
+		}
+	});
 	test('rejects foreign window handle', async () => {
 		const first = fixture(), other = fixture();
 		const page = await first.bridge.openTask(url, 'file:///test.cpp');
-		await assert.rejects(other.bridge.submit(page, payload), /handle/);
+		await assert.rejects(other.bridge.sendAndConfirm(page, payload), /handle/);
 		assert.strictEqual(other.calls(), 0);
 	});
 	test('rejects changed page URL', async () => {
 		const f = fixture(), page = await f.bridge.openTask(url, 'file:///test.cpp');
 		f.change();
-		await assert.rejects(f.bridge.submit(page, payload), /changed/);
+		await assert.rejects(f.bridge.sendAndConfirm(page, payload), /changed/);
 		assert.strictEqual(f.calls(), 0);
 	});
-	test('consumes submit handle once and reveals only host receipt', async () => {
+	test('consumes the send handle once and preserves the host receipt', async () => {
 		const f = fixture(), page = await f.bridge.openTask(url, 'file:///test.cpp');
-		const result = await f.bridge.submit(page, payload);
-		result.id = 'fake';
-		await assert.rejects(f.bridge.submit(page, payload), /consumed/);
-		await f.bridge.revealResult(page);
+		f.ports.readRecord = async ref => ({ ref, phase: 'queued', rawStatus: 'WJ', sourceVerification: 'not-checked' });
+		const result = await f.bridge.sendAndConfirm(page, payload);
+		assert.strictEqual(result.kind, 'record');
+		if (result.kind !== 'record') { throw new Error('Expected record'); }
+		Object.assign(result.record, { id: 'fake' });
+		await assert.rejects(f.bridge.sendAndConfirm(page, payload), /consumed/);
 		assert.strictEqual(f.calls(), 1);
-		assert.strictEqual((f.shown[0] as { id: string }).id, '11');
+		assert.strictEqual((await f.bridge.readRecord({ ...result.record, id: '11' })).ref.id, '11');
 	});
 	test('release invalidates handle without sending', async () => {
 		const f = fixture(), page = await f.bridge.openTask(url, 'file:///test.cpp');
@@ -91,7 +114,7 @@ suite('AtCoder extension bridge', () => {
 		f.ports.readRecord = async ref => ({ ref, phase: 'queued', rawStatus: 'WJ', sourceVerification: 'not-checked' });
 		const receipt = await f.bridge.sendAndConfirm(page, payload);
 		assert.strictEqual(receipt.kind, 'record');
-		await assert.rejects(f.bridge.submit(page, payload), /consumed/);
+		await assert.rejects(f.bridge.sendAndConfirm(page, payload), /consumed/);
 		await f.bridge.release(page);
 		assert.strictEqual((await f.bridge.readRecord(record)).rawStatus, 'WJ');
 		await assert.rejects(f.bridge.readRecord({ ...record, id: '12', url: 'https://atcoder.jp/contests/abc086/submissions/12' }), /record/);
@@ -111,14 +134,13 @@ suite('AtCoder extension bridge', () => {
 	});
 	test('dispose cancels pending native work and suppresses its late receipt', async () => {
 		const f = fixture(), page = await f.bridge.openTask(url, 'file:///test.cpp');
-		let finish!: (value: { status: string; verified: boolean }) => void;
-		f.ports.submit = () => new Promise(resolve => { finish = resolve; });
-		const pending = f.bridge.submit(page, payload);
+		let finish!: (value: Awaited<ReturnType<NonNullable<IAtCoderBridgePorts['sendAndConfirm']>>>) => void;
+		f.ports.sendAndConfirm = () => new Promise(resolve => { finish = resolve; });
+		const pending = f.bridge.sendAndConfirm(page, payload);
 		await f.bridge.dispose();
-		finish({ status: 'unknown', verified: false });
+		finish({ kind: 'not-sent', reason: 'cancelled' });
 		await assert.rejects(pending, /stopped/);
 		assert.strictEqual(f.cancelled(), 1);
-		assert.deepStrictEqual(f.shown, []);
 	});
 	test('cancelling preserves an unconfirmed attempt for reconciliation without resending', async () => {
 		const f = fixture(), page = await f.bridge.openTask(url, 'file:///test.cpp');
@@ -178,8 +200,8 @@ suite('AtCoder extension bridge', () => {
 		const f = fixture();
 		await assert.rejects(f.bridge.openTask('https://evil.test/task', 'file:///test.cpp'), /route/);
 		const page = await f.bridge.openTask(url, 'file:///test.cpp');
-		await assert.rejects(f.bridge.submit({ ...page, url: url + '?changed' }, payload), /handle/);
-		await assert.rejects(f.bridge.submit(page, { ...payload, source: '' }), /source/);
+		await assert.rejects(f.bridge.sendAndConfirm({ ...page, url: url + '?changed' }, payload), /handle/);
+		await assert.rejects(f.bridge.sendAndConfirm(page, { ...payload, source: '' }), /source/);
 		assert.strictEqual(f.calls(), 0);
 	});
 });

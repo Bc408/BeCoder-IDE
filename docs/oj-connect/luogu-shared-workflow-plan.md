@@ -1,5 +1,7 @@
 # OJ Connect 共同流程与洛谷接入实施计划
 
+本文保留首次双站共同流程实施时的技术选型、接口与台账。随后已按固定上游 4.20.0 复用 React 前端，并将内容解析与高亮统一到共享模块；旧 DOM／markdown-it 方案及兼容转导出不是当前架构要求。扩展重复的 `src/adapters/luogu/protocol.ts` 已移除，实际协议转换及回归由核心 `common/luoguProtocol.ts`／`test/common/luoguProtocol.test.ts` 拥有；下文 `.mjs` 构建与页面测试文件现为同名 `.mts`，运行以 package.json 现行脚本为准。当前实现与负责人验收见[开发入口](README.md#当前实现状态)及[技术架构](architecture.md)，不因本文历史未勾选项恢复已移除入口。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 沿用当前会话直接实施方式；最终按技能作一次独立只读审查。计划已经负责人批准，按本会话继续实施；当前执行与验收状态见文末。
 
 **Goal:** 让洛谷与 AtCoder 共用源码驱动的看题、导入、快捷键提交和评测界面，保留各站正确的认证与交题机制。

@@ -1,4 +1,8 @@
-/* Copyright (c) BeCoder contributors. MIT License. See ../../LICENSE. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the MIT License. See LICENSE in the component root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import { createSyntaxRegistry, IncrementalSyntax } from './syntax';
 import { languages } from 'becoder-syntax-assets';
 import type { IRawGrammar } from 'vscode-textmate';
@@ -28,7 +32,6 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
 	queue = queue.then(async () => {
 		if (request.release) { sessions.delete(request.id); return; }
 		try {
-			if (request.text.length > 512000 || request.text.split('\n').some(line => line.length > 20000)) { throw new Error('syntax-size-budget'); }
 			if (!registry) { throw new Error('syntax-not-initialized'); }
 			const owner = await registry;
 			let session = sessions.get(request.id);

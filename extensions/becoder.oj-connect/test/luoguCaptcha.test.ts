@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -20,7 +20,8 @@ function harness() {
 		window: {
 			createWebviewPanel: () => {
 				const listeners = new Set<() => void>();
-				const panel = { webview: { html: '' }, closed: false,
+				const panel = {
+					webview: { html: '' }, closed: false,
 					dispose() { if (!this.closed) { this.closed = true; for (const fn of listeners) { fn(); } } },
 					onDidDispose(callback: () => void) { listeners.add(callback); return { dispose: () => listeners.delete(callback) }; }
 				};

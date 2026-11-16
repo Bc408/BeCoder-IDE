@@ -1,17 +1,26 @@
-/* Copyright (c) 2018 引领天下. MIT License. Derived from vscode-luogu v4.18.2; see UPSTREAM.md. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* allow-any-unicode-comment-file */
+
+/*
+ * Copyright (c) 2018 引领天下. MIT License. Derived from vscode-luogu v4.18.2; see UPSTREAM.md.
+ */
 .submissionControls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  max-width: 100%;
-  min-width: 0;
-  gap: 5px;
-  > button {
-    flex-shrink: 0;
-    white-space: nowrap;
-    overflow-wrap: normal;
-  }
-  > select {
-    max-width: 100%;
-  }
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	max-width: 100%;
+	min-width: 0;
+	gap: 5px;
+	> button {
+		flex-shrink: 0;
+		white-space: nowrap;
+		overflow-wrap: normal;
+	}
+	> select {
+		max-width: 100%;
+	}
 }

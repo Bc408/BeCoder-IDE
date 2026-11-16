@@ -1,4 +1,11 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
  *  Copyright (c) BeCoder contributors. All rights reserved.
  *  Portions Copyright (c) 2018 引领天下.
  *  Licensed under GPL-3.0-or-later. Upstream MIT notice: ThirdPartyNotices.txt.

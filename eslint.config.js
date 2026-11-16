@@ -300,8 +300,16 @@ export default defineConfig(
 		}
 	},
 	{
-		// OJ Connect is BeCoder GPL code with a separately attributed MIT task helper.
-		files: ['extensions/becoder.oj-connect/{src,test,webview,site-scripts}/**/*.{ts,tsx}'],
+		// OJ Connect and its native Luogu protocol retain BeCoder GPL and upstream MIT attribution.
+		files: [
+			'extensions/becoder.oj-connect/{src,test,webview,site-scripts}/**/*.{ts,tsx,mts}',
+			'extensions/becoder.oj-connect/build-*.mts',
+			'scripts/test-{atcoder-shortcut,luogu-session-host,oj-connect}.cjs',
+			'scripts/test-luogu-session.cts',
+			'src/vs/platform/browserView/common/luoguProtocol.ts',
+			'src/vs/platform/browserView/electron-main/luoguCsrfTokenManager.ts',
+			'src/vs/platform/browserView/test/common/luoguProtocol.test.ts'
+		],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*(?:GPL-3\\.0-or-later|MIT License))[\\s\\S]*$' }]
 		}

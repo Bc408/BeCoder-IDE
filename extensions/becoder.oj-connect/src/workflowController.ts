@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { fileURLToPath } from 'url';
@@ -9,6 +9,7 @@ import type { OjAdapter, SubmissionSession } from './adapters/adapter';
 import { resolveProblem } from './problemResolver';
 import type { SiteDirectories, SiteId } from './settings';
 import { OperationError } from './operationError';
+import type { OjPreferences } from './preferences';
 
 export interface SubmissionHost {
 	readonly adapters: readonly OjAdapter[];
@@ -25,9 +26,12 @@ export class SubmissionController {
 	private active: Request | undefined;
 	private disposed = false;
 	private readonly languages = new Map<string, string>();
-	constructor(private readonly host: SubmissionHost) { }
-	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined { return this.languages.get(site + ':' + family); }
-	selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): void { this.languages.set(site + ':' + family, languageId); }
+	constructor(private readonly host: SubmissionHost, private readonly preferences?: OjPreferences) { }
+	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined { return site === 'atcoder' && this.preferences ? this.preferences.language(family) : this.languages.get(site + ':' + family); }
+	async selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): Promise<void> {
+		if (site === 'atcoder' && this.preferences) { await this.preferences.selectLanguage(family, languageId); }
+		else { this.languages.set(site + ':' + family, languageId); }
+	}
 	async submit(input: ISourceSnapshot, explicitProblem?: ProblemRef): Promise<SubmissionOutcome | undefined> {
 		if (this.disposed) { throw new OperationError('prepare', 'not-sent', 'OJ Connect is stopped.'); }
 		if (this.active) { throw new OperationError('prepare', 'not-sent', 'A submission is already in progress.'); }
@@ -52,8 +56,7 @@ export class SubmissionController {
 				const session = request.session;
 				const options = session.languages.filter(option => option.family === snapshot.family);
 				if (!options.length) { throw new OperationError('prepare', 'not-sent', 'No matching language is currently available.'); }
-				const key = adapter.site + ':' + snapshot.family;
-				let languageId = this.languages.get(key);
+				let languageId = this.preferredLanguage(adapter.site, snapshot.family);
 				if (!options.some(option => option.id === languageId)) { languageId = await this.host.chooseLanguage(options, snapshot.fileName, adapter.site, problem); }
 				signal.throwIfAborted();
 				if (!languageId) { return undefined; }
@@ -61,7 +64,8 @@ export class SubmissionController {
 				const replaceDraft = session.hasDraft ? await this.host.confirmDraft(snapshot.fileName) : false;
 				signal.throwIfAborted();
 				if (session.hasDraft && !replaceDraft) { return undefined; }
-				this.languages.set(key, languageId);
+				if (this.preferredLanguage(adapter.site, snapshot.family) !== languageId) { await this.selectLanguage(adapter.site, snapshot.family, languageId); }
+				signal.throwIfAborted();
 				let outcome: SubmissionOutcome;
 				try { outcome = await session.send({ snapshot, languageId, replaceDraft }, progress, signal); }
 				catch (error) {

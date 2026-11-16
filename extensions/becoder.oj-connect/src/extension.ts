@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
@@ -19,10 +19,12 @@ import { LuoguCaptcha } from './views/luoguCaptcha';
 import { cphSamples } from './cphHost';
 import { OperationError } from './operationError';
 import { userError } from './messages';
+import { OjPreferences } from './preferences';
 import type { ProblemRef, ProblemDocument, RecordRef, SubmissionOutcome, ISourceSnapshot, LoginSummary } from './domain';
 
 let controller: SubmissionController | undefined;
 export function activate(context: vscode.ExtensionContext): void {
+	const preferences = new OjPreferences(context.globalState);
 	const execute = async (command: string, ...args: unknown[]) => vscode.commands.executeCommand(command, ...args);
 	const captcha = new LuoguCaptcha(async requestId => vscode.commands.executeCommand<string>('_becoder.ojConnect.luogu.getCaptcha', requestId));
 	context.subscriptions.push(captcha,
@@ -34,7 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	const original = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
 	const login = new LoginView(adapters, execute), loginTree = vscode.window.createTreeView('becoder.ojConnect.accounts', { treeDataProvider: login });
 	context.subscriptions.push(login, loginTree, loginTree.onDidChangeVisibility(event => { if (event.visible) { void login.refresh(); } }));
-	const records = new RecordPanel(context, adapters, original, async record => { await execute('_becoder.ojConnect.releaseRecord', record); }), recent = new Map<string, RecordRef>();
+	const records = new RecordPanel(context, adapters, original, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
 	const columns = new Map<string, vscode.ViewColumn>();
 	const revealSource = async (sourceUri: string) => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));
@@ -42,7 +44,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		return document;
 	};
 	const openRecord = async (record: RecordRef, sourceUri: string) => {
-		recent.set(sourceUri + '\n' + record.problem.url, record);
 		await revealSource(sourceUri); await records.open(record, sourceUri);
 	};
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
@@ -51,10 +52,11 @@ export function activate(context: vscode.ExtensionContext): void {
 		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder URL.') });
 		return value === undefined ? undefined : resolve(value);
 	};
-	controller = new SubmissionController({ adapters, directories, requestProblem,
+	controller = new SubmissionController({
+		adapters, directories, requestProblem,
 		chooseLanguage: async (options, fileName, site, problem) => {
 			const selected = await vscode.window.showQuickPick(options, { title: vscode.l10n.t('Submit {0} to {1}', fileName, site) });
-			if (selected) { problems.updateLanguage(problem, options, selected.id); }
+			if (selected) { await problems.updateLanguage(problem, options, selected.id); }
 			return selected?.id;
 		},
 		confirmDraft: async fileName => {
@@ -62,27 +64,37 @@ export function activate(context: vscode.ExtensionContext): void {
 			return await vscode.window.showWarningMessage(vscode.l10n.t('Replace the code already in the webpage with {0}?', fileName), { modal: true }, replace) === replace;
 		},
 		// Notifications obscure native browser input, including the captcha needed
-		// to finish this request. A dedicated status item also keeps stop clickable.
+		// to finish this request. Status never promises to withdraw a sent solution.
 		runWithProgress: async (fileName, operation) => {
 			const status = vscode.window.createStatusBarItem();
 			try {
 				status.text = '$(sync~spin) ' + vscode.l10n.t('OJ Connect: submitting {0}', fileName);
-				status.command = 'becoder.ojConnect.stopSubmission'; status.show();
+				status.show();
 				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Complete browser verification if requested.') : value.message; });
 			} finally { status.dispose(); }
 		}, openRecord
-	});
+	}, preferences);
 	const snapshot = (document: vscode.TextDocument): ISourceSnapshot => {
 		if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file' || !['c', 'cpp'].includes(document.languageId)) { throw new Error(vscode.l10n.t('Focus a C/C++ source in a trusted local workspace.')); }
 		return { uri: document.uri.toString(), fileName: path.basename(document.uri.fsPath), version: document.version, family: document.languageId as 'c' | 'cpp', source: document.getText() };
 	};
-	let pending: { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string } | undefined;
-	const continueQuery = async () => {
-		const value = pending; if (!value) { return; }
-		const adapter = adapters.find(item => item.site === value.outcome.problem.site)!;
-		const outcome = await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
-		if (outcome.kind === 'record') { pending = undefined; await openRecord(outcome.record, value.sourceUri); }
-		else { await vscode.window.showWarningMessage(vscode.l10n.t('The submission is still unconfirmed. Open its official record in the same browser and continue querying. No code was resent.')); }
+	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; resolved?: boolean };
+	let pending: Pending | undefined;
+	const continueQuery = async (value = pending): Promise<void> => {
+		if (!value || value.resolved) { return; }
+		if (value.query) { return value.query; }
+		value.query = (async () => {
+			try {
+				const adapter = adapters.find(item => item.site === value.outcome.problem.site)!;
+				const outcome = await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
+				if (outcome.kind === 'record') {
+					value.resolved = true;
+					if (pending === value) { pending = undefined; }
+					await openRecord(outcome.record, value.sourceUri);
+				} else { await vscode.window.showWarningMessage(vscode.l10n.t('The submission is still unconfirmed. Open its official record in the same browser and continue querying. No code was resent.')); }
+			} finally { value.query = undefined; }
+		})();
+		return value.query;
 	};
 	const submitDocument = async (document: vscode.TextDocument, problem?: ProblemRef) => {
 		const input = snapshot(document);
@@ -94,8 +106,9 @@ export function activate(context: vscode.ExtensionContext): void {
 			else { await vscode.window.showInformationMessage(vscode.l10n.t('No code was submitted: {0}', userError(outcome.reason))); }
 		}
 		else if (outcome?.kind === 'unconfirmed') {
-			pending = { outcome, sourceUri: input.uri }; const query = vscode.l10n.t('Continue Querying');
-			if (await vscode.window.showWarningMessage(vscode.l10n.t('Submission receipt unconfirmed: {0}. Continue querying instead of submitting again.', userError(outcome.message)), query) === query) { await continueQuery(); }
+			const value: Pending = { outcome, sourceUri: input.uri }; pending = value;
+			const query = vscode.l10n.t('Continue Querying');
+			if (await vscode.window.showWarningMessage(vscode.l10n.t('Submission receipt unconfirmed: {0}. Continue querying instead of submitting again.', userError(outcome.message)), query) === query) { await continueQuery(value); }
 		}
 	};
 	const problems = new ProblemPanel(context, {
@@ -103,8 +116,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		selectLanguage: (site, family, languageId) => controller!.selectLanguage(site, family, languageId),
 		submit: async (source, document) => submitDocument(source, document.ref),
 		importCph: async (sourceUri, document) => { await vscode.commands.executeCommand('_becoder.cph.importSamplesForSource', { sourceUri, problem: cphSamples(document) }); },
-		viewRecord: async (sourceUri, document) => { const record = recent.get(sourceUri + '\n' + document.ref.url); if (record) { await records.open(record, sourceUri); } else { await vscode.window.showInformationMessage(vscode.l10n.t('No submission from this source and problem in this window yet.')); } }, openOriginal: original
-	});
+		openOriginal: original
+	}, preferences);
 	const importer = new ImportController(adapters, {
 		folders: () => (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === 'file').map(folder => folder.uri.fsPath), directories,
 		selectFolder: async folders => (await vscode.window.showQuickPick(folders.map(folder => ({ label: path.basename(folder), description: folder, folder })), { title: vscode.l10n.t('Choose an import folder') }))?.folder,
@@ -132,7 +145,6 @@ export function activate(context: vscode.ExtensionContext): void {
 			await revealSource(input.uri); await problems.open(document, input.uri, source);
 		})),
 		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument) => { if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); } return importer.import(document); }),
-		vscode.commands.registerCommand('becoder.ojConnect.stopSubmission', async () => { await controller?.cancel(); }),
 		vscode.commands.registerCommand('becoder.ojConnect.continueQuery', guard(continueQuery)),
 		vscode.commands.registerCommand('becoder.ojConnect.login', (row: LoginSummary | undefined) => guard(() => login.manage(row, 'login'))()),
 		vscode.commands.registerCommand('becoder.ojConnect.logout', (row: LoginSummary | undefined) => guard(() => login.manage(row, 'logout'))()),

@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
@@ -30,7 +30,6 @@ export class RecordPanel implements vscode.Disposable {
 		};
 		const panel = new Panel(this.context, { kind: 'record', labels: labels(), record: ref, sourceName: sourceUri ? path.basename(vscode.Uri.parse(sourceUri).fsPath) : ref.problem.nativeId }, async value => {
 			if (value.action === 'continueQuery') { await track(); }
-			else if (value.action === 'stopTracking') { stop(); panel.update({ tracking: false, message: vscode.l10n.t('Tracking stopped. The accepted submission remains available.') }); }
 			else if (value.action === 'openOriginal') { await this.openOriginal(ref.url); }
 			else if (value.action === 'viewSource' && panel.state.snapshot?.source !== undefined) {
 				const snapshot = panel.state.snapshot;

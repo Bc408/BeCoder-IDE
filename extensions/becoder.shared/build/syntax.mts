@@ -1,4 +1,8 @@
-/* Copyright (c) BeCoder contributors. MIT License. See ../LICENSE. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the MIT License. See LICENSE in the component root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

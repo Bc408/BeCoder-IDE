@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -35,7 +35,10 @@ test('AtCoder reads bilingual raw statements and sample whitespace without rende
 		assert.strictEqual(value.limits[0].value, '2 sec');
 		assert.ok(value.bodies[0].sections[0].content.includes('<var>a*b</var>'));
 		assert.ok(!value.bodies[0].sections[0].content.includes('入力例'), 'samples appear once in the common sample section');
-		assert.ok(value.bodies[0].sections[0].content.includes('EXPLANATION_REQUIRED'), 'sample explanation must remain in the statement');
+		assert.ok(!value.bodies[0].sections[0].content.includes('EXPLANATION_REQUIRED'), 'sample explanation must not precede the sample grid');
+		assert.strictEqual(value.bodies[0].sections[1].kind, 'sample-explanation');
+		assert.strictEqual(value.bodies[0].sections[1].sampleIndex, 0);
+		assert.ok(value.bodies[0].sections[1].content.includes('EXPLANATION_REQUIRED'));
 	} finally { dom.window.close(); }
 });
 

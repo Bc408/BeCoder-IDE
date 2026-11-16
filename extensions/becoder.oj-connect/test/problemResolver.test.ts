@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
 import { test } from 'node:test';
@@ -41,4 +41,12 @@ test('another site directory wins over a filename that resembles AtCoder', () =>
 test('configured directory is used by the same resolver', () => {
 	const directories = readDirectories({ atcoder: '竞赛题' });
 	assert.deepStrictEqual(resolveProblem('C:/c++/竞赛题/abc086_a.cpp', directories, adapters), { kind: 'problem', problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' } });
+});
+
+test('AtCoder manual input accepts task identifiers and explicit contest/task pairs', () => {
+	assert.deepStrictEqual(atCoderProblem('abc086_a'), { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' });
+	assert.deepStrictEqual(atCoderProblem('tenka1-2019-beginner/tenka1_2019_a'), { site: 'atcoder', nativeId: 'tenka1-2019-beginner/tenka1_2019_a', url: 'https://atcoder.jp/contests/tenka1-2019-beginner/tasks/tenka1_2019_a' });
+	assert.strictEqual(atCoderProblem('abc086/a/extra'), undefined);
+	assert.strictEqual(atCoderProblem('abc086_a.txt'), undefined);
+	assert.strictEqual(atCoderProblem('tenka1_2019_a'), undefined, 'nonstandard tasks require an explicit contest');
 });

@@ -1,4 +1,7 @@
-/* Copyright (c) BeCoder contributors. Licensed under GPL-3.0-or-later. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 import { chromium } from '../../../node_modules/@playwright/test/index.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, cp, writeFile } from 'node:fs/promises';
@@ -17,9 +20,13 @@ const serviceProbe = path.join(output, 'markdown-service.cjs');
 await build({ entryPoints: ['src/markdownService.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', external: ['./markdown'], outfile: serviceProbe });
 await cp('out/markdown.js', path.join(output, 'markdown.js'));
 assert.ok(JSON.stringify(await require(serviceProbe).default.renderTree('$a+b$')).includes('katex'));
-const labels = { testCases:'测试点信息', submittedAt:'提交时间',codeLength:'代码长度',source:'源码',viewSource:'在 BeCoder 中查看',compileSucceeded:'编译成功',compileFailed:'编译失败', submit: '提交', importCph: '导入 CPH', viewRecord: '查看结果', openOriginal: '打开原题', samples: '样例', sample: '样例', input: '输入', output: '输出', copy: '复制', copied: '已复制', language: '语言', continueQuery: '继续查询', stopTracking: '停止跟踪', record: '提交记录', score: '得分', time: '用时', owner: '用户', memory: '内存', compiler: '编译器输出', problem:'所属题目',verdict:'评测状态',resources:'用时/内存',statementLanguage:'题面语言',chooseLanguage:'提交时选择语言',verification_unavailable: '无法读取提交源码', tracking: '正在读取本次评测结果' };
+const labels = { testCases: '测试点信息', submittedAt: '提交时间', codeLength: '代码长度', source: '源码', viewSource: '在 BeCoder 中查看', compileSucceeded: '编译成功', compileFailed: '编译失败', submit: '提交', importCph: '导入 CPH', viewRecord: '查看结果', openOriginal: '打开原题', samples: '样例', sample: '样例', input: '输入', output: '输出', copy: '复制', copied: '已复制', language: '语言', continueQuery: '继续查询', stopTracking: '停止跟踪', record: '提交记录', score: '得分', time: '用时', owner: '用户', memory: '内存', compiler: '编译器输出', problem: '所属题目', verdict: '评测状态', resources: '用时/内存', statementLanguage: '题面语言', chooseLanguage: '提交时选择语言', verification_unavailable: '无法读取提交源码', tracking: '正在读取本次评测结果' };
 let state;
-Object.assign(labels, { importCph: '传送至 CPH', difficulty: '题目难度', tags: '题目标签', 'Time Limit': '时间限制', 'Memory Limit': '内存限制', samples: '输入输出样例', judging: 'Judging' });
+Object.assign(labels, { importCph: '传送至 CPH', difficulty: '题目难度', tags: '题目标签', 'Time Limit': '时间限制', 'Memory Limit': '内存限制', samples: '输入输出样例', judging: 'Judging', copyFailed: '请选择并复制内容' });
+Object.assign(labels, { status_AC: '答案正确', status_WA: '答案错误', status_CE: '编译错误', status_WJ: '等待评测', status_WR: '等待重新评测' });
+labels.status_QLE = '超过询问次数限制';
+labels.compileUnavailable = '无法读取该记录的编译输出。';
+labels.sampleExplanation = '样例说明';
 const server = createServer(async (req, res) => {
 	try {
 		if (req.url === '/') {
@@ -39,12 +46,12 @@ const browser = await chromium.launch({ headless: true });
 try {
 	const page = await browser.newPage();
 	await page.exposeFunction('__renderContent', (content, format) => format === 'markdown' ? renderMarkdownTree(content) : renderHtmlTree(content, state.problem.ref.url));
-	await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.__copied = text; } } }); });
+	await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { if (window.__failCopy) { throw new Error('clipboard unavailable'); } window.__copied = text; } } }); });
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
 	await page.route('https://example.org/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><rect width="100" height="30" fill="#507cab"/></svg>' }));
 	for (const site of ['luogu', 'atcoder']) {
 		const ref = site === 'luogu' ? { site, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } : { site, nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
-		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages:[{id:'one',label:'C++20 with O2',family:'cpp'},{id:'two',label:'C++23 with O2',family:'cpp'}],languageId:'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'A - Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: 'Problem / 题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
+		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'A - Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: 'Problem / 题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
 		const snippets = [
 			{ language: 'php', code: '<?php\n$input = trim(file_get_contents("php://stdin"));\necho $input;\n' },
 			{ language: 'rust', code: 'use std::io;\nfn main() { let mut input = String::new(); }\n' },
@@ -77,7 +84,7 @@ try {
 		}
 		for (const { language, code } of snippets) {
 			const block = page.locator('article pre > code').nth(snippets.findIndex(value => value.language === language));
-			await block.waitFor({timeout:3000}); const copiedCode = code; assert.equal(await block.textContent(), copiedCode);
+			await block.waitFor({ timeout: 3000 }); const copiedCode = code; assert.equal(await block.textContent(), copiedCode);
 			if (language && language !== 'unknown-language') { await block.locator('.code-line > span[style]').first().waitFor({ timeout: 10000 }); }
 			const pre = block.locator('..'); await pre.hover();
 			assert.equal(await pre.locator('.copyButton').evaluate(element => getComputedStyle(element).position), 'absolute', 'copy control belongs at the code block corner');
@@ -93,12 +100,22 @@ try {
 			await copy.click(); assert.equal(await page.evaluate(() => window.__copied), copiedCode, 'copy exact uncolored displayed code');
 		}
 		await page.locator('.sample-grid pre').first().hover();
-		const sampleCopy = page.locator('.sample-grid pre').first().getByRole('button', { name: '复制', exact: true });
+		const sampleCopy = page.locator('.sample-grid pre').first().locator('button');
+		assert.equal(await sampleCopy.getAttribute('aria-label'), labels.copy);
 		assert.equal(await sampleCopy.textContent(), '', 'samples use the same icon-only control');
 		assert.equal(await sampleCopy.locator('svg[aria-hidden="true"]').count(), 1);
 		assert.equal(await sampleCopy.evaluate(button => button.getBoundingClientRect().width), 28);
 		await page.locator('.sample-grid pre').first().getByRole('button', { name: '复制', exact: true }).click();
 		assert.equal(await page.evaluate(() => window.__copied), ' 1  2\n\n');
+		await page.evaluate(() => { window.__failCopy = true; });
+		await sampleCopy.click();
+		await page.locator('.sample-grid pre').first().getByRole('alert').waitFor({ timeout: 1500 });
+		assert.equal(await page.locator('.sample-grid pre').first().getByRole('alert').textContent(), labels.copyFailed, 'sample clipboard failures are visible');
+		assert.equal(await sampleCopy.getAttribute('title'), labels.copy, 'failed copy clears a preceding success indication');
+		await page.evaluate(() => { window.__failCopy = false; });
+		await sampleCopy.click();
+		assert.equal(await page.locator('.sample-grid pre').first().getByRole('alert').count(), 0, 'successful retry clears the failure');
+		assert.equal(await sampleCopy.getAttribute('title'), labels.copied);
 		const themeColors = [];
 		assert.equal(await page.locator('script[data-remote], [onerror], a[href^="command:"], a[href^="javascript:"]').count(), 0);
 		assert.equal(await page.evaluate(() => window.pwned), undefined);
@@ -137,8 +154,13 @@ try {
 			assert.equal(await page.locator('.problem-tag-list').evaluate(element => getComputedStyle(element).opacity), '1', 'keyboard focus can open tags');
 			await page.locator('.problem-tags').evaluate(element => element.blur());
 		} else { assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0); }
-		await page.getByRole('combobox',{name:'语言',exact:true}).selectOption('two');
-		assert.deepEqual(await page.evaluate(()=>window.__messages.at(-1).data),{action:'selectLanguage',languageId:'two'});
+		if (site === 'atcoder') {
+			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.languageId = undefined; window.__OJ_STATE__ = next; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+			await page.getByRole('combobox', { name: '语言', exact: true }).locator('option[value=""]').waitFor({ state: 'attached' });
+			assert.equal(await page.getByRole('combobox', { name: '语言', exact: true }).inputValue(), '', 'no compiler is silently selected on the first statement');
+		}
+		await page.getByRole('combobox', { name: '语言', exact: true }).selectOption('two');
+		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLanguage', languageId: 'two' });
 		await page.getByRole('button', { name: /提交.*\.cpp/ }).click();
 		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'submit' });
 		for (const dark of [true, false]) {
@@ -168,8 +190,48 @@ try {
 			}
 		}
 		assert.equal(themeColors[0], themeColors[1], 'syntax colors follow live theme changes');
-		await page.getByRole('combobox',{name:'题面语言',exact:true}).selectOption('ja'); assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLocale', locale: 'ja' });
+		await page.getByRole('combobox', { name: '题面语言', exact: true }).selectOption('ja'); assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLocale', locale: 'ja' });
+		if (site === 'atcoder') {
+			// ABC467 E uses mathematical var nodes inside its input-format pre, not source code.
+			const format = '<section><h3>Input</h3><pre><var>N</var> <var>M</var>\n<var>A_1</var> <var>A_2</var> <var>\\ldots</var> <var>A_N</var>\n<var>B_1</var> <var>B_2</var> <var>\\ldots</var> <var>B_{N-1}</var>\n</pre></section>';
+			state.locale = 'en';
+			state.problem.bodies = [{ locale: 'en', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>After the operations, <var>A=(6,8,7)</var>.</p>' }] }, { locale: 'ja', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>操作後の列は <var>A=(6,8,7)</var> です。</p>' }] }];
+			await page.goto(url); await page.locator('.oj-input-format .katex').first().waitFor();
+			await page.locator('.sample-explanation .katex').waitFor();
+			assert.equal(await page.locator('.oj-input-format .katex').count(), 10);
+			assert.equal(await page.locator('.oj-input-format code,.oj-input-format .copyButton').count(), 0, 'mathematical input formats bypass source highlighting and copying');
+			assert.equal(await page.locator('.oj-input-format').evaluate(element => getComputedStyle(element).whiteSpace), 'pre-wrap');
+			const pair = page.locator('.sample-grid').first();
+			assert.equal(await pair.locator('.sample-explanation').count(), 1);
+			assert.equal(await page.locator('.sample-grid').last().locator('.sample-explanation').count(), 0);
+			assert.equal(await pair.locator(':scope > div').last().getAttribute('class'), 'sample-explanation');
+			assert.equal(await pair.locator('.sample-explanation').evaluate(element => getComputedStyle(element).gridColumn), '1 / -1');
+			assert.equal(await pair.locator('pre code').first().textContent(), ' 1  2\n\n', 'sample bytes remain untouched');
+			await page.screenshot({ path: path.join(output, 'atcoder-format-sample-explanation.png'), fullPage: true });
+			state.locale = 'ja'; await page.goto(url); await page.locator('.sample-explanation .katex').waitFor();
+			assert.ok((await page.locator('.sample-explanation').textContent()).includes('操作後'));
+			assert.ok(!(await page.locator('.sample-explanation').textContent()).includes('After the operations'));
+		}
 		const record = { problem: ref, id: '22', url: site === 'luogu' ? 'https://www.luogu.com.cn/record/22' : 'https://atcoder.jp/contests/abc086/submissions/22' };
+		if (site === 'atcoder') {
+			state = { kind: 'record', labels, sourceName: 'solution.cpp', record, tracking: true, snapshot: { ref: record, phase: 'judging', rawStatus: '1/21', sourceVerification: 'not-checked', groups: [] } };
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.testcase .spinner').count(), 21, 'real reported total drives the pending testcase grid');
+			assert.equal(await page.locator('.testcase-grid').evaluate(element => getComputedStyle(element).display), 'flex');
+			assert.equal(await page.locator('.testcase').first().locator(':scope > div').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(52, 152, 219)');
+			assert.equal(await page.locator('.testCaseData h3').count(), 0, 'no redundant generic subgroup heading');
+			await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
+			await page.screenshot({ path: path.join(output, 'atcoder-pending-grid.png'), fullPage: true });
+		}
+		for (const [phase, rawStatus] of [['queued', 'WJ'], ['judging', 'WR']]) {
+			state = { kind: 'record', labels, sourceName: 'solution.cpp', record, tracking: true, snapshot: { ref: record, phase, rawStatus, sourceVerification: 'not-checked', groups: [] } };
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict .spinner').count(), 1, 'pending records spin before individual test cases are available');
+			assert.ok((await page.locator('.record-verdict').textContent()).includes(rawStatus), 'native status remains readable');
+			assert.equal(await page.locator('.testcase').count(), 0, 'WJ without a reported total cannot invent testcases');
+			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.tracking = false; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+			await page.locator('.record-verdict .spinner').waitFor({ state: 'detached' });
+		}
 		state = { kind: 'record', labels, sourceName: 'solution.cpp', record, tracking: true, snapshot: { ref: record, phase: 'judging', rawStatus: 'Judging', sourceVerification: 'not-checked', groups: [{ name: 'Subtask #0', rows: [['1', 'Judging'], ['2', 'AC', '2ms', '1KiB']] }] } };
 		await page.goto(url); await page.locator('.testcase .spinner').waitFor();
 		await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
@@ -186,10 +248,11 @@ try {
 		await page.screenshot({ path: path.join(output, `${site}-judging.png`), fullPage: true });
 		await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.snapshot.phase = 'finished'; next.snapshot.rawStatus = 'AC'; next.snapshot.groups[0].rows[0][1] = 'AC'; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
 		await page.locator('.testcase .spinner').waitFor({ state: 'detached' });
-		state = { kind: 'record', labels, sourceName: 'solution.cpp', record, snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', score: '50', language: 'C++20', time: '40 ms', memory: '1 MiB', sourceVerification: 'unavailable', source:'int main() {}',submittedAt:'2026-11-14 12:00:00',codeLength:'13 B',compileSucceeded:true, groups: [{ name: 'Tests', rows: [['1', 'AC'], ['2', 'AC']] }] } };
+		state = { kind: 'record', labels, sourceName: 'solution.cpp', record, snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', score: '50', language: 'C++20', time: '40 ms', memory: '1 MiB', sourceVerification: 'unavailable', source: 'int main() {}', submittedAt: '2026-11-14 12:00:00', codeLength: '13 B', compileSucceeded: true, compileMessage: '  compiler output\n\n', groups: [{ name: 'Tests', rows: [['1', 'AC'], ['2', 'AC']] }] } };
 		await page.goto(url); await page.locator('.record-verdict').waitFor();
-		await page.addStyleTag({content: 'body { --vscode-editor-background:#1e1e1e;--vscode-editor-foreground:#ddd;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }'});
+		await page.addStyleTag({ content: 'body { --vscode-editor-background:#1e1e1e;--vscode-editor-foreground:#ddd;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 		assert.equal(await page.locator('.record-verdict').textContent(), site === 'luogu' ? 'Accepted' : 'AC', 'Luogu displays the full upstream verdict while other sites retain native text');
+		if (site === 'atcoder') { assert.equal(await page.locator('.record-verdict').getAttribute('title'), '答案正确'); }
 		assert.equal(await page.locator('.record-info > div').filter({ has: page.getByText('50', { exact: true }) }).locator('span').last().evaluate(element => getComputedStyle(element).color), 'rgb(243, 156, 17)', 'upstream partial score uses orange');
 		const infoLabels = await page.locator('.record-info > div > span:first-child').allTextContents();
 		assert.ok(infoLabels.indexOf(labels.language) < infoLabels.indexOf(labels.codeLength), 'language precedes code length like upstream');
@@ -197,12 +260,42 @@ try {
 		assert.equal(await page.getByRole('button', { name: '停止跟踪', exact: true }).count(), 0);
 		assert.equal(await page.getByText('无法读取提交源码', { exact: true }).count(), 0);
 		assert.ok(await page.locator('.testcase').count() > 0);
-		await page.getByRole('link',{name:'在 BeCoder 中查看'}).click();
-		assert.deepEqual(await page.evaluate(()=>window.__messages.at(-1).data),{action:'viewSource'});
+		await page.getByRole('link', { name: '在 BeCoder 中查看' }).click();
+		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'viewSource' });
+		const compiler = page.locator('pre');
+		await compiler.hover();
+		const compilerCopy = compiler.getByRole('button', { name: labels.copy, exact: true });
+		await page.evaluate(() => { window.__failCopy = true; });
+		await compilerCopy.click();
+		await compiler.getByRole('alert').waitFor({ timeout: 1500 });
+		await page.evaluate(() => { window.__failCopy = false; });
+		await compilerCopy.click();
+		assert.equal(await page.evaluate(() => window.__copied), state.snapshot.compileMessage, 'compiler output copy preserves whitespace');
+		assert.equal(await compiler.getByRole('alert').count(), 0);
 		await page.screenshot({ path: path.join(output, `${site}-record.png`), fullPage: true });
 		state = { ...state, message: 'Connection stopped', canRetry: true };
 		await page.goto(url); await page.getByRole('button', { name: '继续查询', exact: true }).waitFor();
+		if (site === 'atcoder') {
+			state = { ...state, message: undefined, canRetry: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', compileSucceeded: false, compileMessage: './Main.cpp:4: error: cin was not declared\n  ^~~\n', sourceVerification: 'unavailable' } };
+			await page.goto(url); await page.locator('pre').waitFor();
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), '编译错误');
+			assert.equal(await page.locator('.spinner').count(), 0);
+			await page.locator('pre').hover();
+			await page.locator('pre').getByRole('button', { name: labels.copy, exact: true }).click();
+			assert.equal(await page.evaluate(() => window.__copied), state.snapshot.compileMessage);
+			await page.screenshot({ path: path.join(output, 'atcoder-ce.png'), fullPage: true });
+			state.snapshot.compileMessage = undefined;
+			await page.goto(url); await page.getByText(labels.compileUnavailable, { exact: true }).waitFor();
+			state.snapshot.rawStatus = 'NEW-STATUS'; state.snapshot.compileSucceeded = undefined;
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict').textContent(), 'NEW-STATUS');
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), null);
+			state.snapshot.rawStatus = 'QLE';
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), labels.status_QLE);
+			assert.equal(await page.locator('.record-verdict').evaluate(element => getComputedStyle(element).color), 'rgb(0, 18, 119)');
+		}
 	}
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ passed: true, sites: 2, screenshots: 36, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
+	console.log(JSON.stringify({ passed: true, sites: 2, screenshots: 39, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

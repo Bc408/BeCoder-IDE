@@ -50,6 +50,23 @@ License text: extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE
 
 ---------------------------------------------------------
 
+BeCoder OJ Connect 0.1.0
+https://github.com/Bc408/BeCoder-IDE
+
+BeCoder-authored integration: GPL-3.0-or-later.
+License text: extensions/becoder.oj-connect/LICENSE
+Adapted vscode-luogu 4.20.0 UI and protocol: MIT; Copyright (c) 2018 引领天下.
+Shared Markdown parser: MIT; Copyright (c) 2026 Federico2903.
+Lucide pin SVG: ISC; Copyright (c) 2026 Lucide Icons and Contributors.
+Original Microsoft helper, npm packages, grammars, fonts and theme retain
+individual copyright notices and licenses.
+Full notices: extensions/becoder.oj-connect/ThirdPartyNotices.txt
+Pinned sources and modification records: extensions/becoder.oj-connect/UPSTREAM.md
+Corresponding integration source: extensions/becoder.oj-connect and
+src/vs/platform/browserView; shared renderer: extensions/becoder.shared.
+
+---------------------------------------------------------
+
 BeCoder CPH 0.1.0 (based on Competitive Programming Helper)
 https://github.com/agrawal-d/cph/tree/187590eae3379bad8caaf7bd930d2987557a7966
 GPL-3.0-or-later; modified source: extensions/becoder.cph
@@ -92,14 +109,18 @@ licenses/MIT-VSCode.txt and the generated extension dist/THIRD_PARTY_NOTICES.txt
 
 ---------------------------------------------------------
 
-BeCoder shared Webview hover helper
+BeCoder shared Webview content renderer and hover helper
 https://github.com/Bc408/BeCoder-IDE
 
 MIT License; Copyright (c) BeCoder contributors
-Source and license: extensions/becoder.shared/browser and
-extensions/becoder.shared/LICENSE
-Consumers bundle the helper and distribute its license as dist/HoverLicense.txt.
-It is shared source, not a separately installed extension.
+Sources: extensions/becoder.shared/browser, content and build.
+BeCoder-authored shared code license: extensions/becoder.shared/LICENSE
+Adapted Luogu Markdown renderer: MIT; Copyright (c) 2026 Federico2903.
+License: extensions/becoder.shared/content/LICENSE.luogu-markdown.txt
+Lucide pin SVG: ISC; Copyright (c) 2026 Lucide Icons and Contributors.
+License: extensions/becoder.shared/content/LICENSE.lucide.txt
+Consumers retain component notices; hover consumers also distribute the shared
+MIT license as dist/HoverLicense.txt. Shared source is not a separate extension.
 
 ---------------------------------------------------------
 

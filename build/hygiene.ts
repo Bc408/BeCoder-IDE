@@ -19,6 +19,12 @@ import gulpstylelint from './stylelint.ts';
 const copyrightHeaders = [
 	[
 		'/*---------------------------------------------------------------------------------------------',
+		' *  Copyright (c) 2026 BeCoder contributors.',
+		' *  Licensed under the MIT License. See LICENSE in the component root for license information.',
+		' *--------------------------------------------------------------------------------------------*/',
+	],
+	[
+		'/*---------------------------------------------------------------------------------------------',
 		' *  Copyright (c) Microsoft Corporation. All rights reserved.',
 		' *  Licensed under the MIT License. See License.txt in the project root for license information.',
 		' *--------------------------------------------------------------------------------------------*/',

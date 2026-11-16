@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { type RecordRef, type RecordSnapshot, validateRecord, validateRecordRef } from './domain';
@@ -21,13 +21,14 @@ export class RecordController {
 	async track(input: RecordRef, onUpdate: (value: RecordSnapshot) => void, signal: AbortSignal): Promise<void> {
 		const ref = validateRecordRef(input);
 		if (signal.aborted) { return; }
-		const now = this.options.now ?? Date.now, started = now(), limit = this.options.timeoutMs ?? 120000;
+		const now = this.options.now ?? Date.now, started = now();
+		const limit = this.options.timeoutMs ?? (ref.problem.site === 'atcoder' ? undefined : 120000);
 		const deadline = new AbortController();
-		const timer = setTimeout(() => deadline.abort(new Error('Result tracking timed out. Continue querying the existing record.')), limit);
+		const timer = limit === undefined ? undefined : setTimeout(() => deadline.abort(new Error('Result tracking timed out. Continue querying the existing record.')), limit);
 		const combined = AbortSignal.any([signal, deadline.signal]);
 		try {
 			while (!combined.aborted) {
-				if (now() - started >= limit) { throw new Error('Result tracking timed out. Continue querying the existing record.'); }
+				if (limit !== undefined && now() - started >= limit) { throw new Error('Result tracking timed out. Continue querying the existing record.'); }
 				let abort!: () => void;
 				let value: RecordSnapshot;
 				try {

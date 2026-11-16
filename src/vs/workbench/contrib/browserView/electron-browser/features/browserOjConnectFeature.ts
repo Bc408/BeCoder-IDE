@@ -49,7 +49,20 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const pageListeners = this._register(new DisposableStore());
 		const siteViews = new Map<string, BrowserEditorInput>();
 		const ownedInputs = new Set<BrowserEditorInput>();
-		const reveal = async (input: BrowserEditorInput) => { await editors.openEditor(input, { pinned: true }, SIDE_GROUP); };
+		const revealing = new Map<BrowserEditorInput, Promise<unknown>>();
+		const reveal = async (input: BrowserEditorInput) => {
+			const pending = revealing.get(input) ?? editors.openEditor(input, { pinned: true }, SIDE_GROUP);
+			revealing.set(input, pending);
+			try { await pending; } finally { if (revealing.get(input) === pending) { revealing.delete(input); } }
+		};
+		const closeInteraction = async (input: BrowserEditorInput | undefined) => {
+			if (!input || !ownedInputs.has(input)) { return; }
+			// The native receipt can arrive while openEditor is still opening the verification tab.
+			await revealing.get(input);
+			if (!input.isDisposed() && editors.editors.includes(input)) {
+				await editors.closeEditors(editors.findEditors(input.resource).filter(item => item.editor === input));
+			}
+		};
 		let preparationEpoch = 0;
 		let lifecycleEpoch = 0;
 		const assertLifecycle = (epoch: number) => { if (epoch !== lifecycleEpoch) { throw new Error('oj-connect-stopped'); } };
@@ -60,6 +73,15 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		};
 		const recordViews = new Map<string, string>();
 		const recordScopes = new Map<string, BrowserViewStorageScope>();
+		const recordLifetimes = new Map<string, AbortController>();
+		const recordLifetime = (record: RecordRef) => {
+			let controller = recordLifetimes.get(record.url);
+			if (!controller) { controller = new AbortController(); recordLifetimes.set(record.url, controller); }
+			return controller.signal;
+		};
+		const stopRecord = (record: RecordRef) => { recordLifetimes.get(record.url)?.abort(new Error('oj-connect-stopped')); recordLifetimes.delete(record.url); finishedRecords.delete(record.url); };
+		const stopRecords = () => { for (const controller of recordLifetimes.values()) { controller.abort(new Error('oj-connect-stopped')); } recordLifetimes.clear(); };
+		const assertRecord = (epoch: number, signal: AbortSignal) => { assertLifecycle(epoch); signal.throwIfAborted(); };
 		const recordCancellations = new Map<string, Promise<void>>();
 		const attemptViews = new Map<string, string>();
 		const attemptScopes = new Map<string, BrowserViewStorageScope>();
@@ -137,19 +159,20 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		};
 		if (browsers.onDidChangeBrowserViews) { this._register(browsers.onDidChangeBrowserViews(watchBrowsers)); }
 		watchBrowsers();
-		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope): Promise<BrowserEditorInput> => {
+		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false): Promise<BrowserEditorInput> => {
 			const epoch = lifecycleEpoch;
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			const origin = new URL(url).origin;
 			const all = [...browsers.getKnownBrowserViews().values()].filter(item => !item.isDisposed() && item.model?.storageScope !== BrowserViewStorageScope.Ephemeral && (scope === undefined || item.model?.storageScope === scope));
 			const exact = all.filter(item => item.url && canonical(item.url) === canonical(url));
-			const candidates = exact.length || scope === undefined ? exact : all.filter(item => item.url && originOf(item.url) === origin);
+			const candidates = taskOwned ? [] : exact.length || scope === undefined ? exact : all.filter(item => item.url && originOf(item.url) === origin);
 			const preferred = siteViews.get(origin);
 			if (candidates.length > 1 && !candidates.includes(preferred!)) { throw new Error('oj-connect-browser-ambiguous'); }
 			let input = candidates.includes(preferred!) ? preferred : candidates[0];
 			if (!input) {
 				if (scope !== undefined && await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
 				assertLifecycle(epoch);
+				signal?.throwIfAborted();
 				// Ephemeral tabs have intentionally isolated sessions. Never silently open a fresh account.
 				if (preferred?.model && !preferred.isDisposed() && preferred.model.storageScope === BrowserViewStorageScope.Ephemeral) { throw new Error('Open the target problem in the existing temporary browser session first.'); }
 				input = browsers.getOrCreateLazy(generateUuid(), { url }); ownedInputs.add(input);
@@ -169,8 +192,9 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 					if (input.model && !input.model.loading && originOf(input.model.url) === origin) {
 						if (input.model.storageScope === BrowserViewStorageScope.Ephemeral) { throw new Error('OJ Connect requires a persistent browser session.'); }
 						if (scope !== undefined && input.model.storageScope !== scope) { throw new Error('oj-connect-session-scope-changed'); }
-						watchModel(input.model); await service.watchOjSession(input.model.id, owner); assertLifecycle(epoch);
-						siteViews.set(origin, input); retain(input.model.id); return input;
+						watchModel(input.model); await service.watchOjSession(input.model.id, owner); assertLifecycle(epoch); signal?.throwIfAborted();
+						if (!taskOwned) { siteViews.set(origin, input); }
+						retain(input.model.id); return input;
 					}
 					await timeout(100);
 				}
@@ -197,7 +221,9 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 						return { page: watchModel(model, url), form };
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
-						if (!/atcoder-login-or-form-required|Sign in to Luogu|Luogu page data is unavailable/.test(message)) { throw error; }
+						if (message !== 'atcoder-login-required') { throw error; }
+						const login = new URL('/login', expected.origin); login.searchParams.set('continue', url);
+						await model.loadURL(login.href);
 						if (!shown) { shown = true; await reveal(input); }
 					}
 				}
@@ -246,47 +272,50 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			isPageCurrent: page => { const model = find(page.viewId)?.model; return !!model && !model.loading && model.url === page.url && generations.isCurrent(page); },
 			openTask: async url => {
 				const epoch = preparationEpoch;
-				const input = await openPage(url, preparationController.signal);
+				const input = await openPage(url, preparationController.signal, await browsers.resolveStorageScope(), true);
 				const page = { viewId: input.model!.id };
 				try { return (await waitForForm(input, url, model => service.prepareAtCoderTask(model.id, owner, url), epoch)).page; }
 				catch (error) { release(page); throw error; }
 			},
 			inspectTask: page => service.prepareAtCoderTask(page.viewId, owner, page.url),
-			submit: (page, payload) => service.submitAtCoderTask(page.viewId, owner, page.url, payload),
 			sendAndConfirm: async (page, payload) => {
-				const epoch = lifecycleEpoch, scope = find(page.viewId)?.model?.storageScope;
+				const epoch = lifecycleEpoch, input = find(page.viewId), scope = input?.model?.storageScope;
 				if (scope === undefined || scope === BrowserViewStorageScope.Ephemeral) { throw new Error('oj-connect-session-scope-changed'); }
 				const outcome = await service.sendAndConfirmAtCoderTask(page.viewId, owner, page.url, payload);
 				assertLifecycle(epoch);
-				return remember(outcome, page.viewId, scope);
+				remember(outcome, page.viewId, scope);
+				// UI cleanup must never turn an accepted receipt into an uncertain submission.
+				if (outcome.kind === 'record') { await closeInteraction(input).catch(() => undefined); }
+				return outcome;
 			},
 			readRecord: async record => {
 				const epoch = lifecycleEpoch;
 				const cached = finishedRecords.get(record.url); if (cached) { return cached; }
 				const scope = recordScopes.get(record.url);
 				if (scope === undefined) { throw new Error('oj-connect-session-scope-changed'); }
+				const signal = recordLifetime(record);
 				const existing = find(recordViews.get(record.url) ?? '');
-				const input = existing?.model?.storageScope === scope ? existing : await openPage(record.url, undefined, scope);
+				const input = existing?.model?.storageScope === scope ? existing : await openPage(record.url, signal, scope, true);
 				const page = { viewId: input.model!.id };
 				try {
-					assertLifecycle(epoch);
+					assertRecord(epoch, signal);
 					recordViews.set(record.url, page.viewId);
 					if (canonical(input.model!.url) !== record.url) { await input.model!.loadURL(record.url); }
-					assertLifecycle(epoch);
-					return finishRead(await service.readAtCoderRecord(page.viewId, owner, record), epoch);
+					assertRecord(epoch, signal);
+					const snapshot = await service.readAtCoderRecord(page.viewId, owner, record);
+					assertRecord(epoch, signal);
+					return finishRead(snapshot, epoch);
 				} finally { if (input !== existing && epoch === lifecycleEpoch) { release(page); } }
 			},
 			reconcile: async attemptId => {
+				const input = find(attemptViews.get(attemptId) ?? '');
 				const epoch = lifecycleEpoch, outcome = await service.reconcileAtCoderAttempt(attemptId, owner);
-				assertLifecycle(epoch); return reconciled(outcome, attemptId);
+				assertLifecycle(epoch); reconciled(outcome, attemptId);
+				if (outcome.kind === 'record') { await closeInteraction(input).catch(() => undefined); }
+				return outcome;
 			},
 			cancel: page => service.cancelAtCoderTask(page.viewId, owner),
-			release,
-			revealResult: async (page, result) => {
-				const input = find(page.viewId);
-				if (!input || (result.verified && input.model?.url !== result.url)) { throw new Error('atcoder-page-changed'); }
-				await reveal(input);
-			}
+			release
 		});
 		const createLuoguBridge = () => new LuoguBridgeController({
 			newHandle: generateUuid,
@@ -302,25 +331,29 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			readRecord: async record => {
 				const epoch = lifecycleEpoch;
 				const cached = finishedRecords.get(record.url); if (cached) { return cached; }
+				const signal = recordLifetime(record);
 				await recordCancellations.get(record.url);
-				assertLifecycle(epoch);
-				const id = await luoguSessionId(); assertLifecycle(epoch);
-				return finishRead(await service.readLuoguRecord(id, owner, record), epoch);
+				assertRecord(epoch, signal);
+				const id = await luoguSessionId(); assertRecord(epoch, signal);
+				const snapshot = await service.readLuoguRecord(id, owner, record);
+				assertRecord(epoch, signal);
+				return finishRead(snapshot, epoch);
 			},
 			reconcile: attemptId => service.reconcileLuoguAttempt(attemptId, owner)
 		});
 		this.luoguBridge = createLuoguBridge();
 		this.bridge = createBridge();
 		const closeBackground = () => { for (const input of ownedInputs) { if (!editors.editors.includes(input)) { input.dispose(); } } ownedInputs.clear(); };
-		const reset = () => { lifecycleEpoch++; preparationEpoch++; recordViews.clear(); recordScopes.clear(); attemptViews.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
+		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordViews.clear(); recordScopes.clear(); attemptViews.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
 		this._register(extensions.onWillStop(reset));
 		this._register(extensions.onDidChangeExtensions(event => { if (event.removed.some(item => item.identifier.value.toLowerCase() === 'becoder.oj-connect')) { reset(); } }));
 		this._register(extensions.onDidChangeExtensionsStatus(ids => {
 			if (ids.some(id => id.value.toLowerCase() === 'becoder.oj-connect') && !extensions.getExtensionsStatus()['becoder.oj-connect']?.activationStarted) { reset(); }
 		}));
-		this._register(toDisposable(() => { lifecycleEpoch++; recordScopes.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
+		this._register(toDisposable(() => { lifecycleEpoch++; stopRecords(); recordScopes.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
 		const luoguPrefix = '_becoder.ojConnect.luogu.';
 		const releaseLuoguRecord = (record: RecordRef): Promise<void> => {
+			stopRecord(record);
 			const previous = recordCancellations.get(record.url);
 			const pending = (async () => {
 				await previous;
@@ -332,7 +365,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseLuoguRecord(record)));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.releaseRecord', async (_accessor, record: RecordRef) => {
 			if (record?.problem.site === 'luogu') { await releaseLuoguRecord(record); }
-			else if (record) { recordViews.delete(record.url); closeIdle(); }
+			else if (record) { stopRecord(record); recordViews.delete(record.url); closeIdle(); }
 		}));
 		for (const site of ['luogu', 'atcoder'] as const) {
 			const origin = site === 'luogu' ? 'https://www.luogu.com.cn' : 'https://atcoder.jp';
@@ -362,11 +395,9 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const prefix = '_becoder.ojConnect.atcoder.';
 		this._register(CommandsRegistry.registerCommand(prefix + 'openTask', (_accessor, url: string, uri: string) => this.bridge.openTask(url, uri)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'inspectTask', (_accessor, page: IAtCoderPageRef) => this.bridge.inspectTask(page)));
-		this._register(CommandsRegistry.registerCommand(prefix + 'submit', (_accessor, page: IAtCoderPageRef, payload: IAtCoderSourcePayload) => this.bridge.submit(page, payload)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'sendAndConfirm', (_accessor, page: IAtCoderPageRef, payload: IAtCoderSourcePayload) => this.bridge.sendAndConfirm(page, payload)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'readRecord', (_accessor, record: RecordRef) => this.bridge.readRecord(record)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'reconcile', (_accessor, attemptId: string) => this.bridge.reconcile(attemptId)));
-		this._register(CommandsRegistry.registerCommand(prefix + 'revealResult', (_accessor, page: IAtCoderPageRef) => this.bridge.revealResult(page)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'cancel', (_accessor, page: IAtCoderPageRef) => this.bridge.cancel(page)));
 		this._register(CommandsRegistry.registerCommand(prefix + 'release', (_accessor, page: IAtCoderPageRef) => this.bridge.release(page)));
 	}

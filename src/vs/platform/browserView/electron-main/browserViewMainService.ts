@@ -26,7 +26,6 @@ import { join } from '../../../base/common/path.js';
 import { readBeaconBrowserPage } from '../../beacon/common/beaconBrowserPage.js';
 import { checkAtCoderSourceResponse, extractAtCoderSourceHTML, readAtCoderSubmission } from '../common/atcoderSubmission.js';
 import { atCoderFormScript, atCoderTask, IAtCoderSourcePayload, IAtCoderTaskForm } from '../common/atcoderWorkflow.js';
-import type { IAtCoderShortcutResult } from '../common/atcoderShortcut.js';
 import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt } from './atcoderTransaction.js';
 import { assertLuoguProblem } from '../common/luoguBridge.js';
 import { runOjScript, type OjScriptTask } from './ojScriptTask.js';
@@ -443,10 +442,12 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 						const domain = cookie.domain?.replace(/^\./, '');
 						if ((domain !== 'luogu.com.cn' && domain !== 'www.luogu.com.cn') || !['_uid', '__client_id'].includes(cookie.name)) { return; }
 						if (timer) { clearTimeout(timer); }
-						timer = setTimeout(() => { timer = undefined; void relevantCookies().then(value => {
-							const next = createHash('sha256').update(value).digest('hex');
-							if (!disposed && next !== cookieState) { cookieState = next; listener(); this._onDidChangeOjSession.fire({ windowId, site: 'luogu' }); }
-						}).catch(() => undefined); }, 0);
+						timer = setTimeout(() => {
+							timer = undefined; void relevantCookies().then(value => {
+								const next = createHash('sha256').update(value).digest('hex');
+								if (!disposed && next !== cookieState) { cookieState = next; listener(); this._onDidChangeOjSession.fire({ windowId, site: 'luogu' }); }
+							}).catch(() => undefined);
+						}, 0);
 					};
 					session.electronSession.cookies.on('changed', changed);
 					return toDisposable(() => { disposed = true; if (timer) { clearTimeout(timer); } session.electronSession.cookies.removeListener('changed', changed); });
@@ -597,7 +598,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 				url.search = '';
 				url.hash = '';
 				// Electron 43 Response.url is documented as incorrect. Reject redirects in the transport instead.
-				const response = await contents.session.fetch(url.href, { method: 'GET', redirect: 'error', signal, headers: { Accept: 'text/html' } });
+				const response = await contents.session.fetch(url.href, { method: 'GET', redirect: 'error', cache: 'no-store', signal, headers: { Accept: 'text/html' } });
 				checkAtCoderSourceResponse(response);
 				const reader = response.body?.getReader();
 				if (!reader) { throw new Error('atcoder-source-response'); }
@@ -614,11 +615,12 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 				} finally {
 					await reader.cancel().catch(() => undefined);
 				}
+				const detailHTML = Buffer.concat(chunks).toString('utf8');
 				let sourceHTML: string;
-				try { sourceHTML = extractAtCoderSourceHTML(Buffer.concat(chunks).toString('utf8')); }
+				try { sourceHTML = extractAtCoderSourceHTML(detailHTML); }
 				catch (error) { if (!allowMissingSource) { throw error; } sourceHTML = ''; }
 				if (signal?.aborted || contents.isDestroyed() || contents.isLoading() || contents.getURL() !== expectedURL) { throw new Error('atcoder-changed'); }
-				return contents.executeJavaScriptInIsolatedWorld(1004, [{ code: code.replace('const sourceHTML = null;', `const sourceHTML = ${JSON.stringify(sourceHTML)};`) }]);
+				return contents.executeJavaScriptInIsolatedWorld(1004, [{ code: code.replace(/const (sourceHTML|detailHTML) = null;/g, (_match, name: string) => `const ${name} = ${JSON.stringify(name === 'sourceHTML' ? sourceHTML : detailHTML)};`) }]);
 			}
 		}, windowId, expectedURL, 10000, allowMissingSource);
 		return JSON.stringify({ ...snapshot, sessionScope: view.session.storageScope }, null, '\t');
@@ -632,9 +634,12 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		const info = (labels: string[]) => snapshot.info.find((row: string[]) => labels.includes(row[0]))?.[1] as string | undefined;
 		const rawStatus = snapshot.status;
 		const phase = /^(AC|WA|CE|RE|TLE|MLE|OLE|IE|QLE)$/.test(rawStatus) ? 'finished' : /^(WJ|Waiting)$/.test(rawStatus) ? 'queued' : /^(WR|Judging|\d+\s*\/\s*\d+.*)$/.test(rawStatus) ? 'judging' : 'unknown';
-		return { ref: record, phase, rawStatus, owner: snapshot.owner, language: info(['Language', '言語']), score: info(['Score', '得点']), time: info(['Exec Time', '実行時間']), memory: info(['Memory', 'メモリ']),
-			submittedAt: info(['Submission Time', '提出日時']), codeLength: info(['Code Size', 'コード長']), ...(snapshot.sourceRepresentation !== 'unavailable' ? { source: snapshot.source } : {}),
-			groups: snapshot.tests.length ? [{ name: 'Test Cases', rows: snapshot.tests }] : [], sourceVerification: snapshot.sourceRepresentation === 'unavailable' ? 'unavailable' : 'not-checked' };
+		return {
+			ref: record, phase, rawStatus, owner: snapshot.owner, language: info(['Language', '\u8a00\u8a9e']), score: info(['Score', '\u5f97\u70b9']), time: info(['Exec Time', '\u5b9f\u884c\u6642\u9593']), memory: info(['Memory', '\u30e1\u30e2\u30ea']),
+			...(snapshot.compileMessage !== undefined ? { compileMessage: snapshot.compileMessage } : {}), ...(rawStatus === 'CE' ? { compileSucceeded: false } : {}),
+			submittedAt: info(['Submission Time', '\u63d0\u51fa\u65e5\u6642']), codeLength: info(['Code Size', '\u30b3\u30fc\u30c9\u9577']), ...(snapshot.sourceRepresentation !== 'unavailable' ? { source: snapshot.source } : {}),
+			groups: snapshot.tests.length ? [{ name: 'Test Cases', rows: snapshot.tests }] : [], sourceVerification: snapshot.sourceRepresentation === 'unavailable' ? 'unavailable' : 'not-checked'
+		};
 	}
 
 	async reconcileAtCoderAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome> {
@@ -647,7 +652,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		const result = await reconcileAtCoderTransaction({ view }, entry.context);
 		if (result.verified && result.id && result.url) {
 			clearTimeout(entry.timer); this.atCoderAttempts.delete(attemptId);
-			await view.loadURL(result.url).catch(() => undefined);
 			return { kind: 'record', record: { problem, id: result.id, url: result.url } };
 		}
 		return { kind: 'unconfirmed', problem, attemptId, message: result.status };
@@ -673,6 +677,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 				new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('atcoder-form-timeout')), 6000); })
 			]);
 			if (changed || !available()) { throw new Error('atcoder-page-changed'); }
+			if (result === 'atcoder-login-required' || result === 'atcoder-form-missing') { throw new Error(result); }
 			if (!result || typeof result !== 'object') { throw new Error('atcoder-form-invalid'); }
 			const data = result as IAtCoderTaskForm;
 			if (typeof data.hasDraft !== 'boolean' || !Array.isArray(data.languages) || data.languages.length > 100 || data.languages.some(option => !/^\d+$/.test(option.id) || typeof option.label !== 'string' || option.label.length > 200)) { throw new Error('atcoder-form-invalid'); }
@@ -692,21 +697,14 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		this.atCoderRequests.get(id)?.abort();
 	}
 
-	async submitAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult> {
-		return runAtCoderTransaction({ view: this._getBrowserView(id), requests: this.atCoderRequests,
-			prepare: value => this.prepareAtCoderTask(id, windowId, expectedURL, value),
-			readRecord: url => this.readAtCoderSubmission(id, windowId, url),
-			onInteraction: () => this._onDidRequireOjInteraction.fire({ id, windowId })
-		}, id, windowId, expectedURL, payload);
-	}
-
 	async sendAndConfirmAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome> {
 		let attempt: AtCoderAttempt | undefined;
-		const result = await runAtCoderTransaction({ view: this._getBrowserView(id), requests: this.atCoderRequests,
+		const result = await runAtCoderTransaction({
+			view: this._getBrowserView(id), requests: this.atCoderRequests,
 			prepare: value => this.prepareAtCoderTask(id, windowId, expectedURL, value),
-			readRecord: url => this.readAtCoderSubmission(id, windowId, url), onAttempt: value => { attempt = value; },
+			onAttempt: value => { attempt = value; },
 			onInteraction: () => this._onDidRequireOjInteraction.fire({ id, windowId })
-		}, id, windowId, expectedURL, payload, true);
+		}, id, windowId, expectedURL, payload);
 		const task = atCoderTask(expectedURL)!;
 		const problem: ProblemRef = { site: 'atcoder', nativeId: task.contestId + '/' + task.taskId, url: expectedURL };
 		if (result.verified && result.id && result.url) { return { kind: 'record', record: { problem, id: result.id, url: result.url } }; }

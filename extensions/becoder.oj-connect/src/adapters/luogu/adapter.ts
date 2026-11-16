@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import type { ILuoguPrepared, ILuoguSourcePayload } from 'becoder-oj-connect';
@@ -48,7 +48,8 @@ export class LuoguAdapter implements OjAdapter {
 			signal.throwIfAborted();
 			let consumed = false, disposed = false;
 			const host = this.host;
-			return { languages: prepared.languages, hasDraft: prepared.hasDraft,
+			return {
+				languages: prepared.languages, hasDraft: prepared.hasDraft,
 				async send(input, progress, sendSignal) {
 					sendSignal.throwIfAborted();
 					if (consumed || disposed) { throw new Error('Submission session is consumed.'); }

@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
@@ -11,8 +11,8 @@ import { userError } from '../messages';
 
 export function labels(): Record<string, string> {
 	return {
-		rendering: vscode.l10n.t('Rendering the statement…'), renderFailed: vscode.l10n.t('Could not render the statement.'), submit: vscode.l10n.t('Submit'), submitCode: vscode.l10n.t('Submit Code'), importCph: vscode.l10n.t('Send to CPH'), viewRecord: vscode.l10n.t('View Result'), openOriginal: vscode.l10n.t('Open Original'),
-		continueQuery: vscode.l10n.t('Continue Querying'), stopTracking: vscode.l10n.t('Stop Tracking'), record: vscode.l10n.t('Submission'),
+		rendering: vscode.l10n.t('Rendering the statement…'), renderFailed: vscode.l10n.t('Could not render the statement.'), submit: vscode.l10n.t('Submit'), submitCode: vscode.l10n.t('Submit Code'), importCph: vscode.l10n.t('Send to CPH'), openOriginal: vscode.l10n.t('Open Original'),
+		continueQuery: vscode.l10n.t('Continue Querying'), record: vscode.l10n.t('Submission'),
 		tracking: vscode.l10n.t('Reading the current submission result…'), waiting: vscode.l10n.t('Waiting for record data'), language: vscode.l10n.t('Language'),
 		interactive: vscode.l10n.t('Interactive problem'), samples: vscode.l10n.t('Samples'), sample: vscode.l10n.t('Sample'), input: vscode.l10n.t('Input'), output: vscode.l10n.t('Output'),
 		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Select and copy the sample'), score: vscode.l10n.t('Score'),
@@ -20,8 +20,14 @@ export function labels(): Record<string, string> {
 		'Time Limit': vscode.l10n.t('Time Limit'), 'Memory Limit': vscode.l10n.t('Memory Limit'),
 		difficulty: vscode.l10n.t('Problem Difficulty'), tags: vscode.l10n.t('Problem Tags'),
 		testCases: vscode.l10n.t('Test Cases'),
+		sampleExplanation: vscode.l10n.t('Sample explanation'),
 		submittedAt: vscode.l10n.t('Submission Time'), codeLength: vscode.l10n.t('Code Size'), source: vscode.l10n.t('Source Code'), viewSource: vscode.l10n.t('View in BeCoder'),
 		compileSucceeded: vscode.l10n.t('Compilation succeeded'), compileFailed: vscode.l10n.t('Compilation failed'),
+		compileUnavailable: vscode.l10n.t('Compiler output is unavailable for this record.'),
+		status_AC: vscode.l10n.t('Accepted'), status_WA: vscode.l10n.t('Wrong answer'), status_CE: vscode.l10n.t('Compilation error'),
+		status_TLE: vscode.l10n.t('Time limit exceeded'), status_MLE: vscode.l10n.t('Memory limit exceeded'), status_RE: vscode.l10n.t('Runtime error'),
+		status_OLE: vscode.l10n.t('Output limit exceeded'), status_IE: vscode.l10n.t('Internal judge error'), status_WJ: vscode.l10n.t('Waiting for judging'), status_WR: vscode.l10n.t('Waiting for rejudging'),
+		status_QLE: vscode.l10n.t('Query limit exceeded'),
 		time: vscode.l10n.t('Time'), memory: vscode.l10n.t('Memory'), owner: vscode.l10n.t('User'), compiler: vscode.l10n.t('Compiler Output'),
 		'verification_matched': vscode.l10n.t('The submitted source was verified.'), 'verification_mismatch': vscode.l10n.t('The record source differs from the submitted source.'),
 		'verification_unavailable': vscode.l10n.t('The record source is unavailable.'), 'verification_not-checked': vscode.l10n.t('Source comparison is not available for this result.')

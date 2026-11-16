@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 // Same-version Electron, intercepted private session. No live OJ account or traffic.
@@ -43,7 +43,7 @@ app.whenReady().then(async () => {
 			cookieWatchers.clear();
 		}
 		assert.equal(cookieEvents.listenerCount('changed'), 0);
-		// The Luogu browser-carrier fixture moved to test-luogu-session.cjs and
+		// The Luogu browser-carrier fixture moved to test-luogu-session.cts and
 		// test-luogu-session-host.cjs. Keep the distinct AtCoder read-route regressions here.
 		const partition = 'oj-connect-atcoder-read-fixture';
 		const atcoder = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };

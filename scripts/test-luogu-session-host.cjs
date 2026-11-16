@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 // Actual main-service methods with real Electron cookies in an intercepted private Session.
@@ -22,7 +22,7 @@ app.whenReady().then(async () => {
 		const { BrowserViewMainService } = require(path.join(root, 'tmp/oj-connect-audit/native-luogu-main.cjs'));
 		const privateSession = session.fromPartition('luogu-native-host-fixture');
 		const problem = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
-		const payload = { source: '#include <iostream>\nint main(){std::cout << "同一快照";}\n', fileName: 'P1001.cpp', languageId: '27:o2' };
+		const payload = { source: '#include <iostream>\nint main(){std::cout << "\u540c\u4e00\u5feb\u7167";}\n', fileName: 'P1001.cpp', languageId: '27:o2' };
 		const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6EGQAAAAASUVORK5CYII=';
 		let uid = 123, mode = 'ordinary', creations = 0, imageReads = 0, captchaWaiter;
 		const posts = [], accounts = [], captchaEvents = [], cancellations = [];
@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
 			if (url.pathname === '/fe/api/problem/submit/P1001') {
 				assert.equal(request.method, 'POST');
 				const body = await request.json(); posts.push(body);
-				if (mode === 'captcha' && body.captcha !== 'correct') { return Response.json({ errorMessage: '验证码错误' }, { status: 400 }); }
+				if (mode === 'captcha' && body.captcha !== 'correct') { return Response.json({ errorMessage: '\u9a8c\u8bc1\u7801\u9519\u8bef' }, { status: 400 }); }
 				return Response.json({ rid: 22 });
 			}
 			if (url.pathname === '/ranking' || url.pathname === '/problem/P1001') {

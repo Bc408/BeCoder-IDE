@@ -35,6 +35,18 @@ suite('AtCoder submission experiment', () => {
 		assert.strictEqual(record.sourceRepresentation, 'unavailable');
 	});
 
+	test('preserves bounded compiler output independently from source visibility', async () => {
+		const p = page(), read = p.read;
+		p.read = async code => ({ ...await read(code) as object, status: 'CE', source: '', compileMessage: 'error: <cin>\n  ^~~\n' });
+		const snapshot = await readAtCoderSubmission(p, 7, url, 1000, true);
+		assert.strictEqual(snapshot.compileMessage, 'error: <cin>\n  ^~~\n');
+		assert.strictEqual(snapshot.sourceRepresentation, 'unavailable');
+		for (const compileMessage of [1, 'x'.repeat(524289)]) {
+			p.read = async code => ({ ...await read(code) as object, compileMessage });
+			await assert.rejects(readAtCoderSubmission(p, 7, url), /incomplete/);
+		}
+	});
+
 	test('rejects another window before reading its DOM', async () => {
 		const p = page();
 		p.read = async () => { assert.fail('must not read another window'); };

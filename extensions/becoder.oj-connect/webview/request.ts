@@ -1,4 +1,11 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
  *  Copyright (c) 2018 引领天下. MIT License.
  *  Adapted from yltx/vscode-luogu v4.18.2 (dbced7c2cd0aca345cfa6f91de64b59c02806341).
  *  BeCoder changes: shared OJ data/commands, localization, removed peripheral features.
@@ -20,12 +27,12 @@ export default function send<T = void>(data: PanelAction): Promise<T> {
 	});
 }
 window.addEventListener(
-  'message',
-  ({ data }: MessageEvent<{ uuid: string; data?: unknown; error?: string }>) => {
-    const f = p.get(data.uuid);
-    if (f) {
-      p.delete(data.uuid);
-      data.error ? f[1](data.error) : f[0](data.data);
-    }
-  }
+	'message',
+	({ data }: MessageEvent<{ uuid: string; data?: unknown; error?: string }>) => {
+		const f = p.get(data.uuid);
+		if (f) {
+			p.delete(data.uuid);
+			data.error ? f[1](data.error) : f[0](data.data);
+		}
+	}
 );

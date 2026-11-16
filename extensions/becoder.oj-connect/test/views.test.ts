@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -9,7 +9,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { safeState, panelMessage } from '../src/views/model';
+import { safeState, panelMessage, type PanelState, type PanelAction } from '../src/views/model';
+import { OjPreferences } from '../src/preferences';
 
 test('webview state cannot terminate its script and actions cannot inject a source or command', () => {
 	assert.ok(!safeState({ text: '</script><script>alert(1)</script>\u2028' }).includes('<'));
@@ -17,6 +18,8 @@ test('webview state cannot terminate its script and actions cannot inject a sour
 	assert.strictEqual(panelMessage({ action: 'submit', sourceUri: 'file:///other.cpp' }), undefined);
 	assert.deepStrictEqual(panelMessage({ action: 'submit' }), { action: 'submit' });
 	assert.strictEqual(panelMessage({ action: 'executeCommand' }), undefined);
+	assert.strictEqual(panelMessage({ action: 'viewRecord' }), undefined);
+	assert.strictEqual(panelMessage({ action: 'stopTracking' }), undefined);
 	assert.strictEqual(panelMessage({ action: 'selectLocale', locale: 1 }), undefined);
 	assert.deepStrictEqual(panelMessage({ action: 'selectLocale', locale: 'ja' }), { action: 'selectLocale', locale: 'ja' });
 	assert.deepStrictEqual(panelMessage({ action: 'ready' }), { action: 'ready' });
@@ -27,13 +30,61 @@ test('webview state cannot terminate its script and actions cannot inject a sour
 	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'x'.repeat(8 * 1024 * 1024 + 1) }), undefined);
 });
 
+test('AtCoder statement defaults to English without silently choosing a compiler and restores explicit locale', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-locale-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const file = path.join(root, 'abc086_a.cpp'); fs.writeFileSync(file, 'int main() {}');
+	const uri = pathToFileURL(file).href;
+	const source = { uri: { fsPath: file, toString: () => uri }, languageId: 'cpp', isClosed: false };
+	const Module = require('module'), original = Module._load;
+	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void> }[] = [];
+	let selected = 0;
+	const values = new Map<string, unknown>();
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
+	const event = () => ({ dispose() { } });
+	const modulePath = require.resolve('../src/views/problemPanel'); delete require.cache[modulePath];
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { Uri: { parse: () => ({ fsPath: file }) }, workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event } }; }
+		if (id === './webview') {
+			return {
+				labels: () => ({}), Panel: class {
+					state: PanelState;
+					constructor(_context: unknown, state: PanelState, action: (value: PanelAction) => Promise<void>, private close: () => void) { this.state = state; captures.push({ state, action }); }
+					update(value: unknown) { Object.assign(this.state, value); } reveal() { } dispose() { this.close(); }
+				}
+			};
+		}
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { ProblemPanel } = require('../src/views/problemPanel');
+		const actions = { preferredLanguage: () => undefined, selectLanguage: () => { selected++; } };
+		const ref = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
+		const document = { ref, title: 'Product', languages: [{ id: '6017', label: 'C++23', family: 'cpp' }], bodies: ['ja', 'en'].map(locale => ({ locale, sections: [] })), samples: [], limits: [], interactive: false };
+		let panels = new ProblemPanel({}, actions, preferences);
+		await panels.open(document, uri, source);
+		assert.strictEqual(captures[0].state.locale, 'en'); assert.strictEqual(captures[0].state.languageId, undefined); assert.strictEqual(selected, 0);
+		await captures[0].action({ action: 'selectLocale', locale: 'ja' }); panels.dispose();
+		panels = new ProblemPanel({}, actions, preferences);
+		await panels.open({ ...document, bodies: [document.bodies[1]] }, uri, source);
+		assert.strictEqual(captures[1].state.locale, 'en'); panels.dispose();
+		panels = new ProblemPanel({}, actions, preferences);
+		await panels.open(document, uri, source);
+		assert.strictEqual(captures[2].state.locale, 'ja'); assert.strictEqual(selected, 0); panels.dispose();
+	} finally { Module._load = original; delete require.cache[modulePath]; }
+});
+
 test('a reconstructed webview receives the latest host state after ready', async () => {
 	const Module = require('module'), original = Module._load;
 	let receive!: (value: unknown) => void;
 	const posted: unknown[] = []; let calls = 0;
-	const mock = { l10n: { t: (value: string) => value }, ViewColumn: { Beside: 2 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') }, window: { createWebviewPanel: () => ({
-		webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: unknown) => { posted.push(structuredClone(value)); }, onDidReceiveMessage: (listener: typeof receive) => { receive = listener; return { dispose() {} }; } }, onDidDispose: () => ({ dispose() {} }), dispose() {}
-	}) } };
+	const mock = {
+		l10n: { t: (value: string) => value }, ViewColumn: { Beside: 2 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') }, window: {
+			createWebviewPanel: () => ({
+				webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: unknown) => { posted.push(structuredClone(value)); }, onDidReceiveMessage: (listener: typeof receive) => { receive = listener; return { dispose() { } }; } }, onDidDispose: () => ({ dispose() { } }), dispose() { }
+			})
+		}
+	};
 	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
 	try {
 		const { Panel } = require('../src/views/webview');
@@ -57,17 +108,19 @@ test('open statement panels and the first submission picker keep the language di
 	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 	const Module = require('module'), original = Module._load;
 	const receives: ((value: unknown) => void)[] = [], posted: { state: { languageId: string; languages: unknown[] } }[][] = [];
-	const event = () => ({ dispose() {} });
+	const event = () => ({ dispose() { } });
 	let preferred: string | undefined;
 	const mock = {
 		l10n: { t: (value: string) => value }, env: { language: 'zh-cn' }, ViewColumn: { Beside: 2 },
 		Uri: { parse: (value: string) => ({ fsPath: fileURLToPath(value) }), joinPath: (...parts: unknown[]) => parts.join('/') },
 		workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event },
-		window: { createWebviewPanel: () => {
-			const messages: typeof posted[number] = []; posted.push(messages);
-			let close = () => undefined;
-			return { webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: typeof messages[number]) => messages.push(structuredClone(value)), onDidReceiveMessage: (listener: typeof receives[number]) => { receives.push(listener); return event(); } }, onDidDispose: (listener: () => undefined) => { close = listener; return event(); }, reveal() {}, dispose: () => close() };
-		} }
+		window: {
+			createWebviewPanel: () => {
+				const messages: typeof posted[number] = []; posted.push(messages);
+				let close = () => undefined;
+				return { webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: typeof messages[number]) => messages.push(structuredClone(value)), onDidReceiveMessage: (listener: typeof receives[number]) => { receives.push(listener); return event(); } }, onDidDispose: (listener: () => undefined) => { close = listener; return event(); }, reveal() { }, dispose: () => close() };
+			}
+		}
 	};
 	const webview = require.resolve('../src/views/webview'); delete require.cache[webview];
 	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
@@ -82,10 +135,10 @@ test('open statement panels and the first submission picker keep the language di
 				const uri = pathToFileURL(file).href, source = { uri: { fsPath: file, toString: () => uri }, languageId: 'cpp', isClosed: false };
 				await panels.open({ ref, title: 'A+B', languages: options, bodies: [], samples: [], limits: [], interactive: false }, uri, source);
 			}
-			receives[0]({ action: 'selectLanguage', languageId: '23' });
+			receives[0]({ action: 'selectLanguage', languageId: '23' }); await new Promise(resolve => setImmediate(resolve));
 			assert.strictEqual(preferred, '23'); assert.strictEqual(posted[1].at(-1)!.state.languageId, '23');
 			// Live options supplied after login replace an initially anonymous statement's options.
-			panels.updateLanguage(ref, [{ id: '26', label: 'C++26', family: 'cpp' }], '26');
+			await panels.updateLanguage(ref, [{ id: '26', label: 'C++26', family: 'cpp' }], '26');
 			assert.strictEqual(posted[0].at(-1)!.state.languages.length, 1);
 			receives[1]({ action: 'selectLanguage', languageId: '26' }); assert.strictEqual(preferred, '26');
 			receives[0]({ action: 'selectLanguage', languageId: '20' }); assert.strictEqual(preferred, '26');

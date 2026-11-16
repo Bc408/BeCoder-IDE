@@ -1,16 +1,17 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
  *  Copyright (c) 2018 引领天下. MIT License.
  *  Tag, Spinner and CphIcon adapted from vscode-luogu v4.20.0.
  *  See ThirdPartyNotices.txt for the original license.
  *--------------------------------------------------------------------------------------------*/
 
 import React from 'react';
-import { copyIconPath } from './codeCopy';
-
-export function CopyIcon() {
-	return <svg aria-hidden={'true'} viewBox={'0 0 16 16'} fill={'currentColor'}><path d={copyIconPath} /></svg>;
-}
-
 export function Tag({ label, color }: { label: string; color?: string }) {
 	return <span className={'tag'} style={{ backgroundColor: color ?? '#7f7f7f' }}>{label}</span>;
 }

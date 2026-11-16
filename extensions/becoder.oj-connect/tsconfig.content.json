@@ -8,6 +8,8 @@
 		"lib": ["ES2024", "DOM"],
 		"paths": {
 			"hast": ["./node_modules/@types/hast"],
+			"mdast": ["./node_modules/@types/mdast"],
+			"unist": ["./node_modules/@types/unist"],
 			"*": ["./node_modules/*", "../../node_modules/*"]
 		}
 	},

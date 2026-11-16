@@ -18,11 +18,12 @@ BeCoder 主产品的公开许可标识是 **GPL-3.0-or-later**，完整条款见
 | BeCoder 主产品 | GPL-3.0-or-later；继承的 Code - OSS 部分保留 MIT 声明 | [根 LICENSE](../LICENSE)、[Code - OSS MIT](MIT-VSCode.txt) |
 | Runner（基于 C/C++ Compile Run） | GPL v3；扩展清单为 `GPL-3.0`，组件清单按 `GPL-3.0-only` 记录 | [LICENSE](../extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE)、[上游仓库](https://github.com/danielpinto8zz6/c-cpp-compile-run) |
 | BeCoder CPH | CPH 派生代码为 GPL-3.0-or-later；Competitive Companion 解析器、React 等保留 MIT；Codicons 字体为 CC-BY-4.0 | [LICENSE](../extensions/becoder.cph/LICENSE)、[UPSTREAM.md](../extensions/becoder.cph/UPSTREAM.md)、[第三方声明](../extensions/becoder.cph/ThirdPartyNotices.txt)、[解析器 MIT](../extensions/becoder.cph/companion/LICENSE) |
+| OJ Connect | 自有集成为 GPL-3.0-or-later；洛谷组件、共享 Markdown 渲染器和 Microsoft helper 为 MIT；Lucide 标题锚点为 ISC；其他依赖保留各自许可 | [LICENSE](../extensions/becoder.oj-connect/LICENSE)、[UPSTREAM.md](../extensions/becoder.oj-connect/UPSTREAM.md)、[第三方声明](../extensions/becoder.oj-connect/ThirdPartyNotices.txt) |
 | Beacon | 自有代码为 MIT；适配的 AI Elements、Captain Who 代码和样式为 Apache-2.0；LobeHub 服务图标为 MIT；依赖与语法资源各自保留许可 | [LICENSE](../extensions/becoder.beacon/LICENSE)、[UPSTREAM.md](../extensions/becoder.beacon/UPSTREAM.md)、[AI Elements](../extensions/becoder.beacon/licenses/ai-elements.txt)、[Captain Who](../extensions/becoder.beacon/licenses/captain-who.txt)、[LobeHub](../extensions/becoder.beacon/licenses/lobe-icons.txt) |
 | BeCoder NoteBook | 自有扩展为 GPL-3.0-or-later；复用的 Microsoft Notebook ANSI 工具为 MIT | [LICENSE](../extensions/becoder.notebook/LICENSE)、[Microsoft MIT](MIT-VSCode.txt)、[ANSI 源码](../extensions/notebook-renderers/src/ansi.ts) |
 | Setup 扩展 | MIT | [LICENSE](../extensions/becoder.setup/LICENSE) |
 | GCC Diagnostics | 自有代码为 MIT；GCC Unicode 显示宽度数据为 GPL-3.0-or-later | [MIT LICENSE](../extensions/becoder.gcc-diagnostics/LICENSE)、[数据 NOTICE](../extensions/becoder.gcc-diagnostics/NOTICE)、[GPL 全文](../LICENSE) |
-| Webview 共享 hover helper | MIT；它是共享源码，不是独立安装的扩展 | [LICENSE](../extensions/becoder.shared/LICENSE) |
+| Webview 共享内容渲染与 hover helper | 自有共享代码及移植的 Markdown 渲染器为 MIT；Lucide 标题锚点为 ISC；它是共享源码，不是独立安装的扩展 | [共享 MIT](../extensions/becoder.shared/LICENSE)、[渲染器 MIT](../extensions/becoder.shared/content/LICENSE.luogu-markdown.txt)、[Lucide ISC](../extensions/becoder.shared/content/LICENSE.lucide.txt) |
 | One Monokai | MIT，保留 Joshua Azemoh 版权 | [LICENSE](../extensions/becoder.one-monokai/LICENSE) |
 | vscode-clangd | MIT；扩展和 clangd 二进制是两个许可入口 | [扩展 LICENSE](../extensions/llvm-vs-code-extensions.vscode-clangd/LICENSE)；二进制见下表 |
 | CodeSnap | MIT，保留 Adrien Pyke 版权 | [LICENSE](../extensions/aadityanarayan.code-snap/LICENSE) |
@@ -30,7 +31,7 @@ BeCoder 主产品的公开许可标识是 **GPL-3.0-or-later**，完整条款见
 | Better C++ Syntax | MIT，保留 Jeff Hykin 版权 | [语法许可](../extensions/cpp/better-cpp-syntax-license.txt) |
 | Seti / Mermaid Markdown / 简体中文语言包 | Code - OSS MIT 与各扩展保留的第三方声明 | [Seti 声明](../extensions/theme-seti/ThirdPartyNotices.txt)、[Mermaid 声明](../extensions/mermaid-markdown-features/ThirdPartyNotices.txt)、[语言包 LICENSE](../extensions/MS-CEINTL.vscode-language-pack-zh-hans/LICENSE.md)、[语言包声明](../extensions/MS-CEINTL.vscode-language-pack-zh-hans/ThirdPartyNotices.txt) |
 
-Beacon 的 [build.mjs](../extensions/becoder.beacon/build.mjs) 根据实际捆绑依赖生成 `dist/ThirdPartyNotices.txt`；NoteBook 的 [build.mjs](../extensions/becoder.notebook/build.mjs) 生成 `dist/THIRD_PARTY_NOTICES.txt`。这些文件随构建生成，不应直接修改。使用共享 hover helper 的扩展还会随包提供 `dist/HoverLicense.txt`。
+Beacon 的 [build.mjs](../extensions/becoder.beacon/build.mjs) 根据实际捆绑依赖生成 `dist/ThirdPartyNotices.txt`；NoteBook 的 [build.mjs](../extensions/becoder.notebook/build.mjs) 生成 `dist/THIRD_PARTY_NOTICES.txt`。这些文件随构建生成，不应直接修改。OJ Connect 的完整依赖声明保留于其源码中的 [ThirdPartyNotices.txt](../extensions/becoder.oj-connect/ThirdPartyNotices.txt)，构建另生成真实依赖版本清单。使用共享 hover helper 的扩展还会随包提供 `dist/HoverLicense.txt`。
 
 ## 工具链与源码记录
 

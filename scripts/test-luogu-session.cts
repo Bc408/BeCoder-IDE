@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 // Same-version Electron with a private, intercepted session. No live OJ traffic or account.
@@ -23,7 +23,7 @@ app.whenReady().then(async () => {
 		window.destroy();
 		assert.equal(BrowserWindow.getAllWindows().length, 0);
 		const problem = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
-		const payload = { source: '#include <iostream>\nint main(){std::cout << "你好";}\n', fileName: 'P1001.cpp', languageId: '27:o2' };
+		const payload = { source: '#include <iostream>\nint main(){std::cout << "\u4f60\u597d";}\n', fileName: 'P1001.cpp', languageId: '27:o2' };
 		const context = { user: { uid: 123, name: 'fixture-user' }, data: { problem: { pid: 'P1001', name: 'A+B', content: { locale: 'zh-CN', description: 'Sum $a+b$.' }, samples: [['20 30\n', '50\n']], acceptLanguages: [27], limits: { time: [1000], memory: [524288] } }, translations: {} } };
 		const config = { CodeLanguage: { 27: { id: 27, name: 'C++20', fileExt: ['cpp'], canO2: true } }, RecordStatus: { 0: { name: 'Waiting', shortName: 'WJ' }, 1: { name: 'Judging', shortName: 'Judging' }, 12: { name: 'Accepted', shortName: 'AC' } } };
 		const html = value => '<meta name="csrf-token" content="9999999999:fixture"><script id="lentille-context" type="application/json">' + JSON.stringify(value) + '</script>';
@@ -36,14 +36,14 @@ app.whenReady().then(async () => {
 			assert.equal(url.origin, 'https://www.luogu.com.cn');
 			requests.push(url.pathname);
 			if (url.pathname === '/_lfe/config') { return Response.json(config); }
-			if (url.pathname === '/_lfe/tags/zh-CN') { return Response.json({ tags: [{ id: 1, name: '模拟', type: 2 }], types: [{ id: 2, color: 'orange-3' }] }); }
+			if (url.pathname === '/_lfe/tags/zh-CN') { return Response.json({ tags: [{ id: 1, name: '\u6a21\u62df', type: 2 }], types: [{ id: 2, color: 'orange-3' }] }); }
 			if (url.pathname === '/api/verify/captcha') { return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6EGQAAAAASUVORK5CYII=', 'base64'), { headers: { 'Content-Type': 'image/png' } }); }
 			if (url.pathname === '/fe/api/problem/submit/P1001') {
 				assert.equal(request.method, 'POST');
 				assert.equal(request.headers.get('X-CSRF-Token'), '9999999999:fixture');
 				const body = await request.json(); posts.push(body);
-				if (mode === 'captcha' && body.captcha !== 'correct') { return Response.json({ errorMessage: '验证码错误' }, { status: 400 }); }
-				if (mode === 'rejected') { return Response.json({ errorMessage: '提交过于频繁' }, { status: 429 }); }
+				if (mode === 'captcha' && body.captcha !== 'correct') { return Response.json({ errorMessage: '\u9a8c\u8bc1\u7801\u9519\u8bef' }, { status: 400 }); }
+				if (mode === 'rejected') { return Response.json({ errorMessage: '\u63d0\u4ea4\u8fc7\u4e8e\u9891\u7e41' }, { status: 429 }); }
 				if (mode === 'lost') { return Response.json({}); }
 				if (mode === 'redirect') { return new Response(null, { status: 307, headers: { Location: '/unexpected-replay' } }); }
 				return Response.json({ rid: 22 });
@@ -84,8 +84,8 @@ app.whenReady().then(async () => {
 		assert.equal(requests.filter(route => route === '/_lfe/tags/zh-CN').length, 0, 'no tags require no tag request');
 		Object.assign(context.data.problem, { difficulty: 1, tags: [1] });
 		const [withTags, repeated] = await Promise.all([client.readProblem(problem, signal()), client.readProblem(problem, signal())]);
-		assert.deepEqual(withTags.difficulty, { label: '入门', color: '#FE4C61' });
-		assert.deepEqual(withTags.tags, [{ label: '模拟', color: '#f39c11' }]);
+		assert.deepEqual(withTags.difficulty, { label: '\u5165\u95e8', color: '#FE4C61' });
+		assert.deepEqual(withTags.tags, [{ label: '\u6a21\u62df', color: '#f39c11' }]);
 		assert.deepEqual(withTags.limits.map(limit => limit.value), ['1.00s', '512.00MiB']);
 		assert.deepEqual(repeated.tags, withTags.tags);
 		assert.equal(requests.filter(route => route === '/_lfe/tags/zh-CN').length, 1, 'concurrent problems share the cached tag request');

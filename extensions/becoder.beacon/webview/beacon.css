@@ -137,7 +137,8 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .markdown .code-block pre code { overflow-wrap: normal; white-space: pre; word-break: normal; }
 .markdown .code-block.is-wrapped pre { width: 100%; max-width: 100%; }
 .markdown .code-block.is-wrapped pre code { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
-.code-line { background: transparent; }
+/* Isolate each line's inline layout so appending a tail does not reshape the prefix. */
+.code-line { display: inline-block; min-height: 1lh; max-width: 100%; vertical-align: top; background: transparent; }
 .markdown .inline-code { font-size: .92em; }
 .markdown .katex-display { margin: 18px 0; }
 .math-pending { color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }

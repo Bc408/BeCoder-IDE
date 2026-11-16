@@ -10,7 +10,7 @@ export type { IAtCoderShortcutResult } from 'becoder-oj-connect';
 /** Only bounded own-list table rows are parsed; HTML is never executed. */
 export function parseAtCoderRecords(html: string, contest: string): IAtCoderRecordLink[] {
 	const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-	if (!/^[a-zA-Z0-9_-]+$/.test(contest) || !/<table\b/i.test(html) || !/Submission Time|提出日時/.test(text) || !/Code Size|コード長/.test(text) || /<form[^>]+action=["'][^"']*\/login/i.test(html)) { throw new Error('atcoder-history-unavailable'); }
+	if (!/^[a-zA-Z0-9_-]+$/.test(contest) || !/<table\b/i.test(html) || !/Submission Time|\u63d0\u51fa\u65e5\u6642/.test(text) || !/Code Size|\u30b3\u30fc\u30c9\u9577/.test(text) || /<form[^>]+action=["'][^"']*\/login/i.test(html)) { throw new Error('atcoder-history-unavailable'); }
 	const rows: IAtCoderRecordLink[] = [];
 	for (const match of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
 		const links = [...match[1].matchAll(/<a\b[^>]*\bhref=["']([^"']+)["']/gi)].flatMap(item => {
@@ -35,34 +35,40 @@ export function newAtCoderCandidates(rows: IAtCoderRecordLink[], baseline: strin
 	return rows.filter(row => BigInt(row.id) > BigInt(baseline) && row.taskId === task && row.languageId === language && (!owner || row.owner === owner));
 }
 
+/** Private isolated-world signal retained by the host across native form navigation. */
+export function atCoderSubmitMarker(requestId: string): string {
+	return 'becoder-atcoder-submit:' + requestId;
+}
+
 /** Native requestSubmit respects HTML validation and website handlers; no token is returned to the caller. */
 export function atCoderSendScript(url: string, source: string, languageId: string, requestId: string): string {
 	return `(() => {
-		if (location.href !== ${JSON.stringify(url)}) { throw new Error('atcoder-page-changed'); }
+		if (location.href !== ${JSON.stringify(url)}) { return 'atcoder-page-changed'; }
 		const requestId = ${JSON.stringify(requestId)};
 		let state = globalThis.__becoderAtCoderSubmission;
 		if (state?.requestId === requestId && state.sent) { return true; }
 		const area = document.querySelector('#plain-textarea');
 		const language = document.querySelector('#select-lang select.current');
 		const button = document.querySelector('#submit');
-		if (!area?.form || area.value !== ${JSON.stringify(source)} || language?.value !== ${JSON.stringify(languageId)} || button?.form !== area.form) { throw new Error('atcoder-submission-changed'); }
+		if (!area?.form || area.value !== ${JSON.stringify(source)} || language?.value !== ${JSON.stringify(languageId)} || button?.form !== area.form) { return 'atcoder-submission-changed'; }
 		const form = area.form;
 		const expected = new URL(${JSON.stringify(url)});
-		if (form.method.toLowerCase() !== 'post' || new URL(form.action).origin !== expected.origin || new URL(form.action).pathname !== expected.pathname.replace(/\\/tasks\\/[^/]+$/, '/submit')) { throw new Error('atcoder-form-mismatch'); }
+		if (form.method.toLowerCase() !== 'post' || new URL(form.action).origin !== expected.origin || new URL(form.action).pathname !== expected.pathname.replace(/\\/tasks\\/[^/]+$/, '/submit')) { return 'atcoder-form-mismatch'; }
 		if (state?.requestId !== requestId) {
 			state?.dispose();
 			state = { requestId, form, sent: false, prompted: false, dispose: () => document.removeEventListener('submit', onSubmit, true) };
-			const onSubmit = event => { if (event.target === form) { state.sent = true; } };
+			const onSubmit = event => { if (event.target === form && !state.sent) { state.sent = true; console.info(${JSON.stringify(atCoderSubmitMarker(requestId))}); } };
 			document.addEventListener('submit', onSubmit, true);
 			globalThis.__becoderAtCoderSubmission = state;
 		}
-		if (state.form !== form) { throw new Error('atcoder-form-changed'); }
+		if (state.form !== form) { return 'atcoder-form-changed'; }
 		const captcha = form.elements.namedItem('cf-turnstile-response');
 		if (button.disabled || (captcha && !captcha.value) || !form.checkValidity()) {
 			if (!state.prompted) { button.scrollIntoView({ block: 'center' }); state.prompted = true; }
 			return false;
 		}
 		state.sent = true;
+		console.info(${JSON.stringify(atCoderSubmitMarker(requestId))});
 		form.requestSubmit(button);
 		return true;
 	})()`;

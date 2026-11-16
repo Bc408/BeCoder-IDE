@@ -1,4 +1,11 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
  *  Copyright (c) 2018 引领天下. MIT License.
  *  Adapted from yltx/vscode-luogu v4.18.2 (dbced7c2cd0aca345cfa6f91de64b59c02806341).
  *  BeCoder changes: shared OJ data/commands, localization, removed peripheral features.
@@ -13,7 +20,7 @@ import type { Section } from '../../src/domain';
 import { contentFragment, highlightCodeBlocks } from '../content';
 import type { Root } from 'hast';
 import send from '../request';
-import './copyablePre';
+import CopyablePre from './copyablePre';
 import { installCodeCopyButtons } from './codeCopy';
 import { CphIcon, Tag } from './presentation';
 
@@ -55,7 +62,7 @@ export default function Problem({ state }: { state: PanelState }) {
 	const data = state.problem!, problemId = data.ref.nativeId.split('/').at(-1)!, languagesList = data.bodies.map(body => body.locale);
 	const choosedLanguage = state.locale ?? languagesList[0];
 	const problemContent = data.bodies.find(body => body.locale === choosedLanguage) ?? data.bodies[0];
-	const content = (notes: boolean) => problemContent?.sections.filter(section => (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
+	const content = (notes: boolean) => problemContent?.sections.filter(section => section.kind !== 'sample-explanation' && (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
 		{section.heading && <h2>{section.heading}</h2>}
 		<Content section={section} url={data.ref.url} />
 	</div>);
@@ -91,8 +98,9 @@ export default function Problem({ state }: { state: PanelState }) {
 				<h2>{state.labels.samples}</h2>
 				<div className={'problemSamples'}>
 					{data.samples.map(({ input, output }, id) => <div key={id} className={'sample-grid'}>
-						<div><h3>{state.labels.input}#{id + 1}</h3><pre is={'copyable-pre'}><code>{input}</code></pre></div>
-						<div><h3>{state.labels.output}#{id + 1}</h3><pre is={'copyable-pre'}><code>{output}</code></pre></div>
+						<div><h3>{state.labels.input}#{id + 1}</h3><CopyablePre><code>{input}</code></CopyablePre></div>
+						<div><h3>{state.labels.output}#{id + 1}</h3><CopyablePre><code>{output}</code></CopyablePre></div>
+						{problemContent?.sections.filter(section => section.kind === 'sample-explanation' && section.sampleIndex === id).map((section, index) => <div className={'sample-explanation'} key={index}><h3>{state.labels.sampleExplanation} #{id + 1}</h3><Content section={section} url={data.ref.url} /></div>)}
 					</div>)}
 				</div>
 			</div>}

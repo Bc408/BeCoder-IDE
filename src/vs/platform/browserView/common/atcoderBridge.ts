@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs shared with the bundled extension.
-import type { IAtCoderBridge, IAtCoderPageRef, IAtCoderShortcutResult, IAtCoderSourcePayload, IAtCoderTaskForm, SubmissionOutcome, RecordRef, RecordSnapshot, ProblemRef } from 'becoder-oj-connect';
+import type { IAtCoderBridge, IAtCoderPageRef, IAtCoderSourcePayload, IAtCoderTaskForm, SubmissionOutcome, RecordRef, RecordSnapshot, ProblemRef } from 'becoder-oj-connect';
 import { atCoderTask } from './atcoderWorkflow.js';
 
 export interface IAtCoderHostPage { viewId: string; url: string; generation?: number }
@@ -18,13 +18,11 @@ export class AtCoderPageGeneration {
 export interface IAtCoderBridgePorts {
 	openTask(url: string, sourceUri: string): Promise<IAtCoderHostPage>;
 	inspectTask(page: IAtCoderHostPage): Promise<IAtCoderTaskForm>;
-	submit(page: IAtCoderHostPage, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult>;
 	sendAndConfirm?(page: IAtCoderHostPage, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome>;
 	readRecord?(record: RecordRef): Promise<RecordSnapshot>;
 	reconcile?(attemptId: string): Promise<SubmissionOutcome>;
 	cancel(page: IAtCoderHostPage): Promise<void>;
 	release?(page: IAtCoderHostPage): void;
-	revealResult(page: IAtCoderHostPage, receipt: IAtCoderShortcutResult): Promise<void>;
 	newHandle(): string;
 	isPageCurrent(page: IAtCoderHostPage): boolean;
 }
@@ -33,7 +31,6 @@ interface Lease {
 	consumed: boolean;
 	active: boolean;
 	stopped: boolean;
-	receipt?: IAtCoderShortcutResult;
 	timer: ReturnType<typeof setTimeout>;
 }
 
@@ -75,17 +72,13 @@ export class AtCoderBridgeController implements IAtCoderBridge {
 		return result;
 	}
 
-	async submit(ref: IAtCoderPageRef, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult> {
-		const result = await this.consume(ref, payload, page => this.ports.submit(page, { ...payload }));
-		this.lease(ref).receipt = { ...result };
-		return { ...result };
-	}
-
 	private async consume<T>(ref: IAtCoderPageRef, payload: IAtCoderSourcePayload, operation: (page: IAtCoderHostPage) => Promise<T>, accepted: (value: T) => boolean = () => false): Promise<T> {
 		const lease = this.lease(ref, true);
 		if (lease.consumed) { throw new Error('atcoder-handle-consumed'); }
 		if (!payload || typeof payload.source !== 'string' || !payload.source.trim() || new TextEncoder().encode(payload.source).byteLength > 1024 * 1024 || typeof payload.fileName !== 'string' || !/^[^\\/\x00-\x1f]+\.(cpp|cc|cxx|c)$/i.test(payload.fileName) || typeof payload.languageId !== 'string' || !/^\d+$/.test(payload.languageId) || typeof payload.replaceDraft !== 'boolean') { throw new Error('atcoder-source-invalid'); }
 		lease.consumed = true;
+		// The native transaction owns its deadline after preparation is consumed.
+		clearTimeout(lease.timer);
 		lease.active = true;
 		try {
 			const result = await operation(lease.page);
@@ -131,12 +124,6 @@ export class AtCoderBridgeController implements IAtCoderBridge {
 		if (this.disposed) { throw new Error('atcoder-bridge-stopped'); }
 		if (result.kind === 'unconfirmed' && result.attemptId !== attemptId) { throw new Error('atcoder-invalid-attempt'); }
 		return this.remember(result, problem.url);
-	}
-
-	async revealResult(ref: IAtCoderPageRef): Promise<void> {
-		const lease = this.lease(ref);
-		if (!lease.receipt) { throw new Error('atcoder-receipt-unavailable'); }
-		await this.ports.revealResult(lease.page, { ...lease.receipt });
 	}
 
 	async cancel(ref: IAtCoderPageRef): Promise<void> { await this.release(ref); }

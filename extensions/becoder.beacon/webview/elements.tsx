@@ -50,7 +50,7 @@ function rehypeStreamingText() {
 	};
 }
 
-function StreamingSpan({ children, node: _node, ...props }: ComponentProps<'span'> & { node?: unknown }) {
+function StreamingSpan({ children, ...props }: ComponentProps<'span'>) {
 	const streaming = useContext(StreamingContext);
 	const reduced = useContext(ReducedMotionContext);
 	const target = Children.toArray(children).join('');
@@ -71,7 +71,7 @@ function StreamingSpan({ children, node: _node, ...props }: ComponentProps<'span
 	return <span {...props}>{streaming && !reduced ? <>{visible.prefix}{visible.runs.map(run => <span className="streaming-run" key={run.id}>{run.text}</span>)}</> : children}</span>;
 }
 
-function MarkdownSpan({ children, node: _node, ...props }: ComponentProps<'span'> & { node?: unknown }) {
+function MarkdownSpan({ children, ...props }: ComponentProps<'span'>) {
 	if (props.className?.split(' ').includes('math-formula')) { return <MathFormula expression={Children.toArray(children).join('')} display={props.className.includes('math-display')} />; }
 	return 'data-stream-text' in props ? <StreamingSpan {...props}>{children}</StreamingSpan> : <span {...props}>{children}</span>;
 }
@@ -126,7 +126,7 @@ function useStreamingText(text: string, streaming: boolean, reduced: boolean) {
 	return !streaming || reduced ? text : visible;
 }
 
-function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> & { node?: unknown }) {
+function MarkdownPre({ children, ...props }: ComponentProps<'pre'>) {
 	const streaming = useContext(StreamingContext);
 	const codeElement = Children.toArray(children).find(child => isValidElement(child) && child.type === 'code');
 	if (!isValidElement(codeElement)) { return <pre {...props}>{children}</pre>; }
@@ -140,7 +140,7 @@ function MarkdownPre({ children, node: _node, ...props }: ComponentProps<'pre'> 
 	return <CodeBlock text={readCode(codeProps.children)} language={language} streaming={streaming} />;
 }
 
-const components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan, a: ({ title, node: _node, ...props }: ComponentProps<'a'> & { node?: unknown }) => <a {...props} data-becoder-tooltip={title} /> };
+const components = { img: () => null, pre: MarkdownPre, span: MarkdownSpan, a: ({ title, ...props }: ComponentProps<'a'>) => <a {...props} data-becoder-tooltip={title} /> };
 
 export function Conversation(props: ComponentProps<typeof StickToBottom>) {
 	const reduced = useReducedMotion();
@@ -192,7 +192,7 @@ export const MessageResponse = memo(function MessageResponse({ children, streami
 	const content = useMemo(() => {
 		const tree = parseBeaconMarkdown(text, { streaming });
 		rehypeStreamingText()(tree);
-		return toJsxRuntime(tree, { Fragment, jsx, jsxs, components, passNode: true });
+		return toJsxRuntime(tree, { Fragment, jsx, jsxs, components });
 	}, [text, streaming]);
 	return <ReducedMotionContext.Provider value={reduced}><StreamingContext.Provider value={streaming}><div className="markdown" data-streaming={streaming || undefined}>{content}</div></StreamingContext.Provider></ReducedMotionContext.Provider>;
 });

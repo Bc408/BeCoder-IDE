@@ -2,7 +2,6 @@
 	"displayName": "OJ Connect",
 	"description": "在 BeCoder 中查看题面、导入样例并向洛谷与 AtCoder 提交代码。",
 	"submit": "提交当前代码",
-	"stop": "停止提交跟踪",
 	"configurationTitle": "OJ Connect",
 	"directories": "用于题目识别与导入的站点子目录名称。修改名称不会移动现有文件。",
 	"luoguDirectory": "洛谷目录名称",

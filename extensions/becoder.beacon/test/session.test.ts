@@ -32,6 +32,15 @@ suite('Beacon safe tool feedback', () => {
 });
 
 suite('Beacon default TextMate syntax', () => {
+	test('syntax size limits reject before tokenization and agree for full and patch results', async () => {
+		let calls = 0;
+		const grammar = { tokenizeLine2() { calls++; return { tokens: new Uint32Array([0, 1 << 15]), ruleStack: null, stoppedEarly: false }; } } as never;
+		for (const text of ['x'.repeat(20001), 'x\n'.repeat(10001), 'x'.repeat(1000).concat('\n').repeat(513)]) {
+			await assert.rejects(() => new IncrementalSyntax(grammar, ['', '#bbb']).patch(text), /syntax-size-budget/);
+			await assert.rejects(() => new IncrementalSyntax(grammar, ['', '#bbb']).update(text), /syntax-size-budget/);
+		}
+		assert.equal(calls, 0);
+	});
 	test('adjacent tokens with identical presentation share one run without changing source', async () => {
 		const syntax = new IncrementalSyntax({ tokenizeLine2() { return { tokens: new Uint32Array([0, 1 << 15, 1, 1 << 15, 2, (2 << 15) | (1 << 11), 3, (2 << 15) | (1 << 11)]), ruleStack: null, stoppedEarly: false }; } } as never, ['', '#bbb', '#abc']);
 		assert.deepStrictEqual((await syntax.update('a b;')).lines, [[{ content: 'a ', color: '#bbb', fontStyle: 0 }, { content: 'b;', color: '#abc', fontStyle: 1 }]]);
@@ -61,7 +70,7 @@ suite('Beacon default TextMate syntax', () => {
 		let clock = 0;
 		context.mock.method(performance, 'now', () => clock);
 		const syntax = new IncrementalSyntax({ tokenizeLine2() { clock += 1000; return { tokens: new Uint32Array([0, 1 << 15]), ruleStack: null, stoppedEarly: false }; } } as never, ['', '#bbb']);
-		await assert.rejects(() => syntax.patch(Array(20).fill('slow').join('\n'), async () => {}), /syntax-time-budget/);
+		await assert.rejects(() => syntax.patch(Array(20).fill('slow').join('\n'), async () => { }), /syntax-time-budget/);
 	});
 	test('every fence language has a working grammar and preserves incremental source exactly', async () => {
 		const wasm = readFileSync('../../node_modules/vscode-oniguruma/release/onig.wasm');
@@ -152,7 +161,7 @@ suite('Beacon shared history', () => {
 	const answer: Generate = async function* () { yield { type: 'reasoning', text: 'short internal trace' }; yield { type: 'text', text: 'answer' }; };
 	test('new chats retain history; reload restores the active conversation and isolated model context', async () => {
 		let saved: HistoryData | undefined;
-		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
+		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => { }, () => 'error');
 		await history.session.send('first question', answer, { provider: 'moonshot', model: 'kimi-test' });
 		const first = history.snapshot.activeId;
 		history.newConversation();
@@ -161,7 +170,7 @@ suite('Beacon shared history', () => {
 		history.open(first);
 		history.rename(first, 'Renamed');
 		await history.flush();
-		const reopened = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		const reopened = new ChatHistory(saved, async () => { }, () => { }, () => 'error');
 		assert.equal(reopened.snapshot.activeId, first);
 		assert.equal(reopened.snapshot.messages[1].model, 'kimi-test');
 		assert.equal(reopened.snapshot.messages[1].reasoning, 'short internal trace');
@@ -170,13 +179,13 @@ suite('Beacon shared history', () => {
 			assert.deepStrictEqual(messages.map(item => item.content), ['first question', 'answer', 'followup']);
 			yield { type: 'text', text: 'followup answer' };
 		});
-		const otherWorkspace = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		const otherWorkspace = new ChatHistory(saved, async () => { }, () => { }, () => 'error');
 		assert.equal(otherWorkspace.snapshot.history.length, 2);
 		await Promise.all([history.dispose(), reopened.dispose(), otherWorkspace.dispose()]);
 	});
 	test('busy sessions cannot switch, rename or delete; restored interrupted output is paused', async () => {
 		let saved: HistoryData | undefined;
-		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
+		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => { }, () => 'error');
 		await history.session.send('old chat', answer);
 		const old = history.snapshot.activeId;
 		history.newConversation();
@@ -190,7 +199,7 @@ suite('Beacon shared history', () => {
 		assert.equal(history.snapshot.activeId, active);
 		assert.equal(history.snapshot.history.find(item => item.id === active)?.title, 'new chat');
 		await history.flush();
-		const restored = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		const restored = new ChatHistory(saved, async () => { }, () => { }, () => 'error');
 		assert.equal(restored.snapshot.busy, false);
 		assert.equal(restored.snapshot.messages.at(-1)?.status, 'stopped');
 		history.session.stop(); release(); await running;
@@ -198,7 +207,7 @@ suite('Beacon shared history', () => {
 	});
 	test('deleting the active chat persists removal without deleting other chats', async () => {
 		let saved: HistoryData | undefined;
-		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
+		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => { }, () => 'error');
 		await history.session.send('keep', answer);
 		history.newConversation();
 		await history.session.send('delete', answer);
@@ -213,7 +222,7 @@ suite('Beacon shared history', () => {
 	test('serialized writes preserve the latest state; save failures remain visible until retry succeeds', async () => {
 		let fail = true;
 		let saved: HistoryData | undefined;
-		const history = new ChatHistory(undefined, async data => { if (fail) { throw new Error('disk'); } saved = data; }, () => {}, () => 'error');
+		const history = new ChatHistory(undefined, async data => { if (fail) { throw new Error('disk'); } saved = data; }, () => { }, () => 'error');
 		await history.session.send('question', answer);
 		await history.flush();
 		assert.equal(history.snapshot.saveFailed, true);
@@ -225,7 +234,7 @@ suite('Beacon shared history', () => {
 		let release!: () => void;
 		const gate = new Promise<void>(resolve => { release = resolve; });
 		const writes: HistoryData[] = [];
-		const queued = new ChatHistory(undefined, async data => { writes.push(data); if (writes.length === 1) { await gate; } }, () => {}, () => 'error');
+		const queued = new ChatHistory(undefined, async data => { writes.push(data); if (writes.length === 1) { await gate; } }, () => { }, () => 'error');
 		await queued.session.send('one', answer);
 		await Promise.resolve();
 		queued.rename(queued.snapshot.activeId, 'latest');
@@ -301,7 +310,7 @@ suite('Beacon window session', () => {
 	test('AI SDK persists completed workspace reads and replays native tool context on followup', async () => {
 		let requestCount = 0;
 		const contents = 'private source text';
-		const session = new ChatSession(() => {}, () => 'error');
+		const session = new ChatSession(() => { }, () => 'error');
 		const fetchMock: typeof fetch = async (_url, options) => {
 			const body = JSON.parse(String(options?.body));
 			requestCount++;
@@ -394,7 +403,7 @@ suite('Beacon window session', () => {
 		assert.deepStrictEqual(session.snapshot.messages.map(message => message.text), ['question', 'partial', 'followup', 'continued conversation']);
 	});
 	test('resume appends to the same answer, retains context and reasoning, and rejects stale or concurrent resumes', async () => {
-		const session = new ChatSession(() => {}, () => 'safe error');
+		const session = new ChatSession(() => { }, () => 'safe error');
 		await session.send('question', async function* () { yield { type: 'reasoning', text: 'trace' }; yield { type: 'text', text: '```cpp\nint ' }; session.stop(); });
 		const id = session.snapshot.messages[1].id;
 		let release!: () => void;
@@ -419,7 +428,7 @@ suite('Beacon window session', () => {
 		await session.resume(id, async function* () { assert.fail('superseded answer resumed'); });
 	});
 	test('repeated pause, failed continuation, reload and regeneration preserve the correct prefix', async () => {
-		const session = new ChatSession(() => {}, () => 'safe error');
+		const session = new ChatSession(() => { }, () => 'safe error');
 		await session.send('question', async function* () { session.stop(); });
 		const id = session.snapshot.messages[1].id;
 		await session.resume(id, async function* () { yield { type: 'text', text: 'prefix' }; session.stop(); });
@@ -429,9 +438,9 @@ suite('Beacon window session', () => {
 		assert.equal(session.snapshot.error, 'safe error');
 		assert.equal(session.snapshot.messages[1].text, 'prefix');
 		assert.equal(session.snapshot.messages[1].status, 'stopped');
-		await session.resume(id, async function* () {});
+		await session.resume(id, async function* () { });
 		assert.equal(session.snapshot.messages[1].status, 'stopped', 'Empty continuation does not mark an unfinished answer complete');
-		const restored = new ChatSession(() => {}, () => 'safe error');
+		const restored = new ChatSession(() => { }, () => 'safe error');
 		restored.restore(session.snapshot);
 		await restored.resume(id, async function* () { yield { type: 'text', text: ' suffix' }; restored.stop(); });
 		assert.equal(restored.snapshot.messages[1].text, 'prefix suffix');
@@ -444,7 +453,7 @@ suite('Beacon window session', () => {
 	});
 	test('completed protocol survives pause and reload without replaying interrupted tools', async () => {
 		let saved: HistoryData | undefined;
-		const history = new ChatHistory(undefined, async data => { saved = data; }, () => {}, () => 'error');
+		const history = new ChatHistory(undefined, async data => { saved = data; }, () => { }, () => 'error');
 		await history.session.send('read file', async function* () {
 			yield { type: 'activity', activity: { id: 'call', type: 'read', path: 'main.cpp', status: 'complete' } };
 			yield { type: 'tool-result', result: { id: 'call', path: 'main.cpp', input: { operation: 'read', path: 'main.cpp' }, output: { ok: true, path: 'main.cpp', contents: 'int main() {}' } } };
@@ -455,7 +464,7 @@ suite('Beacon window session', () => {
 			history.session.stop();
 		});
 		await history.flush();
-		const restored = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
+		const restored = new ChatHistory(saved, async () => { }, () => { }, () => 'error');
 		const id = restored.snapshot.messages[1].id;
 		await restored.session.resume(id, async function* (messages) {
 			assert.deepStrictEqual(messages.map(message => message.role), ['user', 'assistant', 'tool', 'assistant', 'user']);
@@ -532,7 +541,7 @@ suite('Beacon provider connections', () => {
 		});
 		if (provider === 'deepseek') { continue; }
 		test(provider + ' streams only answer text through the installed adapter', async () => {
-			const session = new ChatSession(() => {}, () => 'error');
+			const session = new ChatSession(() => { }, () => 'error');
 			await session.send('hello', createGenerator(async () => ({ provider, ...providers[provider], model: 'selected-model', parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' }), async (url, options) => {
 				assert.equal(String(url), providers[provider].baseURL + '/chat/completions');
 				const body = JSON.parse(String(options?.body));

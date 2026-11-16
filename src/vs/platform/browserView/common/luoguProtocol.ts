@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+// allow-any-unicode-comment-file
 
-// Extracted from the BeCoder OJ Connect Luogu adapter protocol.ts.
-// Semantic normalization shared with the bundled OJ adapter; no browser DOM is used here.
+// The main-process Luogu client owns protocol normalization; the extension consumes its DTOs.
 // eslint-disable-next-line local/code-import-patterns -- Internal bundled extension DTOs.
 import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LanguageOption, LoginSummary, Section } from 'becoder-oj-connect';
 import { assertLuoguProblem } from './luoguBridge.js';
@@ -35,69 +35,69 @@ function numeric(value: unknown): string | undefined { return typeof value === '
 
 // Adapted from vscode-luogu v4.20.0 shared.ts, color.ts, stringUtils.ts and tagManager.ts.
 // Copyright (c) 2018 引领天下. MIT License; see ThirdPartyNotices.txt.
-const difficultyNames = ['暂无评定', '入门', '普及-', '普及', '普及+/提高-', '提高', '提高+/省选-', '省选/NOI-', 'NOI/NOI+/CTS'];
+const difficultyNames = ['\u6682\u65e0\u8bc4\u5b9a', '\u5165\u95e8', '\u666e\u53ca-', '\u666e\u53ca', '\u666e\u53ca+/\u63d0\u9ad8-', '\u63d0\u9ad8', '\u63d0\u9ad8+/\u7701\u9009-', '\u7701\u9009/NOI-', 'NOI/NOI+/CTS'];
 const difficultyColors = ['#BFBFBF', '#FE4C61', '#F39C11', '#FFC116', '#52C41A', '#13C2C2', '#3498DB', '#9D3DCF', '#0E1D69'];
 const tagColors = {
-  'blue-1': '#e0f7ff',
-  'blue-2': '#89d1f5',
-  'blue-3': '#3498db',
-  'blue-4': '#14558f',
-  'blue-5': '#052242',
-  'green-1': '#d9f0c7',
-  'green-2': '#94d66d',
-  'green-3': '#52c41a',
-  'green-4': '#22700a',
-  'green-5': '#072401',
-  'purple-1': '#fbedff',
-  'purple-2': '#ce8ee8',
-  'purple-3': '#9d3dcf',
-  'purple-4': '#561982',
-  'purple-5': '#1f0736',
-  'orange-1': '#ffedb5',
-  'orange-2': '#ffce63',
-  'orange-3': '#f39c11',
-  'orange-4': '#a65b00',
-  'orange-5': '#592b00',
-  'pink-1': '#fff0f0',
-  'pink-2': '#ff9ea3',
-  'pink-3': '#fe4c61',
-  'pink-4': '#b3243e',
-  'pink-5': '#660e24',
-  'lapis-1': '#cad5e8',
-  'lapis-2': '#728dcf',
-  'lapis-3': '#2949b4',
-  'lapis-4': '#0e1d69',
-  'lapis-5': '#02051c',
-  'gold-1': '#fff6ba',
-  'gold-2': '#ffe169',
-  'gold-3': '#ffc116',
-  'gold-4': '#b37700',
-  'gold-5': '#663d00',
-  'cyan-1': '#b5f5ec',
-  'cyan-2': '#5cdbd3',
-  'cyan-3': '#13c2c2',
-  'cyan-4': '#006d75',
-  'cyan-5': '#002329',
-  'yellow-1': '#ffffb8',
-  'yellow-2': '#fffb8f',
-  'yellow-3': '#fadb14',
-  'yellow-4': '#ad8b00',
-  'yellow-5': '#614700',
-  'red-1': '#ffebe6',
-  'red-2': '#ffa694',
-  'red-3': '#e74c3c',
-  'red-4': '#9c1d19',
-  'red-5': '#4f080a',
-  'grey-1': '#fafafa',
-  'grey-2': '#e8e8e8',
-  'grey-3': '#bfbfbf',
-  'grey-4': '#595959',
-  'grey-5': '#262626',
-  'lgreen-1': '#dae0d3',
-  'lgreen-2': '#aac791',
-  'lgreen-3': '#70ad47',
-  'lgreen-4': '#34611e',
-  'lgreen-5': '#091405'
+	'blue-1': '#e0f7ff',
+	'blue-2': '#89d1f5',
+	'blue-3': '#3498db',
+	'blue-4': '#14558f',
+	'blue-5': '#052242',
+	'green-1': '#d9f0c7',
+	'green-2': '#94d66d',
+	'green-3': '#52c41a',
+	'green-4': '#22700a',
+	'green-5': '#072401',
+	'purple-1': '#fbedff',
+	'purple-2': '#ce8ee8',
+	'purple-3': '#9d3dcf',
+	'purple-4': '#561982',
+	'purple-5': '#1f0736',
+	'orange-1': '#ffedb5',
+	'orange-2': '#ffce63',
+	'orange-3': '#f39c11',
+	'orange-4': '#a65b00',
+	'orange-5': '#592b00',
+	'pink-1': '#fff0f0',
+	'pink-2': '#ff9ea3',
+	'pink-3': '#fe4c61',
+	'pink-4': '#b3243e',
+	'pink-5': '#660e24',
+	'lapis-1': '#cad5e8',
+	'lapis-2': '#728dcf',
+	'lapis-3': '#2949b4',
+	'lapis-4': '#0e1d69',
+	'lapis-5': '#02051c',
+	'gold-1': '#fff6ba',
+	'gold-2': '#ffe169',
+	'gold-3': '#ffc116',
+	'gold-4': '#b37700',
+	'gold-5': '#663d00',
+	'cyan-1': '#b5f5ec',
+	'cyan-2': '#5cdbd3',
+	'cyan-3': '#13c2c2',
+	'cyan-4': '#006d75',
+	'cyan-5': '#002329',
+	'yellow-1': '#ffffb8',
+	'yellow-2': '#fffb8f',
+	'yellow-3': '#fadb14',
+	'yellow-4': '#ad8b00',
+	'yellow-5': '#614700',
+	'red-1': '#ffebe6',
+	'red-2': '#ffa694',
+	'red-3': '#e74c3c',
+	'red-4': '#9c1d19',
+	'red-5': '#4f080a',
+	'grey-1': '#fafafa',
+	'grey-2': '#e8e8e8',
+	'grey-3': '#bfbfbf',
+	'grey-4': '#595959',
+	'grey-5': '#262626',
+	'lgreen-1': '#dae0d3',
+	'lgreen-2': '#aac791',
+	'lgreen-3': '#70ad47',
+	'lgreen-4': '#34611e',
+	'lgreen-5': '#091405'
 } as const;
 function formatTime(time: number): string {
 	if (time < 1e3) { return `${time}ms`; }
@@ -114,7 +114,7 @@ function formatMemory(memory: number): string {
 }
 function problemMetadata(problem: Record<string, unknown>, rawTags: unknown): Pick<ProblemDocument, 'difficulty' | 'tags'> {
 	const id = problem.difficulty;
-	const difficulty = typeof id === 'number' && Number.isSafeInteger(id) && id >= 0 ? { label: difficultyNames[id] ?? `未知难度 (${id})`, color: difficultyColors[id] ?? difficultyColors[0] } : undefined;
+	const difficulty = typeof id === 'number' && Number.isSafeInteger(id) && id >= 0 ? { label: difficultyNames[id] ?? `\u672a\u77e5\u96be\u5ea6 (${id})`, color: difficultyColors[id] ?? difficultyColors[0] } : undefined;
 	const ids = Array.isArray(problem.tags) ? problem.tags.filter((id): id is number => Number.isSafeInteger(id) && Number(id) >= 0) : [];
 	const response = rawTags && typeof rawTags === 'object' ? object(rawTags) : {};
 	const types = new Map(values(response.types).map(type => [type.id, typeof type.color === 'string' && Object.hasOwn(tagColors, type.color) ? tagColors[type.color as keyof typeof tagColors] : '#000000']));
@@ -152,7 +152,7 @@ export function parseLuoguProblem(ref: ProblemRef, raw: unknown, rawTags?: unkno
 	const bodies: { locale: string; sections: Section[] }[] = [];
 	const add = (rawContent: unknown, fallback: string) => {
 		const value = object(rawContent), locale = typeof value.locale === 'string' ? value.locale : fallback;
-		const fields = [['background', '题目背景', 'Background'], ['description', '题目描述', 'Statement'], ['formatI', '输入格式', 'Input'], ['formatO', '输出格式', 'Output'], ['hint', '说明/提示', 'Notes']];
+		const fields = [['background', '\u9898\u76ee\u80cc\u666f', 'Background'], ['description', '\u9898\u76ee\u63cf\u8ff0', 'Statement'], ['formatI', '\u8f93\u5165\u683c\u5f0f', 'Input'], ['formatO', '\u8f93\u51fa\u683c\u5f0f', 'Output'], ['hint', '\u8bf4\u660e/\u63d0\u793a', 'Notes']];
 		const sections: Section[] = fields.filter(([key]) => typeof value[key] === 'string' && value[key]).map(([key, zh, en]) => ({ heading: locale.toLowerCase().startsWith('zh') ? zh : en, format: 'markdown', content: text(value[key], 8 * 1024 * 1024, true), ...(key === 'hint' ? { kind: 'notes' as const } : {}) }));
 		if (sections.length && !bodies.some(body => body.locale === locale)) { bodies.push({ locale, sections }); }
 	};
@@ -164,7 +164,7 @@ export function parseLuoguProblem(ref: ProblemRef, raw: unknown, rawTags?: unkno
 	if (typeof problem.translation === 'string' && problem.translation && (translations.length === 1 && translations[0] !== 'zh-CN' || translations.length === 0 && !String(content.locale ?? 'zh-CN').toLowerCase().startsWith('zh'))) {
 		for (const body of bodies) {
 			const notes = body.sections.findIndex(section => section.kind === 'notes');
-			body.sections.splice(notes < 0 ? body.sections.length : notes, 0, { heading: '题意翻译', format: 'markdown', content: text(problem.translation, 8 * 1024 * 1024, true) });
+			body.sections.splice(notes < 0 ? body.sections.length : notes, 0, { heading: '\u9898\u610f\u7ffb\u8bd1', format: 'markdown', content: text(problem.translation, 8 * 1024 * 1024, true) });
 		}
 	}
 	const limits: { label: string; value: string }[] = [];
@@ -177,8 +177,10 @@ export function parseLuoguProblem(ref: ProblemRef, raw: unknown, rawTags?: unkno
 		}
 	}
 	if (!Array.isArray(problem.samples)) { throw new Error('Luogu samples are unavailable.'); }
-	return { ref, title: ref.nativeId + ' ' + text(problem.title ?? problem.name ?? content.name, 1024), bodies, limits, ...problemMetadata(problem, rawTags), interactive: false,
-		samples: problem.samples.map(sample => { if (!Array.isArray(sample) || sample.length !== 2) { throw new Error('Invalid Luogu sample.'); } return { input: text(sample[0], 8 * 1024 * 1024, true), output: text(sample[1], 8 * 1024 * 1024, true) }; }) };
+	return {
+		ref, title: ref.nativeId + ' ' + text(problem.title ?? problem.name ?? content.name, 1024), bodies, limits, ...problemMetadata(problem, rawTags), interactive: false,
+		samples: problem.samples.map(sample => { if (!Array.isArray(sample) || sample.length !== 2) { throw new Error('Invalid Luogu sample.'); } return { input: text(sample[0], 8 * 1024 * 1024, true), output: text(sample[1], 8 * 1024 * 1024, true) }; })
+	};
 }
 
 // Default entries extracted from languageFamily + defaultLanguageVersion in
@@ -226,15 +228,18 @@ export function parseLuoguRecord(input: RecordRef, raw: unknown, rawConfig: unkn
 	const detail = record.detail && typeof record.detail === 'object' ? object(record.detail) : {};
 	const compile = detail.compileResult && typeof detail.compileResult === 'object' ? object(detail.compileResult) : {};
 	const judge = detail.judgeResult && typeof detail.judgeResult === 'object' ? object(detail.judgeResult) : {};
-	const groups = visible ? testcaseSubtasks(record, data, judge).map(subtask => ({ name: 'Subtask #' + String(subtask.id), rows: values(subtask.testCases).map(row => {
-		const status = statuses[String(row.status)];
-		return [typeof row.id === 'number' && Number.isSafeInteger(row.id) && row.id >= 0 ? String(row.id + 1) : String(row.id), status && typeof status === 'object' ? String(object(status).shortName ?? row.status) : String(row.status), numeric(row.time) ? row.time + ' ms' : '', numeric(row.memory) ? row.memory + ' KiB' : '', typeof row.description === 'string' ? row.description : '', numeric(row.score) !== undefined ? 'Score: ' + row.score : '', numeric(row.signal) !== undefined && row.signal !== 0 ? 'Received signal ' + row.signal : '', numeric(row.exitCode) !== undefined ? 'Exit with code ' + row.exitCode : ''];
-	}) })) : [];
+	const groups = visible ? testcaseSubtasks(record, data, judge).map(subtask => ({
+		name: 'Subtask #' + String(subtask.id), rows: values(subtask.testCases).map(row => {
+			const status = statuses[String(row.status)];
+			return [typeof row.id === 'number' && Number.isSafeInteger(row.id) && row.id >= 0 ? String(row.id + 1) : String(row.id), status && typeof status === 'object' ? String(object(status).shortName ?? row.status) : String(row.status), numeric(row.time) ? row.time + ' ms' : '', numeric(row.memory) ? row.memory + ' KiB' : '', typeof row.description === 'string' ? row.description : '', numeric(row.score) !== undefined ? 'Score: ' + row.score : '', numeric(row.signal) !== undefined && row.signal !== 0 ? 'Received signal ' + row.signal : '', numeric(row.exitCode) !== undefined ? 'Exit with code ' + row.exitCode : ''];
+		})
+	})) : [];
 	// Legacy content-only records omit canViewCode and return sourceCode only when visible.
 	const sourceVisible = data.canViewCode !== false && typeof record.sourceCode === 'string';
 	const sourceVerification = !sourceVisible ? 'unavailable' : expectedSource === undefined ? 'not-checked' : (record.sourceCode as string).replace(/\r\n/g, '\n') === expectedSource.replace(/\r\n/g, '\n') ? 'matched' : 'mismatch';
 	const compileVisible = visible && record.status !== 0 && typeof compile.success === 'boolean';
-	return { ref, phase, rawStatus, sourceVerification, groups,
+	return {
+		ref, phase, rawStatus, sourceVerification, groups,
 		...(typeof record.submitTime === 'number' && Number.isFinite(record.submitTime) && record.submitTime >= 0 && record.submitTime < 8640000000000 ? { submittedAt: new Date(record.submitTime * 1000).toISOString() } : {}),
 		...(numeric(record.sourceCodeLength) !== undefined ? { codeLength: formatMemory(Number(record.sourceCodeLength)) } : {}),
 		...(sourceVisible ? { source: record.sourceCode as string } : {}),
@@ -243,5 +248,6 @@ export function parseLuoguRecord(input: RecordRef, raw: unknown, rawConfig: unkn
 		...(visible && numeric(record.score) !== undefined ? { score: numeric(record.score) } : {}),
 		...(visible && numeric(record.time) !== undefined ? { time: formatTime(Number(record.time)) } : {}),
 		...(visible && numeric(record.memory) !== undefined ? { memory: formatMemory(Number(record.memory) * 1024) } : {}),
-		...(compileVisible && typeof compile.message === 'string' ? { compileMessage: compile.message } : {}) };
+		...(compileVisible && typeof compile.message === 'string' ? { compileMessage: compile.message } : {})
+	};
 }

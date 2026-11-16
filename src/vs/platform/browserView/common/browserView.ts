@@ -10,7 +10,6 @@ import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
 import { IPermissionCategoryState, ISerializedBrowserPermissionsSnapshot, IBrowserDeviceCandidate, BrowserDeviceType, PermissionCategory } from './browserPermissions.js';
 import type { IAtCoderTaskForm, IAtCoderSourcePayload } from './atcoderWorkflow.js';
-import type { IAtCoderShortcutResult } from './atcoderShortcut.js';
 
 const commandPrefix = 'workbench.action.browser';
 export enum BrowserViewCommandId {
@@ -34,7 +33,6 @@ export enum BrowserViewCommandId {
 	OpenExternal = `${commandPrefix}.openExternal`,
 	OpenSettings = `${commandPrefix}.openSettings`,
 	ImportProblem = `${commandPrefix}.importProblem`,
-	ReadAtCoderSubmission = `${commandPrefix}.readAtCoderSubmission`,
 
 	// Favorites
 	ToggleFavorite = `${commandPrefix}.toggleFavorite`,
@@ -520,7 +518,6 @@ export interface IBrowserViewService {
 	/** User-triggered inspection/filling of the current task form. Never sends a submission. */
 	prepareAtCoderTask(id: string, windowId: number, expectedURL: string, payload?: IAtCoderSourcePayload): Promise<IAtCoderTaskForm>;
 	/** Explicit user action: prepare/send once, then resolve a verified new record. */
-	submitAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult>;
 	sendAndConfirmAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome>;
 	readAtCoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
 	reconcileAtCoderAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome>;

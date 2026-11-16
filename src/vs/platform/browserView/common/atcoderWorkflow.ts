@@ -28,7 +28,14 @@ export function atCoderFormScript(url: string, payload?: IAtCoderSourcePayload):
 		const payload = ${JSON.stringify(payload ?? null)};
 		if (location.href !== expectedURL) { throw new Error('atcoder-page-changed'); }
 		const upload = document.querySelector('#input-open-file');
-		if (!(upload instanceof HTMLInputElement) || upload.type !== 'file') { throw new Error('atcoder-login-or-form-required'); }
+		if (!(upload instanceof HTMLInputElement) || upload.type !== 'file') {
+			const signedOut = Array.from(document.querySelectorAll('a[href]')).some(link => {
+				const target = new URL(link.href);
+				return target.origin === 'https://atcoder.jp' && target.pathname === '/login';
+			});
+			// Known preparation states cross Electron as values, not renderer Error objects.
+			return signedOut ? 'atcoder-login-required' : 'atcoder-form-missing';
+		}
 		const area = document.querySelector('#plain-textarea');
 		if (!(area instanceof HTMLTextAreaElement)) { throw new Error('atcoder-source-control-missing'); }
 		const form = area.form;

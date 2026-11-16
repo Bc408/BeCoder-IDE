@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -35,4 +35,24 @@ test('replaced record and unknown-status deadline cannot masquerade as a final v
 	let now = 0;
 	const pending = new RecordController(async () => ({ ref, phase: 'unknown', rawStatus: 'new status', sourceVerification: 'unavailable' } as RecordSnapshot), { now: () => now, intervalMs: 1, timeoutMs: 2, sleep: async () => { now++; } });
 	await assert.rejects(pending.track(ref, () => undefined, new AbortController().signal), /timed out/);
+});
+
+test('AtCoder healthy judging continues beyond two minutes and stops on the final result', async () => {
+	const record: RecordRef = { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
+	let elapsed = 0, reads = 0;
+	const updates: string[] = [];
+	const controller = new RecordController(async () => ({ ref: record, phase: ++reads === 4 ? 'finished' : 'judging', rawStatus: reads === 4 ? 'AC' : 'WJ', sourceVerification: 'not-checked' }), { now: () => elapsed, sleep: async () => { elapsed += 61000; } });
+	await controller.track(record, value => updates.push(value.rawStatus), new AbortController().signal);
+	assert.deepStrictEqual(updates, ['WJ', 'WJ', 'WJ', 'AC']);
+});
+
+test('closing an AtCoder result during a pending read ignores the late result', async () => {
+	const record: RecordRef = { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
+	let finish!: (value: RecordSnapshot) => void;
+	const controller = new RecordController(async () => new Promise(resolve => { finish = resolve; }));
+	const signal = new AbortController(), updates: string[] = [];
+	const tracking = controller.track(record, value => updates.push(value.rawStatus), signal.signal);
+	signal.abort(); await tracking;
+	finish({ ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' });
+	await Promise.resolve(); assert.deepStrictEqual(updates, []);
 });

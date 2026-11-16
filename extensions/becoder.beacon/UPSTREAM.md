@@ -49,7 +49,7 @@ The original license is in `licenses/captain-who.txt`; modifications map colors 
 theme tokens and keep Beacon's control placement. `ResponseActivity.tsx` implements the observed
 activity lifecycle. `elements.tsx` uses the fixed Beacon entry in `../becoder.shared/content/parser.ts`
 (unified, remark-gfm/math/breaks and rehype-sanitize) and KaTeX for the rendering pipeline.
-The shared parser retains Luogu renderer MIT provenance in LICENSE.luogu-markdown,
+The shared parser retains Luogu renderer MIT provenance in LICENSE.luogu-markdown.txt,
 while Beacon's bundled entry excludes Luogu-only HTML/directive transformations. Formula slots retain their last valid
 KaTeX result while an appended command or group is incomplete; invalid final expressions
 remain ordinary readable text. `CodeBlock.tsx` adapts Captain Who's

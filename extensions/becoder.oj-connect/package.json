@@ -35,11 +35,6 @@
 				"category": "OJ Connect"
 			},
 			{
-				"command": "becoder.ojConnect.stopSubmission",
-				"title": "%stop%",
-				"category": "OJ Connect"
-			},
-			{
 				"command": "becoder.ojConnect.showProblem",
 				"title": "%showProblem%",
 				"category": "OJ Connect"
@@ -177,9 +172,9 @@
 		"build": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json && npm run compile-site-scripts && npm run compile-webview",
 		"test": "npm run compile-site-scripts && node ../../node_modules/typescript/bin/tsc6 -p tsconfig.test.json && node --test out-test/test/*.test.js && node test/content-parser.mts",
 		"vscode:prepublish": "npm run build",
-		"compile-site-scripts": "node build-site-scripts.mjs",
-		"compile-webview": "node build-webview.mjs",
-		"test-render": "node test/render.mjs"
+		"compile-site-scripts": "node build-site-scripts.mts",
+		"compile-webview": "node build-webview.mts",
+		"test-render": "node test/render.mts"
 	},
 	"repository": {
 		"type": "git",

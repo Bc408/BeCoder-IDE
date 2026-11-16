@@ -1,52 +1,23 @@
 /*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
  *  Copyright (c) 2018 引领天下. MIT License.
  *  Adapted from yltx/vscode-luogu v4.18.2 (dbced7c2cd0aca345cfa6f91de64b59c02806341).
  *  BeCoder changes: shared OJ data/commands, localization, removed peripheral features.
  *  See ThirdPartyNotices.txt for the original license.
  *--------------------------------------------------------------------------------------------*/
 
-import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { VSCodeButton } from './uiToolkit';
-import { CopyIcon } from './presentation';
+import React, { useEffect, useRef } from 'react';
+import { installCodeCopyButtons } from './codeCopy';
 
-class CopyablePreElement extends HTMLPreElement {
-  buttonDiv?: HTMLDivElement;
-  reactRoot?: import('react-dom/client').Root;
-  constructor() {
-    super();
-  }
-  connectedCallback() {
-    this.buttonDiv = document.createElement('div');
-    this.buttonDiv.className = 'copyButton';
-    this.insertBefore(this.buttonDiv, this.firstElementChild);
-
-    const Compose = () => {
-      const [animationType, setAnimationType] = useState(false);
-      const copy = async () => {
-        const text = this.querySelector('code')?.textContent ?? '';
-        try { await navigator.clipboard.writeText(text); } catch { return; }
-        setAnimationType(true);
-      };
-      return (
-        <VSCodeButton
-          appearance={'icon'}
-          onClick={copy}
-          aria-label={window.__OJ_STATE__.labels.copy}
-          title={animationType ? window.__OJ_STATE__.labels.copied : window.__OJ_STATE__.labels.copy}
-          onAnimationEnd={() => setAnimationType(false)}
-        >
-          <span className={animationType ? 'animate' : undefined}><CopyIcon /></span>
-        </VSCodeButton>
-      );
-    };
-    (this.reactRoot = createRoot(this.buttonDiv)).render(<Compose />);
-  }
-  disconnectedCallback() {
-    this.reactRoot?.unmount();
-    if (this.buttonDiv) { this.removeChild(this.buttonDiv); }
-  }
+/** Samples and compiler output share the statement's native copy control. */
+export default function CopyablePre({ children }: { children: React.ReactNode }) {
+	const pre = useRef<HTMLPreElement>(null);
+	useEffect(() => installCodeCopyButtons(pre.current!, window.__OJ_STATE__.labels), []);
+	return <pre ref={pre}>{children}</pre>;
 }
-customElements.define('copyable-pre', CopyablePreElement, { extends: 'pre' });
-
-export default {};

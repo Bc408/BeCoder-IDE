@@ -1,5 +1,10 @@
 /*---------------------------------------------------------------------------------------------
- * Copyright (c) 2026 Federico2903. MIT License. See LICENSE.luogu-markdown.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the MIT License. See LICENSE in the component root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------
+ * Copyright (c) 2026 Federico2903. MIT License. See LICENSE.luogu-markdown.txt.
  * Adapted from @luogu-saver-next/markdown-renderer 1.0.3 (laikit-dev/luogu-saver).
  * BeCoder changes: shared synchronous AST pipeline; author-content policies;
  * native callouts, safe embeds and unhighlighted code; no HTML output round trip.
@@ -22,15 +27,31 @@ import { visit } from 'unist-util-visit';
 import { VFile } from 'vfile';
 import { fromHtml } from 'hast-util-from-html';
 import { normalizeMath } from './math';
-import type { Root, Element } from 'hast';
+import type { Root, Element, Properties } from 'hast';
+import type { Root as MarkdownRoot } from 'mdast';
+import type { Node, Data } from 'unist';
 
 // These transformations intentionally mutate remark directive/table extension fields.
 // Keep their third-party AST fields local; public render results use the HAST Root contract.
-type MutableNode = { type: string; [key: string]: any };
+type MutableNode = Node & {
+	value?: string;
+	children?: MutableNode[];
+	tagName?: string;
+	properties?: Properties;
+	name?: string;
+	attributes?: Record<string, string | boolean | null | undefined> | null;
+	url?: string;
+	alt?: string | null;
+	title?: string | null;
+	data?: Data & { hName?: string; hProperties?: Properties; directiveLabel?: boolean | null };
+};
+type MarkdownProcessor = Processor<MarkdownRoot, MarkdownRoot, Root>;
 type MathFence = { offset: number; length: number; end?: number };
 type TextOffsetLookup = (offset: number) => boolean;
 
 const luoguCaptchaUrlFragment = 'https://www.luogu.com.cn/lg4/captcha';
+// Lucide pin SVG, ISC; upstream f6571da835fb5c9766dbceb295b8eecefa0791cb.
+// Copyright (c) 2026 Lucide Icons and Contributors. See LICENSE.lucide.txt.
 const headingAnchorIcon: Element = {
 	type: 'element',
 	tagName: 'svg',
@@ -88,16 +109,16 @@ const schema = {
 	strip: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select']
 };
 
-let beaconProcessor: Processor<any, any, any, any, any>;
-let luoguProcessor: Processor<any, any, any, any, any>;
+let beaconProcessor: MarkdownProcessor;
+let luoguProcessor: MarkdownProcessor;
 
 function classes(node: MutableNode): string[] {
 	const value = node.properties?.className;
-	return Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\s+/) : [];
+	return Array.isArray(value) ? value as string[] : typeof value === 'string' ? value.split(/\s+/) : [];
 }
 
 function plainText(node: MutableNode): string {
-	return node.type === 'text' ? node.value : (node.children ?? []).map(plainText).join('');
+	return node.type === 'text' ? node.value! : (node.children ?? []).map(plainText).join('');
 }
 
 function omitDirectivesAndImages(beacon: boolean) {
@@ -119,7 +140,7 @@ function adaptAuthorHtml() {
 			const href = safeUrl(node.properties?.src, 'https://www.luogu.com.cn');
 			node.tagName = href ? 'a' : 'span';
 			node.properties = href ? { href } : {};
-			node.children = [{ type: 'text', value: href ? '在浏览器中打开嵌入内容' : '嵌入内容不可用' }];
+			node.children = [{ type: 'text', value: href ? '\u5728\u6d4f\u89c8\u5668\u4e2d\u6253\u5f00\u5d4c\u5165\u5185\u5bb9' : '\u5d4c\u5165\u5185\u5bb9\u4e0d\u53ef\u7528' }];
 		});
 	};
 }
@@ -139,8 +160,8 @@ function normalizeUrls(baseURL?: string) {
 				const value = node.properties?.[key];
 				if (value === undefined || key === 'href' && typeof value === 'string' && value.startsWith('#')) { continue; }
 				const url = safeUrl(value, baseURL || (typeof file.data.baseURL === 'string' ? file.data.baseURL : undefined));
-				if (url) { node.properties[key] = url; }
-				else { delete node.properties[key]; }
+				if (url) { node.properties![key] = url; }
+				else { delete node.properties![key]; }
 			}
 		});
 	};
@@ -151,17 +172,17 @@ function nativeContainers() {
 		visit(tree, 'element', (node: MutableNode) => {
 			const names = classes(node);
 			if (names.includes('md-epigraph')) {
-				const author = node.properties.dataAuthor;
-				delete node.properties.dataAuthor;
+				const author = node.properties!.dataAuthor as string;
+				delete node.properties!.dataAuthor;
 				node.children = [{ type: 'element', tagName: 'div', properties: { className: ['epigraph-body'] }, children: node.children }];
 				if (author) { node.children.push({ type: 'element', tagName: 'span', properties: { className: ['epigraph-author'] }, children: [{ type: 'text', value: author }] }); }
 			}
 			const kind = names.find(name => ['info', 'warning', 'success', 'error'].includes(name));
 			if (!kind || !names.includes('md-block')) { return; }
-			const title = names.includes('has-title-children') ? node.children.splice(0, 1).flatMap((child: MutableNode) => child.children ?? [child]) : [{ type: 'text', value: node.properties.dataTitle || kind.toUpperCase() }];
+			const title = names.includes('has-title-children') ? node.children!.splice(0, 1).flatMap((child: MutableNode) => child.children ?? [child]) : [{ type: 'text', value: node.properties!.dataTitle as string || kind.toUpperCase() }];
 			const body = node.children;
 			node.tagName = 'details';
-			node.properties = { className: names.filter(name => name !== 'has-title-children'), open: node.properties.dataOpen === 'true' };
+			node.properties = { className: names.filter(name => name !== 'has-title-children'), open: node.properties!.dataOpen === 'true' };
 			node.children = [
 				{ type: 'element', tagName: 'summary', properties: { className: ['md-block-title'] }, children: [{ type: 'element', tagName: 'span', properties: {}, children: title }] },
 				{ type: 'element', tagName: 'div', properties: { className: ['md-block-body'] }, children: body }
@@ -175,11 +196,11 @@ function contentStructure() {
 		const walk = (parent: MutableNode) => {
 			delete parent.position;
 			delete parent.data;
-			parent.children = parent.children.map((node: MutableNode) => {
+			parent.children = parent.children!.map((node: MutableNode) => {
 				delete node.position;
 				delete node.data;
 				if (node.type !== 'element') { return node; }
-				if (node.tagName === 'pre' && !node.children.some((child: MutableNode) => child.type === 'element' && child.tagName === 'code')) {
+				if (node.tagName === 'pre' && !node.children!.some((child: MutableNode) => child.type === 'element' && child.tagName === 'code')) {
 					node.children = [{ type: 'element', tagName: 'code', properties: {}, children: [{ type: 'text', value: plainText(node) }] }];
 				}
 				walk(node);
@@ -193,12 +214,12 @@ function contentStructure() {
 function mathExpressions() {
 	return (tree: MutableNode) => {
 		const walk = (parent: MutableNode) => {
-			parent.children = parent.children.map((child: MutableNode) => {
+			parent.children = parent.children!.map((child: MutableNode) => {
 				if (child.type !== 'element') { return child; }
-				const expression = child.tagName === 'pre' ? child.children.find((node: MutableNode) => node.type === 'element' && node.tagName === 'code') : child;
+				const expression = child.tagName === 'pre' ? child.children!.find((node: MutableNode) => node.type === 'element' && node.tagName === 'code') : child;
 				const names = expression ? classes(expression) : [];
 				if (names.some(name => ['language-math', 'math-inline', 'math-display'].includes(name))) {
-					return { type: 'element', tagName: 'span', properties: { className: ['math-formula', child.tagName === 'pre' || names.includes('math-display') ? 'math-display' : 'math-inline'] }, children: expression.children };
+					return { type: 'element', tagName: 'span', properties: { className: ['math-formula', child.tagName === 'pre' || names.includes('math-display') ? 'math-display' : 'math-inline'] }, children: expression!.children };
 				}
 				walk(child);
 				return child;
@@ -216,16 +237,21 @@ function literalAuthorHtml() {
 
 function atcoderMath() {
 	return (tree: MutableNode) => {
+		const contains = (node: MutableNode, tag: string): boolean => node.type === 'element' && node.tagName === tag || (node.children ?? []).some((child: MutableNode) => contains(child, tag));
 		const walk = (parent: MutableNode, code = false) => {
 			for (const child of parent.children ?? []) {
 				if (child.type !== 'element') { continue; }
+				// AtCoder uses pre/var for mathematical input layouts, not source code.
+				if (!code && child.tagName === 'pre' && contains(child, 'var') && !contains(child, 'code')) {
+					child.tagName = 'div'; child.properties = { className: ['oj-input-format'] };
+				}
 				if (!code && child.tagName === 'var') {
 					const display = classes(child).includes('oj-math-display');
 					child.tagName = display ? 'pre' : 'code';
 					child.properties = { className: ['language-math', display ? 'math-display' : 'math-inline'] };
 					child.children = [{ type: 'text', value: plainText(child) }];
 				}
-				walk(child, code || ['pre', 'code'].includes(child.tagName));
+				walk(child, code || ['pre', 'code'].includes(child.tagName!));
 			}
 		};
 		walk(tree);
@@ -265,7 +291,7 @@ export function parseMarkdown(source: string, options: { dialect: 'luogu' | 'bea
 	return processor.runSync(parsed.tree, parsed.file) as Root;
 }
 
-let htmlProcessor: Processor<any, any, any, any, any>;
+let htmlProcessor: Processor<undefined, Root, Root>;
 
 /** Native site HTML enters HAST directly; it never passes through Markdown. */
 export function parseHtml(source: string, baseURL: string): Root {
@@ -273,7 +299,7 @@ export function parseHtml(source: string, baseURL: string): Root {
 	const tree = fromHtml(source, { fragment: true });
 	return htmlProcessor.runSync(tree, new VFile({ data: { baseURL } })) as Root;
 }
-let markdownStructureParser: Processor<any, any, any, any, any>;
+let markdownStructureParser: Processor<MarkdownRoot>;
 function createTextOffsetLookup(src: string) {
 	let ranges: { start: number; end: number }[] | undefined;
 	return (offset: number) => {
@@ -314,7 +340,7 @@ function findUnclosedMathFences(src: string, tree: MutableNode, isTextOffset: Te
 		let _a, _b;
 		const start = (_a = node.position) === null || _a === void 0 ? void 0 : _a.start;
 		const end = (_b = node.position) === null || _b === void 0 ? void 0 : _b.end;
-		if ((start === null || start === void 0 ? void 0 : start.offset) === undefined || (end === null || end === void 0 ? void 0 : end.offset) === undefined) {
+		if (start?.offset === undefined || end?.offset === undefined) {
 			return;
 		}
 		const openingLineEnd = Math.min(...[
@@ -416,6 +442,8 @@ function normalizeDisplayMathFences(src: string) {
 	const insertions = [];
 	const lineEnding = src.includes('\r\n') ? '\r\n' : '\n';
 	const openerPattern = /^[ \t]*(\${2,})(?!\$)[ \t]*(\S.*)$/;
+	let closingFences: ({ offset: number; length: number; needsLineBreak: boolean } | undefined)[] | undefined;
+	const maxClosingLength = new Array<number>(lines.length + 1).fill(0);
 	for (let index = 0; index < lines.length; index++) {
 		const openingLine = lines[index];
 		const openingMatch = openerPattern.exec(openingLine.text);
@@ -440,32 +468,33 @@ function normalizeDisplayMathFences(src: string) {
 			}
 			continue;
 		}
+		if (!closingFences) {
+			closingFences = lines.map(line => {
+				const match = /(\${2,})[ \t]*$/.exec(line.text);
+				if (!match) { return undefined; }
+				const opener = openerPattern.exec(line.text);
+				const selfContained = opener && /(\${2,})[ \t]*$/.exec(opener[2]);
+				if (opener && selfContained && selfContained[1].length >= opener[1].length) { return undefined; }
+				const offset = line.start + match.index;
+				return isTextOffset(offset) ? { offset, length: match[1].length, needsLineBreak: line.text.slice(0, match.index).trim() !== '' } : undefined;
+			});
+			for (let closingIndex = lines.length - 1; closingIndex >= 0; closingIndex--) {
+				maxClosingLength[closingIndex] = Math.max(maxClosingLength[closingIndex + 1], closingFences[closingIndex]?.length ?? 0);
+			}
+		}
+		// Failed searches must not rescan every suffix. Successful searches advance
+		// the outer cursor to the closing line, so their scanned ranges do not overlap.
+		if (maxClosingLength[index + 1] < openingMatch[1].length) { continue; }
 		for (let closingIndex = index + 1; closingIndex < lines.length; closingIndex++) {
-			const closingLine = lines[closingIndex];
-			const closingMatch = /(\${2,})[ \t]*$/.exec(closingLine.text);
-			if (!closingMatch || closingMatch[1].length < openingMatch[1].length) {
-				continue;
-			}
-			const selfContainedMatch = openerPattern.exec(closingLine.text);
-			const selfContainedClosing = selfContainedMatch
-				? /(\${2,})[ \t]*$/.exec(selfContainedMatch[2])
-				: null;
-			if (selfContainedMatch &&
-				selfContainedClosing &&
-				selfContainedClosing[1].length >= selfContainedMatch[1].length) {
-				continue;
-			}
-			const closingFenceOffset = closingLine.start + closingMatch.index;
-			if (!isTextOffset(closingFenceOffset)) {
-				continue;
-			}
+			const closingFence = closingFences[closingIndex];
+			if (!closingFence || closingFence.length < openingMatch[1].length) { continue; }
 			// remark-math drops content attached to a multiline opening fence unless the fence is isolated.
 			insertions.push({
 				offset: openingFenceOffset + openingMatch[1].length,
 				value: insertedLine
 			});
-			if (closingLine.text.slice(0, closingMatch.index).trim() !== '') {
-				insertions.push({ offset: closingFenceOffset, value: insertedLine });
+			if (closingFence.needsLineBreak) {
+				insertions.push({ offset: closingFence.offset, value: insertedLine });
 			}
 			index = closingIndex;
 			break;
@@ -486,7 +515,7 @@ function normalizeDisplayMathFences(src: string) {
 	parts.push(src.slice(cursor));
 	return parts.join('');
 }
-function parseLuoguMarkdown(processor: Processor<any, any, any, any, any>, src: string) {
+function parseLuoguMarkdown(processor: MarkdownProcessor, src: string) {
 	let protectedSrc = normalizeDisplayMathFences(src);
 	while (true) {
 		const file = new VFile(protectedSrc);
@@ -529,8 +558,8 @@ function remarkCustomContainers() {
 			if (!((_b = labelNode === null || labelNode === void 0 ? void 0 : labelNode.data) === null || _b === void 0 ? void 0 : _b.directiveLabel)) {
 				return '';
 			}
-			const label = (_c = labelNode.children) === null || _c === void 0 ? void 0 : _c.map((child: MutableNode) => child.value || '').join('').trim();
-			node.children = node.children.slice(1);
+			const label = (_c = labelNode!.children) === null || _c === void 0 ? void 0 : _c.map((child: MutableNode) => child.value || '').join('').trim();
+			node.children = node.children!.slice(1);
 			return label || '';
 		};
 		visit(tree, (node: MutableNode) => {
@@ -547,7 +576,7 @@ function remarkCustomContainers() {
 			if (node.type === 'containerDirective') {
 				const data = node.data || (node.data = {});
 				const attributes = node.attributes || {};
-				const name = node.name;
+				const name = node.name!;
 				if (name === 'align') {
 					const align = attributes.class || Object.keys(attributes)[0] || 'center';
 					data.hName = 'div';
@@ -583,7 +612,7 @@ function remarkCuteTable() {
 	const addClass = (node: MutableNode, classToAdd: string) => {
 		node.data ||= {};
 		node.data.hProperties ||= {};
-		const className = node.data.hProperties.className || [];
+		const className = node.data.hProperties.className as string | string[] || [];
 		node.data.hProperties.className = Array.isArray(className)
 			? [...className, classToAdd]
 			: [className, classToAdd].filter(Boolean);
@@ -609,7 +638,7 @@ function remarkCuteTable() {
 function remarkImages() {
 	return (tree: MutableNode) => {
 		visit(tree, 'image', (node: MutableNode) => {
-			if (node.url.includes(luoguCaptchaUrlFragment)) {
+			if (node.url!.includes(luoguCaptchaUrlFragment)) {
 				node.type = 'text';
 				node.value = '[LUOGU CAPTCHA]';
 				delete node.url;
@@ -617,8 +646,8 @@ function remarkImages() {
 				delete node.title;
 				return;
 			}
-			if (node.url.startsWith('bilibili:')) {
-				const bilibiliUrl = node.url.substring(9);
+			if (node.url!.startsWith('bilibili:')) {
+				const bilibiliUrl = node.url!.substring(9);
 				const [videoID, queryString] = bilibiliUrl.split('?');
 				let bvid = '';
 				let aid = '';
@@ -637,7 +666,7 @@ function remarkImages() {
 				const videoId = bvid || (aid && `av${aid}`);
 				if (!videoId) {
 					node.type = 'text';
-					node.value = '嵌入内容不可用';
+					node.value = '\u5d4c\u5165\u5185\u5bb9\u4e0d\u53ef\u7528';
 					delete node.url;
 				} else {
 					const url = new URL(`/video/${encodeURIComponent(videoId)}`, 'https://www.bilibili.com');
@@ -645,7 +674,7 @@ function remarkImages() {
 					url.searchParams.set('t', t);
 					node.type = 'link';
 					node.url = url.href;
-					node.children = [{ type: 'text', value: `在 bilibili 中打开视频 ${videoId}` }];
+					node.children = [{ type: 'text', value: `\u5728 bilibili \u4e2d\u6253\u5f00\u89c6\u9891 ${videoId}` }];
 				}
 				delete node.alt;
 				delete node.title;
@@ -662,7 +691,7 @@ function remarkTableMergeMarkers() {
 	};
 	const getCellText = (cell: MutableNode, source: string) => {
 		let _a, _b, _c, _d;
-		if (!(cell === null || cell === void 0 ? void 0 : cell.children) || cell.children.length !== 1) {
+		if (!cell.children || cell.children.length !== 1) {
 			return null;
 		}
 		const child = cell.children[0];
@@ -673,8 +702,8 @@ function remarkTableMergeMarkers() {
 		const end = (_d = (_c = child.position) === null || _c === void 0 ? void 0 : _c.end) === null || _d === void 0 ? void 0 : _d.offset;
 		const raw = typeof start === 'number' && typeof end === 'number'
 			? source.slice(start, end)
-			: child.value;
-		return { child, raw, value: child.value };
+			: child.value!;
+		return { child, raw, value: child.value! };
 	};
 	const hasNeighbor = (rows: MutableNode[][], rowIndex: number, cellIndex: number, marker: string) => {
 		let _a, _b, _c, _d;
@@ -728,7 +757,7 @@ function rehypeApplyTableMerges() {
 	};
 	const addClass = (cell: MutableNode, classToAdd: string) => {
 		cell.properties ||= {};
-		const className = cell.properties.className || [];
+		const className = cell.properties.className as string | string[] || [];
 		const classes = Array.isArray(className) ? className : [className].filter(Boolean);
 		if (!classes.includes(classToAdd)) {
 			classes.push(classToAdd);
@@ -762,7 +791,7 @@ function rehypeApplyTableMerges() {
 			});
 			const rows = rowNodes.map((row: MutableNode) => (row.children || []).filter((child: MutableNode) => child.type === 'element' &&
 				(child.tagName === 'td' || child.tagName === 'th')));
-			const owners = rows.map((row: MutableNode) => row.map((cell: MutableNode) => cell));
+			const owners = rows.map(row => row.map(cell => cell));
 			const removed = new WeakSet();
 			const ownerAt = (rowIndex: number, cellIndex: number) => {
 				let _a;

@@ -1,7 +1,8 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+// allow-any-unicode-comment-file
 
 // Copyright (c) 2018 引领天下; MIT. Copied from vscode-luogu v4.20.0
 // src/utils/csrfTokenManager.ts (987ca974b5419230a07b59a195ec44026e16f6f4).
@@ -27,7 +28,7 @@ export default class CsrfTokenManager {
 	private sessionListener: { dispose(): void } | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
 
-	constructor(private readonly dependencies: CsrfTokenManagerDependencies) {}
+	constructor(private readonly dependencies: CsrfTokenManagerDependencies) { }
 
 	start() {
 		if (this.timer !== undefined) { return; }

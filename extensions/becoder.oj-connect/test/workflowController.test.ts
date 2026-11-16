@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -11,6 +11,7 @@ import { SubmissionController, type SubmissionHost } from '../src/workflowContro
 import { defaultDirectories } from '../src/settings';
 import { luoguProblem } from '../src/adapters/luogu/task';
 import { atCoderProblem } from '../src/adapters/atcoder/task';
+import { OjPreferences } from '../src/preferences';
 
 const snapshot = { uri: 'file:///C:/cpp/luogu/P1001.cpp', fileName: 'P1001.cpp', version: 3, family: 'cpp' as const, source: 'first\r\n稿\r\n' };
 function fixture() {
@@ -19,7 +20,8 @@ function fixture() {
 	let selected = 0, released = 0, cancelled = 0;
 	const make = (site: 'luogu' | 'atcoder', resolve: (input: string) => ProblemRef | undefined): OjAdapter => ({
 		site, resolve, fileName: () => 'P1001.cpp', readProblem: async () => { throw new Error('unused'); }, loginSummary: async () => ({ site, state: 'unknown' }),
-		prepare: async problem => ({ languages: [{ id: site + '-cpp', label: 'C++', family: 'cpp' }, { id: site + '-c', label: 'C', family: 'c' }], hasDraft: false,
+		prepare: async problem => ({
+			languages: [{ id: site + '-cpp', label: 'C++', family: 'cpp' }, { id: site + '-c', label: 'C', family: 'c' }], hasDraft: false,
 			send: async input => { sent.push({ site, snapshot: input.snapshot, languageId: input.languageId }); return { kind: 'record', record: { problem, id: '11', url: site === 'luogu' ? 'https://www.luogu.com.cn/record/11' : 'https://atcoder.jp/contests/abc086/submissions/11' } }; },
 			cancel: async () => { cancelled++; }, dispose: async () => { released++; }
 		}),
@@ -46,6 +48,22 @@ test('both adapters share fixed source snapshot and remember languages separatel
 	await g.controller.submit(snapshot);
 	assert.strictEqual(g.selected(), 2);
 	assert.deepStrictEqual(g.sent.map(value => value.languageId), ['luogu-cpp', 'atcoder-cpp', 'luogu-cpp']);
+});
+
+test('AtCoder compiler choices persist across controllers and an expired choice asks again', async () => {
+	const values = new Map<string, unknown>();
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
+	const f = fixture(), prepare = f.atcoder.prepare;
+	let compiler = '6017';
+	f.atcoder.prepare = async (...args) => ({ ...await prepare(...args), languages: [{ id: compiler, label: 'C++23', family: 'cpp' }] });
+	const source = { ...snapshot, uri: 'file:///C:/cpp/atcoder/abc086_a.cpp', fileName: 'abc086_a.cpp' };
+	await new SubmissionController(f.host, preferences).submit(source);
+	await new SubmissionController(f.host, preferences).submit(source);
+	assert.strictEqual(f.selected(), 1);
+	compiler = '7017';
+	await new SubmissionController(f.host, preferences).submit(source);
+	assert.strictEqual(f.selected(), 2);
+	assert.deepStrictEqual(f.sent.map(value => value.languageId), ['6017', '6017', '7017']);
 });
 
 test('the statement language selector and keyboard submission use the same preference', async () => {
@@ -81,10 +99,12 @@ test('draft refusal and cancelled language selection do not send', async () => {
 });
 test('uncertain send and record presentation failure never retry the source', async () => {
 	const f = fixture(), prepare = f.luogu.prepare;
-	f.luogu.prepare = async (...args) => ({ ...await prepare(...args), send: async input => {
-		f.sent.push({ site: 'luogu', snapshot: input.snapshot, languageId: input.languageId });
-		return { kind: 'unconfirmed', problem: luoguProblem('P1001')!, attemptId: 'attempt', message: 'Connection lost' };
-	} });
+	f.luogu.prepare = async (...args) => ({
+		...await prepare(...args), send: async input => {
+			f.sent.push({ site: 'luogu', snapshot: input.snapshot, languageId: input.languageId });
+			return { kind: 'unconfirmed', problem: luoguProblem('P1001')!, attemptId: 'attempt', message: 'Connection lost' };
+		}
+	});
 	assert.strictEqual((await f.controller.submit(snapshot))?.kind, 'unconfirmed');
 	assert.strictEqual(f.sent.length, 1); assert.strictEqual(f.records.length, 0);
 	const g = fixture(); g.host.openRecord = async () => { throw new Error('panel closed'); };
@@ -96,11 +116,13 @@ test('cancellation after acceptance retains the formal receipt', async () => {
 	const f = fixture(), prepare = f.luogu.prepare;
 	f.luogu.prepare = async (...args) => {
 		const session = await prepare(...args);
-		return { ...session, send: async (...sendArgs) => {
-			const result = await session.send(...sendArgs);
-			await f.controller.cancel();
-			return result;
-		} };
+		return {
+			...session, send: async (...sendArgs) => {
+				const result = await session.send(...sendArgs);
+				await f.controller.cancel();
+				return result;
+			}
+		};
 	};
 	assert.strictEqual((await f.controller.submit(snapshot))?.kind, 'record');
 	assert.strictEqual(f.records[0]?.id, '11');
@@ -111,11 +133,13 @@ test('cancellation after sending retains the unconfirmed attempt without resendi
 	const f = fixture(), prepare = f.luogu.prepare;
 	f.luogu.prepare = async (...args) => {
 		const session = await prepare(...args);
-		return { ...session, send: async input => {
-			f.sent.push({ site: 'luogu', snapshot: input.snapshot, languageId: input.languageId });
-			await f.controller.cancel();
-			return { kind: 'unconfirmed', problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, attemptId: 'sent-attempt', message: 'Connection lost' };
-		} };
+		return {
+			...session, send: async input => {
+				f.sent.push({ site: 'luogu', snapshot: input.snapshot, languageId: input.languageId });
+				await f.controller.cancel();
+				return { kind: 'unconfirmed', problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, attemptId: 'sent-attempt', message: 'Connection lost' };
+			}
+		};
 	};
 	assert.deepStrictEqual(await f.controller.submit(snapshot), {
 		kind: 'unconfirmed', problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, attemptId: 'sent-attempt', message: 'Connection lost'
@@ -130,10 +154,12 @@ test('deactivation suppresses a late unconfirmed attempt', async () => {
 	const f = fixture(), prepare = f.luogu.prepare;
 	f.luogu.prepare = async (...args) => {
 		const session = await prepare(...args);
-		return { ...session, send: async () => {
-			await f.controller.dispose();
-			return { kind: 'unconfirmed', problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, attemptId: 'sent-attempt', message: 'Connection lost' };
-		} };
+		return {
+			...session, send: async () => {
+				await f.controller.dispose();
+				return { kind: 'unconfirmed', problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, attemptId: 'sent-attempt', message: 'Connection lost' };
+			}
+		};
 	};
 	assert.strictEqual(await f.controller.submit(snapshot), undefined);
 	assert.strictEqual(f.records.length, 0);
@@ -144,11 +170,13 @@ test('deactivation cannot reopen a result panel from a late accepted receipt', a
 	const f = fixture(), prepare = f.luogu.prepare;
 	f.luogu.prepare = async (...args) => {
 		const session = await prepare(...args);
-		return { ...session, send: async (...sendArgs) => {
-			const result = await session.send(...sendArgs);
-			await f.controller.dispose();
-			return result;
-		} };
+		return {
+			...session, send: async (...sendArgs) => {
+				const result = await session.send(...sendArgs);
+				await f.controller.dispose();
+				return result;
+			}
+		};
 	};
 	assert.strictEqual(await f.controller.submit(snapshot), undefined);
 	assert.strictEqual(f.records.length, 0);

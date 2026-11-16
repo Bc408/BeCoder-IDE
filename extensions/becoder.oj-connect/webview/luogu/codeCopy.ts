@@ -1,8 +1,15 @@
 /*---------------------------------------------------------------------------------------------
-*  Copyright (c) 2018 引领天下. MIT License.
-*  Adapted from yltx/vscode-luogu v4.20.0 (987ca974b5419230a07b59a195ec44026e16f6f4).
-*  BeCoder changes: shared OJ integration and localization. See ThirdPartyNotices.txt.
-*--------------------------------------------------------------------------------------------*/
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
+
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2018 引领天下. MIT License.
+ *  Adapted from yltx/vscode-luogu v4.20.0 (987ca974b5419230a07b59a195ec44026e16f6f4).
+ *  BeCoder changes: shared OJ integration and localization. See ThirdPartyNotices.txt.
+ *--------------------------------------------------------------------------------------------*/
 
 // Overlapping sheets: a filled front page and an outlined back page.
 export const copyIconPath = 'M8 1h5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2ZM4 5H3a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2h-1.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h1V5Z';
@@ -11,7 +18,8 @@ export const copyIconPath = 'M8 1h5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-
 export function installCodeCopyButtons(article: HTMLElement, labels: Record<string, string>) {
 	let disposed = false;
 	const cleanups: Array<() => void> = [];
-	article.querySelectorAll('pre').forEach(pre => {
+	const blocks = article instanceof HTMLPreElement ? [article] : [...article.querySelectorAll('pre')];
+	blocks.forEach(pre => {
 		const code = pre.querySelector('code');
 		if (!code) { return; }
 
@@ -51,6 +59,7 @@ export function installCodeCopyButtons(article: HTMLElement, labels: Record<stri
 				button.title = labels.copied;
 			} catch {
 				if (disposed) { return; }
+				reset();
 				error.textContent = labels.copyFailed;
 				controls.append(error);
 			}

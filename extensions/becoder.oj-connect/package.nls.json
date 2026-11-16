@@ -2,7 +2,6 @@
 	"displayName": "OJ Connect",
 	"description": "Read problems, import samples and submit code to Luogu and AtCoder in BeCoder.",
 	"submit": "Submit Current Code",
-	"stop": "Stop Submission Tracking",
 	"configurationTitle": "OJ Connect",
 	"directories": "Site subdirectory names for problem detection and imports. Changing names does not move files.",
 	"luoguDirectory": "Luogu directory name",

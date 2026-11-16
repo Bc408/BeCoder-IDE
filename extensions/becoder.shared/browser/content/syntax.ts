@@ -1,4 +1,8 @@
-/* Copyright (c) BeCoder contributors. MIT License. See ../../LICENSE. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the MIT License. See LICENSE in the component root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import { INITIAL, Registry, type IGrammar, type IRawGrammar, type IRawTheme, type StateStack } from 'vscode-textmate';
 import { createOnigScanner, createOnigString, loadWASM } from 'vscode-oniguruma';
 import { injections, theme } from 'becoder-syntax-assets';
@@ -23,19 +27,18 @@ export class IncrementalSyntax {
 	private states: StateStack[] = [];
 	private lines: SyntaxToken[][] = [];
 	constructor(private readonly grammar: IGrammar, private readonly colors: string[]) { }
-	async patch(text: string, yieldTask?: () => Promise<void>): Promise<SyntaxPatch> {
-		const source = text.split('\n');
-		let start = 0;
-		while (start < source.length && start < this.source.length && source[start] === this.source[start]) { start++; }
-		const result = await this.update(text, yieldTask);
-		return { start, lineCount: result.lines.length, lines: result.lines.slice(start) };
-	}
 	async update(text: string, yieldTask = () => typeof scheduler !== 'undefined' ? scheduler.yield() : new Promise<void>(resolve => setTimeout(resolve, 0))): Promise<SyntaxResult> {
+		await this.patch(text, yieldTask);
+		return { text, lines: this.lines.slice() };
+	}
+	async patch(text: string, yieldTask = () => typeof scheduler !== 'undefined' ? scheduler.yield() : new Promise<void>(resolve => setTimeout(resolve, 0))): Promise<SyntaxPatch> {
+		if (text.length > 512000) { throw new Error('syntax-size-budget'); }
+		const source = text.split('\n');
+		if (source.length - Number(text.endsWith('\n')) > 10000 || source.some(line => line.length > 20000)) { throw new Error('syntax-size-budget'); }
 		let sliceStart = performance.now(), computeMs = 0;
 		// Cold grammar compilation is independent of painting. Ordinary long blocks
 		// continue across slices; only pathological total computation is abandoned.
 		const cold = this.source.length === 0;
-		const source = text.split('\n');
 		let start = 0;
 		while (start < source.length && start < this.source.length && source[start] === this.source[start]) { start++; }
 		this.states.length = start;
@@ -67,6 +70,6 @@ export class IncrementalSyntax {
 			this.lines.push(tokens);
 		}
 		this.source = source;
-		return { text, lines: this.lines.slice() };
+		return { start, lineCount: this.lines.length, lines: this.lines.slice(start) };
 	}
 }

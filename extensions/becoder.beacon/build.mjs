@@ -41,7 +41,8 @@ for (const file of [...Object.keys(host.metafile.inputs), ...Object.keys(ui.meta
 	}
 }
 const notices = [fs.readFileSync(path.join(root, 'licenses/lobe-icons.txt'), 'utf8'), 'Beacon bundled dependency notices. AI Elements attribution is in ../UPSTREAM.md.'];
-notices.push('\nShared Markdown pipeline adapted from @luogu-saver-next/markdown-renderer 1.0.3; BeCoder changes remove HTML round trips, generate native callouts and keep code unhighlighted until display.\n', fs.readFileSync(path.join(root, '../becoder.shared/content/LICENSE.luogu-markdown'), 'utf8'));
+notices.push('\nShared Markdown pipeline adapted from @luogu-saver-next/markdown-renderer 1.0.3; BeCoder changes remove HTML round trips, generate native callouts and keep code unhighlighted until display.\n', fs.readFileSync(path.join(root, '../becoder.shared/content/LICENSE.luogu-markdown.txt'), 'utf8'));
+notices.push('\nShared content heading icon: Lucide pin (ISC); retained with shared parser provenance.\n', fs.readFileSync(path.join(root, '../becoder.shared/content/LICENSE.lucide.txt'), 'utf8'));
 notices.push(`\nBeCoder built-in grammar sources: ${grammarExtensions.join(', ')}; corresponding upstream notices follow.\n`, fs.readFileSync(path.join(root, '../../ThirdPartyNotices.txt'), 'utf8'));
 for (const file of ['markdown-latex-combined-license.txt', 'cpp-bailout-license.txt']) { notices.push(fs.readFileSync(path.join(root, '../latex', file), 'utf8')); }
 const shikiLanguages = path.join(root, 'node_modules/@shikijs/langs');

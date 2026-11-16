@@ -33,7 +33,7 @@ suite('OJ script cancellation', () => {
 		const task: OjScriptTask = { controller: new AbortController(), dispatched: false };
 		let started!: () => void;
 		const dispatched = new Promise<void>(resolve => { started = resolve; });
-		const running = runOjScript(task, async () => 'script', () => { started(); return new Promise(() => {}); });
+		const running = runOjScript(task, async () => 'script', () => { started(); return new Promise(() => { }); });
 		await dispatched;
 		task.controller.abort(new Error('page changed'));
 		await assert.rejects(running, /page changed/);

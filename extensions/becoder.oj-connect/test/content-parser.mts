@@ -1,4 +1,7 @@
-/* Copyright (c) BeCoder contributors. Licensed under GPL-3.0-or-later. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
@@ -15,7 +18,7 @@ const shared = path.join(root, 'extensions/becoder.shared/content/parser.ts');
 const nodePaths = [path.join(root, 'extensions/becoder.oj-connect/node_modules')];
 await build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'markdown.cjs'), alias: { 'becoder-content': shared }, nodePaths });
 const renderer = require(path.join(output, 'markdown.cjs'));
-const descendants = (node: Nodes, predicate: (node: Nodes) => boolean): Nodes[] => [ ...(predicate(node) ? [node] : []), ...('children' in node ? node.children.flatMap(child => descendants(child, predicate)) : []) ];
+const descendants = (node: Nodes, predicate: (node: Nodes) => boolean): Nodes[] => [...(predicate(node) ? [node] : []), ...('children' in node ? node.children.flatMap(child => descendants(child, predicate)) : [])];
 const elements = (tree: Nodes, tag: string): Element[] => descendants(tree, node => node.type === 'element' && node.tagName === tag).filter((node): node is Element => node.type === 'element');
 const hasClass = (node: Element, name: string): boolean => Array.isArray(node.properties.className) && node.properties.className.includes(name);
 const text = (node: Nodes): string => node.type === 'text' ? node.value : ('children' in node ? node.children.map(text).join('') : '');
@@ -51,6 +54,11 @@ assert.ok(descendants(math, node => node.type === 'element' && hasClass(node, 'k
 assert.ok(text(math).includes('unclosed'));
 console.log('OJ content parser regressions passed');
 
+const inputFormat = await renderer.renderHtmlTree('<pre><var>N</var> <var>M</var>\n<var>A_1</var> <var>\\ldots</var> <var>A_N</var>\n</pre>', 'https://atcoder.jp/contests/abc467/tasks/abc467_e');
+assert.equal(elements(inputFormat, 'code').length, 0, 'a mathematical input format must not enter syntax highlighting');
+assert.equal(elements(inputFormat, 'span').filter(node => hasClass(node, 'katex')).length, 5);
+assert.ok(text(inputFormat).includes('\n'), 'input format keeps its line layout');
+
 await build({ entryPoints: [path.join(root, 'extensions/becoder.oj-connect/src/markdownService.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['./markdown'], outfile: path.join(output, 'service.cjs') });
 const { MarkdownService } = require(path.join(output, 'service.cjs'));
 let renderCalls = 0;
@@ -75,6 +83,24 @@ console.log('Shared content cache regressions passed');
 // Shared parser contracts also run in a browser bundle; no DOM APIs are required here.
 await build({ entryPoints: [shared], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'parser.cjs'), nodePaths });
 const parser = require(path.join(output, 'parser.cjs'));
+// Count only this normalization pass's closing-fence probes, independently of machine speed.
+const closingFencePattern = /(\${2,})[ \t]*$/.source;
+const originalExec = RegExp.prototype.exec;
+let closingFenceProbes = 0;
+RegExp.prototype.exec = function (input: string) {
+	if (this.source === closingFencePattern) { closingFenceProbes++; }
+	return originalExec.call(this, input);
+};
+const unmatchedLines = 256;
+try { parser.parseMarkdown('$$x\n'.repeat(unmatchedLines), { dialect: 'luogu' }); }
+finally { RegExp.prototype.exec = originalExec; }
+assert.ok(closingFenceProbes <= unmatchedLines * 4, `unmatched display fences must not rescan every suffix (${closingFenceProbes} probes)`);
+for (const fence of ['$$', '$$$$']) {
+	for (const ending of ['\n', '\r\n']) {
+		const tree = parser.parseMarkdown(`${fence}a+b${ending}=c+d${fence}${ending}`, { dialect: 'luogu' });
+		assert.deepEqual(elements(tree, 'annotation').map(text), ['a+b\n=c+d'], 'normalization preserves wider fences and CRLF formula content');
+	}
+}
 const beaconRawHtml = parser.parseBeaconMarkdown('<div>Do not lose this instruction</div>\n\nInline <b>literal</b> text.');
 assert.ok(text(beaconRawHtml).includes('<div>Do not lose this instruction</div>'), 'Beacon raw HTML remains safe literal text instead of silently losing its content');
 assert.ok(text(beaconRawHtml).includes('Inline <b>literal</b> text.'));
@@ -98,7 +124,7 @@ assert.deepEqual(elements(protocols, 'a').map(node => node.properties.href), ['h
 const html = parser.parseHtml('<p><var>a+b</var></p><pre><var>literal</var>  \n</pre><img src="/image.png" onerror="alert(1)" style="position:fixed"><script>bad()</script>', 'https://atcoder.jp/contests/abc086/tasks/abc086_a');
 assert.equal(elements(html, 'script').length, 0);
 assert.ok(descendants(html, node => node.type === 'element' && hasClass(node, 'katex')).length > 0);
-assert.equal(text(elements(html, 'code')[0]), 'literal  \n');
+assert.equal(elements(html, 'code').length, 0, 'explicit var inside an input-format pre remains mathematical');
 assert.equal(elements(html, 'img')[0].properties.src, 'https://atcoder.jp/image.png');
 assert.equal(elements(html, 'img')[0].properties.onError, undefined);
 assert.equal(elements(html, 'img')[0].properties.style, undefined);

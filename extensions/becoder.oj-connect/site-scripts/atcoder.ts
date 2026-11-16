@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { type ProblemRef, type ProblemDocument, type LoginSummary, validateProblem } from '../src/domain';
+import { type ProblemRef, type ProblemDocument, type Section, type LoginSummary, validateProblem } from '../src/domain';
 import { atCoderProblem } from '../src/adapters/atcoder/task';
 import { withOjRead } from './reads';
 
@@ -19,23 +19,28 @@ export async function readAtCoderProblem(problem: ProblemRef, requestId: string)
 		if (!statement) { throw new Error('AtCoder statement is unavailable.'); }
 		const bodyHTML = (element: Element) => {
 			const clone = element.cloneNode(true) as Element;
+			const explanations: Section[] = [];
 			for (const heading of clone.querySelectorAll('h3')) {
-				if (/入力例|出力例|Sample Input|Sample Output/.test(heading.textContent ?? '') && heading.parentElement?.tagName === 'SECTION') {
-					// Explanations and diagrams can share the sample's section.
-					heading.parentElement.querySelector('pre')?.remove(); heading.remove();
+				const sample = /^(?:\u5165\u529b\u4f8b|\u51fa\u529b\u4f8b|Sample Input|Sample Output)\s*(\d+)/.exec(heading.textContent?.trim() ?? '');
+				if (sample && heading.parentElement?.tagName === 'SECTION') {
+					const section = heading.parentElement;
+					section.querySelector('pre')?.remove(); heading.remove();
+					if (section.textContent?.trim() || section.querySelector('img,table')) { explanations.push({ kind: 'sample-explanation', sampleIndex: Number(sample[1]) - 1, format: 'html', content: section.innerHTML }); }
+					section.remove();
 				}
 			}
-			return clone.innerHTML;
+			for (const node of [...clone.children]) { if (node.tagName === 'HR' || (!node.textContent?.trim() && !node.querySelector('img,pre,table,var'))) { node.remove(); } }
+			return [{ format: 'html' as const, content: clone.innerHTML }, ...explanations];
 		};
 		const bodies = (['ja', 'en'] as const).flatMap(locale => {
 			const element = statement.querySelector('.lang-' + locale);
-			return element ? [{ locale, sections: [{ format: 'html' as const, content: bodyHTML(element) }] }] : [];
+			return element ? [{ locale, sections: bodyHTML(element) }] : [];
 		});
-		if (!bodies.length) { bodies.push({ locale: 'en', sections: [{ format: 'html', content: bodyHTML(statement) }] }); }
+		if (!bodies.length) { bodies.push({ locale: 'en', sections: bodyHTML(statement) }); }
 		const sampleRoot = statement.querySelector('.lang-ja') ?? statement.querySelector('.lang-en') ?? statement;
 		const samples: { input: string; output: string }[] = [];
-		const inputs = [...sampleRoot.querySelectorAll('h3')].filter(node => /入力例|Sample Input/.test(node.textContent ?? ''));
-		const outputs = [...sampleRoot.querySelectorAll('h3')].filter(node => /出力例|Sample Output/.test(node.textContent ?? ''));
+		const inputs = [...sampleRoot.querySelectorAll('h3')].filter(node => /\u5165\u529b\u4f8b|Sample Input/.test(node.textContent ?? ''));
+		const outputs = [...sampleRoot.querySelectorAll('h3')].filter(node => /\u51fa\u529b\u4f8b|Sample Output/.test(node.textContent ?? ''));
 		if (inputs.length !== outputs.length) { throw new Error('AtCoder sample structure is incomplete.'); }
 		for (let i = 0; i < inputs.length; i++) {
 			const input = inputs[i].parentElement?.querySelector('pre'), output = outputs[i].parentElement?.querySelector('pre');
@@ -87,8 +92,10 @@ export async function logoutAtCoder(_input: unknown, requestId: string): Promise
 		const token = form?.querySelector<HTMLInputElement>('input[type="hidden"][name="csrf_token"]')?.value;
 		if (!token) { throw new Error('AtCoder sign out form is unavailable.'); }
 		signal.throwIfAborted();
-		const response = await fetch('/logout', { method: 'POST', credentials: 'same-origin', redirect: 'follow', signal,
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf_token: token }).toString() });
+		const response = await fetch('/logout', {
+			method: 'POST', credentials: 'same-origin', redirect: 'follow', signal,
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf_token: token }).toString()
+		});
 		if (!response.ok || loginSummary(await accountPage(signal)).state !== 'signed-out') { throw new Error('AtCoder sign out could not be confirmed.'); }
 		return true;
 	});

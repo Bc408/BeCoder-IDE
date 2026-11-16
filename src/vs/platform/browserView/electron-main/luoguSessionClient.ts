@@ -80,8 +80,10 @@ export class LuoguSessionClient {
 		try {
 			controller.signal.throwIfAborted();
 			onDispatch?.();
-			const response = await this.ports.fetch(origin + path, { ...init, redirect: 'manual', credentials: 'include', signal: controller.signal,
-				headers: { Referer: origin + '/', 'X-Requested-With': 'XMLHttpRequest', ...init.headers } });
+			const response = await this.ports.fetch(origin + path, {
+				...init, redirect: 'manual', credentials: 'include', signal: controller.signal,
+				headers: { Referer: origin + '/', 'X-Requested-With': 'XMLHttpRequest', ...init.headers }
+			});
 			return await consume(response);
 		} finally { this.requests.delete(controller); clearTimeout(timer); outer?.removeEventListener('abort', abort); }
 	}
@@ -166,7 +168,7 @@ export class LuoguSessionClient {
 			const prepared = this.prepared.get(problem.url), current = this.generation;
 			if (!prepared || prepared.ownerKey !== ownerKey || prepared.generation !== current || !prepared.languages.some(language => language.id === payload.languageId)) { throw new Error('luogu-session-changed'); }
 			const [lang, optimization] = payload.languageId.split(':');
-			for (;;) {
+			for (; ;) {
 				const token = await cancellable(this.csrf.getToken(), signal);
 				if (this.ports.synchronizeSession) { await cancellable(this.ports.synchronizeSession(), signal); }
 				signal.throwIfAborted();
@@ -182,10 +184,10 @@ export class LuoguSessionClient {
 					const body = object(JSON.parse(text)); return { response, body };
 				}, () => { uncertain = true; });
 				const { response, body } = result;
-				this.ports.trace?.('submit-response', { requestId, status: response.status, category: body.errorMessage === '验证码错误' ? 'captcha-rejected' : typeof body.errorMessage === 'string' ? 'other-rejection' : body.rid !== undefined ? 'record' : 'unknown', generation: this.generation });
+				this.ports.trace?.('submit-response', { requestId, status: response.status, category: body.errorMessage === '\u9a8c\u8bc1\u7801\u9519\u8bef' ? 'captcha-rejected' : typeof body.errorMessage === 'string' ? 'other-rejection' : body.rid !== undefined ? 'record' : 'unknown', generation: this.generation });
 				if (response.ok && Number.isSafeInteger(body.rid) && Number(body.rid) > 0) { const id = String(body.rid); return { kind: 'record', record: { problem, id, url: origin + '/record/' + id } }; }
 				uncertain = false;
-				if (body.errorMessage === '验证码错误' && body.rid === undefined) {
+				if (body.errorMessage === '\u9a8c\u8bc1\u7801\u9519\u8bef' && body.rid === undefined) {
 					if (captcha !== undefined && ++captchaFailures >= 3) { return failed('luogu-browser-verification-required'); }
 					captcha = await this.ports.askCaptcha(requestId, signal);
 					if (captcha === undefined) { return failed('Verification cancelled. No submission was accepted.'); }
@@ -252,9 +254,11 @@ export class LuoguSessionClient {
 		socket.onopen = () => socket.send(JSON.stringify({ type: 'join_channel', channel: 'record.track', channel_param: ref.id }));
 		socket.onmessage = event => { try { const value = object(JSON.parse(String(event.data))); if (value._ws_type === 'join_result' && !joined) { joined = true; clearTimeout(timer); push(object(value.welcome_message).record); } else if (joined && value._ws_type === 'server_broadcast' && value.type === 'status_push') { push(value.record); } } catch { dispose(new Error('luogu-push-invalid-response')); } };
 		socket.onerror = () => dispose(new Error('luogu-push-failed')); socket.onclose = () => dispose(new Error('luogu-push-closed'));
-		return { dispose, next: async (signal: AbortSignal): Promise<Record<string, unknown>> => {
-			signal.throwIfAborted(); if (failure) { throw failure; } if (queued) { const value = queued; queued = undefined; return value; } if (pending) { throw new Error('luogu-record-busy'); }
-			return new Promise((resolve, reject) => { const abort = () => { pending = undefined; reject(new Error('luogu-record-cancelled')); }; signal.addEventListener('abort', abort, { once: true }); pending = { resolve: value => { signal.removeEventListener('abort', abort); resolve(value); }, reject: error => { signal.removeEventListener('abort', abort); reject(error); } }; });
-		} };
+		return {
+			dispose, next: async (signal: AbortSignal): Promise<Record<string, unknown>> => {
+				signal.throwIfAborted(); if (failure) { throw failure; } if (queued) { const value = queued; queued = undefined; return value; } if (pending) { throw new Error('luogu-record-busy'); }
+				return new Promise((resolve, reject) => { const abort = () => { pending = undefined; reject(new Error('luogu-record-cancelled')); }; signal.addEventListener('abort', abort, { once: true }); pending = { resolve: value => { signal.removeEventListener('abort', abort); resolve(value); }, reject: error => { signal.removeEventListener('abort', abort); reject(error); } }; });
+			}
+		};
 	}
 }

@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, SubmissionOutcome } from 'becoder-oj-connect';
@@ -61,19 +61,24 @@ export function validateProblem(raw: unknown): ProblemDocument {
 		ref, title: text(value.title, 2048), interactive: value.interactive,
 		...(value.difficulty === undefined ? {} : { difficulty: metadata(value.difficulty) }),
 		...(value.tags === undefined ? {} : { tags: array(value.tags, 256).map(metadata) }),
-		...(value.languages === undefined ? {} : { languages: array(value.languages, 100).map(raw => {
-			const option = object(raw);
-			if (option.family !== 'c' && option.family !== 'cpp') { throw new Error('oj-connect-invalid-language'); }
-			return { id: text(option.id, 200), label: text(option.label, 200), family: option.family };
-		}) }),
+		...(value.languages === undefined ? {} : {
+			languages: array(value.languages, 100).map(raw => {
+				const option = object(raw);
+				if (option.family !== 'c' && option.family !== 'cpp') { throw new Error('oj-connect-invalid-language'); }
+				return { id: text(option.id, 200), label: text(option.label, 200), family: option.family };
+			})
+		}),
 		bodies: array(value.bodies, 32).map(rawBody => {
 			const body = object(rawBody);
-			return { locale: text(body.locale, 64), sections: array(body.sections, 64).map((rawSection): Section => {
-				const section = object(rawSection);
-				if (section.format !== 'markdown' && section.format !== 'html') { throw new Error('oj-connect-invalid-content'); }
-				if (section.kind !== undefined && section.kind !== 'notes') { throw new Error('oj-connect-invalid-content'); }
-				return { format: section.format, content: text(section.content, 8 * 1024 * 1024, true), ...(section.heading === undefined ? {} : { heading: text(section.heading, 1024) }), ...(section.kind === 'notes' ? { kind: 'notes' as const } : {}) };
-			}) };
+			return {
+				locale: text(body.locale, 64), sections: array(body.sections, 64).map((rawSection): Section => {
+					const section = object(rawSection);
+					if (section.format !== 'markdown' && section.format !== 'html') { throw new Error('oj-connect-invalid-content'); }
+					if (section.kind !== undefined && section.kind !== 'notes' && section.kind !== 'sample-explanation') { throw new Error('oj-connect-invalid-content'); }
+					if (section.kind === 'sample-explanation' && (!Number.isSafeInteger(section.sampleIndex) || Number(section.sampleIndex) < 0 || Number(section.sampleIndex) >= array(value.samples, 100).length)) { throw new Error('oj-connect-invalid-content'); }
+					return { format: section.format, content: text(section.content, 8 * 1024 * 1024, true), ...(section.heading === undefined ? {} : { heading: text(section.heading, 1024) }), ...(section.kind === 'notes' ? { kind: 'notes' as const } : section.kind === 'sample-explanation' ? { kind: 'sample-explanation' as const, sampleIndex: Number(section.sampleIndex) } : {}) };
+				})
+			};
 		}),
 		samples: array(value.samples, 100).map(rawSample => { const sample = object(rawSample); return { input: text(sample.input, 8 * 1024 * 1024, true), output: text(sample.output, 8 * 1024 * 1024, true) }; }),
 		limits: array(value.limits, 32).map(rawLimit => { const limit = object(rawLimit); return { label: text(limit.label, 200), value: text(limit.value, 1000) }; })
@@ -88,10 +93,14 @@ export function validateRecord(raw: unknown): RecordSnapshot {
 		if (value[name] !== undefined) { optional[name] = text(value[name], name === 'compileMessage' || name === 'source' ? 1024 * 1024 : 8192, true); }
 	}
 	if (value.compileSucceeded !== undefined && typeof value.compileSucceeded !== 'boolean') { throw new Error('oj-connect-invalid-record'); }
-	return { ref, phase: value.phase as RecordSnapshot['phase'], rawStatus: text(value.rawStatus, 200, true), sourceVerification: value.sourceVerification as RecordSnapshot['sourceVerification'], ...optional,
+	return {
+		ref, phase: value.phase as RecordSnapshot['phase'], rawStatus: text(value.rawStatus, 200, true), sourceVerification: value.sourceVerification as RecordSnapshot['sourceVerification'], ...optional,
 		...(value.compileSucceeded === undefined ? {} : { compileSucceeded: value.compileSucceeded as boolean }),
-		...(value.groups === undefined ? {} : { groups: array(value.groups, 128).map(rawGroup => {
-			const group = object(rawGroup);
-			return { name: text(group.name, 1000, true), rows: array(group.rows, 1024).map(row => array(row, 32).map(cell => text(cell, 8192, true))) };
-		}) }) };
+		...(value.groups === undefined ? {} : {
+			groups: array(value.groups, 128).map(rawGroup => {
+				const group = object(rawGroup);
+				return { name: text(group.name, 1000, true), rows: array(group.rows, 1024).map(row => array(row, 32).map(cell => text(cell, 8192, true))) };
+			})
+		})
+	};
 }

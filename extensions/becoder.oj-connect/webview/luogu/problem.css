@@ -1,111 +1,129 @@
-/* Copyright (c) 2018 引领天下. MIT License. Derived from vscode-luogu v4.18.2; see UPSTREAM.md. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* allow-any-unicode-comment-file */
+
+/*
+ * Copyright (c) 2018 引领天下. MIT License. Derived from vscode-luogu v4.18.2; see UPSTREAM.md.
+ */
 #app.oj-problem {
-  > header {
-    display: flex;
-    border-bottom: 1px solid #7f7f7f7f;
-    flex-direction: row;
-    > :nth-child(1) {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      > :nth-child(1) {
-        flex: 1;
-      }
-      > :nth-child(2) {
-        display: flex;
-        margin-bottom: 0.67em;
-        gap: 5px;
-        flex-wrap: wrap;
-        .vscode-button {
-          > * {
-            display: flex;
-            align-items: center;
-            > svg {
-              margin-right: 2px;
-              height: 1em;
-            }
-          }
-        }
-      }
-    }
-    > :nth-child(2) {
-      display: grid;
-      @media screen and (max-width: 420px) {
-        display: none;
-      }
-      grid-template-columns: repeat(2, auto);
-      grid-template-rows: repeat(2, min-content);
-      font-family: -apple-system, BlinkMacSystemFont, 'San Francisco',
-        'Helvetica Neue', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK',
-        'Source Han Sans', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei',
-        sans-serif;
-      margin: 10px;
-      > div {
-        padding: 6px 12px;
-        background-color: var(--vscode-editor-background);
-        > div:nth-child(1) {
-          text-align: center;
-        }
-        > div:nth-child(2) {
-          text-align: center;
-          font-weight: 700;
-        }
-      }
-      > .problem-limit {
-        border-bottom: 1px solid var(--vscode-editor-foreground);
-      }
-    }
-  }
-  div.problemSamples {
-    > div {
-      display: grid;
-      column-gap: 10px;
-      grid-template-columns: 50% 50%;
-      @media screen and (max-width: 400px) {
-        grid-template-columns: 100%;
-      }
-      > div {
-        > h3 {
-          margin: 0;
-        }
-      }
-    }
-  }
+	> header {
+		display: flex;
+		border-bottom: 1px solid #7f7f7f7f;
+		flex-direction: row;
+		> :nth-child(1) {
+			flex: 1;
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+			> :nth-child(1) {
+				flex: 1;
+			}
+			> :nth-child(2) {
+				display: flex;
+				margin-bottom: 0.67em;
+				gap: 5px;
+				flex-wrap: wrap;
+				.vscode-button {
+					> * {
+						display: flex;
+						align-items: center;
+						> svg {
+							margin-right: 2px;
+							height: 1em;
+						}
+					}
+				}
+			}
+		}
+		> :nth-child(2) {
+			display: grid;
+			@media screen and (max-width: 420px) {
+				display: none;
+			}
+			grid-template-columns: repeat(2, auto);
+			grid-template-rows: repeat(2, min-content);
+			font-family: -apple-system, BlinkMacSystemFont, 'San Francisco',
+				'Helvetica Neue', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK',
+				'Source Han Sans', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei',
+				sans-serif;
+			margin: 10px;
+			> div {
+				padding: 6px 12px;
+				background-color: var(--vscode-editor-background);
+				> div:nth-child(1) {
+					text-align: center;
+				}
+				> div:nth-child(2) {
+					text-align: center;
+					font-weight: 700;
+				}
+			}
+			> .problem-limit {
+				border-bottom: 1px solid var(--vscode-editor-foreground);
+			}
+		}
+	}
+	div.problemSamples {
+		> div {
+			display: grid;
+			column-gap: 10px;
+			grid-template-columns: 50% 50%;
+			@media screen and (max-width: 400px) {
+				grid-template-columns: 100%;
+			}
+			> div {
+				> h3 {
+					margin: 0;
+				}
+			}
+		}
+	}
+}
+
+.sample-explanation { grid-column: 1 / -1; margin-top: 0.5em; }
+.oj-input-format {
+	white-space: pre-wrap;
+	overflow-x: auto;
+	padding: 0.5em;
+	border: 1px solid var(--vscode-panel-border, #7f7f7f55);
+	border-radius: 3px;
 }
 
 /* Ported from vscode-luogu v4.20.0 haveTag, with keyboard focus support. */
 .problem-tags {
-  > div:nth-child(2) > svg {
-    width: 1em;
-    height: 1em;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    transition: transform 0.5s;
-  }
-  > div:nth-child(3) {
-    position: relative;
-    > div {
-      position: absolute;
-      top: 0;
-      right: -30px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.5s;
-      backdrop-filter: blur(12px);
-      background-color: var(--vscode-editor-background);
-      box-shadow: 0 3px 8px var(--vscode-editor-foreground);
-      border-radius: 7px;
-      padding: 10px;
-      margin: 10px;
-      width: 200px;
-      z-index: 114514;
-    }
-  }
-  &:hover, &:focus-within {
-    > div:nth-child(2) > :first-child { transform: rotate(180deg); }
-    > div:nth-child(3) > div { opacity: 1; }
-  }
-  &:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+	> div:nth-child(2) > svg {
+		width: 1em;
+		height: 1em;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2;
+		transition: transform 0.5s;
+	}
+	> div:nth-child(3) {
+		position: relative;
+		> div {
+			position: absolute;
+			top: 0;
+			right: -30px;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.5s;
+			backdrop-filter: blur(12px);
+			background-color: var(--vscode-editor-background);
+			box-shadow: 0 3px 8px var(--vscode-editor-foreground);
+			border-radius: 7px;
+			padding: 10px;
+			margin: 10px;
+			width: 200px;
+			z-index: 114514;
+		}
+	}
+	&:hover, &:focus-within {
+		> div:nth-child(2) > :first-child { transform: rotate(180deg); }
+		> div:nth-child(3) > div { opacity: 1; }
+	}
+	&:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
 }

@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import type { IAtCoderBridge, IAtCoderPageRef, IAtCoderSourcePayload } from 'becoder-oj-connect';
@@ -14,11 +14,13 @@ export interface AtCoderHost extends Pick<IAtCoderBridge, 'openTask' | 'inspectT
 	readProblem(problem: ProblemRef): Promise<ProblemDocument>;
 	loginSummary(): Promise<LoginSummary>;
 	readRecord(record: RecordRef): Promise<RecordSnapshot>;
+	cancelRecord?(record: RecordRef): Promise<void>;
 	reconcile(attemptId: string): Promise<SubmissionOutcome>;
 }
 
 export class AtCoderAdapter implements OjAdapter {
 	readonly site = 'atcoder';
+	private readonly recordCancellations = new Map<string, Promise<void>>();
 	constructor(private readonly host: AtCoderHost) { }
 	resolve(input: string): ProblemRef | undefined { return atCoderProblem(input); }
 	fileName(problem: ProblemRef): string {
@@ -33,8 +35,19 @@ export class AtCoderAdapter implements OjAdapter {
 	async loginSummary(signal: AbortSignal): Promise<LoginSummary> { signal.throwIfAborted(); return this.host.loginSummary(); }
 	async readRecord(record: RecordRef, signal: AbortSignal): Promise<RecordSnapshot> {
 		signal.throwIfAborted(); this.problem(record.problem); validateRecordRef(record);
-		const result = validateRecord(await this.host.readRecord(record));
-		signal.throwIfAborted(); return result;
+		await this.recordCancellations.get(record.url);
+		signal.throwIfAborted();
+		let cancellation: Promise<void> | undefined;
+		const cancel = () => {
+			const pending = this.host.cancelRecord?.(record).catch(() => undefined) ?? Promise.resolve();
+			cancellation = pending; this.recordCancellations.set(record.url, pending);
+			void pending.finally(() => { if (this.recordCancellations.get(record.url) === pending) { this.recordCancellations.delete(record.url); } });
+		};
+		signal.addEventListener('abort', cancel, { once: true });
+		try {
+			const result = validateRecord(await this.host.readRecord(record));
+			signal.throwIfAborted(); return result;
+		} finally { signal.removeEventListener('abort', cancel); await cancellation; }
 	}
 	async reconcile(attemptId: string, signal: AbortSignal): Promise<SubmissionOutcome> { signal.throwIfAborted(); return this.host.reconcile(attemptId); }
 	async prepare(problem: ProblemRef, sourceUri: string, _progress: Parameters<OjAdapter['prepare']>[2], signal: AbortSignal): Promise<SubmissionSession> {

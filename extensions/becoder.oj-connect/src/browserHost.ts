@@ -1,8 +1,8 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) BeCoder contributors. All rights reserved.
- *  Licensed under GPL-3.0-or-later. See LICENSE in the project root.
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { IAtCoderBridge, IAtCoderPageRef, IAtCoderShortcutResult, IAtCoderSourcePayload, IAtCoderTaskForm, ILuoguPrepared, ILuoguSourcePayload } from 'becoder-oj-connect';
+import type { IAtCoderPageRef, IAtCoderSourcePayload, IAtCoderTaskForm, ILuoguPrepared, ILuoguSourcePayload } from 'becoder-oj-connect';
 import { officialTaskURL } from './adapters/atcoder/task';
 import type { AtCoderHost } from './adapters/atcoder/adapter';
 import { type ProblemRef, type ProblemDocument, type RecordRef, type RecordSnapshot, type LoginSummary, type SubmissionOutcome, validateProblem, validateRecord, validateOutcome, validateRecordRef } from './domain';
@@ -56,7 +56,7 @@ export class CommandLuoguHost implements LuoguHost {
 function invalid(): never { throw new Error('oj-connect-invalid-host-response'); }
 
 /** Transport only. No browser cookies, native view IDs, scripts or generic network request are exposed. */
-export class CommandBrowserHost implements IAtCoderBridge, AtCoderHost {
+export class CommandBrowserHost implements AtCoderHost {
 	constructor(private readonly execute: (command: string, ...args: unknown[]) => Promise<unknown>) { }
 	private call(operation: string, ...args: unknown[]): Promise<unknown> { return this.execute('_becoder.ojConnect.atcoder.' + operation, ...args); }
 	async cancelPreparation(): Promise<void> { await this.call('cancelPreparation'); }
@@ -75,18 +75,6 @@ export class CommandBrowserHost implements IAtCoderBridge, AtCoderHost {
 		});
 		return { hasDraft: value.hasDraft, languages };
 	}
-	async submit(page: IAtCoderPageRef, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult> {
-		const value = object(await this.call('submit', page, payload));
-		if (typeof value.status !== 'string' || value.status.length > 200 || typeof value.verified !== 'boolean' || (value.stopped !== undefined && typeof value.stopped !== 'boolean')) { invalid(); }
-		for (const field of ['id', 'url', 'owner', 'score']) { if (value[field] !== undefined && (typeof value[field] !== 'string' || (value[field] as string).length > 2048)) { invalid(); } }
-		if (value.verified) {
-			if (typeof value.id !== 'string' || !/^[1-9][0-9]*$/.test(value.id) || typeof value.url !== 'string') { invalid(); }
-			const task = new URL(page.url), detail = new URL(value.url);
-			if (detail.origin !== 'https://atcoder.jp' || detail.username || detail.password || detail.pathname !== task.pathname.replace(/\/tasks\/[^/]+\/?$/, '/submissions/' + value.id)) { invalid(); }
-		}
-		return { status: value.status, verified: value.verified, id: value.id as string | undefined, url: value.url as string | undefined, score: value.score as string | undefined, owner: value.owner as string | undefined, stopped: value.stopped as boolean | undefined };
-	}
-	async revealResult(page: IAtCoderPageRef): Promise<void> { await this.call('revealResult', page); }
 	async sendAndConfirm(page: IAtCoderPageRef, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome> {
 		const outcome = validateOutcome(await this.call('sendAndConfirm', page, payload));
 		if (outcome.kind === 'record' && outcome.record.problem.url !== page.url) { invalid(); }
@@ -110,5 +98,6 @@ export class CommandBrowserHost implements IAtCoderBridge, AtCoderHost {
 	}
 	async reconcile(attemptId: string): Promise<SubmissionOutcome> { return validateOutcome(await this.call('reconcile', attemptId)); }
 	async cancel(page: IAtCoderPageRef): Promise<void> { await this.call('cancel', page); }
+	async cancelRecord(record: RecordRef): Promise<void> { await this.execute('_becoder.ojConnect.releaseRecord', validateRecordRef(record)); }
 	async release(page: IAtCoderPageRef): Promise<void> { await this.call('release', page); }
 }

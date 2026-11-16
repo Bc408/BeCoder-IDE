@@ -1,4 +1,8 @@
-/* Copyright (c) BeCoder contributors. MIT License. See ../../LICENSE. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the MIT License. See LICENSE in the component root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 import { languages } from 'becoder-syntax-assets';
 import { createSyntaxClient } from './syntaxClient';
 import type { SyntaxToken } from './syntax';
@@ -10,7 +14,7 @@ export function resolveLanguage(rawLanguage: string) {
 	const raw = rawLanguage.trim(), normalized = raw.toLowerCase();
 	const entry = languages[aliases[normalized] ?? normalized];
 	const id = entry?.id ?? 'text';
-	const label = !raw || ['text', 'txt', 'plaintext'].includes(normalized) ? (document.documentElement.lang.startsWith('zh') ? '纯文本' : 'Plain text') : labels[id] ?? entry?.label ?? raw.charAt(0).toUpperCase() + raw.slice(1);
+	const label = !raw || ['text', 'txt', 'plaintext'].includes(normalized) ? (document.documentElement.lang.startsWith('zh') ? '\u7eaf\u6587\u672c' : 'Plain text') : labels[id] ?? entry?.label ?? raw.charAt(0).toUpperCase() + raw.slice(1);
 	return { id, label };
 }
 

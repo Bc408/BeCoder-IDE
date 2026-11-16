@@ -8,7 +8,7 @@ declare module 'becoder-oj-connect' {
 	export type SiteId = 'luogu' | 'codeforces' | 'atcoder' | 'lanqiao' | 'nowcoder';
 	export interface ISourceSnapshot { uri: string; fileName: string; version: number; family: 'c' | 'cpp'; source: string }
 	export interface ProblemRef { readonly site: SiteId; readonly nativeId: string; readonly url: string }
-	export interface Section { readonly heading?: string; readonly format: 'markdown' | 'html'; readonly content: string; readonly kind?: 'notes' }
+	export interface Section { readonly heading?: string; readonly format: 'markdown' | 'html'; readonly content: string; readonly kind?: 'notes' | 'sample-explanation'; readonly sampleIndex?: number }
 	export interface ProblemDocument {
 		readonly ref: ProblemRef; readonly title: string;
 		readonly difficulty?: { readonly label: string; readonly color?: string };
@@ -43,8 +43,6 @@ declare module 'becoder-oj-connect' {
 	export interface IAtCoderBridge {
 		openTask(taskURL: string, sourceUri: string): Promise<IAtCoderPageRef>;
 		inspectTask(page: IAtCoderPageRef): Promise<IAtCoderTaskForm>;
-		submit(page: IAtCoderPageRef, payload: IAtCoderSourcePayload): Promise<IAtCoderShortcutResult>;
-		revealResult(page: IAtCoderPageRef): Promise<void>;
 		cancel(page: IAtCoderPageRef): Promise<void>;
 		release(page: IAtCoderPageRef): Promise<void>;
 	}

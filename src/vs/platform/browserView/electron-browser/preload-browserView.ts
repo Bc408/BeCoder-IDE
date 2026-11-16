@@ -16,6 +16,30 @@
 function init() {
 	const { contextBridge, ipcRenderer } = require('electron');
 
+	// Integrated Browser does not support passkeys. Advertise that before site
+	// scripts probe support, rather than starting conditional WebAuthn and then
+	// showing a native chooser or a permissions-policy error on the login page.
+	contextBridge.executeInMainWorld({
+		func: () => {
+			Object.defineProperty(window, 'PublicKeyCredential', { value: undefined, configurable: true, writable: true });
+			for (const method of ['get', 'create'] as const) {
+				const original = navigator.credentials?.[method];
+				if (original) {
+					Object.defineProperty(navigator.credentials, method, {
+						configurable: true,
+						writable: true,
+						value: (options?: CredentialRequestOptions & CredentialCreationOptions) => {
+							if (options?.publicKey) {
+								return Promise.reject(new DOMException('Passkeys are not supported in Integrated Browser.', 'NotSupportedError'));
+							}
+							return original.call(navigator.credentials, options);
+						}
+					});
+				}
+			}
+		}
+	});
+
 	const nativeCtrlCmdKeybindings = {
 		mac: {
 			always: new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'backspace', 'delete']),

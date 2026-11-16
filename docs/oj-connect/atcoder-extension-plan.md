@@ -1,5 +1,7 @@
 # OJ Connect AtCoder 插件化第一阶段实施计划
 
+本文保留第一阶段迁移时的接口、步骤与检查记录，不是当前接口清单。该阶段快捷键闭环已获负责人确认；后续共同题面、评测页、登录侧栏与洛谷适配已实施，旧 `submit`／`revealResult` 桥与实验工具栏已移除。未采集的逐字段验收证据仍保持未勾选，不据此重新开启已完成的迁移。当前结构与验收状态见[技术架构](architecture.md)及[开发入口](README.md#当前实现状态)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. 负责人已确认当前会话顺序执行。步骤使用复选框跟踪，未通过验收的步骤保持未勾选。
 
 **Goal:** 让统一内置扩展接管当前已跑通的 AtCoder 源码快捷键提交流程，通过受限宿主接口保留真实会话、一次发送和本次记录核对，完成可独立验收的首个迁移增量。

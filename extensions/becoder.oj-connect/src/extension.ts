@@ -10,7 +10,7 @@ import { AtCoderAdapter } from './adapters/atcoder/adapter';
 import { NowcoderAdapter } from './adapters/nowcoder/adapter';
 import { LuoguAdapter } from './adapters/luogu/adapter';
 import { SubmissionController } from './workflowController';
-import { ImportController } from './importController';
+import { ImportController, browserImportTarget } from './importController';
 import { readDirectories, type SiteId } from './settings';
 import { resolveProblem } from './problemResolver';
 import { ProblemPanel } from './views/problemPanel';
@@ -131,7 +131,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const importer = new ImportController(adapters, {
 		folders: () => (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === 'file').map(folder => folder.uri.fsPath), directories,
 		selectFolder: async folders => (await vscode.window.showQuickPick(folders.map(folder => ({ label: path.basename(folder), description: folder, folder })), { title: vscode.l10n.t('Choose an import folder') }))?.folder,
-		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, sourceUri, source); }
+		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, source.uri.toString(), source); }
 	});
 	context.subscriptions.push(problems, records, importer,
 		vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('becoder.ojConnect')) { problems.refreshPreferences(); } })
@@ -156,7 +156,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, new AbortController().signal);
 			await revealSource(input.uri); await problems.open(document, input.uri, source);
 		})),
-		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument) => { if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); } return importer.import(document); }),
+		vscode.commands.registerCommand('_becoder.ojConnect.importTarget', (url: string) => typeof url === 'string' ? browserImportTarget(url, directories, adapters) : undefined),
+		vscode.commands.registerCommand('_becoder.ojConnect.cancelBrowserImport', (requestId: string) => importer.cancel(requestId)),
+		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument, requestId?: string) => { if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); } return importer.import(document, requestId); }),
 		vscode.commands.registerCommand('becoder.ojConnect.continueQuery', guard(continueQuery)),
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);

@@ -13,6 +13,16 @@ import { parseImportedProblem } from '../src/problem';
 const { JSDOM } = require('jsdom');
 const script = fs.readFileSync(path.resolve('extensions/becoder.cph/dist/problem-parser.js'), 'utf8');
 
+test('URL capability manifest is derived from exactly the parsers used for import', () => {
+	const dom = new JSDOM('', { runScripts: 'outside-only' });
+	try {
+		const patterns = JSON.parse(fs.readFileSync(path.resolve('extensions/becoder.cph/dist/problem-parser-patterns.json'), 'utf8'));
+		assert.deepStrictEqual(JSON.parse(dom.window.eval(`${script}\nJSON.stringify(BeCoderCompanion.getMatchPatterns())`)), patterns);
+		assert.ok(patterns.includes('https://ac.nowcoder.com/pat/*/problem/*'));
+		assert.ok(!patterns.includes('https://example.com/*'));
+	} finally { dom.window.close(); }
+});
+
 async function parse(html: string, url: string) {
 	const dom = new JSDOM(html, { url, runScripts: 'outside-only' });
 	try {

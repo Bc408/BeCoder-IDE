@@ -6,7 +6,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { ImportController } from './importController';
+import { ImportController, type ImportDestination } from './importController';
 import { ImportResult, ProblemStore } from './problemStore';
 import { JudgeView } from './judgeView';
 import { fillTemplate, problemFileStem, problemDisplayName } from './importPreferences';
@@ -65,10 +65,11 @@ export function activate(context: vscode.ExtensionContext) {
 		await judgeView.runSource(document.uri.fsPath);
 	}));
 	const controller = new ImportController({
-		sourcePreferences: async (problem, folder) => {
+		sourcePreferences: async (problem, folder, forcedLanguage) => {
 			const configuration = vscode.workspace.getConfiguration('becoder.cph', vscode.Uri.file(folder));
 			let language = configuration.get<string>('general.defaultLanguage', 'cpp');
 			const useTemplate = language !== 'none';
+			language = forcedLanguage ?? language;
 			if (language === 'none') {
 				language = await vscode.window.showQuickPick(['cpp', 'c'], { placeHolder: vscode.l10n.t('Choose the source language') }) ?? '';
 				if (!language) { return undefined; }
@@ -115,7 +116,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const editor = await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Beside });
 			const placeholder = '$CURSOR_PLACEHOLDER';
 			const index = document.getText().indexOf(placeholder);
-			if (index !== -1) {
+			if (result.sourceCreated && !document.isDirty && index !== -1) {
 				const start = document.positionAt(index);
 				await editor.edit(edit => edit.delete(new vscode.Range(start, document.positionAt(index + placeholder.length))));
 				editor.selection = new vscode.Selection(start, start);
@@ -126,7 +127,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(controller);
-	context.subscriptions.push(vscode.commands.registerCommand(importProblemCommand, async (json: unknown, pageUrl: unknown) => {
+	context.subscriptions.push(vscode.commands.registerCommand('_becoder.cph.cancelBrowserImport', (requestId: string) => controller.cancel(requestId)));
+	context.subscriptions.push(vscode.commands.registerCommand(importProblemCommand, async (json: unknown, pageUrl: unknown, destination?: ImportDestination, requestId?: string) => {
 		if (preciseImport) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.isBusy) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.hasUnsavedEdits) { throw new Error(vscode.l10n.t('Save the edited samples before opening another problem.')); }
@@ -136,7 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (typeof json !== 'string' || typeof pageUrl !== 'string') {
 			throw new Error(vscode.l10n.t('Invalid problem import request.'));
 		}
-		return controller.import(json, pageUrl);
+		return controller.import(json, pageUrl, destination, requestId);
 	}));
 	let preciseImport = false;
 	context.subscriptions.push(vscode.commands.registerCommand('_becoder.cph.importSamplesForSource', async (raw: unknown) => {

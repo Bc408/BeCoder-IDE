@@ -87,10 +87,15 @@
 
 .problem-action.vscode-button {
 	flex: 0 0 auto;
-	width: 32px;
-	height: 32px;
-	padding: 6px;
-	> svg { width: 18px; height: 18px; }
+	width: 28px;
+	height: 28px;
+	padding: 4px;
+	color: #fff;
+	> svg { width: 1em; height: 1em; }
+}
+
+.problem-action-cph.vscode-button {
+	color: #000;
 }
 
 .sample-explanation { grid-column: 1 / -1; margin-top: 0.5em; }

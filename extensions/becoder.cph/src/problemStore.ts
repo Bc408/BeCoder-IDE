@@ -20,6 +20,7 @@ export interface StoredProblem extends ImportedProblem {
 export interface ImportResult {
 	readonly kind: 'created' | 'replaced' | 'kept';
 	readonly problem: StoredProblem;
+	readonly sourceCreated?: true;
 }
 
 export interface ProblemSnapshot {
@@ -83,6 +84,19 @@ export class ProblemStore {
 		if (current.dev !== this.rootIdentity.dev || current.ino !== this.rootIdentity.ino || fs.realpathSync(this.root) !== this.root) {
 			throw new ProblemStoreError('changed', this.root);
 		}
+	}
+
+	/** Only a validated direct child of the explicitly selected workspace. */
+	child(directory: string): ProblemStore {
+		if (!directory || directory.length > 255 || directory.trim() !== directory || /[<>:"/\\|?*\x00-\x1f]/.test(directory) || /[. ]$/.test(directory) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(directory)) {
+			throw new ProblemStoreError('unsafe-path', 'Invalid import destination.');
+		}
+		this.checkRoot();
+		const target = path.join(this.root, directory);
+		try { fs.mkdirSync(target); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') { throw error; } }
+		this.checkRoot(); ordinary(target, true);
+		if (fs.realpathSync(target) !== target) { throw new ProblemStoreError('unsafe-path', 'Invalid import destination.'); }
+		return new ProblemStore(target);
 	}
 
 	private checkDataDirectory(): void {
@@ -252,11 +266,12 @@ export class ProblemStore {
 		confirmReplacement: (existing: StoredProblem) => Promise<boolean>,
 		signal?: AbortSignal,
 		sourcePreferences?: SourcePreferences,
-		target?: { source: string; defaults: readonly ('time' | 'memory')[] }
+		target?: { source: string; defaults?: readonly ('time' | 'memory')[]; create?: boolean }
 	): Promise<ImportResult> {
 		// Revalidate even if invoked from a future internal command rather than browser.
 		const problem = parseImportedProblem(JSON.stringify({ ...input, name: sourcePreferences?.name ?? input.name }), input.url);
 		this.checkRoot();
+		if (target && (path.dirname(target.source) !== this.root || !/\.(?:c|cpp|cc|cxx)$/i.test(target.source))) { throw new ProblemStoreError('unsafe-path', 'Invalid import destination.'); }
 		try {
 			fs.mkdirSync(this.dataDirectory);
 		} catch (error) {
@@ -290,7 +305,7 @@ export class ProblemStore {
 				if (!accepted) {
 					return { kind: 'kept', problem: existing.problem };
 				}
-				const replacement = { ...this.withSource(problem, existing.problem.srcPath), customCheckerPath: existing.problem.customCheckerPath, ...(target ? { localLimitDefaults: target.defaults } : {}) };
+				const replacement = { ...this.withSource(problem, existing.problem.srcPath), customCheckerPath: existing.problem.customCheckerPath, ...(target?.defaults ? { localLimitDefaults: target.defaults } : {}) };
 				const temporary = path.join(this.dataDirectory, `.becoder-${token}.tmp`);
 				fs.writeFileSync(temporary, JSON.stringify(replacement), { flag: 'wx' });
 				const temporaryIdentity = ordinary(temporary);
@@ -313,12 +328,13 @@ export class ProblemStore {
 			}
 			const stem = safeSourceName(sourcePreferences?.stem ?? problem.name);
 			const source = target?.source ?? path.join(this.root, `${stem}.${sourcePreferences?.language ?? 'cpp'}`);
-			const stored = { ...this.withSource(problem, source), ...(target ? { localLimitDefaults: target.defaults } : {}) };
+			const stored = { ...this.withSource(problem, source), ...(target?.defaults ? { localLimitDefaults: target.defaults } : {}) };
 			check();
-			if (!target && !fs.existsSync(source)) {
+			let sourceCreated: true | undefined;
+			if ((!target || target.create) && !fs.existsSync(source)) {
 				const contents = sourcePreferences?.initialize?.(stored) ?? sourcePreferences?.contents ?? '';
 				check();
-				try { fs.writeFileSync(source, contents, { flag: 'wx' }); }
+				try { fs.writeFileSync(source, contents, { flag: 'wx' }); sourceCreated = true; }
 				catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') { throw error; } }
 			}
 			// CPH reuses the named source. Never truncate or initialize an existing file.
@@ -348,7 +364,7 @@ export class ProblemStore {
 					this.removeTemporary(temporary, identity);
 				}
 			}
-			return { kind: previous === undefined ? 'created' : 'replaced', problem: stored };
+			return { kind: previous === undefined ? 'created' : 'replaced', problem: stored, ...(sourceCreated ? { sourceCreated } : {}) };
 		} finally {
 			await release();
 		}

@@ -76,7 +76,7 @@ export default function Problem({ state }: { state: PanelState }) {
 						onChange={event => { void send({ action: 'selectLocale', locale: event.target.value }).catch(() => undefined); }}>
 						{languagesList.map(locale => <VSCodeOption value={locale} key={locale}>{locale}</VSCodeOption>)}
 					</VSCodeDropdown>}
-					<VSCodeButton onClick={() => { void send({ action: 'importCph' }).catch(() => undefined); }} appearance={'primary'} className={'problem-action'} aria-label={state.labels.importCph} title={state.labels.importCph}><CphIcon /></VSCodeButton>
+					<VSCodeButton onClick={() => { void send({ action: 'importCph' }).catch(() => undefined); }} appearance={'primary'} className={'problem-action problem-action-cph'} aria-label={state.labels.importCph} title={state.labels.importCph}><CphIcon /></VSCodeButton>
 					<SubmissionControls state={state} />
 				</div>
 			</div>

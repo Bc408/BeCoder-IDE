@@ -9,9 +9,25 @@ import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { test } from 'node:test';
-import { ImportController, type ImportHost } from '../src/importController';
+import { ImportController, browserImportTarget, type ImportHost } from '../src/importController';
+import { LuoguAdapter } from '../src/adapters/luogu/adapter';
+import { AtCoderAdapter } from '../src/adapters/atcoder/adapter';
+import { NowcoderAdapter } from '../src/adapters/nowcoder/adapter';
 import { defaultDirectories } from '../src/settings';
 import type { OjAdapter } from '../src/adapters/adapter';
+test('browser targets use actual adapters and settings without accepting unsupported same-site entries', () => {
+	const adapters = [new LuoguAdapter({} as ConstructorParameters<typeof LuoguAdapter>[0]), new AtCoderAdapter({} as ConstructorParameters<typeof AtCoderAdapter>[0]), new NowcoderAdapter({} as ConstructorParameters<typeof NowcoderAdapter>[0])];
+	for (const [url, expected] of [
+		['https://www.luogu.com.cn/problem/P1001', { directory: 'practice', fileName: 'P1001.cpp' }],
+		['https://atcoder.jp/contests/abc086/tasks/abc086_a?lang=en', { directory: 'atcoder', fileName: 'abc086_a.cpp' }],
+		['https://ac.nowcoder.com/acm/problem/18204', { directory: 'nowcoder', fileName: '18204.cpp' }],
+		['https://ac.nowcoder.com/acm/contest/5657/A', { directory: 'nowcoder', fileName: '5657_A.cpp' }],
+		['https://ac.nowcoder.com/pat/1/problem/2', undefined],
+		['https://codeforces.com/problemset/problem/1/A', undefined],
+		['P1001.cpp', undefined]
+	] as const) { assert.deepStrictEqual(browserImportTarget(url, () => ({ ...defaultDirectories, luogu: 'practice' }), adapters), expected); }
+	assert.strictEqual(browserImportTarget('https://codeforces.com/problemset/problem/1/A', () => assert.fail('unsupported page must ignore OJ settings'), adapters), undefined);
+});
 test('browser import opens the same solution without CPH and supports every valid custom directory', async t => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-import-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 	const opened: string[] = [], host: ImportHost = { folders: () => [root], directories: () => ({ ...defaultDirectories, luogu: '_atcoder' }), selectFolder: async () => undefined, open: async source => { opened.push(source); } };
@@ -22,4 +38,10 @@ test('browser import opens the same solution without CPH and supports every vali
 	assert.deepStrictEqual(await importer.import(document), first);
 	assert.strictEqual(fs.readFileSync(fileURLToPath(first.sourceUri), 'utf8'), 'draft stays');
 	assert.deepStrictEqual(opened, [first.sourceUri, first.sourceUri]); assert.deepStrictEqual(fs.readdirSync(root), ['_atcoder']);
+});
+
+test('cancellation delivered before extension activation cannot publish an old page', async () => {
+	const importer = new ImportController([], { folders: () => assert.fail(), directories: () => assert.fail(), selectFolder: async () => assert.fail(), open: async () => assert.fail() });
+	importer.cancel('pending-activation');
+	await assert.rejects(importer.import({}, 'pending-activation'), { name: 'AbortError' });
 });

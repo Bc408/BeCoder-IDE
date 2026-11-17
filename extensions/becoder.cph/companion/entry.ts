@@ -14,12 +14,17 @@ import { AcWingProblemParser } from './src/parsers/problem/AcWingProblemParser';
 import { LibreOJProblemParser } from './src/parsers/problem/LibreOJProblemParser';
 import { DMOJProblemParser } from './src/parsers/problem/DMOJProblemParser';
 
-export async function parseCurrentProblem(): Promise<string> {
-  const url=location.href;
-  const parsers=[new CodeforcesProblemParser(), new AtCoderProblemParser(), new LuoguProblemParser(),
+const parsers=[new CodeforcesProblemParser(), new AtCoderProblemParser(), new LuoguProblemParser(),
     new LanqiaoProblemParser(), new NowCoderProblemParser(), new SPOJProblemParser(),
     new CSESProblemParser(), new HDOJProblemParser(), new AcWingProblemParser(),
     new LibreOJProblemParser(), new DMOJProblemParser()];
+
+export function getMatchPatterns(): string[] {
+  return [...new Set(parsers.flatMap(parser => parser.getMatchPatterns()))];
+}
+
+export async function parseCurrentProblem(): Promise<string> {
+  const url=location.href;
   const parser=parsers.find(candidate => candidate.getMatchPatterns().some(pattern => {
     const expression=pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
     return new RegExp(`^${expression}$`).test(url);

@@ -8,6 +8,13 @@ import type { OjAdapter } from './adapters/adapter';
 import { type ProblemDocument, validateProblem } from './domain';
 import type { SiteDirectories } from './settings';
 import { SourceStore } from './sourceStore';
+import { browserProblem } from './browserProblem';
+
+export function browserImportTarget(input: string, directories: () => SiteDirectories, adapters: readonly OjAdapter[]): { directory: string; fileName: string } | undefined {
+	const problem = browserProblem(input);
+	if (!problem) { return undefined; }
+	return { directory: directories()[problem.site], fileName: adapters.find(adapter => adapter.site === problem.site)!.fileName(problem) };
+}
 
 export interface ImportHost {
 	folders(): readonly string[];
@@ -17,11 +24,14 @@ export interface ImportHost {
 }
 export class ImportController {
 	private active: AbortController | undefined;
+	private requestId: string | undefined;
+	private readonly cancelledRequests = new Set<string>();
 	private disposed = false;
 	constructor(private readonly adapters: readonly OjAdapter[], private readonly host: ImportHost, private readonly store = new SourceStore()) { }
-	async import(input: unknown): Promise<{ sourceUri: string } | undefined> {
+	async import(input: unknown, requestId?: string): Promise<{ sourceUri: string } | undefined> {
+		if (requestId && this.cancelledRequests.delete(requestId)) { throw new DOMException('Import cancelled.', 'AbortError'); }
 		if (this.disposed || this.active) { throw new Error('A problem import is already in progress or OJ Connect is stopped.'); }
-		const controller = new AbortController(); this.active = controller;
+		const controller = new AbortController(); this.active = controller; this.requestId = requestId;
 		try {
 			const document = validateProblem(input), adapter = this.adapters.find(item => item.site === document.ref.site);
 			if (!adapter) { throw new Error('This site is not available yet.'); }
@@ -34,7 +44,14 @@ export class ImportController {
 			controller.signal.throwIfAborted();
 			const sourceUri = pathToFileURL(result.sourcePath).href;
 			await this.host.open(sourceUri, document); return { sourceUri };
-		} finally { this.active = undefined; }
+		} finally { this.active = undefined; this.requestId = undefined; }
+	}
+	cancel(requestId: string): void {
+		if (!requestId) { return; }
+		if (this.requestId === requestId) { this.active?.abort(); return; }
+		// A navigation may cancel the command while its extension is still activating.
+		this.cancelledRequests.add(requestId);
+		if (this.cancelledRequests.size > 64) { this.cancelledRequests.delete(this.cancelledRequests.values().next().value!); }
 	}
 	dispose(): void { this.disposed = true; this.active?.abort(); }
 }

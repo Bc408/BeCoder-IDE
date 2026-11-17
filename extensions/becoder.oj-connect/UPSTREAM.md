@@ -18,7 +18,7 @@ AtCoder 原始 HTML 直接经同一 HAST 清洗／KaTeX 管线，不转成 Markd
 
 ## 直接复用的前端源码（初次迁入 2026-11-14，本轮对齐 2026-11-15）
 
-最新题面／评测对齐额外迁入4.20.0的 `components/index.tsx` 中Tag、Spinner、`views/viewProblem/cphIcon.tsx` 的操作图标，以及`record/data.ts` 的官网测试点分组合并。难度名称／颜色、标签类别palette与限制格式来自上游shared.ts、color.ts、stringUtils.ts；题面元数据由各站提供可选文字及颜色。纸飞机为本地简单矢量，不增加Font Awesome依赖。之前裁剪“标签／图标”的描述属于本轮批准前范围。完整剩余差距见 [界面对齐审查](../../docs/oj-connect/luogu-420-ui-gap-review-2026-11-15.md)。
+最新题面／评测对齐额外迁入4.20.0的 `components/index.tsx` 中Tag、Spinner、`views/viewProblem/cphIcon.tsx` 的操作图标，以及`record/data.ts` 的官网测试点分组合并。难度名称／颜色、标签类别palette与限制格式来自上游shared.ts、color.ts、stringUtils.ts；题面元数据由各站提供可选文字及颜色。纸飞机直接使用上游锁定的 `@fortawesome/free-solid-svg-icons` 7.1.0 中 `faPaperPlane` 的原始 SVG 路径与 viewBox，替换原本地简化图形；不增加图标运行时依赖。原图形归 Fonticons, Inc. 所有，适用 CC BY 4.0，来源和许可见 ThirdPartyNotices.txt。之前裁剪“标签／图标”的描述属于本轮批准前范围。完整剩余差距见 [界面对齐审查](../../docs/oj-connect/luogu-420-ui-gap-review-2026-11-15.md)。
 
 验证码交互从 4.20.0 `src/utils/workspaceUtils.ts` 的 `askForCaptcha` 迁入 `src/views/luoguCaptcha.ts`：保留图片面板、输入框、留空刷新和取消。图片由原生浏览器同一 Session 的固定地址获取，扩展只收到图片数据；增加任务取消时关闭面板和输入框，避免已取消的提交继续等待人工输入。
 

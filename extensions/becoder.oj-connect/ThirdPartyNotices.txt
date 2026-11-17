@@ -46,6 +46,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+--- Font Awesome Free 7.1.0: faPaperPlane ---
+
+Copyright (c) 2025 Fonticons, Inc. (https://fontawesome.com)
+
+Source: @fortawesome/free-solid-svg-icons 7.1.0, faPaperPlane.js
+https://www.npmjs.com/package/@fortawesome/free-solid-svg-icons/v/7.1.0
+
+The original icon path and viewBox are embedded in webview/luogu/presentation.tsx
+without geometry changes. Button size and color follow OJ Connect styling.
+No Font Awesome font or runtime is bundled.
+
+Icons: CC BY 4.0 License (https://creativecommons.org/licenses/by/4.0/)
+
+The Font Awesome Free download is licensed under a Creative Commons
+Attribution 4.0 International License and applies to all icons packaged
+as SVG and JS file types.
+
 --- Bundled host renderer and Webview dependencies ---
 
 Shared Markdown parser adapted from @luogu-saver-next/markdown-renderer 1.0.3. BeCoder changes: synchronous AST pipeline, consumer content policies, native callouts and safe links; code is highlighted only in the display layer.

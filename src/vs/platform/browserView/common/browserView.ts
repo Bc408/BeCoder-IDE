@@ -33,6 +33,7 @@ export enum BrowserViewCommandId {
 	OpenExternal = `${commandPrefix}.openExternal`,
 	OpenSettings = `${commandPrefix}.openSettings`,
 	ImportProblem = `${commandPrefix}.importProblem`,
+	GetProblem = `${commandPrefix}.getProblem`,
 
 	// Favorites
 	ToggleFavorite = `${commandPrefix}.toggleFavorite`,
@@ -506,6 +507,8 @@ export interface IBrowserViewService {
 
 	/** Execute only the bundled problem parser, in the owning window's view. */
 	parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }>;
+	getProblemParserPatterns(): Promise<readonly string[]>;
+	resolveBrowserProblem(url: string): Promise<ProblemRef | undefined>;
 	/** Rendered content of an already loaded view; does not navigate or fetch. */
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
 

@@ -287,7 +287,7 @@ export default defineConfig(
 	},
 	{
 		// CPH is GPL-derived code, not Microsoft MIT code. Preserve its attribution.
-		files: ['extensions/becoder.cph/{src,test}/**/*.ts', 'extensions/becoder.cph/webview/*.{ts,tsx}'],
+		files: ['extensions/becoder.cph/{src,test}/**/*.ts', 'extensions/becoder.cph/webview/*.{ts,tsx}', 'extensions/becoder.cph/build-parsers.mts'],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\))(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]
 		}

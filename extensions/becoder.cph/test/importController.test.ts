@@ -71,3 +71,51 @@ test('rejects concurrent requests and window disposal cancels pending import', a
 	release('b');
 	await assert.rejects(pending, { name: 'AbortError' });
 });
+
+test('explicit OJ destinations preserve template root and reuse the exact source through both CPH paths', async t => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cph-oj-target-')));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const opened: string[] = [];
+	const host: ImportHost = {
+		workspaceFolders: () => [root], selectFolder: async () => assert.fail(), requestWorkspace: async () => assert.fail(),
+		confirmReplacement: async () => false, showProblem: async result => { opened.push(result.problem.srcPath); },
+		sourcePreferences: async (_problem, folder) => {
+			assert.strictEqual(folder, root, 'template lookup remains relative to workspace');
+			return { language: 'c', contents: '', stem: 'CPH default', initialize: () => 'template\n' };
+		}
+	};
+	const controller = new ImportController(host);
+	for (const [directory, fileName] of [['luogu', 'P1001.cpp'], ['atcoder', 'abc086_a.cpp'], ['nowcoder', '5657_A.cpp']]) {
+		const target = { directory, fileName };
+		const first = await controller.import(json, url, target); assert.ok(first);
+		const source = path.join(root, directory, fileName);
+		assert.strictEqual(first.problem.srcPath, source);
+		assert.strictEqual(fs.readFileSync(source, 'utf8'), 'template\n');
+		fs.writeFileSync(source, 'solution stays');
+		await controller.import(json, url, target);
+		assert.strictEqual(fs.readFileSync(source, 'utf8'), 'solution stays');
+		assert.deepStrictEqual(fs.readdirSync(path.join(root, directory)).sort(), ['.cph', fileName].sort());
+	}
+	assert.strictEqual(opened.length, 6);
+	await assert.rejects(controller.import(json, url, { directory: '../escape', fileName: 'x.cpp' }), /destination/i);
+	await assert.rejects(controller.import(json, url, { directory: 'okay', fileName: '../x.cpp' }), /destination/i);
+});
+
+test('cancelling a browser request during workspace selection prevents file publication', async t => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cph-oj-abort-')));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	let release!: (value: string) => void;
+	const controller = new ImportController({ workspaceFolders: () => [root, 'other'], selectFolder: () => new Promise(resolve => { release = resolve; }),
+		requestWorkspace: async () => assert.fail(), confirmReplacement: async () => assert.fail(), showProblem: async () => assert.fail() });
+	const pending = controller.import(json, url, { directory: 'atcoder', fileName: 'abc086_a.cpp' }, 'browser-one');
+	controller.cancel('unrelated'); controller.cancel('browser-one'); release(root);
+	await assert.rejects(pending, { name: 'AbortError' });
+	assert.deepStrictEqual(fs.readdirSync(root), []);
+});
+
+test('cancellation delivered before extension activation cannot start an import', async () => {
+	const controller = new ImportController({ workspaceFolders: () => assert.fail('cancelled request must not query folders'), selectFolder: async () => assert.fail(),
+		requestWorkspace: async () => assert.fail(), confirmReplacement: async () => assert.fail(), showProblem: async () => assert.fail() });
+	controller.cancel('pending-activation');
+	await assert.rejects(controller.import(json, url, undefined, 'pending-activation'), { name: 'AbortError' });
+});

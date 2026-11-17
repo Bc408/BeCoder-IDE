@@ -30,6 +30,7 @@ import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt
 import { assertLuoguProblem } from '../common/luoguBridge.js';
 import { runOjScript, type OjScriptTask } from './ojScriptTask.js';
 import { createHash } from 'crypto';
+import { createRequire } from 'module';
 import { NowcoderSessionClient } from './nowcoderSessionClient.js';
 import { assertNowcoderProblem } from '../common/nowcoderBridge.js';
 import { LuoguSessionClient } from './luoguSessionClient.js';
@@ -287,6 +288,20 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	async getSelectedText(id: string): Promise<string> {
 		return this._getBrowserView(id).getSelectedText();
+	}
+
+	async getProblemParserPatterns(): Promise<readonly string[]> {
+		const text = await fs.readFile(join(this.environmentMainService.appRoot, 'extensions', 'becoder.cph', 'dist', 'problem-parser-patterns.json'), 'utf8');
+		if (text.length > 65536) { throw new Error('Invalid problem parser patterns.'); }
+		const patterns: unknown = JSON.parse(text);
+		if (!Array.isArray(patterns) || patterns.length > 256 || patterns.some(pattern => typeof pattern !== 'string' || pattern.length > 2048 || !/^https?:\/\//.test(pattern))) { throw new Error('Invalid problem parser patterns.'); }
+		return patterns;
+	}
+
+	async resolveBrowserProblem(url: string): Promise<ProblemRef | undefined> {
+		// Fixed bundled pure module: reuse adapter identities without activating account views.
+		const { browserProblem } = createRequire(import.meta.url)(join(this.environmentMainService.appRoot, 'extensions', 'becoder.oj-connect', 'out', 'browserProblem.js'));
+		return browserProblem(url);
 	}
 
 	async parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }> {

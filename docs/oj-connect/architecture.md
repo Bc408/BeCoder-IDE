@@ -20,7 +20,7 @@
 | 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts`／`nowcoderBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
 | AtCoder 事务 | `atcoderTransaction.ts` 直接准备官方 submit 页，以完整表单内的明确源码／语言／题目进行一次页面内 fetch；无上传、Ace 同步和原生点击备用路线；复用返回列表及首次详情，保留基线排旧、账号、唯一候选和源码核对；正常全程不显现网页，验证超时在插件内提示 |
 | 洛谷传输 | `luoguSessionClient.ts` 编排固定操作；`luoguSessionTransport.ts` 从持久 BrowserSession 读取凭据，以 Node HTTPS 发送固定请求，验证码与提交共用该路径；退出由内置浏览器中的官网处理。同次提交已输入的验证码被明确拒绝三次后停止，并提示转内置浏览器手动提交／认证，不增加新认证。`luoguCsrfTokenManager.ts` 迁入上游管理器，`luoguProtocol.ts` 转换语义数据，原生主进程建立带同会话凭据的推送连接 |
-| Import／CPH | 浏览器三站 Import→`importController.ts`／`sourceStore.ts`→源码与题面；题面明确调用 CPH `importSamplesForSource`，其他站既有直接 CPH 导入保留 |
+| Import／CPH | 浏览器固定主动作 Get Problem→`importController.ts`／`sourceStore.ts`→源码与题面；菜单 Import to CPH 始终使用 Companion，命中三站时复用 adapter 的目录与文件名，其他题源保留 CPH 默认行为；题面另通过 `importSamplesForSource` 关联绑定源码 |
 | 登录管理 | `views/loginView.ts` 以轻量 WebviewView 显示各站标识与真实摘要；仅名称可点击，未登录打开官网登录入口，已登录打开协议摘要提供的官方个人页，缺少可靠身份时沿官网登录入口重定向；退出仅在内置浏览器官网手动完成。宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；CF与蓝桥明确不可用 |
 
 三站的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
@@ -110,11 +110,15 @@ extensions/becoder.oj-connect/
 
 ## 导入、目录与 CPH
 
-浏览器菜单的 Import 应路由到 OJ Connect，先读取题目并在当前工作区的配置站点目录下创建／打开源码，再打开独立题面。目标不存在时创建目录与文件；同名源码存在时仅打开，保护未保存稿。多工作区根或没有打开文件夹时需要取得明确导入根，不能猜写入位置。
+浏览器工具栏使用固定主动作 Get Problem 的原生分体按钮，右侧菜单依次为 Get Problem、Import to CPH，不记忆或提升上次动作。主动作只对三站支持身份可用，禁用时菜单箭头仍可打开。Get Problem 先读取当前浏览器题目，再在工作区配置站点目录下创建／打开源码及独立题面，不初始化 CPH。目标不存在时创建目录与文件；同名源码存在时仅打开，保护未保存稿。多工作区根只选择一次，没有打开文件夹时明确提示，不能猜写入位置。
+
+URL 能力判断不预读题目或账号：主进程从固定内置路径加载 OJ 扩展的纯 `browserProblem` 模块，组合既有三站 task resolver，不激活扩展；CPH 能力清单从实际 Companion parser 注册表随构建生成，不另维护站点正则。导航、加载、关闭会使旧能力失效并取消未完成导入；内部请求 ID 保留有界的先到取消，防止扩展激活期间取消丢失。
 
 目录设置是站点直子目录名，需验证为合法、互不歧义的单级子目录，写入目标必须留在所选工作区内。设置修改影响后续导入与目录识别，不自动迁移用户文件。目录与文件名规则从同一解析入口取得，题面命令和提交命令不各自实现一份。
 
-CPH 原有 `_becoder.cph.importProblem` 组织自己的源码与样例导入；当前 OJ Connect 使用另一个窄接口 `_becoder.cph.importSamplesForSource` 复用已有 `.cpp`：读取／写入样例仍归 CPH，源码路径由本次用户操作明确传入，覆盖保护仍由 CPH 校验。点击题面“导入 CPH”以前，不自动初始化 CPH 数据。
+浏览器 Import to CPH 对所有题源均使用已有 Companion DOM 解析器，成功后由 OJ Connect 的纯定位命令对支持题目提供配置目录和 adapter 文件名；未命中时走 CPH 默认行为，命中后的配置或 IO 错误直接报告，不降级写入另一位置。CPH 仍负责模板、源码新建和样例覆盖保护；精确目标固定为 `.cpp`，模板位置仍相对所选工作区根。已有源码不执行模板或占位符清理。
+
+题面内的 CPH 动作继续使用 `_becoder.cph.importSamplesForSource`，把结构化样例关联到当前题面绑定的源码，与浏览器 DOM 解析路线分别保留。两条路线落到同一精确源码和 CPH 元数据，不依赖其他活跃编辑器；CPH 忙碌、样例有未保存修改或用户取消替换时保持原数据。仅 Get Problem 不创建 CPH 数据。
 
 复用已有题面解析与样例结构，保持空白、换行、单位及官网提供的上下文。页面到题目解析、题目到源码文件、题目到 CPH 是不同边界，应分别验证，不能用一次页面解析成功替代全部导入验收。
 

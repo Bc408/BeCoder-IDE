@@ -44,10 +44,20 @@ test('creates C++ source and CPH-compatible metadata inside selected workspace',
 	const root = workspace(t);
 	const result = await new ProblemStore(root).importProblem(problem(), async () => assert.fail('new import must not confirm'));
 	assert.strictEqual(result.kind, 'created');
+	assert.strictEqual(result.sourceCreated, true);
 	assert.strictEqual(fs.readFileSync(result.problem.srcPath, 'utf8'), '');
 	const stored = JSON.parse(fs.readFileSync(path.join(root, '.cph', metadataName(result.problem.srcPath)), 'utf8'));
 	assert.deepStrictEqual(stored, result.problem);
 	assert.deepStrictEqual(fs.readdirSync(path.join(root, '.cph')), [metadataName(result.problem.srcPath)]);
+});
+
+test('new metadata for an existing source is not source initialization', async t => {
+	const root = workspace(t), source = path.join(root, 'P1001.cpp');
+	fs.writeFileSync(source, '$CURSOR_PLACEHOLDER\nuser source');
+	const store = new ProblemStore(root);
+	const result = await store.importProblem(problem(), async () => assert.fail(), undefined, undefined, { source, create: true });
+	assert.strictEqual(result.sourceCreated, undefined);
+	assert.strictEqual(fs.readFileSync(source, 'utf8'), '$CURSOR_PLACEHOLDER\nuser source');
 });
 
 test('creates an upstream-style local problem without changing the existing source', async t => {

@@ -8,7 +8,7 @@ import type { LoginSummary, SiteId } from '../domain';
 export function loginContent(rows: readonly LoginSummary[], names: Record<SiteId, string>, states: Record<LoginSummary['state'], string>, icons: Record<SiteId, string>, source: string, nonce: string): string {
 	const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ 38: '&amp;', 60: '&lt;', 62: '&gt;', 34: '&quot;', 39: '&#39;' }[char.charCodeAt(0)]!));
 	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${source}; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';"><style nonce="${nonce}">
-		body { padding: 4px 12px; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
+		body { padding: 4px 12px; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); user-select: none; }
 		.account { display: grid; grid-template-columns: 20px max-content minmax(0,1fr); align-items: center; gap: 8px; min-height: 30px; }
 		img { width: 18px; height: 18px; object-fit: contain; background: #fff; border-radius: 2px; opacity: .35; filter: grayscale(1); }
 		[data-state="signed-in"] img { opacity: 1; filter: none; }

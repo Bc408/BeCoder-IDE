@@ -235,12 +235,21 @@ function literalAuthorHtml() {
 	};
 }
 
-function atcoderMath() {
+function siteHtmlMath() {
 	return (tree: MutableNode) => {
 		const contains = (node: MutableNode, tag: string): boolean => node.type === 'element' && node.tagName === tag || (node.children ?? []).some((child: MutableNode) => contains(child, tag));
 		const walk = (parent: MutableNode, code = false) => {
 			for (const child of parent.children ?? []) {
 				if (child.type !== 'element') { continue; }
+				if (!code && child.tagName === 'img' && typeof child.properties?.src === 'string') {
+					const url = new URL(child.properties.src);
+					const tex = url.searchParams.get('tex');
+					if (url.protocol === 'https:' && ['www.nowcoder.com', 'hr.nowcoder.com'].includes(url.hostname) && url.pathname === '/equation' && tex && tex.length <= 16384) {
+						child.tagName = 'var';
+						child.properties = { id: child.properties.id };
+						child.children = [{ type: 'text', value: tex }];
+					}
+				}
 				// AtCoder uses pre/var for mathematical input layouts, not source code.
 				if (!code && child.tagName === 'pre' && contains(child, 'var') && !contains(child, 'code')) {
 					child.tagName = 'div'; child.properties = { ...child.properties, className: ['oj-input-format'] };
@@ -319,7 +328,7 @@ function htmlFragmentLinks() {
 
 /** Native site HTML enters HAST directly; it never passes through Markdown. */
 export function parseHtml(source: string, baseURL: string): Root {
-	htmlProcessor ??= unified().use(rehypeSanitize, { ...schema, attributes: { ...schema.attributes, '*': ['className', 'id'] } }).use(htmlFragmentLinks).use(normalizeUrls).use(atcoderMath).use(rehypeSafeKatex, { strict: 'ignore', trust: false, maxExpand: 1000 }).use(contentStructure);
+	htmlProcessor ??= unified().use(rehypeSanitize, { ...schema, attributes: { ...schema.attributes, '*': ['className', 'id'] } }).use(htmlFragmentLinks).use(normalizeUrls).use(siteHtmlMath).use(rehypeSafeKatex, { strict: 'ignore', trust: false, maxExpand: 1000 }).use(contentStructure);
 	const tree = fromHtml(source, { fragment: true });
 	return htmlProcessor.runSync(tree, new VFile({ data: { baseURL } })) as Root;
 }

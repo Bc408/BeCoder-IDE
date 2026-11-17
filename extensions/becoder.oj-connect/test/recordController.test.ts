@@ -9,6 +9,22 @@ import { RecordController } from '../src/recordController';
 import type { RecordRef, RecordSnapshot } from '../src/domain';
 
 const ref: RecordRef = { problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, id: '11', url: 'https://www.luogu.com.cn/record/11' };
+test('all three sites stop a pending read at the local deadline and explicitly resume the same ID', async () => {
+	const records: RecordRef[] = [ref, { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' }, { problem: { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }, id: '123', url: 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=123' }];
+	for (const record of records) {
+		let reads = 0, aborted = false;
+		const updates: RecordSnapshot[] = [];
+		const controller = new RecordController(async (input, signal) => {
+			assert.deepStrictEqual(input, record);
+			if (++reads === 1) { signal.addEventListener('abort', () => { aborted = true; }, { once: true }); return new Promise(() => undefined); }
+			return { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' };
+		}, { timeoutMs: 10 });
+		await assert.rejects(controller.track(record, value => updates.push(value), new AbortController().signal), /timed out/);
+		assert.strictEqual(aborted, true); assert.strictEqual(updates.length, 0);
+		await controller.track(record, value => updates.push(value), new AbortController().signal);
+		assert.strictEqual(reads, 2); assert.strictEqual(updates[0].rawStatus, 'AC');
+	}
+});
 test('tracking reads one confirmed ID and ends only on the actual final snapshot', async () => {
 	let reads = 0;
 	const states: string[] = [];
@@ -50,11 +66,13 @@ test('Luogu hidden and unknown results stop after one read and allow an explicit
 	}
 });
 
-test('AtCoder healthy judging continues beyond two minutes and stops on the final result', async () => {
+test('AtCoder stops local tracking after two minutes and continues querying the same record explicitly', async () => {
 	const record: RecordRef = { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
 	let elapsed = 0, reads = 0;
 	const updates: string[] = [];
 	const controller = new RecordController(async () => ({ ref: record, phase: ++reads === 4 ? 'finished' : 'judging', rawStatus: reads === 4 ? 'AC' : 'WJ', sourceVerification: 'not-checked' }), { now: () => elapsed, sleep: async () => { elapsed += 61000; } });
+	await assert.rejects(controller.track(record, value => updates.push(value.rawStatus), new AbortController().signal), /timed out/);
+	assert.deepStrictEqual(updates, ['WJ', 'WJ']);
 	await controller.track(record, value => updates.push(value.rawStatus), new AbortController().signal);
 	assert.deepStrictEqual(updates, ['WJ', 'WJ', 'WJ', 'AC']);
 });

@@ -14,7 +14,7 @@ export interface SubmissionSession {
 }
 
 export interface OjAdapter {
-	readonly site: 'luogu' | 'atcoder';
+	readonly site: 'luogu' | 'atcoder' | 'nowcoder';
 	resolve(input: string): ProblemRef | undefined;
 	fileName(problem: ProblemRef): string;
 	readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument>;

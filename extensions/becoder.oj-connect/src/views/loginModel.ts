@@ -6,10 +6,14 @@
 import type { OjAdapter } from '../adapters/adapter';
 import type { LoginSummary, SiteId } from '../domain';
 export const sites: readonly SiteId[] = ['luogu', 'atcoder', 'codeforces', 'nowcoder', 'lanqiao'];
-export async function changeAccount(row: LoginSummary, action: 'login' | 'logout', execute: (command: string) => Promise<unknown>, refresh: () => Promise<void>): Promise<boolean> {
-	if (row.site !== 'luogu' && row.site !== 'atcoder') { return false; }
-	if (action === 'logout' ? row.state !== 'signed-in' : row.state !== 'signed-out' && row.state !== 'unknown') { return false; }
-	try { await execute('_becoder.ojConnect.' + row.site + '.' + action); }
+export async function openAccount(row: LoginSummary, execute: (command: string) => Promise<unknown>, refresh: () => Promise<void>, open: (url: string) => Promise<void>): Promise<boolean> {
+	if (row.site !== 'luogu' && row.site !== 'atcoder' && row.site !== 'nowcoder') { return false; }
+	if (row.state === 'unavailable') { return false; }
+	const profiles = { luogu: /^https:\/\/www\.luogu\.com\.cn\/user\/[1-9]\d*$/, atcoder: /^https:\/\/atcoder\.jp\/users\/[a-zA-Z0-9_]+$/, nowcoder: /^https:\/\/ac\.nowcoder\.com\/acm\/contest\/profile\/[1-9]\d*$/ };
+	try {
+		if (row.state === 'signed-in' && row.profileUrl && profiles[row.site].test(row.profileUrl)) { await open(row.profileUrl); }
+		else { await execute('_becoder.ojConnect.' + row.site + '.login'); }
+	}
 	finally { await refresh(); }
 	return true;
 }

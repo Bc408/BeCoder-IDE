@@ -12,6 +12,18 @@ function store() {
 	return { values, get: <T>(key: string) => values.get(key) as T | undefined, update: async (key: string, value: unknown) => { if (value === undefined) { values.delete(key); } else { values.set(key, value); } } };
 }
 
+test('Nowcoder keeps its C and C++ language IDs separate from both existing sites', async () => {
+	const settings = store(), preferences = new OjPreferences(settings);
+	await preferences.selectLanguage('nowcoder', 'cpp', '38');
+	await preferences.selectLanguage('nowcoder', 'c', '1');
+	await preferences.selectLanguage('luogu', 'cpp', '28:o2');
+	await preferences.selectLanguage('atcoder', 'cpp', '6017');
+	assert.strictEqual(preferences.language('nowcoder', 'cpp'), '38');
+	assert.strictEqual(preferences.language('nowcoder', 'c'), '1');
+	assert.strictEqual(preferences.language('luogu', 'cpp'), '28:o2');
+	assert.strictEqual(preferences.language('atcoder', 'cpp'), '6017');
+});
+
 test('both sites use the same persistent settings authority without mixing C and C++', async () => {
 	const settings = store(), first = new OjPreferences(settings);
 	await first.selectLanguage('atcoder', 'cpp', '6017');

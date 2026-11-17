@@ -109,6 +109,7 @@
     "@xterm/headless": "^6.1.0-beta.303",
     "@xterm/xterm": "^6.1.0-beta.304",
     "7zip-bin": "5.2.0",
+    "acorn": "8.16.0",
     "chrome-remote-interface": "^0.33.0",
     "detect-libc": "^2.1.2",
     "http-proxy-agent": "^7.0.0",

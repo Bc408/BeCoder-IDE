@@ -4,7 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
 import { test } from 'node:test';
-import { CommandBrowserHost, CommandLuoguHost } from '../src/browserHost';
+import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost } from '../src/browserHost';
+import { openAccount } from '../src/views/loginModel';
+
+test('account profile survives all three command hosts and opens the personal page', async () => {
+	for (const [Host, site, profileUrl] of [[CommandLuoguHost, 'luogu', 'https://www.luogu.com.cn/user/123'], [CommandBrowserHost, 'atcoder', 'https://atcoder.jp/users/user_1'], [CommandNowcoderHost, 'nowcoder', 'https://ac.nowcoder.com/acm/contest/profile/123']] as const) {
+		const events: string[] = [];
+		const host = new Host(async () => ({ site, state: 'signed-in', label: 'User', profileUrl }));
+		const summary = await host.loginSummary();
+		assert.strictEqual(summary.profileUrl, profileUrl);
+		await openAccount(summary, async command => { events.push(command); }, async () => undefined, async url => { events.push(url); });
+		assert.deepStrictEqual(events, [profileUrl]);
+	}
+});
 
 test('malformed bridge responses are rejected before becoming page or receipt', async () => {
 	const host = new CommandBrowserHost(async () => ({ handle: 'x', url: 'https://evil.test/' }));

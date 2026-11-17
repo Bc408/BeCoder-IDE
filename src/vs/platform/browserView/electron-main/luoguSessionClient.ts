@@ -140,13 +140,6 @@ export class LuoguSessionClient {
 		return { ...parseLuoguProblem(problem, context, tags), languages: luoguLanguages(context, config) };
 	}
 	async login(signal: AbortSignal) { return luoguLogin(await this.context('/ranking', signal)); }
-	async logout(signal: AbortSignal): Promise<void> {
-		const token = await cancellable(this.csrf.getToken(), signal);
-		await this.request('/auth/logout', { method: 'POST', signal, headers: { 'X-CSRF-Token': token } }, async response => {
-			if (!response.ok && response.status !== 302) { throw new Error('luogu-logout-http-' + response.status); }
-		});
-		this.invalidate(); if ((await this.login(signal)).state !== 'signed-out') { throw new Error('luogu-logout-unconfirmed'); }
-	}
 	async captcha(signal: AbortSignal): Promise<string> {
 		this.ports.trace?.('captcha-image-request', { generation: this.generation });
 		return this.request('/api/verify/captcha', { signal, cache: 'no-store' }, async response => {

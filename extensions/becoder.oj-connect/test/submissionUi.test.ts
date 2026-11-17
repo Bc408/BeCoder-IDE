@@ -35,7 +35,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 			showWarningMessage: async (message: string) => { warnings.push(message); },
 			showInformationMessage: async () => undefined,
 			showErrorMessage: async (message: string) => { throw new Error(message); },
-			activeTextEditor: { document: source, viewColumn: 1 }, createTreeView: () => ({ visible: false, onDidChangeVisibility: disposable }),
+			activeTextEditor: { document: source, viewColumn: 1 }, registerWebviewViewProvider: disposable,
 			showQuickPick: async (options: unknown[]) => options[0],
 			withProgress: async (options: { location: number }, operation: (progress: unknown, token: unknown) => Promise<void>) => {
 				locations.push(options.location); return operation({ report() { } }, { onCancellationRequested: disposable });

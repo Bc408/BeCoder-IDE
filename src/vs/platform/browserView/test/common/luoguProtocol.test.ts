@@ -22,6 +22,7 @@ suite('Luogu production protocol', () => {
 		assert.deepStrictEqual(languages.map(value => value.id), ['2:o2', '27', '27:o2', '2']);
 		assert.deepStrictEqual(languages.map(value => value.family), ['c', 'cpp', 'cpp', 'c']);
 		assert.strictEqual(luoguLogin(context).state, 'signed-in');
+		assert.strictEqual(luoguLogin(context).profileUrl, 'https://www.luogu.com.cn/user/' + context.user.uid);
 		assert.strictEqual(luoguLogin({ user: null }).state, 'signed-out');
 		assert.strictEqual(luoguLogin({}).state, 'unknown');
 	});
@@ -63,11 +64,25 @@ suite('Luogu production protocol', () => {
 		assert.throws(() => parseLuoguRecord(ref, { data: { record: { ...record, id: 309516437 } } }, config));
 	});
 
+	test('record problem title and difficulty reuse official problem metadata without additional requests', () => {
+		const ref = { problem, id: '22', url: 'https://www.luogu.com.cn/record/22' };
+		const record = { id: 22, status: 12, problem: { pid: 'P1001', title: 'A+B', name: 'Legacy title', difficulty: 1 } };
+		const result = parseLuoguRecord(ref, { data: { record } }, config);
+		assert.strictEqual(Reflect.get(result, 'problemTitle'), 'A+B');
+		assert.deepStrictEqual(Reflect.get(result, 'problemDifficulty'), { label: '\u5165\u95e8', color: '#FE4C61' });
+		const legacy = parseLuoguRecord(ref, { data: { record: { ...record, problem: { pid: 'P1001', name: 'Legacy title' } } } }, config);
+		assert.strictEqual(Reflect.get(legacy, 'problemTitle'), 'Legacy title');
+		assert.strictEqual(Reflect.get(legacy, 'problemDifficulty'), undefined);
+		const absent = parseLuoguRecord(ref, { data: { record: { ...record, problem: { pid: 'P1001' } } } }, config);
+		assert.strictEqual(Reflect.get(absent, 'problemTitle'), undefined);
+	});
+
 	test('foreign statements retain the upstream Chinese translation', () => {
 		const raw = structuredClone(context);
 		Object.assign(raw.data.problem, { content: { locale: 'en', description: 'English statement' }, translation: '中文翻译' });
 		const data = parseLuoguProblem(problem, raw);
 		assert.ok(data.bodies[0].sections.some(section => section.content === '中文翻译'));
+		assert.strictEqual(data.bodies[0].sections[0].heading, '题目描述');
 	});
 
 	test('testcase diagnostics survive mapping and legacy hidden results stay hidden', () => {

@@ -300,12 +300,15 @@ export default defineConfig(
 		}
 	},
 	{
-		// OJ Connect and its native Luogu protocol retain BeCoder GPL and upstream MIT attribution.
+		// OJ Connect and its native protocols retain BeCoder GPL and upstream MIT attribution.
 		files: [
 			'extensions/becoder.oj-connect/{src,test,webview,site-scripts}/**/*.{ts,tsx,mts}',
 			'extensions/becoder.oj-connect/build-*.mts',
 			'scripts/test-{atcoder-shortcut,luogu-session-host,oj-connect}.cjs',
 			'scripts/test-luogu-session.cts',
+			'scripts/test-nowcoder{.mts,-session.cts}',
+			'src/vs/platform/browserView/electron-main/nowcoder{Protocol,SessionClient}.ts',
+			'src/vs/platform/browserView/test/electron-main/nowcoder{Protocol,SessionClient}.test.ts',
 			'src/vs/platform/browserView/common/luoguProtocol.ts',
 			'src/vs/platform/browserView/electron-main/luoguCsrfTokenManager.ts',
 			'src/vs/platform/browserView/test/common/luoguProtocol.test.ts'
@@ -1704,6 +1707,7 @@ export default defineConfig(
 						'assert',
 						'child_process',
 						'console',
+						'acorn',
 						'cookie',
 						'crypto',
 						'detect-libc',

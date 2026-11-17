@@ -45,18 +45,6 @@
 				"category": "OJ Connect"
 			},
 			{
-				"command": "becoder.ojConnect.login",
-				"title": "%login%",
-				"category": "OJ Connect",
-				"icon": "$(sign-in)"
-			},
-			{
-				"command": "becoder.ojConnect.logout",
-				"title": "%logout%",
-				"category": "OJ Connect",
-				"icon": "$(sign-out)"
-			},
-			{
 				"command": "becoder.ojConnect.refreshAccounts",
 				"title": "%refreshAccounts%",
 				"category": "OJ Connect",
@@ -163,6 +151,20 @@
 					"default": "auto",
 					"scope": "window",
 					"description": "%panelLocation%"
+				},
+				"becoder.ojConnect.nowcoder.cCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%nowcoder.cCompiler%"
+				},
+				"becoder.ojConnect.nowcoder.cppCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%nowcoder.cppCompiler%"
 				}
 			}
 		},
@@ -179,43 +181,12 @@
 			"becoder-oj-connect": [
 				{
 					"id": "becoder.ojConnect.accounts",
-					"name": "%accounts%"
+					"name": "%accounts%",
+					"type": "webview"
 				}
 			]
 		},
 		"menus": {
-			"commandPalette": [
-				{
-					"command": "becoder.ojConnect.login",
-					"when": "false"
-				},
-				{
-					"command": "becoder.ojConnect.logout",
-					"when": "false"
-				}
-			],
-			"view/item/context": [
-				{
-					"command": "becoder.ojConnect.login",
-					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.(signed-out|unknown)$/",
-					"group": "inline@1"
-				},
-				{
-					"command": "becoder.ojConnect.logout",
-					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.signed-in$/",
-					"group": "inline@1"
-				},
-				{
-					"command": "becoder.ojConnect.login",
-					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.(signed-out|unknown)$/",
-					"group": "account@1"
-				},
-				{
-					"command": "becoder.ojConnect.logout",
-					"when": "view == becoder.ojConnect.accounts && viewItem =~ /^ojConnect\\.account\\.(luogu|atcoder)\\.signed-in$/",
-					"group": "account@1"
-				}
-			],
 			"view/title": [
 				{
 					"command": "becoder.ojConnect.refreshAccounts",

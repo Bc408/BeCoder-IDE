@@ -11,7 +11,7 @@ interface PreferenceStore {
 }
 
 function validLanguage(site: SiteId, value: unknown): value is string {
-	return typeof value === 'string' && (site === 'atcoder' ? /^\d+$/.test(value) : site === 'luogu' && /^\d+(?::o2)?$/.test(value));
+	return typeof value === 'string' && (site === 'atcoder' || site === 'nowcoder' ? /^\d+$/.test(value) : site === 'luogu' && /^\d+(?::o2)?$/.test(value));
 }
 
 /** Personal settings are the sole authority; available compilers remain site-owned. */

@@ -95,6 +95,11 @@ assert.equal(elements(inputFormat, 'code').length, 0, 'a mathematical input form
 assert.equal(elements(inputFormat, 'span').filter(node => hasClass(node, 'katex')).length, 5);
 assert.ok(text(inputFormat).includes('\n'), 'input format keeps its line layout');
 
+const equations = await renderer.renderHtmlTree('<p><img src="https://www.nowcoder.com/equation?tex=a%2Bb" alt="wrong alt"><img src="https://hr.nowcoder.com/equation?tex=n%20%5Cle%2010%5E5"></p><img src="https://example.org/equation?tex=x"><img src="https://www.nowcoder.com/figure.png"><pre><code>&lt;img src="https://www.nowcoder.com/equation?tex=x"&gt;</code></pre>', 'https://ac.nowcoder.com/acm/problem/322020');
+assert.equal(elements(equations, 'span').filter(node => hasClass(node, 'katex')).length, 2, 'official equation images use local theme-readable math');
+assert.equal(elements(equations, 'img').length, 2, 'ordinary images and other hosts remain images');
+assert.equal(text(elements(equations, 'code')[0]), '<img src="https://www.nowcoder.com/equation?tex=x">', 'math conversion never touches literal code');
+
 await build({ entryPoints: [path.join(root, 'extensions/becoder.oj-connect/src/markdownService.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['./markdown'], outfile: path.join(output, 'service.cjs') });
 const { MarkdownService } = require(path.join(output, 'service.cjs'));
 let renderCalls = 0;

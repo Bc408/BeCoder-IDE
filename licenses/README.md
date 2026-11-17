@@ -11,6 +11,8 @@ BeCoder 主产品的公开许可标识是 **GPL-3.0-or-later**，完整条款见
 - [MIT-VSCode.txt](MIT-VSCode.txt)：Code - OSS 的 Microsoft MIT 许可。保留源文件中的 Microsoft 版权和 MIT 声明。
 - [MIT-Electron.txt](MIT-Electron.txt)：Electron 的 MIT 许可；Electron 随附的 Chromium 等依赖声明仍属于运行时发行文件。
 
+- [MIT-Acorn.txt](MIT-Acorn.txt)：Acorn 8.16.0 的 MIT 许可；牛客原生宿主只解析官网脚本中的静态字面量，不执行脚本。
+
 ## BeCoder 组件与扩展
 
 | 组件 | 已声明的许可与例外 | 许可证、来源与修改记录 |

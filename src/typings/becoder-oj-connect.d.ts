@@ -23,9 +23,11 @@ declare module 'becoder-oj-connect' {
 	export interface RecordRef { readonly problem: ProblemRef; readonly id: string; readonly url: string }
 	export interface RecordSnapshot {
 		readonly ref: RecordRef; readonly phase: 'queued' | 'judging' | 'finished' | 'unknown';
+		readonly problemTitle?: string; readonly problemDifficulty?: ProblemDocument['difficulty'];
 		readonly rawStatus: string; readonly language?: string; readonly owner?: string; readonly score?: string;
 		readonly time?: string; readonly memory?: string; readonly compileMessage?: string;
 		readonly submittedAt?: string; readonly codeLength?: string; readonly source?: string; readonly compileSucceeded?: boolean;
+		readonly testCaseSummary?: { readonly passed: number; readonly total: number };
 		readonly groups?: readonly { readonly name: string; readonly rows: readonly (readonly string[])[] }[];
 		readonly sourceVerification: 'matched' | 'mismatch' | 'unavailable' | 'not-checked';
 		readonly pollAfterMs?: number;
@@ -34,9 +36,11 @@ declare module 'becoder-oj-connect' {
 	export type SubmissionOutcome = { readonly kind: 'record'; readonly record: RecordRef }
 		| { readonly kind: 'not-sent'; readonly reason: string }
 		| { readonly kind: 'unconfirmed'; readonly problem: ProblemRef; readonly message: string; readonly attemptId: string };
-	export interface LoginSummary { readonly site: SiteId; readonly state: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable'; readonly label?: string }
+	export interface LoginSummary { readonly site: SiteId; readonly state: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable'; readonly label?: string; readonly profileUrl?: string }
 	export interface ILuoguPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
 	export interface ILuoguSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
+	export interface INowcoderPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
+	export interface INowcoderSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
 	export interface IAtCoderPageRef { handle: string; url: string }
 	export interface IAtCoderTaskForm { languages: { id: string; label: string }[]; hasDraft: boolean }
 	export interface IAtCoderSourcePayload { source: string; fileName: string; languageId: string; replaceDraft: boolean }

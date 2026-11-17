@@ -45,7 +45,7 @@ class ImportProblemAction extends Action2 {
 		this.busy = true;
 		try {
 			const model = editor.model, page = new URL(model.url);
-			// These two sites share OJ Connect's source + statement flow. Other CPH parsers stay intact.
+			// Supported sites share OJ Connect's source + statement flow. Other CPH parsers stay intact.
 			let problem;
 			if (page.origin === 'https://www.luogu.com.cn' && /^\/problem\/(?:P|B|U|T|CF|SP|UVA|AT_)[A-Za-z0-9_]+$/.test(page.pathname)) {
 				const pid = page.pathname.split('/')[2], contest = page.searchParams.get('contestId');
@@ -53,8 +53,12 @@ class ImportProblemAction extends Action2 {
 			} else if (page.origin === 'https://atcoder.jp' && /^\/contests\/[A-Za-z0-9_-]+\/tasks\/[A-Za-z0-9_-]+\/?$/.test(page.pathname)) {
 				const parts = page.pathname.split('/'); problem = { site: 'atcoder' as const, nativeId: parts[2] + '/' + parts[4], url: page.origin + page.pathname.replace(/\/$/, '') };
 			}
+			if (page.origin === 'https://ac.nowcoder.com' && /^\/acm\/(?:problem\/[1-9]\d*|contest\/[1-9]\d*\/[A-Z][A-Z0-9]*)\/?$/.test(page.pathname) && !page.search && !page.hash) {
+				problem = { site: 'nowcoder' as const, nativeId: page.pathname.replace(/^\/acm\//, '').replace(/\/$/, ''), url: page.origin + page.pathname.replace(/\/$/, '') };
+			}
 			if (problem) {
-				const document = await service.readOjProblem(model.id, mainWindow.vscodeWindowId, problem);
+				const sessionId = problem.site === 'nowcoder' ? await service.openNowcoderSession(mainWindow.vscodeWindowId, model.storageScope) : model.id;
+				const document = await service.readOjProblem(sessionId, mainWindow.vscodeWindowId, problem);
 				if (editor.model !== model || model.loading || new URL(model.url).pathname.replace(/\/$/, '') !== page.pathname.replace(/\/$/, '')) { throw new Error(localize('browser.problem.changed', 'The problem page changed during import.')); }
 				await commands.executeCommand('_becoder.ojConnect.importFromBrowser', document);
 				return;

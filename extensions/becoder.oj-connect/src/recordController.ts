@@ -22,13 +22,13 @@ export class RecordController {
 		const ref = validateRecordRef(input);
 		if (signal.aborted) { return; }
 		const now = this.options.now ?? Date.now, started = now();
-		const limit = this.options.timeoutMs ?? (ref.problem.site === 'atcoder' ? undefined : 120000);
+		const limit = this.options.timeoutMs ?? 120000;
 		const deadline = new AbortController();
-		const timer = limit === undefined ? undefined : setTimeout(() => deadline.abort(new Error('Result tracking timed out. Continue querying the existing record.')), limit);
+		const timer = setTimeout(() => deadline.abort(new Error('Result tracking timed out. Continue querying the existing record.')), limit);
 		const combined = AbortSignal.any([signal, deadline.signal]);
 		try {
 			while (!combined.aborted) {
-				if (limit !== undefined && now() - started >= limit) { throw new Error('Result tracking timed out. Continue querying the existing record.'); }
+				if (now() - started >= limit) { throw new Error('Result tracking timed out. Continue querying the existing record.'); }
 				let abort!: () => void;
 				let value: RecordSnapshot;
 				try {

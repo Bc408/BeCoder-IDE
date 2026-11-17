@@ -1,4 +1,5 @@
 {
+	"Passed tests": "通过测试点",
 	"AtCoder problem URL for {0}": "{0} 对应的 AtCoder 题目链接",
 	"Enter an official AtCoder problem URL.": "请输入 AtCoder 官方题目链接。",
 	"Submit {0} to AtCoder": "将 {0} 提交到 AtCoder",
@@ -43,7 +44,7 @@
 	"Not checked": "未检查",
 	"Not connected yet": "尚未接入",
 	"Problem number or official URL for {0}{1}": "{0}{1} 对应的题号或官方链接",
-	"Enter a matching problem number or an official Luogu/AtCoder URL.": "请输入匹配的题号或洛谷／AtCoder 官方链接。",
+	"Enter a matching problem number or an official Luogu/AtCoder/Nowcoder URL.": "请输入匹配的题号或洛谷／AtCoder 官方链接。",
 	"Submit {0} to {1}": "将 {0} 提交到 {1}",
 	"OJ Connect: submitting {0}": "OJ Connect：正在提交 {0}",
 	"Submitting code.": "正在提交代码。",
@@ -145,10 +146,21 @@
 	"Internal judge error": "评测系统错误",
 	"Waiting for judging": "等待评测",
 	"Waiting for rejudging": "等待重新评测",
+	"Judging": "正在评测",
+	"Compiling": "正在编译",
+	"Presentation error": "输出格式错误",
+	"Floating point exception": "浮点运算异常",
+	"Segmentation fault": "段错误",
+	"Code length exceeded": "超过代码长度限制",
+	"Nonzero exit code": "程序异常退出",
 	"Compiler output is unavailable for this record.": "无法读取该记录的编译输出。",
 	"Query limit exceeded": "超过询问次数限制",
 	"Sample explanation": "样例说明",
 	"OJ Connect could not migrate saved preferences. Unmigrated choices are kept; check your user settings and reload to retry.": "OJ Connect 无法迁移已保存的偏好。未迁移的选择已保留；请检查用户设置并重新加载以重试。",
 	"This result is hidden. Continue querying to check for updates.": "该评测结果已隐藏。可点击继续查询检查更新。",
-	"This result has an unrecognized status. Continue querying to check for updates.": "暂不识别该评测状态。可点击继续查询检查更新。"
+	"This result has an unrecognized status. Continue querying to check for updates.": "暂不识别该评测状态。可点击继续查询检查更新。",
+	"Sign in to Nowcoder from the OJ Connect sidebar, then submit again.": "请从 OJ Connect 侧栏登录牛客，然后重新提交。",
+	"Only public Nowcoder ACM standard input/output problems and ended public individual contests are supported.": "目前支持牛客 ACM 公开标准输入输出题，以及已结束的公开个人赛题。",
+	"Source from the official record": "官网记录源码",
+	"Source sent in this submission; not yet checked against the official record": "本次发送的源码，尚未从官网核对"
 }

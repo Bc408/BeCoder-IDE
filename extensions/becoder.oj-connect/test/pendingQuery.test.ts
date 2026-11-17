@@ -40,7 +40,7 @@ async function fixture(t: TestContext) {
 		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), openTextDocument: async () => source },
 		window: {
 			activeTextEditor: { document: source, viewColumn: 1 },
-			createTreeView: () => ({ visible: false, onDidChangeVisibility: disposable }),
+			registerWebviewViewProvider: disposable,
 			createStatusBarItem: () => ({ show() { }, dispose() { } }),
 			showQuickPick: async (options: unknown[]) => options[0], showTextDocument: async () => undefined,
 			showWarningMessage: (_message: string, ...actions: string[]) => { if (!actions.length) { return Promise.resolve(undefined); } const notice = deferred<string | undefined>(); notices.push(notice); return notice.promise; },

@@ -152,8 +152,8 @@ export function parseLuoguProblem(ref: ProblemRef, raw: unknown, rawTags?: unkno
 	const bodies: { locale: string; sections: Section[] }[] = [];
 	const add = (rawContent: unknown, fallback: string) => {
 		const value = object(rawContent), locale = typeof value.locale === 'string' ? value.locale : fallback;
-		const fields = [['background', '\u9898\u76ee\u80cc\u666f', 'Background'], ['description', '\u9898\u76ee\u63cf\u8ff0', 'Statement'], ['formatI', '\u8f93\u5165\u683c\u5f0f', 'Input'], ['formatO', '\u8f93\u51fa\u683c\u5f0f', 'Output'], ['hint', '\u8bf4\u660e/\u63d0\u793a', 'Notes']];
-		const sections: Section[] = fields.filter(([key]) => typeof value[key] === 'string' && value[key]).map(([key, zh, en]) => ({ heading: locale.toLowerCase().startsWith('zh') ? zh : en, format: 'markdown', content: text(value[key], 8 * 1024 * 1024, true), ...(key === 'hint' ? { kind: 'notes' as const } : {}) }));
+		const fields = [['background', '\u9898\u76ee\u80cc\u666f'], ['description', '\u9898\u76ee\u63cf\u8ff0'], ['formatI', '\u8f93\u5165\u683c\u5f0f'], ['formatO', '\u8f93\u51fa\u683c\u5f0f'], ['hint', '\u8bf4\u660e/\u63d0\u793a']];
+		const sections: Section[] = fields.filter(([key]) => typeof value[key] === 'string' && value[key]).map(([key, heading]) => ({ heading, format: 'markdown', content: text(value[key], 8 * 1024 * 1024, true), ...(key === 'hint' ? { kind: 'notes' as const } : {}) }));
 		if (sections.length && !bodies.some(body => body.locale === locale)) { bodies.push({ locale, sections }); }
 	};
 	add(content, 'zh-CN');
@@ -211,14 +211,15 @@ export function luoguLogin(raw: unknown): LoginSummary {
 	if (root.user === null) { return { site: 'luogu', state: 'signed-out' }; }
 	if (root.user && typeof root.user === 'object') {
 		const user = object(root.user);
-		if (Number.isSafeInteger(user.uid) && Number(user.uid) > 0 && typeof user.name === 'string') { return { site: 'luogu', state: 'signed-in', label: text(user.name, 512) }; }
+		if (Number.isSafeInteger(user.uid) && Number(user.uid) > 0 && typeof user.name === 'string') { return { site: 'luogu', state: 'signed-in', label: text(user.name, 512), profileUrl: 'https://www.luogu.com.cn/user/' + user.uid }; }
 	}
 	return { site: 'luogu', state: 'unknown' };
 }
 
 export function parseLuoguRecord(input: RecordRef, raw: unknown, rawConfig: unknown, expectedSource?: string): RecordSnapshot {
 	const ref = validateRecordRef(input), data = dataOf(raw), record = object(data.record);
-	if (ref.problem.site !== 'luogu' || String(record.id) !== ref.id || object(record.problem).pid !== ref.problem.nativeId.split('@')[0]) { throw new Error('Luogu returned a different record.'); }
+	const problem = object(record.problem);
+	if (ref.problem.site !== 'luogu' || String(record.id) !== ref.id || problem.pid !== ref.problem.nativeId.split('@')[0]) { throw new Error('Luogu returned a different record.'); }
 	const config = object(rawConfig), statuses = object(config.RecordStatus), languages = object(config.CodeLanguage);
 	const status = statuses[String(record.status)], visible = data.canViewStatus !== false && data.showStatus !== false;
 	const mapping = status && typeof status === 'object' ? object(status) : undefined;
@@ -238,8 +239,11 @@ export function parseLuoguRecord(input: RecordRef, raw: unknown, rawConfig: unkn
 	const sourceVisible = data.canViewCode !== false && typeof record.sourceCode === 'string';
 	const sourceVerification = !sourceVisible ? 'unavailable' : expectedSource === undefined ? 'not-checked' : (record.sourceCode as string).replace(/\r\n/g, '\n') === expectedSource.replace(/\r\n/g, '\n') ? 'matched' : 'mismatch';
 	const compileVisible = visible && record.status !== 0 && typeof compile.success === 'boolean';
+	const title = problem.title ?? problem.name, difficulty = problemMetadata(problem, undefined).difficulty;
 	return {
 		ref, phase, rawStatus, sourceVerification, groups,
+		...(typeof title === 'string' && title.trim() ? { problemTitle: text(title, 2048) } : {}),
+		...(difficulty ? { problemDifficulty: difficulty } : {}),
 		...(typeof record.submitTime === 'number' && Number.isFinite(record.submitTime) && record.submitTime >= 0 && record.submitTime < 8640000000000 ? { submittedAt: new Date(record.submitTime * 1000).toISOString() } : {}),
 		...(numeric(record.sourceCodeLength) !== undefined ? { codeLength: formatMemory(Number(record.sourceCodeLength)) } : {}),
 		...(sourceVisible ? { source: record.sourceCode as string } : {}),

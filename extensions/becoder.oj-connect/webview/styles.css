@@ -14,13 +14,10 @@ a { color: var(--vscode-textLink-foreground, #3794ff); }
 select { max-width: min(100%, 300px); }
 #app { overflow-wrap: anywhere; }
 .problem-limits:empty { display: none; }
-.problemSamples > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
-.sample-grid > div { min-width: 0; }
 pre code { font-family: var(--vscode-editor-font-family, monospace); }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px; }
 .notice { padding: 8px 12px; border-left: 3px solid var(--vscode-focusBorder); }
 pre > div.copyButton { opacity: 0; } pre:hover > div.copyButton, pre:focus-within > div.copyButton { opacity: 1; visibility: visible; }
-@media (max-width: 400px) { .problemSamples > div { grid-template-columns: minmax(0, 1fr) !important; } }
 
 
 

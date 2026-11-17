@@ -40,16 +40,19 @@
 		}
 		> :nth-child(2) {
 			display: grid;
-			@media screen and (max-width: 420px) {
-				display: none;
-			}
-			grid-template-columns: repeat(2, auto);
+			flex: 0 0 auto;
+			min-width: 0;
+			max-width: 50%;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			grid-template-rows: repeat(2, min-content);
 			font-family: -apple-system, BlinkMacSystemFont, 'San Francisco',
 				'Helvetica Neue', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK',
 				'Source Han Sans', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei',
 				sans-serif;
 			margin: 10px;
+			@media screen and (max-width: 420px) {
+				display: none;
+			}
 			> div {
 				padding: 6px 12px;
 				background-color: var(--vscode-editor-background);
@@ -70,11 +73,12 @@
 		> div {
 			display: grid;
 			column-gap: 10px;
-			grid-template-columns: 50% 50%;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 			@media screen and (max-width: 400px) {
-				grid-template-columns: 100%;
+				grid-template-columns: minmax(0, 1fr);
 			}
 			> div {
+				min-width: 0;
 				> h3 {
 					margin: 0;
 				}
@@ -83,13 +87,19 @@
 	}
 }
 
+.problem-action.vscode-button {
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	padding: 6px;
+	> svg { width: 18px; height: 18px; }
+}
+
 .sample-explanation { grid-column: 1 / -1; margin-top: 0.5em; }
 .oj-input-format {
 	white-space: pre-wrap;
 	overflow-x: auto;
-	padding: 0.5em;
-	border: 1px solid var(--vscode-panel-border, #7f7f7f55);
-	border-radius: 3px;
+	margin: 1em 0;
 }
 
 /* Ported from vscode-luogu v4.20.0 haveTag, with keyboard focus support. */

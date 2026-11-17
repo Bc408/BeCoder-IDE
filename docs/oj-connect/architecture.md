@@ -4,26 +4,26 @@
 
 更新日期：2026-11-17。负责人已确认“统一内置扩展负责刷题业务，浏览器宿主保留真实会话，CPH 负责本地测试”。AtCoder 第一阶段快捷键闭环已获负责人确认；当前源码另已实现洛谷／AtCoder 的共同导入、题面与评测页，并按最新要求直接裁剪复用 vscode-luogu4.20.0 的保留前端，并使用现有共享内容渲染能力。共同流程设计和实施计划均已批准。洛谷闭环与使用体验已获认可；2026-11-17 负责人已确认 AtCoder 代码提交能力闭环且达标，各轮其他界面与候选改动仍按各自记录验收。具体证据与限制见[当前状态](README.md#当前实现状态)，不能用旧 MVP、协议窗口或已认可的前版验证后续改动。
 
-## 当前双站如何组织
+## 当前三站如何组织
 
 2026-11-17 去冗余审查已移除无生产入口的旧详情 JSON 实验链路，保留当前提交／评测使用的 HTML 与源码解析工具；该轮发现见[审查报告](review-2026-11-17-cleanup-settings.md)，后续修复及设置实施见[维护记录](maintenance-settings-2026-11-17.md)。
 
 2026-11-17 当前候选已按批准的[AtCoder 提交耗时优化设计](../superpowers/specs/2026-11-17-atcoder-submission-latency-design.md)收敛为按需建立本次官方提交页、正常验证、单次页面内请求和独立会话记录读取。干净 stage 构建与负责人验收单列，不把有限真实采证写成长时可靠率或固定时延承诺。
 
-源码当前由 `extensions/becoder.oj-connect/src/extension.ts` 装配两个适配器和同一个 `workflowController.ts`；未使用的适配器注册表和控制器重导出已移除。`domain.ts` 统一题目、语言、正式记录、结果及发送状态；`problemResolver.ts` 按直接父目录优先和文件名解析。
+源码当前由 `extensions/becoder.oj-connect/src/extension.ts` 装配三个适配器和同一个 `workflowController.ts`；未使用的适配器注册表和控制器重导出已移除。`domain.ts` 统一题目、语言、正式记录、结果及发送状态；`problemResolver.ts` 按直接父目录优先和文件名解析。
 
 | 所有者 | 当前职责与入口 |
 | --- | --- |
-| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；确认回执后释放发送资源，再等待结果面板；`recordController.ts` 读取明确 ID，AtCoder 采用有效官网 Interval、缺失回退2秒，正常跟踪无整轮截止；洛谷适配器等待推送并保留既有期限 |
-| 站点适配 | `src/adapters/{luogu,atcoder}/adapter.ts` 将原站业务封装在临时任务内；`site-scripts/` 仅保留 AtCoder 固定网页操作 |
+| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；确认回执后释放发送资源，再等待结果面板；`recordController.ts` 读取明确 ID，三站每轮约120秒，到期保留记录并允许继续查询；AtCoder 优先官网 Interval、缺失回退2秒，洛谷等待推送，牛客沿用2秒 |
+| 站点适配 | `src/adapters/{luogu,atcoder,nowcoder}/adapter.ts` 将原站业务封装在临时任务内；`site-scripts/` 仅保留 AtCoder 固定网页操作 |
 | 共同界面 | `src/views/` 与 `webview/`；题面绑定源码和题目，评测页绑定正式 ID，Webview 消息不决定源码路径／正文／任意命令 |
-| 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
+| 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts`／`nowcoderBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
 | AtCoder 事务 | `atcoderTransaction.ts` 直接准备官方 submit 页，以完整表单内的明确源码／语言／题目进行一次页面内 fetch；无上传、Ace 同步和原生点击备用路线；复用返回列表及首次详情，保留基线排旧、账号、唯一候选和源码核对；正常全程不显现网页，验证超时在插件内提示 |
-| 洛谷传输 | `luoguSessionClient.ts` 编排固定操作；`luoguSessionTransport.ts` 从持久 BrowserSession 读取凭据，以 Node HTTPS 发送固定请求，验证码与提交共用该路径；显式退出保留 Session.fetch 的 Cookie 清理。同次提交已输入的验证码被明确拒绝三次后停止，并提示转内置浏览器手动提交／认证，不增加新认证。`luoguCsrfTokenManager.ts` 迁入上游管理器，`luoguProtocol.ts` 转换语义数据，原生主进程建立带同会话凭据的推送连接 |
-| Import／CPH | 浏览器双站 Import→`importController.ts`／`sourceStore.ts`→源码与题面；题面明确调用 CPH `importSamplesForSource`，其他站既有直接 CPH 导入保留 |
-| 登录管理 | `views/loginView.ts` 提供双站登录／退出与真实摘要；宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；未接入三站明确不可用 |
+| 洛谷传输 | `luoguSessionClient.ts` 编排固定操作；`luoguSessionTransport.ts` 从持久 BrowserSession 读取凭据，以 Node HTTPS 发送固定请求，验证码与提交共用该路径；退出由内置浏览器中的官网处理。同次提交已输入的验证码被明确拒绝三次后停止，并提示转内置浏览器手动提交／认证，不增加新认证。`luoguCsrfTokenManager.ts` 迁入上游管理器，`luoguProtocol.ts` 转换语义数据，原生主进程建立带同会话凭据的推送连接 |
+| Import／CPH | 浏览器三站 Import→`importController.ts`／`sourceStore.ts`→源码与题面；题面明确调用 CPH `importSamplesForSource`，其他站既有直接 CPH 导入保留 |
+| 登录管理 | `views/loginView.ts` 以轻量 WebviewView 显示各站标识与真实摘要；仅名称可点击，未登录打开官网登录入口，已登录打开协议摘要提供的官方个人页，缺少可靠身份时沿官网登录入口重定向；退出仅在内置浏览器官网手动完成。宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；CF与蓝桥明确不可用 |
 
-洛谷与 AtCoder 的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
+三站的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
 
 主动登录只等待模型与持久会话校验，不等待整页加载再显现浏览器。AtCoder 提交事务临时关闭隐藏页面的后台定时器节流，结束时恢复；不预热、不跨提交复用页面。确认详情作为首次结构化结果交接，后续使用同窗口／会话范围的 status/json 及必要终态详情，不持有任务页。
 
@@ -38,6 +38,8 @@
 2026-11-16 负责人判断该情况涉及洛谷交互式认证，明确不引入新认证形式，改为若干次失败后提示浏览器手动提交。源码据此将本次图片验证码答案失败上限设为三次；首次无答案的挑战、留空刷新与取消不计数。只对精确“验证码错误”且无正式 rid 的明确拒绝计数；未知受理仍不得重发。该产品收尾决策不等于独立证明网站内部认证机制，也不宣称已经修复该机制的自动认证能力。共享渲染已有后续实施与测量，历史基线和当前结果见[渲染记录](rendering-review-2026-11-16.md)，不再将整项描述为只读方案。
 
 ## 目标所有者
+
+牛客当前候选采用与手动 ACM 交题一致的固定 Session 请求路线，见[设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)和[证据](nowcoder-protocol-evidence.md)。`nowcoderSessionClient.ts` 拥有固定 HTTP 操作、一次发送及会话失效；`electron-main/nowcoderProtocol.ts` 按需加载 Acorn 解析官网 pageInfo／env 静态字面量并映射题面、语言和结果。身份校验位于不依赖 Acorn 的 `nowcoderBridge.ts`，供 workbench 与主进程共用。无提交页、预热或备用通道，无第二套账号存储。只读跟踪与发送资源独立，未知受理不重交。三站均采用共同约120秒期限，原有站点查询节奏保留。当前实现与真实验收证据分列。
 
 ```mermaid
 flowchart LR
@@ -73,14 +75,14 @@ extensions/becoder.oj-connect/
     workflowController.ts 提交任务与取消、防重边界
     browserHost.ts        类型明确的宿主调用
     views/                登录摘要、独立题面、独立评测页
-    adapters/{luogu,atcoder}/  双站适配
+    adapters/{luogu,atcoder,nowcoder}/  三站适配
   site-scripts/           AtCoder 固定原站操作
   webview/luogu/          裁剪复用的上游 React 组件／样式
   webview/main.tsx        共同状态装配
   test/                   路由、导入、状态与界面测试
 ```
 
-未来各站点放在同一扩展的 `adapters/` 下，复用用户流程和界面。洛谷是视觉和使用基线，接入须按各站实际差异适配，不做外围功能的朴素叠加。题目标识、官网会话与语言 ID 按站点解释，不将不同站点的同名状态或题号强行等同。未知、部分结果、字段缺失均保留原始信息。统一体验不要求全部站点采用相同 HTTP 或推送协议；未接入三站的调研不构成已实施或官方承诺。
+未来各站点放在同一扩展的 `adapters/` 下，复用用户流程和界面。洛谷是视觉和使用基线，接入须按各站实际差异适配，不做外围功能的朴素叠加。题目标识、官网会话与语言 ID 按站点解释，不将不同站点的同名状态或题号强行等同。未知、部分结果、字段缺失均保留原始信息。统一体验不要求全部站点采用相同 HTTP 或推送协议；CF与蓝桥的调研不构成已实施或官方承诺。
 
 下一站接入前，先核实当前题面、语言目录、登录与验证、正式回执和结果更新的真实路线，再据此确定适配范围。发现公开或所谓“官方接口”只构成调研线索，不能直接承诺提交能力；需要网页的站点可复用已验证的原生事务，需要请求的站点可使用固定受限操作，不预设所有站点共用一种传输。每站以同一条源码→看题／导入→快捷键提交→本次正式结果的用户流程验收，不因侧栏有站点名称或单个请求成功就声明支持。
 
@@ -100,7 +102,7 @@ extensions/becoder.oj-connect/
 | 停止请求 | 释放等待、读取与页面观察；停止跟踪不等于撤回已发出的解答 |
 | 读取站点登录摘要 | 返回当前会话可确认的登录状态及必要显示信息；失败／未检查不冒充已退出 |
 
-这些操作当前已有双站固定接点与编译期 DTO；三站未接入的能力仍不计为完成。核心只保留宿主需要的权限与执行职责，不把完整用户流程重新塞回 `BrowserViewMainService`。
+这些操作当前已有三站固定接点与编译期 DTO；CF与蓝桥未接入。核心只保留宿主需要的权限与执行职责，不把完整用户流程重新塞回 `BrowserViewMainService`。
 
 提交的不可逆发送边界由宿主持有。扩展重复调用、取消后验证晚到，都不能造成自动重发。扩展停用或宿主连接结束时终止该请求后续动作；AtCoder 另观察网页关闭／导航，洛谷任务不随普通网页关闭而结束。发生不确定状态时允许重新读取正式结果，不自动重新提交代码。洛谷登录使用官网，验证码优先复用插件图片交互；不再向网页插入自制验证码表单。
 

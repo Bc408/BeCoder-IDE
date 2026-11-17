@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- BeCoder's internal type-only extension bridge contract.
-import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ILuoguSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
+import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ILuoguSourcePayload, INowcoderSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
 import { Disposable, DisposableStore, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { timeout } from '../../../../../base/common/async.js';
@@ -14,6 +14,7 @@ import { CommandsRegistry, ICommandService } from '../../../../../platform/comma
 import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { BrowserViewStorageScope, IBrowserViewService, ipcBrowserViewChannelName } from '../../../../../platform/browserView/common/browserView.js';
 import { AtCoderBridgeController, AtCoderPageGeneration } from '../../../../../platform/browserView/common/atcoderBridge.js';
+import { NowcoderBridgeController, assertNowcoderProblem } from '../../../../../platform/browserView/common/nowcoderBridge.js';
 import { LuoguBridgeController, assertLuoguProblem } from '../../../../../platform/browserView/common/luoguBridge.js';
 import type { BrowserEditorInput } from '../../common/browserEditorInput.js';
 import { type IBrowserViewModel, IBrowserViewWorkbenchService } from '../../common/browserView.js';
@@ -27,6 +28,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 	static readonly ID = 'workbench.contrib.ojConnect';
 	private bridge: AtCoderBridgeController;
 	private luoguBridge: LuoguBridgeController;
+	private nowcoderBridge: NowcoderBridgeController;
 	constructor(
 		@IEditorService editors: IEditorService,
 		@IBrowserViewWorkbenchService browsers: IBrowserViewWorkbenchService,
@@ -66,6 +68,12 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			else if (outcome.kind === 'unconfirmed') { luoguSessions.set(outcome.attemptId, sessionId); }
 			return outcome;
 		};
+		const nowcoderSessions = new Map<string, string>();
+		const rememberNowcoder = (outcome: SubmissionOutcome, sessionId: string) => {
+			if (outcome.kind === 'record') { nowcoderSessions.set(outcome.record.url, sessionId); }
+			else if (outcome.kind === 'unconfirmed') { nowcoderSessions.set(outcome.attemptId, sessionId); }
+			return outcome;
+		};
 		const recordLifetimes = new Map<string, AbortController>();
 		const recordLifetime = (record: RecordRef) => {
 			let controller = recordLifetimes.get(record.url);
@@ -81,6 +89,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(toDisposable(() => { for (const timer of attemptTimers) { clearTimeout(timer); } attemptTimers.clear(); }));
 		const busyViews = new Map<string, number>();
 		const openingInputs = new Map<BrowserEditorInput, number>();
+		const openingScopes = new WeakMap<BrowserEditorInput, BrowserViewStorageScope>();
 		const finishedRecords = new Map<string, RecordSnapshot>();
 		const closeIdle = () => {
 			for (const input of ownedInputs) {
@@ -122,7 +131,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const active = () => !!extensions.getExtensionsStatus()['becoder.oj-connect']?.activationStarted;
 		this._register(service.onDidChangeOjSession(event => {
 			if (event.windowId === owner) {
-				if (event.site === 'luogu') { for (const [url, record] of finishedRecords) { if (record.ref.problem.site === 'luogu') { finishedRecords.delete(url); } } }
+				if (event.site === 'luogu' || event.site === 'nowcoder') { for (const [url, record] of finishedRecords) { if (record.ref.problem.site === event.site) { finishedRecords.delete(url); } } }
 				refreshAccounts();
 			}
 		}));
@@ -145,7 +154,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				if (input.isDisposed() || !model || model.storageScope === BrowserViewStorageScope.Ephemeral) { continue; }
 				watchModel(model);
 				const origin = originOf(model.url);
-				if (origin === 'https://www.luogu.com.cn' || origin === 'https://atcoder.jp') { void service.watchOjSession(model.id, owner).catch(() => undefined); }
+				if (origin === 'https://www.luogu.com.cn' || origin === 'https://atcoder.jp' || origin === 'https://ac.nowcoder.com' || origin === 'https://www.nowcoder.com') { void service.watchOjSession(model.id, owner).catch(() => undefined); }
 			}
 		};
 		if (browsers.onDidChangeBrowserViews) { this._register(browsers.onDidChangeBrowserViews(watchBrowsers)); }
@@ -153,20 +162,24 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false, waitForLoad = true): Promise<BrowserEditorInput> => {
 			const epoch = lifecycleEpoch;
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
+			if (scope !== undefined && await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
 			const origin = new URL(url).origin;
-			const all = [...browsers.getKnownBrowserViews().values()].filter(item => !item.isDisposed() && item.model?.storageScope !== BrowserViewStorageScope.Ephemeral && (scope === undefined || item.model?.storageScope === scope));
+			const all = [...browsers.getKnownBrowserViews().values()].filter(item => {
+				const storageScope = item.model?.storageScope ?? openingScopes.get(item);
+				return !item.isDisposed() && storageScope !== BrowserViewStorageScope.Ephemeral && (scope === undefined || storageScope === scope);
+			});
 			const exact = all.filter(item => item.url && canonical(item.url) === canonical(url));
 			const candidates = taskOwned ? [] : exact.length || scope === undefined ? exact : all.filter(item => item.url && originOf(item.url) === origin);
 			const preferred = siteViews.get(origin);
 			if (candidates.length > 1 && !candidates.includes(preferred!)) { throw new Error('oj-connect-browser-ambiguous'); }
 			let input = candidates.includes(preferred!) ? preferred : candidates[0];
 			if (!input) {
-				if (scope !== undefined && await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
 				assertLifecycle(epoch);
 				signal?.throwIfAborted();
 				// Ephemeral tabs have intentionally isolated sessions. Never silently open a fresh account.
 				if (preferred?.model && !preferred.isDisposed() && preferred.model.storageScope === BrowserViewStorageScope.Ephemeral) { throw new Error('Open the target problem in the existing temporary browser session first.'); }
 				input = browsers.getOrCreateLazy(generateUuid(), { url }); ownedInputs.add(input);
+				if (scope !== undefined) { openingScopes.set(input, scope); }
 			}
 			openingInputs.set(input, (openingInputs.get(input) ?? 0) + 1);
 			try {
@@ -192,13 +205,17 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				throw new Error('oj-connect-page-not-ready');
 			} finally {
 				const count = openingInputs.get(input)! - 1;
-				if (count) { openingInputs.set(input, count); } else { openingInputs.delete(input); }
+				if (count) { openingInputs.set(input, count); } else { openingInputs.delete(input); openingScopes.delete(input); }
 				closeIdle();
 			}
 		};
 		const luoguSessionId = async () => {
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			return service.openLuoguSession(owner, await browsers.resolveStorageScope());
+		};
+		const nowcoderSessionId = async () => {
+			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
+			return service.openNowcoderSession(owner, await browsers.resolveStorageScope());
 		};
 		this._register(service.onDidRequireLuoguCaptcha(event => {
 			if (event.windowId !== owner || !active()) { return; }
@@ -209,8 +226,9 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (event.windowId === owner) { void _commands.executeCommand('_becoder.ojConnect.luogu.cancelCaptcha', event.requestId).catch(() => undefined); }
 		}));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.luogu.getCaptcha', (_accessor, requestId: string) => service.getLuoguCaptcha(owner, requestId)));
-		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder') => {
+		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder') => {
 			if (problem?.site !== site) { throw new Error('oj-connect-problem-route'); }
+			if (site === 'nowcoder') { assertNowcoderProblem(problem); return service.readOjProblem(await nowcoderSessionId(), owner, problem); }
 			if (site === 'luogu') { assertLuoguProblem(problem); }
 			else { const task = atCoderTask(problem.url); if (!task || problem.nativeId !== task.contestId + '/' + task.taskId) { throw new Error('oj-connect-problem-route'); } }
 			if (site === 'luogu') { return service.readOjProblem(await luoguSessionId(), owner, problem); }
@@ -220,7 +238,8 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			try { return await service.readOjProblem(input.model.id, owner, problem); }
 			finally { release(page); }
 		};
-		const loginSummary = async (site: 'luogu' | 'atcoder'): Promise<LoginSummary> => {
+		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder'): Promise<LoginSummary> => {
+			if (site === 'nowcoder') { return service.readOjLogin(await nowcoderSessionId(), owner, site); }
 			if (site === 'luogu') { return service.readOjLogin(await luoguSessionId(), owner, site); }
 			try { return await service.readAtCoderLogin(owner, await browsers.resolveStorageScope()); }
 			catch { return { site, state: 'unknown' }; }
@@ -316,16 +335,59 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				return outcome;
 			}
 		});
+		const createNowcoderBridge = () => new NowcoderBridgeController({
+			newHandle: generateUuid,
+			isCurrent: () => active(),
+			open: async problem => {
+				const epoch = preparationEpoch, id = await nowcoderSessionId();
+				const form = await service.prepareNowcoderTask(id, owner, problem);
+				if (epoch !== preparationEpoch || !active()) { throw new Error('oj-connect-stopped'); }
+				return { viewId: id, url: 'https://ac.nowcoder.com/', ownerKey: form.ownerKey, languages: form.languages };
+			},
+			send: async (page, problem, payload, requestId) => {
+				const epoch = lifecycleEpoch;
+				if (await nowcoderSessionId() !== page.viewId) { throw new Error('oj-connect-session-scope-changed'); }
+				assertLifecycle(epoch);
+				const outcome = await service.submitNowcoderTask(page.viewId, owner, problem, payload, page.ownerKey, requestId);
+				assertLifecycle(epoch);
+				return rememberNowcoder(outcome, page.viewId);
+			},
+			cancel: (page, requestId) => service.cancelNowcoderTask(page.viewId, owner, requestId),
+			readRecord: async record => {
+				const epoch = lifecycleEpoch;
+				const id = nowcoderSessions.get(record.url);
+				if (id === undefined) { throw new Error('oj-connect-session-scope-changed'); }
+				const signal = recordLifetime(record);
+				await recordCancellations.get(record.url);
+				assertRecord(epoch, signal);
+				if (await nowcoderSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				assertRecord(epoch, signal);
+				const cached = finishedRecords.get(record.url); if (cached) { return cached; }
+				const snapshot = await service.readNowcoderRecord(id, owner, record);
+				assertRecord(epoch, signal);
+				return finishRead(snapshot, epoch);
+			},
+			reconcile: async attemptId => {
+				const epoch = lifecycleEpoch, id = nowcoderSessions.get(attemptId);
+				if (id === undefined || await nowcoderSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				const outcome = await service.reconcileNowcoderAttempt(id, owner, attemptId);
+				assertLifecycle(epoch);
+				rememberNowcoder(outcome, id);
+				if (outcome.kind !== 'unconfirmed') { nowcoderSessions.delete(attemptId); }
+				return outcome;
+			}
+		});
 		this.luoguBridge = createLuoguBridge();
+		this.nowcoderBridge = createNowcoderBridge();
 		this.bridge = createBridge();
 		const closeBackground = () => { for (const input of ownedInputs) { if (!editors.editors.includes(input)) { input.dispose(); } } ownedInputs.clear(); };
-		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
+		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge, nowcoder = this.nowcoderBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); this.nowcoderBridge = createNowcoderBridge(); void nowcoder.dispose(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
 		this._register(extensions.onWillStop(reset));
 		this._register(extensions.onDidChangeExtensions(event => { if (event.removed.some(item => item.identifier.value.toLowerCase() === 'becoder.oj-connect')) { reset(); } }));
 		this._register(extensions.onDidChangeExtensionsStatus(ids => {
 			if (ids.some(id => id.value.toLowerCase() === 'becoder.oj-connect') && !extensions.getExtensionsStatus()['becoder.oj-connect']?.activationStarted) { reset(); }
 		}));
-		this._register(toDisposable(() => { lifecycleEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
+		this._register(toDisposable(() => { lifecycleEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void this.nowcoderBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
 		const luoguPrefix = '_becoder.ojConnect.luogu.';
 		const releaseLuoguRecord = (record: RecordRef): Promise<void> => {
 			stopRecord(record);
@@ -340,8 +402,23 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			return pending.finally(() => { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } });
 		};
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseLuoguRecord(record)));
+		const nowcoderPrefix = '_becoder.ojConnect.nowcoder.';
+		const releaseNowcoderRecord = (record: RecordRef): Promise<void> => {
+			stopRecord(record);
+			const id = nowcoderSessions.get(record.url);
+			if (id === undefined) { return Promise.resolve(); }
+			const previous = recordCancellations.get(record.url);
+			const pending = (async () => {
+				await previous;
+				await service.releaseNowcoderRecord(id, owner, record);
+			})();
+			recordCancellations.set(record.url, pending);
+			return pending.finally(() => { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } });
+		};
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseNowcoderRecord(record)));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.releaseRecord', async (_accessor, record: RecordRef) => {
 			if (record?.problem.site === 'luogu') { await releaseLuoguRecord(record); }
+			else if (record?.problem.site === 'nowcoder') { await releaseNowcoderRecord(record); }
 			else if (record) {
 				stopRecord(record);
 				const scope = recordScopes.get(record.url);
@@ -352,19 +429,13 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				}
 			}
 		}));
-		for (const site of ['luogu', 'atcoder'] as const) {
-			const origin = site === 'luogu' ? 'https://www.luogu.com.cn' : 'https://atcoder.jp';
+		for (const site of ['luogu', 'atcoder', 'nowcoder'] as const) {
+			const origin = site === 'luogu' ? 'https://www.luogu.com.cn' : site === 'nowcoder' ? 'https://www.nowcoder.com' : 'https://atcoder.jp';
 			this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.' + site + '.login', async () => {
 				// Explicit login is interactive: show the browser while the website loads.
 				// Background problem and submission operations still require a ready document.
-				const input = await openPage(origin + (site === 'luogu' ? '/auth/login' : '/login'), undefined, undefined, false, false);
+				const input = await openPage(origin + (site === 'luogu' ? '/auth/login' : site === 'nowcoder' ? '/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/') : '/login'), undefined, await browsers.resolveStorageScope(), false, false);
 				try { await reveal(input); } finally { release({ viewId: input.model!.id }); }
-			}));
-			this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.' + site + '.logout', async () => {
-				if (site === 'luogu') { await service.logoutOjSite(await luoguSessionId(), owner, site); refreshAccounts(); return; }
-				const input = await openPage(origin + '/');
-				try { await service.logoutOjSite(input.model!.id, owner, site); refreshAccounts(); }
-				finally { release({ viewId: input.model!.id }); }
 			}));
 		}
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'cancelPreparation', cancelPreparation));
@@ -377,6 +448,15 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'reconcile', (_accessor, attemptId: string) => this.luoguBridge.reconcile(attemptId)));
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'luogu')));
 		this._register(CommandsRegistry.registerCommand(luoguPrefix + 'loginSummary', () => loginSummary('luogu')));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'cancelPreparation', cancelPreparation));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'prepare', (_accessor, problem: ProblemRef, sourceUri: string) => this.nowcoderBridge.prepare(problem, sourceUri)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'send', (_accessor, handle: string, payload: INowcoderSourcePayload) => this.nowcoderBridge.send(handle, payload)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'cancel', (_accessor, handle: string) => this.nowcoderBridge.cancel(handle)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'release', (_accessor, handle: string) => this.nowcoderBridge.release(handle)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'readRecord', (_accessor, record: RecordRef) => this.nowcoderBridge.readRecord(record)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'reconcile', (_accessor, attemptId: string) => this.nowcoderBridge.reconcile(attemptId)));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'nowcoder')));
+		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'loginSummary', () => loginSummary('nowcoder')));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'atcoder')));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.loginSummary', () => loginSummary('atcoder')));
 		const prefix = '_becoder.ojConnect.atcoder.';

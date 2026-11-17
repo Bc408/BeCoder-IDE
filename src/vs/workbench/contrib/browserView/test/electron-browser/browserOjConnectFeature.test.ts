@@ -285,6 +285,116 @@ suite('OJ Connect source shortcut', () => {
 		} finally { contribution.dispose(); }
 	});
 
+	test('Nowcoder submits and reopens results without creating any browser tab', async () => {
+		const problem = { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' };
+		const record = { problem, id: '55', url: 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=55' };
+		let visible = 0, recordReads = 0;
+		let finishRelease!: () => void;
+		const releasing = new Promise<void>(resolve => { finishRelease = resolve; });
+		const calls: [string, unknown[]][] = [];
+		const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: async () => BrowserViewStorageScope.Global, getOrCreateLazy: () => { throw new Error('Nowcoder must not create a tab'); } };
+		const main = {
+			getChannel: () => ({
+				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+					calls.push([name, args]);
+					if (name === 'openNowcoderSession') { return 'global'; }
+					if (name === 'prepareNowcoderTask') { return { languages: [{ id: '2', label: 'C++20', family: 'cpp' }], hasDraft: false, ownerKey: '1' }; }
+					if (name === 'submitNowcoderTask') { return { kind: 'record', record }; }
+					if (name === 'releaseNowcoderRecord') { await releasing; }
+					if (name === 'readNowcoderRecord') { recordReads++; return { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' }; }
+					if (name === 'readOjProblem') { return { ref: args[2], title: 'A+B', bodies: [], samples: [], limits: [], interactive: false }; }
+					return undefined;
+				}
+			})
+		};
+		const editors = { editors: [], openEditor: async () => { visible++; } };
+		const commands = { executeCommand: async () => { throw new Error('No browser interaction is needed'); } };
+		const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+		const contribution = new BrowserOjConnectContribution(editors as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], commands as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+		try {
+			const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.nowcoder.' + suffix)!.handler(undefined!, ...args);
+			await execute('readProblem', problem);
+			const prepared = await execute('prepare', problem, 'file:///C:/18204.cpp') as { handle: string };
+			await execute('send', prepared.handle, { source: 'int main() {}', fileName: '18204.cpp', languageId: '2' });
+			await execute('release', prepared.handle);
+			const cancelled = execute('cancelRecord', record);
+			const reopened = execute('readRecord', record);
+			await new Promise(resolve => setTimeout(resolve, 0));
+			assert.strictEqual(recordReads, 0, 'immediate reopen waits for the old native subscription release');
+			finishRelease(); await cancelled; await reopened;
+			await CommandsRegistry.getCommand('_becoder.ojConnect.releaseRecord')!.handler(undefined!, record);
+			await execute('readRecord', record);
+			assert.strictEqual(recordReads, 2, 'closing a result releases its source snapshot; reopening reads the confirmed record again');
+			assert.strictEqual(visible, 0);
+			assert.deepStrictEqual(calls.find(([name]) => name === 'readOjProblem')?.[1], ['global', mainWindow.vscodeWindowId, problem]);
+			assert.deepStrictEqual(calls.find(([name]) => name === 'openNowcoderSession')?.[1], [mainWindow.vscodeWindowId, BrowserViewStorageScope.Global]);
+		} finally { contribution.dispose(); }
+	});
+	test('Nowcoder refuses a prepared send after browser storage scope changes', async () => {
+		const problem = { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' };
+		let scope = BrowserViewStorageScope.Global, sends = 0;
+		const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: async () => scope };
+		const main = {
+			getChannel: () => ({
+				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+					if (name === 'openNowcoderSession') { return args[1] === BrowserViewStorageScope.Global ? 'global' : 'workspace'; }
+					if (name === 'prepareNowcoderTask') { return { ownerKey: '123', languages: [{ id: '2', label: 'C++', family: 'cpp' }] }; }
+					if (name === 'submitNowcoderTask') { sends++; return { kind: 'not-sent', reason: 'fixture' }; }
+					return undefined;
+				}
+			})
+		};
+		const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+		const contribution = new BrowserOjConnectContribution({ editors: [] } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+		const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.nowcoder.' + suffix)!.handler(undefined!, ...args);
+		try {
+			const prepared = await execute('prepare', problem, 'file:///C:/nowcoder/18204.cpp') as { handle: string };
+			scope = BrowserViewStorageScope.Workspace;
+			await assert.rejects(async () => execute('send', prepared.handle, { source: 'int main(){}', fileName: '18204.cpp', languageId: '2' }), /oj-connect-session-scope-changed/);
+			assert.strictEqual(sends, 0, 'changing the selected Session cannot send using the old account');
+		} finally { contribution.dispose(); }
+	});
+
+	test('Nowcoder releases the original subscription after its browser storage scope changes', async () => {
+		const problem = { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' };
+		const record = { problem, id: '56', url: 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=56' };
+		let scope = BrowserViewStorageScope.Global;
+		const pending = new DeferredPromise<unknown>();
+		const started = new DeferredPromise<void>();
+		const subscriptions = new Set<string>();
+		const released: string[] = [];
+		const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: async () => scope };
+		const main = {
+			getChannel: () => ({
+				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+					if (name === 'openNowcoderSession') { return String(args[1]); }
+					if (name === 'prepareNowcoderTask') { return { languages: [{ id: '2', label: 'C++20', family: 'cpp' }], ownerKey: '1' }; }
+					if (name === 'submitNowcoderTask') { return { kind: 'record', record }; }
+					if (name === 'readNowcoderRecord') { subscriptions.add(String(args[0])); await started.complete(); return pending.p; }
+					if (name === 'releaseNowcoderRecord') { released.push(String(args[0])); subscriptions.delete(String(args[0])); }
+					return undefined;
+				}
+			})
+		};
+		const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+		const contribution = new BrowserOjConnectContribution({ editors: [] } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], {} as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+		const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.nowcoder.' + suffix)!.handler(undefined!, ...args);
+		try {
+			const prepared = await execute('prepare', problem, 'file:///C:/18204.cpp') as { handle: string };
+			await execute('send', prepared.handle, { source: 'int main() {}', fileName: '18204.cpp', languageId: '2' });
+			await execute('release', prepared.handle);
+			const reading = execute('readRecord', record) as Promise<unknown>;
+			const stopped = assert.rejects(reading, /stopped/);
+			await started.p;
+			scope = BrowserViewStorageScope.Workspace;
+			await execute('cancelRecord', record);
+			await pending.complete({ ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' });
+			await stopped;
+			assert.deepStrictEqual(released, [BrowserViewStorageScope.Global]);
+			assert.strictEqual(subscriptions.size, 0, 'closing must release the original session, not a newly selected one');
+		} finally { contribution.dispose(); }
+	});
+
 	test('AtCoder finished source snapshots are evicted when the result closes while confirmed receipts remain readable', async () => {
 		const fixture = atCoderFixture();
 		try {
@@ -370,10 +480,31 @@ suite('OJ Connect source shortcut', () => {
 			assert.strictEqual(fixture.recordReads, 2);
 		} finally { fixture.dispose(); }
 	});
-	test('native account commands open fixed official login pages and logout only the selected site', async () => {
+	for (const site of ['luogu', 'atcoder', 'nowcoder']) {
+		test(site + ' login does not reuse an identical page from another storage scope', async () => {
+			const loginURL = site === 'luogu' ? 'https://www.luogu.com.cn/auth/login' : site === 'atcoder' ? 'https://atcoder.jp/login' : 'https://www.nowcoder.com/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/');
+			const known = new Map(), opened: BrowserViewStorageScope[] = [];
+			const create = (id: string, storageScope: BrowserViewStorageScope) => {
+				const model = { id, url: loginURL, loading: false, storageScope, onDidNavigate: Event.None, onDidClose: Event.None };
+				return { url: loginURL, model, isDisposed: () => false, resolve: async () => model, dispose() { } };
+			};
+			known.set('old-global', create('old-global', BrowserViewStorageScope.Global));
+			const editors = { editors: [], openEditor: async (input: ReturnType<typeof create>) => { opened.push(input.model.storageScope); } };
+			const browsers = { resolveStorageScope: async () => BrowserViewStorageScope.Workspace, getKnownBrowserViews: () => known, getOrCreateLazy: (id: string) => { const input = create(id, BrowserViewStorageScope.Workspace); known.set(id, input); return input; } };
+			const main = { getChannel: () => ({ listen: () => Event.None, call: async () => undefined }) };
+			const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+			const contribution = new BrowserOjConnectContribution(editors as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+			try {
+				await CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.login')!.handler(undefined!);
+				assert.deepStrictEqual(opened, [BrowserViewStorageScope.Workspace]);
+				assert.strictEqual(known.size, 2);
+			} finally { contribution.dispose(); }
+		});
+	}
+
+	test('native account commands open fixed login pages without exposing programmatic logout', async () => {
 		const known = new Map();
-		const opened: string[] = [], logoutRequests: unknown[][] = [];
-		let logoutFailure: Error | undefined;
+		const opened: string[] = [];
 		const editors = { editors: [], openEditor: async (input: { url: string }) => { opened.push(input.url); } };
 		const browsers = {
 			resolveStorageScope: async () => BrowserViewStorageScope.Global, getKnownBrowserViews: () => known, getOrCreateLazy: (id: string, options: { url: string }) => {
@@ -385,9 +516,8 @@ suite('OJ Connect source shortcut', () => {
 		};
 		const main = {
 			getChannel: () => ({
-				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+				listen: () => Event.None, call: async (name: string) => {
 					if (name === 'openLuoguSession') { return 'global'; }
-					if (name === 'logoutOjSite') { logoutRequests.push(args); if (logoutFailure) { throw logoutFailure; } }
 					return undefined;
 				}
 			})
@@ -400,14 +530,8 @@ suite('OJ Connect source shortcut', () => {
 			await CommandsRegistry.getCommand('_becoder.ojConnect.atcoder.login')!.handler(undefined!);
 			assert.deepStrictEqual(opened, ['https://www.luogu.com.cn/auth/login', 'https://atcoder.jp/login']);
 			known.set('blank-user-tab', { model: { url: '', loading: false, storageScope: BrowserViewStorageScope.Global }, isDisposed: () => false });
-			await CommandsRegistry.getCommand('_becoder.ojConnect.luogu.logout')!.handler(undefined!);
-			assert.strictEqual(logoutRequests.length, 1);
-			assert.deepStrictEqual(logoutRequests[0], ['global', mainWindow.vscodeWindowId, 'luogu']);
-			logoutFailure = new Error('server refused logout');
-			await assert.rejects(async () => await CommandsRegistry.getCommand('_becoder.ojConnect.atcoder.logout')!.handler(undefined!), /server refused logout/);
-			const atcoder = [...known.values()].find(input => input.url === 'https://atcoder.jp/');
-			assert.deepStrictEqual(logoutRequests[1], [atcoder.model.id, mainWindow.vscodeWindowId, 'atcoder']);
-			assert.strictEqual(opened.length, 2, 'logout never reveals an unrelated webpage');
+			for (const site of ['luogu', 'atcoder', 'nowcoder']) { assert.strictEqual(CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.logout'), undefined); }
+			assert.strictEqual(opened.length, 2, 'no account action opens an unrelated webpage');
 		} finally { contribution.dispose(); }
 		assert.ok([...known.entries()].filter(([id]) => id !== 'blank-user-tab').every(([, input]) => input.isDisposed()), 'all hidden account carriers are released');
 		assert.strictEqual(known.get('blank-user-tab').isDisposed(), false, 'ordinary blank tabs remain untouched');
@@ -439,19 +563,52 @@ suite('OJ Connect source shortcut', () => {
 			assert.ok([...fixture.known.values()].every(input => input.isDisposed()));
 		} finally { fixture.dispose(); }
 	});
-	test('native account commands coalesce repeated clicks while session observation is pending', async () => {
-		const fixture = atCoderFixture(true), observed = new DeferredPromise<void>();
-		fixture.setWatch(() => observed.p);
-		const first = fixture.execute('login'), second = fixture.execute('login');
-		try {
-			await new Promise(resolve => setTimeout(resolve, 0));
-			assert.strictEqual(fixture.creations, 1);
-			await observed.complete();
-			for (const input of fixture.known.values()) { input.model.loading = false; }
-			await Promise.all([first, second]);
-			assert.strictEqual(fixture.creations, 1);
-		} finally { await observed.complete(); fixture.dispose(); }
-	});
+	for (const site of ['luogu', 'atcoder', 'nowcoder']) {
+		test(site + ' login reuses its pending lazy input before its model resolves', async () => {
+			const resolving = new DeferredPromise<void>(), known = new Map(), opened: string[] = [];
+			let creations = 0;
+			const browsers = {
+				resolveStorageScope: async () => BrowserViewStorageScope.Workspace, getKnownBrowserViews: () => known,
+				getOrCreateLazy: (id: string, options: { url: string }) => {
+					creations++;
+					const model = { id, url: options.url, loading: true, storageScope: BrowserViewStorageScope.Workspace, onDidNavigate: Event.None, onDidClose: Event.None };
+					let disposed = false;
+					const input = { url: options.url, model: undefined as typeof model | undefined, isDisposed: () => disposed, resolve: async () => { await resolving.p; input.model = model; return model; }, dispose: () => { disposed = true; } };
+					known.set(id, input); return input;
+				}
+			};
+			const editors = { editors: [], openEditor: async (input: { model: { id: string } }) => { opened.push(input.model.id); } };
+			const main = { getChannel: () => ({ listen: () => Event.None, call: async () => undefined }) };
+			const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+			const contribution = new BrowserOjConnectContribution(editors as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+			const login = CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.login')!;
+			const first = login.handler(undefined!), second = login.handler(undefined!);
+			try {
+				await new Promise(resolve => setTimeout(resolve, 0));
+				assert.ok([...known.values()].every(input => !input.model), 'the model stays unresolved during the repeated click');
+				assert.strictEqual(creations, 1);
+				await resolving.complete();
+				await Promise.all([first, second]);
+				assert.strictEqual(opened.length, 2);
+				assert.strictEqual(opened[0], opened[1], 'both clicks reveal the same login input');
+			} finally { await resolving.complete(); await Promise.allSettled([first, second]); contribution.dispose(); }
+		});
+		test(site + ' login coalesces repeated clicks while session observation is pending', async () => {
+			const fixture = atCoderFixture(true), observed = new DeferredPromise<void>();
+			fixture.setWatch(() => observed.p);
+			const login = CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.login')!;
+			const first = login.handler(undefined!), second = login.handler(undefined!);
+			try {
+				await new Promise(resolve => setTimeout(resolve, 0));
+				assert.strictEqual(fixture.creations, 1);
+				await observed.complete();
+				for (const input of fixture.known.values()) { input.model.loading = false; }
+				await Promise.all([first, second]);
+				assert.strictEqual(fixture.creations, 1);
+			} finally { await observed.complete(); await Promise.allSettled([first, second]); fixture.dispose(); }
+		});
+	}
+
 	test('native account commands do not reveal a login whose extension stopped during observation', async () => {
 		const fixture = atCoderFixture(), observed = new DeferredPromise<void>();
 		fixture.setWatch(() => observed.p);

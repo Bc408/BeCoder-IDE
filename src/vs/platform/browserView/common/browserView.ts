@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs shared with the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, ILuoguSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
 import { Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
@@ -343,14 +343,20 @@ export interface IBrowserViewService {
 	onDidCreateBrowserView: Event<IBrowserViewCreatedEvent>;
 	readonly onDidRequireLuoguCaptcha: Event<{ windowId: number; requestId: string; image: string }>;
 	readonly onDidCancelLuoguCaptcha: Event<{ windowId: number; requestId: string }>;
+	openNowcoderSession(windowId: number, scope: BrowserViewStorageScope): Promise<string>;
+	prepareNowcoderTask(id: string, windowId: number, problem: ProblemRef): Promise<{ languages: readonly LanguageOption[]; hasDraft: boolean; ownerKey: string }>;
+	submitNowcoderTask(id: string, windowId: number, problem: ProblemRef, payload: INowcoderSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome>;
+	cancelNowcoderTask(id: string, windowId: number, requestId: string): Promise<void>;
+	readNowcoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	releaseNowcoderRecord(id: string, windowId: number, record: RecordRef): Promise<void>;
+	reconcileNowcoderAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome>;
 	openLuoguSession(windowId: number, scope: BrowserViewStorageScope): Promise<string>;
 	readAtCoderLogin(windowId: number, scope: BrowserViewStorageScope): Promise<LoginSummary>;
 	getLuoguCaptcha(windowId: number, requestId: string): Promise<string>;
 	answerLuoguCaptcha(windowId: number, requestId: string, answer: string | undefined): Promise<void>;
-	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' }>;
+	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' }>;
 	watchOjSession(id: string, windowId: number): Promise<void>;
-	logoutOjSite(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<void>;
-	updateLuoguSession(id: string, windowId: number, operation: 'logoutLuogu' | 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void>;
+	updateLuoguSession(id: string, windowId: number, operation: 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void>;
 
 	/**
 	 * Dynamic events that return an Event for a specific browser view ID.
@@ -506,7 +512,7 @@ export interface IBrowserViewService {
 	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
 	cancelOjOperations(windowId: number): Promise<void>;
 	cancelOjPreparations(windowId: number): Promise<void>;
-	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<LoginSummary>;
+	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder'): Promise<LoginSummary>;
 	prepareLuoguTask(id: string, windowId: number, problem: ProblemRef): Promise<{ languages: readonly LanguageOption[]; hasDraft: boolean; ownerKey: string }>;
 	submitLuoguTask(id: string, windowId: number, problem: ProblemRef, payload: ILuoguSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome>;
 	cancelLuoguTask(id: string, windowId: number, requestId: string): Promise<void>;

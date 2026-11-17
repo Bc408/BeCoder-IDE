@@ -30,11 +30,13 @@ import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt
 import { assertLuoguProblem } from '../common/luoguBridge.js';
 import { runOjScript, type OjScriptTask } from './ojScriptTask.js';
 import { createHash } from 'crypto';
+import { NowcoderSessionClient } from './nowcoderSessionClient.js';
+import { assertNowcoderProblem } from '../common/nowcoderBridge.js';
 import { LuoguSessionClient } from './luoguSessionClient.js';
 import { fetchLuoguDirect } from './luoguSessionTransport.js';
 import { ILogService } from '../../log/common/log.js';
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs for the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload } from 'becoder-oj-connect';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -63,6 +65,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly atCoderRecordRequests = new Map<string, { controller: AbortController; done: Promise<void> }>();
 	private readonly atCoderAttempts = new Map<string, { context: AtCoderAttempt; session: BrowserSession; windowId: number; timer: ReturnType<typeof setTimeout> }>();
 	private readonly luoguRequests = new Map<string, { requestId: string; windowId: number; controller: AbortController; cancel(): Promise<void> }>();
+	private readonly nowcoderClients = new Map<string, { windowId: number; client: NowcoderSessionClient }>();
+	private readonly nowcoderRequests = new Map<string, { windowId: number; requestId: string; controller: AbortController }>();
+	private readonly nowcoderAttempts = new Map<string, { sessionId: string; windowId: number; outcome: SubmissionOutcome; expires: number }>();
 	private readonly luoguClients = new Map<string, { windowId: number; session: BrowserSession; client: LuoguSessionClient }>();
 	private readonly luoguCaptchas = new Map<string, { windowId: number; client: LuoguSessionClient; signal: AbortSignal; resolve(answer: string | undefined): void }>();
 	private readonly _onDidRequireLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string; image: string }>());
@@ -70,7 +75,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly _onDidCancelLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string }>());
 	readonly onDidCancelLuoguCaptcha = this._onDidCancelLuoguCaptcha.event;
 	private readonly ojSessionWatchers = this._register(new DisposableMap<string>());
-	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' }>());
+	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' }>());
 	readonly onDidChangeOjSession = this._onDidChangeOjSession.event;
 	private readonly luoguAttempts = new Map<string, { problem: ProblemRef; viewId: string; windowId: number; ownerKey: string; sourceHash: string; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
@@ -95,7 +100,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	) {
 		super();
 		this._register(toDisposable(() => { for (const request of this.atCoderRecordRequests.values()) { request.controller.abort(); } this.atCoderRecords.clear(); }));
-		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.atCoderAccountReads.values()) { request.controller.abort(); } for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); }));
+		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.atCoderAccountReads.values()) { request.controller.abort(); } for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); for (const { client } of this.nowcoderClients.values()) { client.dispose(); } this.nowcoderClients.clear(); for (const request of this.nowcoderRequests.values()) { request.controller.abort(); } }));
 	}
 
 	async getOrCreateBrowserView(id: string, options: IBrowserViewCreateOptions): Promise<IBrowserViewState> {
@@ -321,7 +326,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	/** Fixed owned script resources only. No operation name or script is exposed through the service API. */
-	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem' | 'logoutAtCoder', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
+	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
 		const view = this._getBrowserView(id);
 		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
 		const contents = view.getWebContentsView().webContents;
@@ -359,6 +364,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjOperations(windowId: number): Promise<void> {
+		for (const request of this.nowcoderRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
+		for (const [key, entry] of this.nowcoderClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.nowcoderClients.delete(key); } }
+		for (const [key, entry] of this.nowcoderAttempts) { if (entry.windowId === windowId) { this.nowcoderAttempts.delete(key); } }
 		for (const request of this.atCoderAccountReads.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
 		for (const request of this.luoguRequests.values()) { if (request.windowId === windowId) { await request.cancel(); } }
 		for (const [key, entry] of this.luoguClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.luoguClients.delete(key); } }
@@ -373,10 +381,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjPreparations(windowId: number): Promise<void> {
-		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder')) { request.cancel(); } }
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder' || request.operation === 'prepareNowcoder')) { request.cancel(); } }
 	}
 
 	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
+		if (problem.site === 'nowcoder') { return this.nowcoderClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
 		const actualURL = this._getBrowserView(id).getWebContentsView().webContents.getURL();
@@ -459,13 +468,72 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			const html = Buffer.concat(chunks).toString('utf8');
 			for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
 				const match = /\buserScreenName\s*=\s*(["'])([a-zA-Z0-9_]*)\1/.exec(script[1]);
-				if (match) { return match[2] ? { site: 'atcoder', state: 'signed-in', label: match[2] } : { site: 'atcoder', state: 'signed-out' }; }
+				if (match) { return match[2] ? { site: 'atcoder', state: 'signed-in', label: match[2], profileUrl: 'https://atcoder.jp/users/' + match[2] } : { site: 'atcoder', state: 'signed-out' }; }
 			}
 			return { site: 'atcoder', state: 'unknown' };
 		})();
 		this.atCoderAccountReads.set(key, { windowId, controller, result });
 		try { return await result; }
 		finally { clearTimeout(timer); if (this.atCoderAccountReads.get(key)?.controller === controller) { this.atCoderAccountReads.delete(key); } }
+	}
+
+	async openNowcoderSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
+		const session = this.ojSession(windowId, scope), key = windowId + ':' + session.id;
+		if (!this.nowcoderClients.has(key)) {
+			const fingerprint = async () => createHash('sha256').update((await session.electronSession.cookies.get({ url: 'https://ac.nowcoder.com/' })).filter(cookie => ['t', 'NOWCODERUID'].includes(cookie.name)).map(cookie => [cookie.domain, cookie.path, cookie.name, cookie.value].join(':')).sort().join('\n')).digest('hex');
+			let cookieState = await fingerprint();
+			if (!this.windowsMainService.getWindowById(windowId)) { throw new Error('oj-connect-owner'); }
+			if (this.nowcoderClients.has(key)) { return session.id; }
+			const synchronize = async () => { const next = await fingerprint(); if (next !== cookieState) { cookieState = next; client.invalidate(); this._onDidChangeOjSession.fire({ windowId, site: 'nowcoder' }); } };
+			const client = new NowcoderSessionClient({
+				fetch: (url, init) => session.electronSession.fetch(url, init),
+				synchronizeSession: synchronize,
+				onSessionChange: () => {
+					let disposed = false;
+					const changed = (_event: Electron.Event, cookie: Electron.Cookie, cause: string, removed: boolean) => {
+						if (!['nowcoder.com', 'ac.nowcoder.com', 'www.nowcoder.com'].includes(cookie.domain?.replace(/^\./, '') ?? '') || !['t', 'NOWCODERUID'].includes(cookie.name) || removed && cause === 'overwrite') { return; }
+						if (!disposed) { void synchronize().catch(() => undefined); }
+					};
+					session.electronSession.cookies.on('changed', changed);
+					return toDisposable(() => { disposed = true; session.electronSession.cookies.removeListener('changed', changed); });
+				}
+			});
+			this.nowcoderClients.set(key, { windowId, client });
+		}
+		return session.id;
+	}
+	private nowcoderClient(id: string, windowId: number): NowcoderSessionClient {
+		const entry = this.nowcoderClients.get(windowId + ':' + id);
+		if (!entry) { throw new Error('nowcoder-session-owner'); } return entry.client;
+	}
+	async prepareNowcoderTask(id: string, windowId: number, problem: ProblemRef) {
+		assertNowcoderProblem(problem); const key = generateUuid(), controller = new AbortController();
+		this.ojReads.set(key, { windowId, operation: 'prepareNowcoder', cancel: () => controller.abort() });
+		try { return await this.nowcoderClient(id, windowId).prepare(problem, controller.signal); }
+		finally { this.ojReads.delete(key); }
+	}
+	async submitNowcoderTask(id: string, windowId: number, problem: ProblemRef, payload: INowcoderSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome> {
+		assertNowcoderProblem(problem); const client = this.nowcoderClient(id, windowId), key = windowId + ':' + id;
+		if (this.nowcoderRequests.has(key)) { throw new Error('nowcoder-submission-busy'); }
+		if (typeof requestId !== 'string' || !requestId || requestId.length > 200) { throw new Error('nowcoder-invalid-request'); }
+		const request = { windowId, requestId, controller: new AbortController() }; this.nowcoderRequests.set(key, request);
+		try {
+			const outcome = await client.submit(problem, payload, ownerKey, requestId, request.controller.signal);
+			for (const [key, attempt] of this.nowcoderAttempts) { if (attempt.expires < Date.now()) { this.nowcoderAttempts.delete(key); } }
+			if (outcome.kind === 'unconfirmed' && this.nowcoderClients.get(key)?.client === client) { this.nowcoderAttempts.set(requestId, { windowId, sessionId: id, outcome, expires: Date.now() + 600000 }); }
+			return outcome;
+		} finally { if (this.nowcoderRequests.get(key) === request) { this.nowcoderRequests.delete(key); } }
+	}
+	async cancelNowcoderTask(id: string, windowId: number, requestId: string): Promise<void> {
+		this.nowcoderClient(id, windowId); const pending = this.nowcoderRequests.get(windowId + ':' + id); if (pending?.requestId === requestId) { pending.controller.abort(); }
+	}
+	async readNowcoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot> { return this.nowcoderClient(id, windowId).readRecord(record, new AbortController().signal); }
+	async releaseNowcoderRecord(id: string, windowId: number, record: RecordRef): Promise<void> { this.nowcoderClient(id, windowId).releaseRecord(record); }
+	async reconcileNowcoderAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome> {
+		this.nowcoderClient(id, windowId); const attempt = this.nowcoderAttempts.get(attemptId);
+		if (!attempt || attempt.windowId !== windowId || attempt.sessionId !== id || attempt.expires < Date.now()) { throw new Error('nowcoder-attempt-unavailable'); }
+		// No unique receipt evidence: retain uncertainty; never infer the most recent record or resend.
+		return attempt.outcome;
 	}
 
 	async openLuoguSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
@@ -562,25 +630,14 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		this.logService.info('[OJ Connect Luogu]', 'captcha-answer', { windowId, requestId, cancelled: answer === undefined, length: answer?.length ?? 0 });
 		pending.resolve(answer);
 	}
-	async updateLuoguSession(id: string, windowId: number, operation: 'logoutLuogu' | 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void> {
+	async updateLuoguSession(id: string, windowId: number, operation: 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void> {
 		const client = this.luoguClient(id, windowId);
-		if (operation === 'logoutLuogu') { await client.logout(new AbortController().signal); }
-		else if (operation === 'invalidateLuoguSession') { client.invalidate(); }
+		if (operation === 'invalidateLuoguSession') { client.invalidate(); }
 		else if (operation === 'releaseLuoguRecord' && record) { assertLuoguProblem(record.problem); client.releaseRecord(record); }
 		else { throw new Error('oj-connect-operation'); }
 	}
-	async logoutOjSite(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<void> {
-		if (site === 'luogu') { await this.luoguClient(id, windowId).logout(new AbortController().signal); return; }
-		if (site !== 'atcoder') { throw new Error('oj-connect-site'); }
-		const url = this._getBrowserView(id).getURL();
-		if (new URL(url).origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
-		const view = this._getBrowserView(id);
-		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
-		this.invalidateAtCoderAccount(windowId, view.session.id);
-		await this._runOjRead(id, windowId, url, 'logoutAtCoder', null);
-		this.invalidateAtCoderAccount(windowId, view.session.id);
-	}
-	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<LoginSummary> {
+	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder'): Promise<LoginSummary> {
+		if (site === 'nowcoder') { return this.nowcoderClient(id, windowId).login(new AbortController().signal); }
 		if (site === 'luogu') { return this.luoguClient(id, windowId).login(new AbortController().signal); }
 		const view = this._getBrowserView(id);
 		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }

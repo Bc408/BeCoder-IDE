@@ -102,21 +102,51 @@ const RecordStatus: Record<
 		color: 'rgb(38, 38, 38)'
 	}
 };
-function statusColor(status: string): string {
+function statusColor(status: string, text = false): string {
 	const normalized = status.trim().toLowerCase();
 	const presentation = Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized);
-	if (presentation) { return presentation.color; }
-	if (normalized === 'qle') { return RecordStatus[5].color; }
-	if (normalized === 'ie') { return RecordStatus[11].color; }
+	if (text && ['waiting', 'compiling', 'judging', 'wj', 'wr'].includes(normalized)) { return RecordStatus[1].color; }
+	if (presentation) { return text && ['#001277', 'rgb(14, 29, 105)'].includes(presentation.color) ? '#8c9eff' : presentation.color; }
+	if (normalized === 'qle') { return text ? '#8c9eff' : RecordStatus[5].color; }
+	if (normalized === 'ie') { return text ? '#8c9eff' : RecordStatus[11].color; }
+	if (normalized === 'pe') { return RecordStatus[6].color; }
 	// Other sites retain their raw status; only known pending aliases share Judging.
 	if (/^(WJ|WR|\d+\s*\/)/i.test(status)) { return RecordStatus[1].color; }
 	return '#7f7f7f';
 }
 
-function statusName(status: string, site: string): string {
-	if (site !== 'luogu') { return status; }
+function statusName(status: string): string {
 	const normalized = status.trim().toLowerCase();
-	return Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized)?.name ?? status;
+	const aliases: Record<string, string> = { wj: 'Waiting', wr: 'Judging', ie: 'Internal Error', qle: 'Query Limit Exceeded', pe: 'Presentation Error' };
+	return Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized)?.name ?? aliases[normalized] ?? (/^\d+\s*\/\s*\d+/.test(status) ? 'Judging' : status);
+}
+
+function statusLabel(status: string, labels: PanelState['labels']): string | undefined {
+	const aliases: Record<string, string> = { Waiting: 'WJ', Judging: 'Judging', Compiling: 'Compiling' };
+	const name = statusName(status);
+	const code = Object.values(RecordStatus).find(value => value.name === name)?.shortName;
+	return labels['status_' + (aliases[name] ?? code ?? status)];
+}
+
+// Same thresholds and precision as vscode-luogu 4.20.0 stringUtils.ts.
+// Keep decimal/unspecified KB/MB units as reported instead of relabelling them KiB/MiB.
+function resourceText(value: string | undefined, time = false): string | undefined {
+	const match = value && /^(\d+(?:\.\d+)?)\s*([a-z]+)$/i.exec(value);
+	if (!match) { return value; }
+	const scales: Record<string, number> = time ? { ms: 1, s: 1000, sec: 1000, min: 60000, h: 3600000, d: 86400000 } : { B: 1, KiB: 1024, MiB: 1048576, GiB: 1073741824 };
+	const scale = scales[match[2]], number = Number(match[1]) * scale;
+	if (scale === undefined || !Number.isFinite(number)) { return match[1] + match[2]; }
+	if (time) {
+		if (number < 1000) { return `${number}ms`; }
+		if (number < 60000) { return `${(number / 1000).toFixed(2)}s`; }
+		if (number < 3600000) { return `${(number / 60000).toFixed(2)}min`; }
+		if (number < 86400000) { return `${(number / 3600000).toFixed(2)}h`; }
+		return `${(number / 86400000).toFixed(2)}d`;
+	}
+	if (number < 1024) { return `${number}B`; }
+	if (number < 1048576) { return `${(number / 1024).toFixed(2)}KiB`; }
+	if (number < 1073741824) { return `${(number / 1048576).toFixed(2)}MiB`; }
+	return `${(number / 1073741824).toFixed(2)}GiB`;
 }
 
 // vscode-luogu 4.20.0 shared.ts getScoreColor.
@@ -127,6 +157,7 @@ function scoreColor(score: number): string {
 // Cropped from record/app.tsx: information rows, subtasks and original testcase cards/hover details.
 export default function Record({ state }: { state: PanelState }) {
 	const record = state.record!, snapshot = state.snapshot, labels = state.labels;
+	const problemName = record.problem.site === 'nowcoder' ? record.problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : record.problem.nativeId;
 	const pending = !!state.tracking && (!snapshot || snapshot.phase === 'queued' || snapshot.phase === 'judging');
 	const progress = snapshot?.phase === 'judging' && record.problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
 	const total = progress && Number(progress[1]) <= Number(progress[2]) && Number(progress[2]) <= 1024 ? Number(progress[2]) : 0;
@@ -135,15 +166,16 @@ export default function Record({ state }: { state: PanelState }) {
 	return <>
 		<h1><a href={record.url} onClick={event => { event.preventDefault(); void send({ action: 'openOriginal' }).catch(() => undefined); }}>{record.problem.site === 'luogu' ? 'R' : '#'}{record.id}</a> {labels.record}</h1>
 		<div className={'record-info'}>
-			<div><span>{labels.problem}</span><a href={record.problem.url}>{record.problem.nativeId}</a></div>
-			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={record.problem.site === 'atcoder' ? labels['status_' + snapshot?.rawStatus] : undefined} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ'), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus, record.problem.site) : labels.tracking}</span></div>
-			{snapshot?.score !== undefined && (record.problem.site !== 'atcoder' || snapshot.phase === 'finished') && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
+			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={record.problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
+			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={snapshot && statusLabel(snapshot.rawStatus, labels)} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus) : labels.tracking}{progress && <span>{snapshot!.rawStatus}</span>}</span></div>
+			{snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
+			{snapshot?.testCaseSummary && <div><span>{labels.passedTests}</span><span>{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
 			{snapshot?.language !== undefined && <div><span>{labels.language}</span><span>{snapshot.language}</span></div>}
-			{snapshot?.codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{snapshot.codeLength}</span></div>}
+			{snapshot?.codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{resourceText(snapshot.codeLength)}</span></div>}
 			{snapshot?.owner !== undefined && <div><span>{labels.owner}</span><span>{snapshot.owner}</span></div>}
-			{(snapshot?.time !== undefined || snapshot?.memory !== undefined) && <div><span>{labels.resources}</span><span>{[snapshot.time, snapshot.memory].filter(Boolean).join(' / ')}</span></div>}
-			{snapshot?.source !== undefined && <div><span>{labels.source}</span><a href={'#'} onClick={event => { event.preventDefault(); void send({ action: 'viewSource' }).catch(() => undefined); }}>{labels.viewSource}</a></div>}
+			{snapshot?.phase === 'finished' && (snapshot.time !== undefined || snapshot.memory !== undefined) && <div><span>{labels.resources}</span><span>{[resourceText(snapshot.time, true), resourceText(snapshot.memory)].filter(Boolean).join(' / ')}</span></div>}
+			{snapshot?.source !== undefined && <div><span>{labels.source}</span><a href={'#'} title={record.problem.site === 'nowcoder' ? labels.sentSource : labels.officialSource} onClick={event => { event.preventDefault(); void send({ action: 'viewSource' }).catch(() => undefined); }}>{labels.viewSource}</a></div>}
 		</div>
 		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
 		{snapshot?.sourceVerification === 'mismatch' && <p className={'notice'}>{labels.verification_mismatch}</p>}
@@ -161,7 +193,7 @@ function TestCase({ children: data, animate }: { children: readonly string[]; an
 	const judging = animate && /^(judging|running|WJ|WR|1|\d+\s*\/\s*\d+)$/i.test(data[1] ?? '');
 	return <div className={'testcase'} tabIndex={0}>
 		<div style={{ backgroundColor: statusColor(data[1] ?? '') }}>
-			<div>#{data[0]}</div><div>{judging ? <Spinner label={data[1]} /> : data[1]}</div>{!judging && <div>{data.slice(2, 4).filter(Boolean).join(' / ')}</div>}
+			<div>#{data[0]}</div><div>{judging ? <Spinner label={data[1]} /> : data[1]}</div>{!judging && <div>{[resourceText(data[2], true), resourceText(data[3])].filter(Boolean).join(' / ')}</div>}
 		</div>
 		<div>{data.slice(4).filter(Boolean).join('\n')}</div>
 	</div>;

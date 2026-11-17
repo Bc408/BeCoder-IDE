@@ -5,8 +5,9 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CommandBrowserHost, CommandLuoguHost } from './browserHost';
+import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost } from './browserHost';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
+import { NowcoderAdapter } from './adapters/nowcoder/adapter';
 import { LuoguAdapter } from './adapters/luogu/adapter';
 import { SubmissionController } from './workflowController';
 import { ImportController } from './importController';
@@ -20,7 +21,7 @@ import { cphSamples } from './cphHost';
 import { OperationError } from './operationError';
 import { userError } from './messages';
 import { OjPreferences } from './preferences';
-import type { ProblemRef, ProblemDocument, RecordRef, SubmissionOutcome, ISourceSnapshot, LoginSummary } from './domain';
+import type { ProblemRef, ProblemDocument, RecordRef, SubmissionOutcome, ISourceSnapshot } from './domain';
 
 let controller: SubmissionController | undefined;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -41,11 +42,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.askCaptcha', (image: string, requestId: string) => captcha.ask(image, requestId)),
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.cancelCaptcha', (requestId: string) => captcha.cancel(requestId))
 	);
-	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute))];
+	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute))];
 	const directories = () => readDirectories(vscode.workspace.getConfiguration('becoder.ojConnect').get('directories'));
 	const original = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
-	const login = new LoginView(adapters, execute), loginTree = vscode.window.createTreeView('becoder.ojConnect.accounts', { treeDataProvider: login });
-	context.subscriptions.push(login, loginTree, loginTree.onDidChangeVisibility(event => { if (event.visible) { void login.refresh(); } }));
+	const login = new LoginView(context, adapters, execute, original);
+	context.subscriptions.push(login, vscode.window.registerWebviewViewProvider('becoder.ojConnect.accounts', login));
 	const records = new RecordPanel(context, adapters, original, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
 	const columns = new Map<string, vscode.ViewColumn>();
 	const revealSource = async (sourceUri: string) => {
@@ -59,7 +60,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
 		const candidates = adapters.filter(adapter => !site || adapter.site === site);
 		const resolve = (value: string) => { const found = candidates.map(adapter => adapter.resolve(value)).filter((item): item is ProblemRef => !!item); return found.length === 1 ? found[0] : undefined; };
-		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder URL.') });
+		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder/Nowcoder URL.') });
 		return value === undefined ? undefined : resolve(value);
 	};
 	controller = new SubmissionController({
@@ -111,7 +112,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const outcome = await controller!.submit(input, problem);
 		void login.refresh();
 		if (outcome?.kind === 'not-sent') {
-			if (outcome.reason === 'luogu-browser-verification-required') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
+			if (outcome.reason === 'luogu-browser-verification-required' || outcome.reason === 'nowcoder-browser-verification-required') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
 			else { await vscode.window.showInformationMessage(vscode.l10n.t('No code was submitted: {0}', userError(outcome.reason))); }
 		}
 		else if (outcome?.kind === 'unconfirmed') {
@@ -157,11 +158,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		})),
 		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument) => { if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); } return importer.import(document); }),
 		vscode.commands.registerCommand('becoder.ojConnect.continueQuery', guard(continueQuery)),
-		vscode.commands.registerCommand('becoder.ojConnect.login', (row: LoginSummary | undefined) => guard(() => login.manage(row, 'login'))()),
-		vscode.commands.registerCommand('becoder.ojConnect.logout', (row: LoginSummary | undefined) => guard(() => login.manage(row, 'logout'))()),
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);
-	if (loginTree.visible) { void login.refresh(); }
 }
 
 export async function deactivate(): Promise<void> { await controller?.dispose(); controller = undefined; }

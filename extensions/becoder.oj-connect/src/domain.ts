@@ -6,6 +6,7 @@
 import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, SubmissionOutcome } from 'becoder-oj-connect';
 import { atCoderProblem } from './adapters/atcoder/task';
 import { luoguProblem } from './adapters/luogu/task';
+import { nowcoderProblem } from './adapters/nowcoder/task';
 export type { SiteId, ISourceSnapshot, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, LanguageOption, SubmissionProgress, SubmissionOutcome, LoginSummary } from 'becoder-oj-connect';
 
 export function object(value: unknown): Record<string, unknown> {
@@ -34,7 +35,7 @@ function metadata(raw: unknown): { label: string; color?: string } {
 export function validateProblemRef(raw: unknown): ProblemRef {
 	const value = object(raw);
 	const url = text(value.url);
-	const parsed = value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : undefined;
+	const parsed = value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : value.site === 'nowcoder' ? nowcoderProblem(url) : undefined;
 	if (!parsed || parsed.url !== url || parsed.nativeId !== value.nativeId) { throw new Error('oj-connect-invalid-problem'); }
 	return parsed;
 }
@@ -42,7 +43,8 @@ export function validateRecordRef(raw: unknown): RecordRef {
 	const value = object(raw), problem = validateProblemRef(value.problem), id = text(value.id, 100), url = text(value.url);
 	if (!/^[1-9]\d*$/.test(id)) { throw new Error('oj-connect-invalid-record'); }
 	const expected = problem.site === 'luogu' ? 'https://www.luogu.com.cn/record/' + id
-		: 'https://atcoder.jp/contests/' + problem.nativeId.split('/')[0] + '/submissions/' + id;
+		: problem.site === 'nowcoder' ? 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=' + id
+			: 'https://atcoder.jp/contests/' + problem.nativeId.split('/')[0] + '/submissions/' + id;
 	if (url !== expected) { throw new Error('oj-connect-invalid-record'); }
 	return { problem, id, url };
 }
@@ -92,9 +94,14 @@ export function validateRecord(raw: unknown): RecordSnapshot {
 	for (const name of ['language', 'owner', 'score', 'time', 'memory', 'compileMessage', 'submittedAt', 'codeLength', 'source']) {
 		if (value[name] !== undefined) { optional[name] = text(value[name], name === 'compileMessage' || name === 'source' ? 1024 * 1024 : 8192, true); }
 	}
+	const summary = value.testCaseSummary === undefined ? undefined : object(value.testCaseSummary);
+	if (summary && (!Number.isSafeInteger(summary.passed) || !Number.isSafeInteger(summary.total) || Number(summary.passed) < 0 || Number(summary.total) <= 0 || Number(summary.passed) > Number(summary.total))) { throw new Error('oj-connect-invalid-record'); }
 	if (value.compileSucceeded !== undefined && typeof value.compileSucceeded !== 'boolean') { throw new Error('oj-connect-invalid-record'); }
 	if (value.pollAfterMs !== undefined && (typeof value.pollAfterMs !== 'number' || !Number.isFinite(value.pollAfterMs) || value.pollAfterMs < 100 || value.pollAfterMs > 60000)) { throw new Error('oj-connect-invalid-record'); }
 	return {
+		...(summary ? { testCaseSummary: { passed: Number(summary.passed), total: Number(summary.total) } } : {}),
+		...(value.problemTitle === undefined ? {} : { problemTitle: text(value.problemTitle, 2048) }),
+		...(value.problemDifficulty === undefined ? {} : { problemDifficulty: metadata(value.problemDifficulty) }),
 		ref, phase: value.phase as RecordSnapshot['phase'], rawStatus: text(value.rawStatus, 200, true), sourceVerification: value.sourceVerification as RecordSnapshot['sourceVerification'], ...optional,
 		...(value.compileSucceeded === undefined ? {} : { compileSucceeded: value.compileSucceeded as boolean }),
 		...(value.pollAfterMs === undefined ? {} : { pollAfterMs: value.pollAfterMs as number }),

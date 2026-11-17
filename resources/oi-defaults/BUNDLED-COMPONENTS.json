@@ -224,6 +224,16 @@
 			"packageInventory": "resources/oi-defaults/toolchains/ucrt64-packages.json",
 			"correspondingSource": "https://github.com/msys2/MINGW-packages/tree/{commit}/{recipe}",
 			"correspondingSourcePath": "resources/oi-defaults/toolchains/ucrt64-sources/recipes"
+		},
+		{
+			"id": "acorn",
+			"version": "8.16.0",
+			"source": "https://github.com/acornjs/acorn/tree/8.16.0",
+			"modificationStatus": "Unmodified production dependency. Parses Nowcoder metadata and compiler catalogue literals in the native host without executing website JavaScript.",
+			"license": "MIT",
+			"spdxIdentifier": "MIT",
+			"copyrightNotice": "Copyright (C) 2012-2022 by various contributors (see upstream AUTHORS)",
+			"licensePath": "licenses/MIT-Acorn.txt"
 		}
 	]
 }

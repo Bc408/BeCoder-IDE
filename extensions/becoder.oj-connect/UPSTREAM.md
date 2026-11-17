@@ -67,3 +67,15 @@ uiToolkit、复制组件、请求通信、Time 的核心已经来自上游；不
 ### 验证码 P0 传输候选（2026-11-15）
 
 负责人确认同机同网的原版插件可正确通过验证码。诊断表明当前图片与 POST 使用相同会话、凭据未变化、每轮只取一次图片，但服务器仍重复拒绝。上游 `api.ts` 的 Axios 显式 `proxy:false`；旧 Session.fetch 则使用浏览器代理。当前 `luoguSessionTransport.ts` 以 Node HTTPS `agent:false` 对齐固定 HTTP 操作的直连方式，凭据仍逐次从浏览器 Session 读取，保持当前浏览器 User-Agent 以单独测试传输差异。没有迁入独立 Cookie 存储或新增 Axios 依赖。退出仍经 Session.fetch 清理浏览器会话；AtCoder 不变。真实只读与合成请求测试不代表验证码 P0 已获真实提交验收。
+
+## 牛客 ACM 原生协议（2026-11-17）
+
+使用已采证的官网 `/nccommon/submit_cd` 与 `/nccommon/status`，并复用本扩展现有控制器和洛谷组件。未复制牛客 VSIX 或网站 bundle 代码。官网 JavaScript 只作为运行时数据来源，不能因官方 VSIX 是 MIT 就推断网站源码许可。原生主进程显式依赖 Acorn 8.16.0（MIT），仅提取语法树字面量，拒绝动态表达式；不执行远程代码、不随包分发采证脚本或网站 bundle。其许可见根 ThirdPartyNotices.txt 与 licenses/MIT-Acorn.txt。
+
+## 平台标识（2026-11-17）
+
+resources/luogu.png、atcoder.png、nowcoder.png、codeforces.png、lanqiao.png 来自各平台官网 favicon，仅转换为 PNG 用于标识站点。名称、图形及商标权归各自平台所有，不将其宣称为本项目原创或适用本项目源码 GPL 授权；不表示平台为 BeCoder 背书。
+
+来源：https://www.luogu.com.cn/favicon.ico 、https://img.atcoder.jp/assets/favicon.png 、https://ac.nowcoder.com/favicon.ico 、https://codeforces.com/favicon.ico 、https://static.shiyanlou.com/lanqiao/frontend/static/favicon.ico 。
+
+本轮侧栏改为轻量 WebviewView，仅名称导航；依据负责人仅在官网手动退出的要求，已删除旧的程序化退出命令、服务接口、原生客户端退出方法及 AtCoder 注入退出脚本。上文关于退出的描述保留各历史阶段背景，不代表当前仍暴露这些能力。

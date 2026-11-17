@@ -3,9 +3,25 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { type ProblemRef, type ProblemDocument, type Section, type LoginSummary, validateProblem } from '../src/domain';
+import { type ProblemRef, type ProblemDocument, type Section, validateProblem } from '../src/domain';
 import { atCoderProblem } from '../src/adapters/atcoder/task';
 import { withOjRead } from './reads';
+
+// Adapted from vscode-luogu v4.20.0 src/utils/stringUtils.ts.
+// Copyright (c) 2018 yltx. MIT License; see ThirdPartyNotices.txt.
+function formatTime(time: number): string {
+	if (time < 1e3) { return `${time}ms`; }
+	if (time < 60 * 1e3) { return `${(time / 1e3).toFixed(2)}s`; }
+	if (time < 60 * 60 * 1e3) { return `${(time / (60 * 1e3)).toFixed(2)}min`; }
+	if (time < 24 * 60 * 60 * 1e3) { return `${(time / (60 * 60 * 1e3)).toFixed(2)}h`; }
+	return `${(time / (24 * 60 * 60 * 1e3)).toFixed(2)}d`;
+}
+function formatMemory(memory: number): string {
+	if (memory < 2 ** 10) { return `${memory}B`; }
+	if (memory < 2 ** 20) { return `${(memory / 2 ** 10).toFixed(2)}KiB`; }
+	if (memory < 2 ** 30) { return `${(memory / 2 ** 20).toFixed(2)}MiB`; }
+	return `${(memory / 2 ** 30).toFixed(2)}GiB`;
+}
 
 export async function readAtCoderProblem(problem: ProblemRef, requestId: string): Promise<ProblemDocument> {
 	if (problem.site !== 'atcoder' || atCoderProblem(location.href)?.url !== problem.url) { throw new Error('AtCoder problem changed.'); }
@@ -29,8 +45,29 @@ export async function readAtCoderProblem(problem: ProblemRef, requestId: string)
 					section.remove();
 				}
 			}
+			// Official top-level task sections share Luogu's hierarchy; prose stays in its selected language.
+			const headings: Record<string, string> = {
+				'Problem Statement': '\u9898\u76ee\u63cf\u8ff0', '\u554f\u984c\u6587': '\u9898\u76ee\u63cf\u8ff0',
+				Input: '\u8f93\u5165\u683c\u5f0f', '\u5165\u529b': '\u8f93\u5165\u683c\u5f0f',
+				Output: '\u8f93\u51fa\u683c\u5f0f', '\u51fa\u529b': '\u8f93\u51fa\u683c\u5f0f',
+				Notes: '\u8bf4\u660e/\u63d0\u793a'
+			};
+			const notes: Section[] = [];
+			for (const heading of clone.querySelectorAll('section > h3')) {
+				if (heading.closest('pre, code')) { continue; }
+				const title = heading.textContent?.trim() ?? '';
+				const replacement = page.createElement('h2');
+				for (const attribute of heading.attributes) { replacement.setAttribute(attribute.name, attribute.value); }
+				if (headings[title]) { replacement.textContent = headings[title]; }
+				else { replacement.innerHTML = heading.innerHTML; }
+				heading.replaceWith(replacement);
+				if (title === 'Notes') {
+					const section = replacement.parentElement!;
+					notes.push({ kind: 'notes', format: 'html', content: section.outerHTML }); section.remove();
+				}
+			}
 			for (const node of [...clone.children]) { if (node.tagName === 'HR' || (!node.textContent?.trim() && !node.querySelector('img,pre,table,var'))) { node.remove(); } }
-			return [{ format: 'html' as const, content: clone.innerHTML }, ...explanations];
+			return [{ format: 'html' as const, content: clone.innerHTML }, ...explanations, ...notes];
 		};
 		const bodies = (['ja', 'en'] as const).flatMap(locale => {
 			const element = statement.querySelector('.lang-' + locale);
@@ -49,9 +86,10 @@ export async function readAtCoderProblem(problem: ProblemRef, requestId: string)
 		}
 		const limitText = statement.previousElementSibling?.textContent ?? '';
 		const limits: { label: string; value: string }[] = [];
-		const time = /([0-9.]+)\s*sec/.exec(limitText), memory = /(\d+)\s*(Mi?B)/.exec(limitText);
-		if (time) { limits.push({ label: 'Time Limit', value: time[1] + ' sec' }); }
-		if (memory) { limits.push({ label: 'Memory Limit', value: memory[1] + ' ' + memory[2] }); }
+		const time = /(?:^|[:\uFF1A])\s*(\d+(?:\.\d+)?)\s*sec\b/.exec(limitText), memory = /(?:^|[:\uFF1A])\s*(\d+(?:\.\d+)?)\s*(MiB|MB)\b/.exec(limitText);
+		const timeMs = time ? Number(time[1]) * 1000 : NaN, memoryBytes = memory ? Number(memory[1]) * (memory[2] === 'MiB' ? 2 ** 20 : 1e6) : NaN;
+		if (Number.isFinite(timeMs) && timeMs > 0) { limits.push({ label: 'Time Limit', value: formatTime(timeMs) }); }
+		if (Number.isFinite(memoryBytes) && memoryBytes > 0) { limits.push({ label: 'Memory Limit', value: formatMemory(memoryBytes) }); }
 		const heading = page.querySelector('h2, .h2');
 		const title = heading ? [...heading.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim() : '';
 		const languages = [...(page.querySelector<HTMLSelectElement>('select[name="data.LanguageId"]')?.options ?? [])].flatMap(option => {
@@ -59,39 +97,5 @@ export async function readAtCoderProblem(problem: ProblemRef, requestId: string)
 			return !option.disabled && family && /^\d+$/.test(option.value) ? [{ id: option.value, label, family }] : [];
 		});
 		return validateProblem({ ref: problem, title: title || problem.nativeId, bodies, samples, limits, languages, interactive: /(?:interactive|reactive) (?:task|problem)/i.test(statement.textContent ?? '') });
-	});
-}
-
-function loginSummary(page: Document): LoginSummary {
-	for (const script of page.scripts) {
-		const match = /\buserScreenName\s*=\s*(["'])([a-zA-Z0-9_]*)\1/.exec(script.textContent ?? '');
-		if (match) { return match[2] ? { site: 'atcoder', state: 'signed-in', label: match[2] } : { site: 'atcoder', state: 'signed-out' }; }
-	}
-	return { site: 'atcoder', state: 'unknown' };
-}
-
-async function accountPage(signal: AbortSignal): Promise<Document> {
-	const response = await fetch('/', { credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal });
-	if (!response.ok) { throw new Error('AtCoder account is unavailable.'); }
-	const html = await response.text();
-	if (html.length > 8 * 1024 * 1024) { throw new Error('AtCoder account page is too large.'); }
-	return new DOMParser().parseFromString(html, 'text/html');
-}
-
-export async function logoutAtCoder(_input: unknown, requestId: string): Promise<boolean> {
-	if (location.origin !== 'https://atcoder.jp') { throw new Error('AtCoder page changed.'); }
-	return withOjRead(requestId, async signal => {
-		const page = await accountPage(signal);
-		// Verified against the official homepage: POST /logout + hidden csrf_token.
-		const form = [...page.forms].find(form => form.method.toLowerCase() === 'post' && new URL(form.getAttribute('action') ?? '', location.origin).href === 'https://atcoder.jp/logout');
-		const token = form?.querySelector<HTMLInputElement>('input[type="hidden"][name="csrf_token"]')?.value;
-		if (!token) { throw new Error('AtCoder sign out form is unavailable.'); }
-		signal.throwIfAborted();
-		const response = await fetch('/logout', {
-			method: 'POST', credentials: 'same-origin', redirect: 'follow', signal,
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf_token: token }).toString()
-		});
-		if (!response.ok || loginSummary(await accountPage(signal)).state !== 'signed-out') { throw new Error('AtCoder sign out could not be confirmed.'); }
-		return true;
 	});
 }

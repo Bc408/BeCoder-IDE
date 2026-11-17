@@ -1025,7 +1025,8 @@ suite('OI extension boundary', () => {
 			'vscode.mermaid-markdown-features',
 			'ms-ceintl.vscode-language-pack-zh-hans',
 			'clangd-windows',
-			'becoder-ucrt64'
+			'becoder-ucrt64',
+			'acorn'
 		]);
 		for (const component of components) {
 			assert.ok(component.id && component.version && component.source);

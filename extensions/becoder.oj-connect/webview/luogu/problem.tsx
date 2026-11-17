@@ -60,7 +60,7 @@ function Content({ section, url, scope }: { section: Section; url: string; scope
 // Cropped from viewProblem/app.tsx: the original header, controls and paired sample layout.
 export default function Problem({ state }: { state: PanelState }) {
 	const scope = useId() + (state.locale ?? '');
-	const data = state.problem!, problemId = data.ref.nativeId.split('/').at(-1)!, languagesList = data.bodies.map(body => body.locale);
+	const data = state.problem!, problemId = data.ref.site === 'nowcoder' ? data.ref.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : data.ref.nativeId.split('/').at(-1)!, languagesList = data.bodies.map(body => body.locale);
 	const choosedLanguage = state.locale ?? languagesList[0];
 	const problemContent = data.bodies.find(body => body.locale === choosedLanguage) ?? data.bodies[0];
 	const content = (notes: boolean) => problemContent?.sections.filter(section => section.kind !== 'sample-explanation' && (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
@@ -76,7 +76,7 @@ export default function Problem({ state }: { state: PanelState }) {
 						onChange={event => { void send({ action: 'selectLocale', locale: event.target.value }).catch(() => undefined); }}>
 						{languagesList.map(locale => <VSCodeOption value={locale} key={locale}>{locale}</VSCodeOption>)}
 					</VSCodeDropdown>}
-					<VSCodeButton onClick={() => { void send({ action: 'importCph' }).catch(() => undefined); }} appearance={'primary'}><div><CphIcon />{state.labels.importCph}</div></VSCodeButton>
+					<VSCodeButton onClick={() => { void send({ action: 'importCph' }).catch(() => undefined); }} appearance={'primary'} className={'problem-action'} aria-label={state.labels.importCph} title={state.labels.importCph}><CphIcon /></VSCodeButton>
 					<SubmissionControls state={state} />
 				</div>
 			</div>

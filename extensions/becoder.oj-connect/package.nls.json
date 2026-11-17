@@ -13,8 +13,6 @@
 	"continueQuery": "Continue Querying Unconfirmed Submission",
 	"refreshAccounts": "Refresh Login Status",
 	"accounts": "Login Status",
-	"login": "Sign In",
-	"logout": "Sign Out",
 	"luogu.cCompiler": "Luogu C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
 	"luogu.cppCompiler": "Luogu C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
 	"atcoder.cCompiler": "AtCoder C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
@@ -28,5 +26,7 @@
 	"panelBeside": "Beside the active editor group",
 	"panelOne": "First editor group",
 	"panelTwo": "Second editor group",
-	"panelThree": "Third editor group"
+	"panelThree": "Third editor group",
+	"nowcoder.cCompiler": "Nowcoder C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"nowcoder.cppCompiler": "Nowcoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice."
 }

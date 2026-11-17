@@ -12,6 +12,7 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5em;
+	flex-wrap: wrap;
 }
 
 #app.oj-record {
@@ -24,8 +25,10 @@
 		flex-direction: column;
 		> div {
 			display: grid;
-			grid-template-columns: 6em auto;
-			align-items: center;
+			grid-template-columns: 6em minmax(0, 1fr);
+			column-gap: 1em;
+			align-items: baseline;
+			> :last-child { min-width: 0; }
 		}
 	}
 	> div.testCaseData {

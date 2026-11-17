@@ -34,14 +34,18 @@ try {
 		'$$\nf(x)=\\sum_{k=0}^{n}\\frac{f^{(k)}(x_0)}{k!}(x-x_0)^k+R_n(x)\n$$',
 		'\\[\\left(\\frac{x+1}{y-1}\\right)^2+\\sqrt{x^2+y^2}\\]',
 		'\\[\\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix}\\]',
-		'```math\n\\int_0^1\\frac{x^2}{1+x^2}\\,dx\n```\n'
+		'```math\n\\int_0^1\\frac{x^2}{1+x^2}\\,dx\n```\n',
+		'```cpp\nauto literal = "\\(x\\)";\n```\n\n$$\nf(x)=\\sum_{k=0}^{n}\\frac{x^k}{k!}\n$$',
+		'`\\(literal\\)`\n\n推导中：\\(\\frac{x+1}{y-1}\\)'
 	];
 	const expressions = [
 		'f(x)=\\frac{f^{(n)}(x_0)}{n!}(x-x_0)^n',
 		'f(x)=\\sum_{k=0}^{n}\\frac{f^{(k)}(x_0)}{k!}(x-x_0)^k+R_n(x)',
 		'\\left(\\frac{x+1}{y-1}\\right)^2+\\sqrt{x^2+y^2}',
 		'\\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix}',
-		'\\int_0^1\\frac{x^2}{1+x^2}\\,dx'
+		'\\int_0^1\\frac{x^2}{1+x^2}\\,dx',
+		'f(x)=\\sum_{k=0}^{n}\\frac{x^k}{k!}',
+		'\\frac{x+1}{y-1}'
 	];
 	for (let index = 0; index < sources.length; index++) {
 		const source = sources[index];
@@ -83,7 +87,7 @@ try {
 		console.log(index, metrics);
 		if (!diagnose) {
 			assert.equal(metrics.redFrames, 0, source);
-			if (index < 2) { assert.ok(metrics.liveUpdates > 2, 'Valid prefixes render before the formula finishes'); }
+			if (index < 2 || index >= 5) { assert.ok(metrics.liveUpdates > 2, 'Valid prefixes render before the formula finishes, including when Markdown code is present'); }
 			assert.equal(metrics.unstableHeldFrames, 0, 'A partial command preserves the last valid formula markup');
 		}
 		await page.screenshot({ path: path.join(output, `${diagnose ? 'before' : 'after'}-${index}.png`) });

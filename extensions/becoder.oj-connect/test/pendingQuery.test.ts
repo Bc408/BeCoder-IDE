@@ -24,6 +24,7 @@ async function fixture(t: TestContext) {
 	const disposable = () => ({ dispose() { } });
 	const source = { uri: { scheme: 'file', fsPath: 'C:/practice/luogu/P1001.cpp', toString: () => 'file:///C:/practice/luogu/P1001.cpp' }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
 	const vscode = {
+		ConfigurationTarget: { Global: 1 },
 		EventEmitter: class { event = disposable; fire() { } dispose() { } },
 		l10n: { t: (value: string, ...args: string[]) => value.replace('{0}', args[0]) },
 		Uri: { parse: (value: string) => value }, ViewColumn: { One: 1 },
@@ -36,7 +37,7 @@ async function fixture(t: TestContext) {
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined }), openTextDocument: async () => source },
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), openTextDocument: async () => source },
 		window: {
 			activeTextEditor: { document: source, viewColumn: 1 },
 			createTreeView: () => ({ visible: false, onDidChangeVisibility: disposable }),
@@ -52,7 +53,7 @@ async function fixture(t: TestContext) {
 		if (id === './views/recordPanel') { return { RecordPanel: class { async open(record: RecordRef, sourceUri: string) { opened.push({ record, sourceUri }); } } }; }
 		return original.call(this, id, ...args);
 	};
-	const extension = require('../src/extension'); extension.activate({ subscriptions: [], globalState: { get: () => undefined, update: async () => { } } });
+	const extension = require('../src/extension'); await extension.activate({ subscriptions: [], globalState: { get: () => undefined, update: async () => { } } });
 	t.after(async () => { await extension.deactivate(); Module._load = original; delete require.cache[extensionPath]; });
 	return {
 		queries, opened, notices,

@@ -216,8 +216,13 @@ export class LuoguSessionClient {
 		if (!state) { state = { released: false }; this.recordGenerations.set(ref.url, state); }
 		let track = this.tracks.get(ref.url);
 		let context: Record<string, unknown>;
-		if (track) { context = await track.next(signal); }
-		else { context = await this.context(ref.url, signal); }
+		if (track) {
+			try { context = await track.next(signal); }
+			catch (error) {
+				if (track.failed && this.tracks.get(ref.url) === track) { this.tracks.delete(ref.url); }
+				throw error;
+			}
+		} else { context = await this.context(ref.url, signal); }
 		const config = await cancellable(this.configuration(), signal);
 		signal.throwIfAborted();
 		if (state.released || epoch !== this.generation) { throw new Error('luogu-record-released'); }
@@ -229,8 +234,9 @@ export class LuoguSessionClient {
 				if (state.released || epoch !== this.generation || signal.aborted) { socket.close(); throw new Error('luogu-record-released'); }
 				track = this.createTrack(ref, context, socket); this.tracks.set(ref.url, track);
 			}
-		} else if (snapshot.phase === 'finished' && track) {
-			this.releaseRecord(ref); return parseLuoguRecord(ref, await this.context(ref.url, signal), config);
+		} else if (track) {
+			this.releaseRecord(ref);
+			if (snapshot.phase === 'finished') { return parseLuoguRecord(ref, await this.context(ref.url, signal), config); }
 		}
 		return snapshot;
 	}
@@ -255,8 +261,9 @@ export class LuoguSessionClient {
 		socket.onmessage = event => { try { const value = object(JSON.parse(String(event.data))); if (value._ws_type === 'join_result' && !joined) { joined = true; clearTimeout(timer); push(object(value.welcome_message).record); } else if (joined && value._ws_type === 'server_broadcast' && value.type === 'status_push') { push(value.record); } } catch { dispose(new Error('luogu-push-invalid-response')); } };
 		socket.onerror = () => dispose(new Error('luogu-push-failed')); socket.onclose = () => dispose(new Error('luogu-push-closed'));
 		return {
+			get failed() { return failure !== undefined; },
 			dispose, next: async (signal: AbortSignal): Promise<Record<string, unknown>> => {
-				signal.throwIfAborted(); if (failure) { throw failure; } if (queued) { const value = queued; queued = undefined; return value; } if (pending) { throw new Error('luogu-record-busy'); }
+				signal.throwIfAborted(); if (queued) { const value = queued; queued = undefined; return value; } if (failure) { throw failure; } if (pending) { throw new Error('luogu-record-busy'); }
 				return new Promise((resolve, reject) => { const abort = () => { pending = undefined; reject(new Error('luogu-record-cancelled')); }; signal.addEventListener('abort', abort, { once: true }); pending = { resolve: value => { signal.removeEventListener('abort', abort); resolve(value); }, reject: error => { signal.removeEventListener('abort', abort); reject(error); } }; });
 			}
 		};

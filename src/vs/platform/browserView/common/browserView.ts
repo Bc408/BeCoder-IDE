@@ -344,9 +344,9 @@ export interface IBrowserViewService {
 	readonly onDidRequireLuoguCaptcha: Event<{ windowId: number; requestId: string; image: string }>;
 	readonly onDidCancelLuoguCaptcha: Event<{ windowId: number; requestId: string }>;
 	openLuoguSession(windowId: number, scope: BrowserViewStorageScope): Promise<string>;
+	readAtCoderLogin(windowId: number, scope: BrowserViewStorageScope): Promise<LoginSummary>;
 	getLuoguCaptcha(windowId: number, requestId: string): Promise<string>;
 	answerLuoguCaptcha(windowId: number, requestId: string, answer: string | undefined): Promise<void>;
-	readonly onDidRequireOjInteraction: Event<{ id: string; windowId: number }>;
 	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' }>;
 	watchOjSession(id: string, windowId: number): Promise<void>;
 	logoutOjSite(id: string, windowId: number, site: 'luogu' | 'atcoder'): Promise<void>;
@@ -502,8 +502,6 @@ export interface IBrowserViewService {
 	parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }>;
 	/** Rendered content of an already loaded view; does not navigate or fetch. */
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
-	/** Experimental current-detail snapshot; fixed same-detail source GET in the actual view session. */
-	readAtCoderSubmission(id: string, windowId: number, expectedURL: string): Promise<string>;
 
 	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
 	cancelOjOperations(windowId: number): Promise<void>;
@@ -519,7 +517,8 @@ export interface IBrowserViewService {
 	prepareAtCoderTask(id: string, windowId: number, expectedURL: string, payload?: IAtCoderSourcePayload): Promise<IAtCoderTaskForm>;
 	/** Explicit user action: prepare/send once, then resolve a verified new record. */
 	sendAndConfirmAtCoderTask(id: string, windowId: number, expectedURL: string, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome>;
-	readAtCoderRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	readAtCoderRecord(scope: BrowserViewStorageScope, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	releaseAtCoderRecord(scope: BrowserViewStorageScope, windowId: number, record: RecordRef): Promise<void>;
 	reconcileAtCoderAttempt(attemptId: string, windowId: number): Promise<SubmissionOutcome>;
 	cancelAtCoderTask(id: string, windowId: number): Promise<void>;
 

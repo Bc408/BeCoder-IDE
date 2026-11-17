@@ -23,8 +23,18 @@ import { OjPreferences } from './preferences';
 import type { ProblemRef, ProblemDocument, RecordRef, SubmissionOutcome, ISourceSnapshot, LoginSummary } from './domain';
 
 let controller: SubmissionController | undefined;
-export function activate(context: vscode.ExtensionContext): void {
-	const preferences = new OjPreferences(context.globalState);
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	const configuration = () => vscode.workspace.getConfiguration('becoder.ojConnect');
+	const preferences = new OjPreferences({
+		get: <T>(key: string) => configuration().get<T>(key),
+		update: (key, value) => configuration().update(key, value, vscode.ConfigurationTarget.Global)
+	});
+	try {
+		await preferences.migrate(context.globalState, key => configuration().inspect(key)?.globalValue !== undefined);
+	} catch (error) {
+		console.warn('[OJ Connect] Preference migration failed', error);
+		void vscode.window.showWarningMessage(vscode.l10n.t('OJ Connect could not migrate saved preferences. Unmigrated choices are kept; check your user settings and reload to retry.'));
+	}
 	const execute = async (command: string, ...args: unknown[]) => vscode.commands.executeCommand(command, ...args);
 	const captcha = new LuoguCaptcha(async requestId => vscode.commands.executeCommand<string>('_becoder.ojConnect.luogu.getCaptcha', requestId));
 	context.subscriptions.push(captcha,
@@ -63,14 +73,13 @@ export function activate(context: vscode.ExtensionContext): void {
 			const replace = vscode.l10n.t('Replace Webpage Draft');
 			return await vscode.window.showWarningMessage(vscode.l10n.t('Replace the code already in the webpage with {0}?', fileName), { modal: true }, replace) === replace;
 		},
-		// Notifications obscure native browser input, including the captcha needed
-		// to finish this request. Status never promises to withdraw a sent solution.
+		// Status does not steal editor focus or promise to withdraw a sent solution.
 		runWithProgress: async (fileName, operation) => {
 			const status = vscode.window.createStatusBarItem();
 			try {
 				status.text = '$(sync~spin) ' + vscode.l10n.t('OJ Connect: submitting {0}', fileName);
 				status.show();
-				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Complete browser verification if requested.') : value.message; });
+				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Submitting code.') : value.message; });
 			} finally { status.dispose(); }
 		}, openRecord
 	}, preferences);
@@ -123,7 +132,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		selectFolder: async folders => (await vscode.window.showQuickPick(folders.map(folder => ({ label: path.basename(folder), description: folder, folder })), { title: vscode.l10n.t('Choose an import folder') }))?.folder,
 		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, sourceUri, source); }
 	});
-	context.subscriptions.push(problems, records, importer);
+	context.subscriptions.push(problems, records, importer,
+		vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('becoder.ojConnect')) { problems.refreshPreferences(); } })
+	);
 	const guard = (action: () => Promise<unknown>) => async () => {
 		try { await action(); }
 		catch (error) {

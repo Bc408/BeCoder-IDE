@@ -21,7 +21,7 @@ function fixture() {
 	const make = (site: 'luogu' | 'atcoder', resolve: (input: string) => ProblemRef | undefined): OjAdapter => ({
 		site, resolve, fileName: () => 'P1001.cpp', readProblem: async () => { throw new Error('unused'); }, loginSummary: async () => ({ site, state: 'unknown' }),
 		prepare: async problem => ({
-			languages: [{ id: site + '-cpp', label: 'C++', family: 'cpp' }, { id: site + '-c', label: 'C', family: 'c' }], hasDraft: false,
+			languages: [{ id: site === 'luogu' ? '28:o2' : '6017', label: 'C++', family: 'cpp' }, { id: site === 'luogu' ? '2' : '6016', label: 'C', family: 'c' }], hasDraft: false,
 			send: async input => { sent.push({ site, snapshot: input.snapshot, languageId: input.languageId }); return { kind: 'record', record: { problem, id: '11', url: site === 'luogu' ? 'https://www.luogu.com.cn/record/11' : 'https://atcoder.jp/contests/abc086/submissions/11' } }; },
 			cancel: async () => { cancelled++; }, dispose: async () => { released++; }
 		}),
@@ -33,7 +33,9 @@ function fixture() {
 		chooseLanguage: async options => { selected++; return options[0].id; }, confirmDraft: async () => true,
 		runWithProgress: async (_name, operation) => operation(() => undefined), openRecord: async ref => { records.push(ref); }
 	};
-	return { controller: new SubmissionController(host), host, luogu, atcoder, sent, records, selected: () => selected, released: () => released, cancelled: () => cancelled };
+	const values = new Map<string, unknown>();
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
+	return { controller: new SubmissionController(host, preferences), host, luogu, atcoder, sent, records, selected: () => selected, released: () => released, cancelled: () => cancelled };
 }
 test('both adapters share fixed source snapshot and remember languages separately', async () => {
 	const f = fixture(), input = { ...snapshot };
@@ -47,7 +49,7 @@ test('both adapters share fixed source snapshot and remember languages separatel
 	await g.controller.submit({ ...snapshot, uri: 'file:///C:/cpp/atcoder/abc086_a.cpp' });
 	await g.controller.submit(snapshot);
 	assert.strictEqual(g.selected(), 2);
-	assert.deepStrictEqual(g.sent.map(value => value.languageId), ['luogu-cpp', 'atcoder-cpp', 'luogu-cpp']);
+	assert.deepStrictEqual(g.sent.map(value => value.languageId), ['28:o2', '6017', '28:o2']);
 });
 
 test('AtCoder compiler choices persist across controllers and an expired choice asks again', async () => {
@@ -68,11 +70,11 @@ test('AtCoder compiler choices persist across controllers and an expired choice 
 
 test('the statement language selector and keyboard submission use the same preference', async () => {
 	const f = fixture();
-	f.controller.selectLanguage('luogu', 'cpp', 'luogu-cpp');
+	f.controller.selectLanguage('luogu', 'cpp', '28:o2');
 	await f.controller.submit(snapshot);
 	assert.strictEqual(f.selected(), 0);
-	assert.strictEqual(f.sent[0].languageId, 'luogu-cpp');
-	assert.strictEqual(f.controller.preferredLanguage('luogu', 'cpp'), 'luogu-cpp');
+	assert.strictEqual(f.sent[0].languageId, '28:o2');
+	assert.strictEqual(f.controller.preferredLanguage('luogu', 'cpp'), '28:o2');
 });
 test('late preparation after cancellation is cancelled and disposed without sending', async () => {
 	const f = fixture();

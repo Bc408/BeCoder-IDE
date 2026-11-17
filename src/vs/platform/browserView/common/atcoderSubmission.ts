@@ -3,31 +3,53 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export interface IAtCoderSubmissionPage {
-	ownerWindowId: number;
-	url(): string;
-	loading(): boolean;
-	closed(): boolean;
-	watchChange(listener: () => void): { dispose(): void };
-	read(script: string, signal?: AbortSignal): Promise<unknown>;
+// eslint-disable-next-line local/code-import-patterns -- Internal type-only OJ record contract.
+import type { RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+
+/** AtCoder escapes source as HTML text; decode once, without executing a document. */
+export function decodeAtCoderHTML(value: string): string {
+	const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\u0027', nbsp: '\u00a0' };
+	return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+		if (name[0] !== '#') { return named[name] ?? entity; }
+		const number = name[1].toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+		return number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff) ? String.fromCodePoint(number) : '\ufffd';
+	});
 }
 
-export interface IAtCoderSubmissionSnapshot {
-	version: 1;
-	url: string;
-	capturedAt: string;
-	contestId: string;
-	taskUrl: string;
-	source: string;
-	submissionId: string;
-	owner: string;
-	viewerIdentity: 'unverified';
-	status: string;
-	compileMessage?: string;
-	info: string[][];
-	tests: string[][];
-	coverage: 'loaded-detail-only';
-	sourceRepresentation: 'same-detail-html-decoded-pre' | 'unavailable';
+/** Bounded, non-executing parsing of the official record's tables and escaped pre. */
+export function parseAtCoderRecordHTML(record: RecordRef, html: string): RecordSnapshot {
+	const route = detailRoute(record.url);
+	if (!route || record.problem.site !== 'atcoder' || !new RegExp('^https://atcoder\\.jp/contests/' + route[1] + '/tasks/[a-zA-Z0-9_-]+$').test(record.problem.url) || record.id !== route[2] || html.length > 4 * 1024 * 1024) { throw new Error('atcoder-invalid-record'); }
+	const text = (value: string) => decodeAtCoderHTML(value.replace(/<[^>]*>/g, '')).trim();
+	const tables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table\s*>/gi)].map(match => match[1]);
+	const infoHTML = tables.find(table => [...table.matchAll(/href=["']([^"']+)["']/gi)].some(match => {
+		try { return new URL(decodeAtCoderHTML(match[1]), record.url).href === record.problem.url; } catch { return false; }
+	}));
+	if (!infoHTML) { throw new Error('atcoder-record-task-mismatch'); }
+	const rows = (table: string) => [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)].map(row => [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]\s*>/gi)].map(cell => text(cell[1])));
+	const info = rows(infoHTML);
+	const rawStatus = text(/<[^>]+\bid=["']judge-status["'][^>]*>([\s\S]*?)<\//i.exec(html)?.[1] ?? '');
+	const ownerLink = /href=["']\/users\/([^/"']+)["']/i.exec(infoHTML)?.[1];
+	if (!ownerLink || !rawStatus || info.length > 1024) { throw new Error('atcoder-record-incomplete'); }
+	const get = (labels: string[]) => info.find(row => labels.includes(row[0]))?.[1];
+	let source: string | undefined;
+	try { source = decodeAtCoderHTML(extractAtCoderSourceHTML(html)); } catch { /* A private source may be unavailable. */ }
+	// allow-any-unicode-next-line -- Official Japanese compile-output heading.
+	const compile = /<h4\b[^>]*>\s*(?:Compile Error|コンパイルエラー)\s*<\/h4>\s*<pre\b[^>]*>([\s\S]*?)<\/pre>/i.exec(html)?.[1];
+	const tests = tables.filter(table => table !== infoHTML).flatMap(table => {
+		const values = rows(table);
+		// allow-any-unicode-next-line -- Official bilingual test-case column names.
+		const header = values.findIndex(row => /^(Case Name|テストケース)$/.test(row[0] ?? '') && /^(Status|結果)$/.test(row[1] ?? '') && /^(Exec Time|実行時間)$/.test(row[2] ?? '') && /^(Memory|メモリ)$/.test(row[3] ?? ''));
+		return header < 0 ? [] : values.slice(header + 1).filter(row => row.length >= 4);
+	});
+	if (tests.length > 1024 || [...tests, ...info].some(row => row.length > 16 || row.some(cell => cell.length > 8192)) || (source?.length ?? 0) > 1048576 || (compile?.length ?? 0) > 524288) { throw new Error('atcoder-record-too-large'); }
+	return {
+		ref: record, rawStatus, phase: /^(AC|WA|CE|RE|TLE|MLE|OLE|IE|QLE)$/.test(rawStatus) ? 'finished' : /^(WJ|Waiting)$/.test(rawStatus) ? 'queued' : /^(WR|Judging|\d+\s*\/\s*\d+.*)$/.test(rawStatus) ? 'judging' : 'unknown',
+		// allow-any-unicode-next-line -- Official bilingual submission metadata labels.
+		owner: decodeAtCoderHTML(ownerLink), language: get(['Language', '言語']), score: get(['Score', '得点']), time: get(['Exec Time', '実行時間']), memory: get(['Memory', 'メモリ']), submittedAt: get(['Submission Time', '提出日時']), codeLength: get(['Code Size', 'コード長']),
+		...(source ? { source } : {}), ...(compile !== undefined ? { compileMessage: decodeAtCoderHTML(compile) } : {}), ...(rawStatus === 'CE' ? { compileSucceeded: false } : {}),
+		groups: tests.length ? [{ name: 'Test Cases', rows: tests }] : [], sourceVerification: source ? 'not-checked' : 'unavailable'
+	};
 }
 
 /** Accept only one plain escaped source pre, never a rendered editor subtree. */
@@ -45,82 +67,8 @@ export function checkAtCoderSourceResponse(response: Pick<Response, 'status' | '
 	}
 }
 
-/** Fixed DOM probe; sourceHTML is supplied from the same detail's unexecuted HTML. */
-const detailScript = `(() => {
-	const route = /^\\/contests\\/([a-zA-Z0-9_-]+)\\/submissions\\/([1-9][0-9]*)\\/?$/.exec(location.pathname);
-	if (!route) { throw new Error('atcoder-route'); }
-	const sourceHTML = null;
-	const detailHTML = null;
-	const page = typeof detailHTML === 'string' ? new DOMParser().parseFromString(detailHTML, 'text/html') : document;
-	if (typeof sourceHTML !== 'string') { throw new Error('atcoder-source-unavailable'); }
-	const decoder = document.createElement('textarea');
-	decoder.innerHTML = sourceHTML;
-	const source = decoder.value;
-	if (source !== null && source.length > 524288) { throw new Error('atcoder-too-large'); }
-	const tables = Array.from(page.querySelectorAll('table'));
-	const infoTable = tables.find(table => Array.from(table.querySelectorAll('a[href]')).some(a => new URL(a.getAttribute('href'), location.href).pathname.startsWith('/contests/' + route[1] + '/tasks/')));
-	const links = Array.from(infoTable?.querySelectorAll('a[href]') ?? []).map(a => new URL(a.getAttribute('href'), location.href));
-	const task = links.find(u => u.origin === location.origin && u.pathname.startsWith('/contests/' + route[1] + '/tasks/'));
-	const owner = links.find(u => u.origin === location.origin && /^\\/users\\/[^/]+\\/?$/.test(u.pathname));
-	const rows = table => Array.from(table.querySelectorAll('tr')).filter(row => row.closest('table') === table).map(row => Array.from(row.children).filter(cell => cell.tagName === 'TH' || cell.tagName === 'TD').map(cell => cell.textContent.trim()));
-	const info = infoTable ? rows(infoTable) : [];
-	// Inspected on official submission 80885966: h4 "Compile Error" then a plain pre.
-	const compileHeading = Array.from(page.querySelectorAll('h4')).find(heading => /^(Compile Error|\u30b3\u30f3\u30d1\u30a4\u30eb\u30a8\u30e9\u30fc)$/.test(heading.textContent.trim()));
-	const compileMessage = compileHeading?.nextElementSibling?.tagName === 'PRE' ? compileHeading.nextElementSibling.textContent : undefined;
-	if (compileMessage !== undefined && compileMessage.length > 524288) { throw new Error('atcoder-too-large'); }
-	// The detail also contains test-set summaries. Only the case table has
-	// these four columns; never turn summary/header rows into testcase cards.
-	const tests = tables.filter(table => table !== infoTable && !table.parentElement?.closest('table')).flatMap(table => {
-		const values = rows(table);
-		const header = values.findIndex(row => /^(Case Name|\u30c6\u30b9\u30c8\u30b1\u30fc\u30b9)$/.test(row[0] ?? '') && /^(Status|\u7d50\u679c)$/.test(row[1] ?? '') && /^(Exec Time|\u5b9f\u884c\u6642\u9593)$/.test(row[2] ?? '') && /^(Memory|\u30e1\u30e2\u30ea)$/.test(row[3] ?? ''));
-		return header < 0 ? [] : values.slice(header + 1).filter(row => row.length >= 4);
-	});
-	if (info.length + tests.length > 1024 || [...info, ...tests].some(row => row.length > 16 || row.some(cell => cell.length > 8192))) { throw new Error('atcoder-too-large'); }
-	return { url: location.href, contestId: route[1], submissionId: route[2], taskUrl: task?.href ?? null, owner: owner ? decodeURIComponent(owner.pathname.split('/')[2]) : null,
-		source, status: page.querySelector('#judge-status')?.textContent.trim() ?? null, compileMessage, info, tests };
-})()`;
-
 function detailRoute(value: string): RegExpExecArray | null {
 	const url = new URL(value);
 	if (url.origin !== 'https://atcoder.jp' || url.username || url.password) { return null; }
 	return /^\/contests\/([a-zA-Z0-9_-]+)\/submissions\/([1-9][0-9]*)\/?$/.exec(url.pathname);
-}
-
-/** Experimental current-detail snapshot. The adapter owns the fixed-route source request and DOM read. */
-export async function readAtCoderSubmission(page: IAtCoderSubmissionPage, windowId: number, expectedURL: string, timeoutMs = 10000, allowMissingSource = false): Promise<IAtCoderSubmissionSnapshot> {
-	if (page.ownerWindowId !== windowId) { throw new Error('atcoder-owner'); }
-	const route = detailRoute(expectedURL);
-	if (!route) { throw new Error('atcoder-route'); }
-	if (page.closed() || page.loading() || page.url() !== expectedURL) { throw new Error('atcoder-changed'); }
-	let changed = false;
-	const controller = new AbortController();
-	let rejectChange: (error: Error) => void = () => { };
-	const change = new Promise<never>((_, reject) => { rejectChange = reject; });
-	const listener = page.watchChange(() => { changed = true; rejectChange(new Error('atcoder-changed')); });
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	try {
-		const raw = await Promise.race([
-			page.read(detailScript, controller.signal), change,
-			new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('atcoder-timeout')), timeoutMs); })
-		]);
-		if (changed || page.closed() || page.loading() || page.url() !== expectedURL) { throw new Error('atcoder-changed'); }
-		if (!raw || typeof raw !== 'object' || new TextEncoder().encode(JSON.stringify(raw)).byteLength > 2 * 1024 * 1024) { throw new Error('atcoder-too-large'); }
-		const value = raw as Record<string, unknown>;
-		const rows = (input: unknown): input is string[][] => Array.isArray(input) && input.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'string'));
-		if (value.url !== expectedURL || value.contestId !== route[1] || value.submissionId !== route[2] ||
-			typeof value.source !== 'string' || (!allowMissingSource && !value.source.trim()) || typeof value.owner !== 'string' || !value.owner ||
-			typeof value.status !== 'string' || !value.status || (value.compileMessage !== undefined && (typeof value.compileMessage !== 'string' || value.compileMessage.length > 524288)) || typeof value.taskUrl !== 'string' ||
-			!new RegExp('^https://atcoder\\.jp/contests/' + route[1] + '/tasks/[a-zA-Z0-9_-]+$').test(value.taskUrl) || !rows(value.info) || !rows(value.tests)) {
-			throw new Error('atcoder-incomplete');
-		}
-		return {
-			version: 1, url: expectedURL, capturedAt: new Date().toISOString(), contestId: route[1], submissionId: route[2],
-			taskUrl: value.taskUrl, owner: value.owner, viewerIdentity: 'unverified', source: value.source,
-			status: value.status, ...(typeof value.compileMessage === 'string' ? { compileMessage: value.compileMessage } : {}), info: value.info, tests: value.tests, coverage: 'loaded-detail-only', sourceRepresentation: value.source.trim() ? 'same-detail-html-decoded-pre' : 'unavailable'
-		};
-	} finally {
-		controller.abort();
-		if (timer) { clearTimeout(timer); }
-		listener.dispose();
-	}
 }

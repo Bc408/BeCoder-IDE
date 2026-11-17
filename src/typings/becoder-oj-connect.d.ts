@@ -28,6 +28,7 @@ declare module 'becoder-oj-connect' {
 		readonly submittedAt?: string; readonly codeLength?: string; readonly source?: string; readonly compileSucceeded?: boolean;
 		readonly groups?: readonly { readonly name: string; readonly rows: readonly (readonly string[])[] }[];
 		readonly sourceVerification: 'matched' | 'mismatch' | 'unavailable' | 'not-checked';
+		readonly pollAfterMs?: number;
 	}
 	export interface SubmissionProgress { readonly phase: 'preparing' | 'interaction' | 'sending' | 'confirming'; readonly message: string }
 	export type SubmissionOutcome = { readonly kind: 'record'; readonly record: RecordRef }

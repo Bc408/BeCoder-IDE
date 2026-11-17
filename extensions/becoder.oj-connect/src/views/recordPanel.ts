@@ -24,8 +24,14 @@ export class RecordPanel implements vscode.Disposable {
 		const track = async () => {
 			stop(); const controller = new AbortController(); active = controller;
 			panel.update({ tracking: true, message: undefined, canRetry: false });
-			try { await new RecordController((record, signal) => adapter.readRecord(record, signal), { intervalMs: ref.problem.site === 'luogu' ? 0 : 2000 }).track(ref, snapshot => panel.update({ snapshot }), controller.signal); }
-			catch (error) { if (!controller.signal.aborted) { panel.update({ canRetry: true, message: vscode.l10n.t('Could not update this record: {0}', userError(error)) }); } }
+			try {
+				await new RecordController((record, signal) => adapter.readRecord(record, signal), { intervalMs: ref.problem.site === 'luogu' ? 0 : undefined }).track(ref, snapshot => {
+					if (active !== controller || controller.signal.aborted) { return; }
+					const stopped = ref.problem.site === 'luogu' && snapshot.phase === 'unknown';
+					panel.update({ snapshot, canRetry: stopped, message: stopped ? snapshot.rawStatus === 'N/A' ? vscode.l10n.t('This result is hidden. Continue querying to check for updates.') : vscode.l10n.t('This result has an unrecognized status. Continue querying to check for updates.') : undefined });
+				}, controller.signal);
+			}
+			catch (error) { if (active === controller && !controller.signal.aborted) { panel.update({ canRetry: true, message: vscode.l10n.t('Could not update this record: {0}', userError(error)) }); } }
 			finally { if (active === controller) { active = undefined; panel.update({ tracking: false }); } }
 		};
 		const panel = new Panel(this.context, { kind: 'record', labels: labels(), record: ref, sourceName: sourceUri ? path.basename(vscode.Uri.parse(sourceUri).fsPath) : ref.problem.nativeId }, async value => {

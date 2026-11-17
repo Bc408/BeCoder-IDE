@@ -61,7 +61,7 @@ app.whenReady().then(async () => {
 			_onDidRequireLuoguCaptcha: { fire: value => { captchaEvents.push(value); const done = captchaWaiter; captchaWaiter = undefined; done?.(value); } },
 			_onDidCancelLuoguCaptcha: { fire: value => cancellations.push(value) }
 		};
-		for (const name of ['openLuoguSession', 'luoguClient', 'readOjLogin', 'prepareLuoguTask', 'submitLuoguTask', 'cancelLuoguTask', 'getLuoguCaptcha', 'answerLuoguCaptcha']) { host[name] = BrowserViewMainService.prototype[name]; }
+		for (const name of ['ojSession', 'openLuoguSession', 'luoguClient', 'readOjLogin', 'prepareLuoguTask', 'submitLuoguTask', 'cancelLuoguTask', 'getLuoguCaptcha', 'answerLuoguCaptcha']) { host[name] = BrowserViewMainService.prototype[name]; }
 		const setUid = value => privateSession.cookies.set({ url: 'https://www.luogu.com.cn/', name: '_uid', value: String(value), path: '/' });
 		await setUid(uid);
 		const id = await host.openLuoguSession(1, 'global');

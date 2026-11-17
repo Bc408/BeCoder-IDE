@@ -8,14 +8,25 @@ import * as assert from 'node:assert/strict';
 import { ChatSession, type Generate } from '../src/session';
 import { createGenerator, listModels } from '../src/provider';
 import { normalizeBaseURL, providers, secretName, type ProviderId } from '../src/connection';
-import { normalizeMath } from '../../becoder.shared/content/math';
+import { normalizeMath as normalizeMathSource } from '../../becoder.shared/content/math';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import { visit } from 'unist-util-visit';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { readFileSync } from 'fs';
 import { createSyntaxRegistry as createRegistry, IncrementalSyntax } from '../../becoder.shared/browser/content/syntax';
 import { languages, grammars } from 'beacon-syntax-assets';
+import { toolErrorCode, toolErrorMessage } from '../src/toolFeedback';
 
 const createSyntaxRegistry = (wasm: ArrayBuffer) => createRegistry(wasm, async scope => grammars.find(grammar => grammar.scopeName === scope) ?? null);
-import { toolErrorCode, toolErrorMessage } from '../src/toolFeedback';
+const mathStructureParser = unified().use(remarkParse);
+function normalizeMath(source: string, streaming = false): string {
+	const ranges: { start: number; end: number }[] = [];
+	visit(mathStructureParser.parse(source), node => {
+		if ((node.type === 'code' || node.type === 'inlineCode') && node.position) { ranges.push({ start: node.position.start.offset!, end: node.position.end.offset! }); }
+	});
+	return normalizeMathSource(source, streaming, (start, end = start + 1) => !ranges.some(range => start < range.end && end > range.start));
+}
 
 suite('Beacon safe tool feedback', () => {
 	test('only owned error codes produce feedback; exceptions and inherited object properties are never displayed', () => {
@@ -253,6 +264,26 @@ suite('Beacon shared history', () => {
 });
 
 suite('Beacon math delimiters', () => {
+	test('Markdown code ranges protect nested containers, embedded fences and CRLF', () => {
+		for (const source of [
+			'> ```cpp\n> auto s="```";\n> auto t="\\(x\\)";\n> ```',
+			'- ```cpp\n  auto s="```";\n  auto t="\\(x\\)";\n  ```',
+			'> - ```cpp\r\n>   auto s="```";\r\n>   auto t="\\(x\\)";\r\n>   ```',
+			'> ```cpp\n> auto s="```";\n> auto t="\\(x\\)";\n',
+			'> ```cpp\n> auto s="```";\n> auto t="$pending";\n',
+			'`\\(inline\\)`\n\n    \\(indented\\)\r\n\t$pending'
+		]) {
+			assert.equal(normalizeMath(source), source);
+			assert.equal(normalizeMath(source, true), source);
+		}
+		assert.equal(normalizeMath('> ```cpp\n> \\(x\\)\n> ```\n\nText \\(y\\).'), '> ```cpp\n> \\(x\\)\n> ```\n\nText $y$.');
+	});
+	test('unfinished prose math never consumes a closing delimiter from code or appends into a fence', () => {
+		for (const code of ['```cpp\nauto end="\\)";\n```', '`\\)`', '> ```cpp\n> auto end="\\)";\n> ```']) {
+			const source = 'Text \\(unfinished\n\n' + code;
+			assert.equal(normalizeMath(source, true), source.replace('\\(unfinished', '\\\\(unfinished'));
+		}
+	});
 	test('source without math delimiters stays verbatim, including unfinished fences and CRLF', () => {
 		for (const source of ['plain [text] (text)', '```cpp\r\nconst char* path = "C:\\\\temp";\r\n', '  ~~~~cpp\n`unfinished\n', '\\) \\] \\\\ escaped', '    indented\r\n\tcode\n']) {
 			assert.equal(normalizeMath(source), source);
@@ -274,7 +305,7 @@ suite('Beacon math delimiters', () => {
 		assert.equal(normalizeMath(source), '$$\nf(x)=\\sum_{n=0}^{\\infty}x^n\n=f(0)+x+\\cdots\n$$\n\nFollowing paragraph.');
 	});
 	test('does not rewrite code fences, inline code, indented code or escaped slashes', () => {
-		const input = '```cpp\n\\(x\\)\n```\n`\\[y\\]`\n    \\(z\\)\n\\\\(literal)';
+		const input = '```cpp\n\\(x\\)\n```\n`\\[y\\]`\n\n    \\(z\\)\n\\\\(literal)';
 		assert.equal(normalizeMath(input), input);
 	});
 	test('unfinished streaming formula remains readable and becomes math when closed', () => {

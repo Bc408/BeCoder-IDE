@@ -58,11 +58,8 @@ test('AtCoder logout follows inspected official POST form and confirms fresh sig
 	finally { dom.window.close(); }
 });
 
-test('AtCoder login refresh reads the session homepage rather than stale carrier DOM', async () => {
+test('AtCoder login checks are owned by main rather than an injected page runtime', () => {
 	const dom = fixture();
-	dom.reconfigure({ url: 'https://atcoder.jp/' });
-	dom.window.document.body.innerHTML = '<script>var userScreenName = "stale-user";</script>';
-	dom.window.fetch = async (url: string) => { assert.strictEqual(url, '/'); return new Response('<script>var userScreenName = "";</script>'); };
-	try { assert.strictEqual((await dom.window.BeCoderOj.readAtCoderLogin(null, 'fresh-atcoder')).state, 'signed-out'); }
+	try { assert.strictEqual(dom.window.BeCoderOj.readAtCoderLogin, undefined); }
 	finally { dom.window.close(); }
 });

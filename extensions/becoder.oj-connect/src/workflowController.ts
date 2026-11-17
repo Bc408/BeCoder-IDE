@@ -20,18 +20,14 @@ export interface SubmissionHost {
 	runWithProgress<T>(fileName: string, operation: (progress: (value: SubmissionProgress) => void) => Promise<T>): Promise<T>;
 	openRecord(record: RecordRef, sourceUri: string): Promise<void>;
 }
-interface Request { controller: AbortController; session?: SubmissionSession; cancellation?: Promise<void> }
+interface Request { controller: AbortController; session?: SubmissionSession; cancellation?: Promise<void>; cleanup?: Promise<void> }
 
 export class SubmissionController {
 	private active: Request | undefined;
 	private disposed = false;
-	private readonly languages = new Map<string, string>();
-	constructor(private readonly host: SubmissionHost, private readonly preferences?: OjPreferences) { }
-	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined { return site === 'atcoder' && this.preferences ? this.preferences.language(family) : this.languages.get(site + ':' + family); }
-	async selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): Promise<void> {
-		if (site === 'atcoder' && this.preferences) { await this.preferences.selectLanguage(family, languageId); }
-		else { this.languages.set(site + ':' + family, languageId); }
-	}
+	constructor(private readonly host: SubmissionHost, private readonly preferences: OjPreferences) { }
+	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined { return this.preferences.language(site, family); }
+	async selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): Promise<void> { await this.preferences.selectLanguage(site, family, languageId); }
 	async submit(input: ISourceSnapshot, explicitProblem?: ProblemRef): Promise<SubmissionOutcome | undefined> {
 		if (this.disposed) { throw new OperationError('prepare', 'not-sent', 'OJ Connect is stopped.'); }
 		if (this.active) { throw new OperationError('prepare', 'not-sent', 'A submission is already in progress.'); }
@@ -78,6 +74,10 @@ export class SubmissionController {
 				if (outcome.kind === 'record') {
 					const record = validateRecordRef(outcome.record);
 					if (record.problem.url !== problem.url || record.problem.nativeId !== problem.nativeId) { throw new OperationError('confirm', 'unconfirmed', 'The returned record belongs to a different problem.'); }
+					// A confirmed receipt no longer needs the sending page or submission lock.
+					await this.releaseSession(request);
+					if (this.active === request) { this.active = undefined; }
+					if (this.disposed) { return outcome; }
 					try { await this.host.openRecord(record, snapshot.uri); }
 					catch (error) { throw new OperationError('track', 'record', error instanceof Error ? error.message : String(error), record); }
 				} else if (outcome.kind === 'unconfirmed') {
@@ -93,9 +93,9 @@ export class SubmissionController {
 			try {
 				if (request.session) {
 					if (signal.aborted) { await this.cancelSession(request).catch(() => undefined); }
-					await request.session.dispose().catch(() => undefined);
+					await this.releaseSession(request);
 				}
-			} finally { this.active = undefined; }
+			} finally { if (this.active === request) { this.active = undefined; } }
 		}
 	}
 	async cancel(): Promise<void> {
@@ -105,5 +105,6 @@ export class SubmissionController {
 		if (request.session) { await this.cancelSession(request); }
 	}
 	private cancelSession(request: Request): Promise<void> { return request.cancellation ??= request.session!.cancel(); }
+	private releaseSession(request: Request): Promise<void> { return request.cleanup ??= request.session!.dispose().catch(() => undefined); }
 	async dispose(): Promise<void> { this.disposed = true; await this.cancel(); }
 }

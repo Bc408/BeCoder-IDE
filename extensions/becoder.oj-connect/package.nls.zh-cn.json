@@ -14,5 +14,19 @@
 	"refreshAccounts": "刷新登录状态",
 	"accounts": "登录状态",
 	"login": "登录",
-	"logout": "退出登录"
+	"logout": "退出登录",
+	"luogu.cCompiler": "洛谷 的 C 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。O2 版本以 :o2 结尾。",
+	"luogu.cppCompiler": "洛谷 的 C++ 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。O2 版本以 :o2 结尾。",
+	"atcoder.cCompiler": "AtCoder 的 C 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。",
+	"atcoder.cppCompiler": "AtCoder 的 C++ 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。",
+	"statementEnglish": "英文",
+	"statementJapanese": "日文",
+	"statementLanguage": "AtCoder 默认题面语言。页面切换会更新此个人设置；没有对应语言时显示题目实际提供的内容。",
+	"panelLocation": "新题面与评测页的打开位置；修改不会移动已打开页面。",
+	"panelAuto": "自动：复用源码右侧最近的编辑组，没有则在右侧打开。",
+	"panelActive": "当前编辑组",
+	"panelBeside": "右侧编辑组",
+	"panelOne": "第一个编辑组",
+	"panelTwo": "第二个编辑组",
+	"panelThree": "第三个编辑组"
 }

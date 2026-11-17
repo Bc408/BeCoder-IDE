@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { atCoderTask, atCoderSubmitURL } from './atcoderWorkflow.js';
+
 export interface IAtCoderRecordLink { id: string; taskId: string; owner: string; languageId: string }
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTO shared with the bundled extension.
 export type { IAtCoderShortcutResult } from 'becoder-oj-connect';
@@ -35,52 +37,69 @@ export function newAtCoderCandidates(rows: IAtCoderRecordLink[], baseline: strin
 	return rows.filter(row => BigInt(row.id) > BigInt(baseline) && row.taskId === task && row.languageId === language && (!owner || row.owner === owner));
 }
 
-/** Private isolated-world signal retained by the host across native form navigation. */
-export function atCoderSubmitMarker(requestId: string): string {
-	return 'becoder-atcoder-submit:' + requestId;
+/** The normal own-list template supplies identity even before the account's first submission. */
+export function atCoderHistoryOwner(html: string, rows: IAtCoderRecordLink[]): string {
+	const owners = new Set(rows.map(row => row.owner));
+	for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
+		const match = /\buserScreenName\s*=\s*(["'])([a-zA-Z0-9_]*)\1/.exec(script[1]);
+		if (match) { owners.add(match[2]); }
+	}
+	if (owners.size !== 1 || owners.has('')) { throw new Error('atcoder-account-ambiguous'); }
+	return owners.values().next().value!;
 }
 
-/** Native requestSubmit respects HTML validation and website handlers; no token is returned to the caller. */
-export function atCoderSendScript(url: string, source: string, languageId: string, requestId: string): string {
-	return `(() => {
-		if (location.href !== ${JSON.stringify(url)}) { return 'atcoder-page-changed'; }
-		const requestId = ${JSON.stringify(requestId)};
-		let state = globalThis.__becoderAtCoderSubmission;
-		if (state?.requestId === requestId && state.sent) { return true; }
-		const area = document.querySelector('#plain-textarea');
-		const language = document.querySelector('#select-lang select.current');
-		const button = document.querySelector('#submit');
-		if (!area?.form || area.value !== ${JSON.stringify(source)} || language?.value !== ${JSON.stringify(languageId)} || button?.form !== area.form) { return 'atcoder-submission-changed'; }
-		const form = area.form;
-		const expected = new URL(${JSON.stringify(url)});
-		if (form.method.toLowerCase() !== 'post' || new URL(form.action).origin !== expected.origin || new URL(form.action).pathname !== expected.pathname.replace(/\\/tasks\\/[^/]+$/, '/submit')) { return 'atcoder-form-mismatch'; }
-		if (state?.requestId !== requestId) {
-			state?.dispose();
-			state = { requestId, form, sent: false, prompted: false, dispose: () => document.removeEventListener('submit', onSubmit, true) };
-			const onSubmit = event => { if (event.target === form && !state.sent) { state.sent = true; console.info(${JSON.stringify(atCoderSubmitMarker(requestId))}); } };
-			document.addEventListener('submit', onSubmit, true);
-			globalThis.__becoderAtCoderSubmission = state;
-		}
-		if (state.form !== form) { return 'atcoder-form-changed'; }
+export type AtCoderSendResult = { kind: 'pending' } | { kind: 'not-sent'; status: string } | { kind: 'unknown' } | { kind: 'response'; url: string; html: string };
+
+/** Both probes and the send recheck the same initialized official form. */
+function formGuard(taskURL: string, languageId: string): string {
+	const task = atCoderTask(taskURL);
+	if (!task || !/^\d+$/.test(languageId)) { throw new Error('atcoder-task-route'); }
+	return `
+		if (location.href !== ${JSON.stringify(atCoderSubmitURL(taskURL))}) { return 'atcoder-page-changed'; }
+		const button = document.querySelector('#submit'), form = button?.form;
+		if (!form || document.readyState === 'loading') { return 'atcoder-form-missing'; }
+		const action = new URL(form.action);
+		if (form.method.toLowerCase() !== 'post' || action.origin !== 'https://atcoder.jp' || action.pathname !== '/contests/' + ${JSON.stringify(task.contestId)} + '/submit' || form.enctype !== 'application/x-www-form-urlencoded') { return 'atcoder-form-mismatch'; }
+		if (form.elements.namedItem('data.TaskScreenName')?.value !== ${JSON.stringify(task.taskId)}) { return 'atcoder-task-mismatch'; }
+		const language = form.querySelectorAll('#select-lang select.current');
+		if (language.length !== 1 || !Array.from(language[0].options).some(option => option.value === ${JSON.stringify(languageId)} && !option.disabled)) { return 'atcoder-language-changed'; }
+		if (!form.elements.namedItem('csrf_token')?.value) { return 'atcoder-form-missing'; }
 		const captcha = form.elements.namedItem('cf-turnstile-response');
-		if (button.disabled || (captcha && !captcha.value) || !form.checkValidity()) {
-			if (!state.prompted) { button.scrollIntoView({ block: 'center' }); state.prompted = true; }
-			return false;
-		}
-		state.sent = true;
-		console.info(${JSON.stringify(atCoderSubmitMarker(requestId))});
-		form.requestSubmit(button);
+		const verification = captcha || document.querySelector('.cf-turnstile') || Array.from(document.scripts).some(script => { try { return new URL(script.src).hostname === 'challenges.cloudflare.com'; } catch { return false; } });
+		if (button.disabled || verification && !captcha?.value) { return false; }
 		return true;
-	})()`;
+	`;
 }
 
-/** Removes only this shortcut's passive native-submit observer; never submits. */
-export function atCoderSendCleanupScript(requestId: string): string {
-	return `(() => {
-		const state = globalThis.__becoderAtCoderSubmission;
-		if (state?.requestId === ${JSON.stringify(requestId)}) {
-			state.dispose();
-			delete globalThis.__becoderAtCoderSubmission;
-		}
+/** Does not return credentials, mutate the form, or send. */
+export function atCoderReadinessScript(taskURL: string, languageId: string): string {
+	return '(() => {' + formGuard(taskURL, languageId) + '})()';
+}
+
+/** One in-page request; source is serialized directly, independent of the website editor. */
+export function atCoderSendScript(taskURL: string, source: string, languageId: string, requestId: string, expiresAt: number): string {
+	const task = atCoderTask(taskURL);
+	if (!task || !source.trim() || new TextEncoder().encode(source).byteLength > 1024 * 1024) { throw new Error('atcoder-source-invalid'); }
+	return `(async () => {
+		if (Date.now() >= ${expiresAt}) { return { kind: 'not-sent', status: 'atcoder-send-expired' }; }
+		const ready = (() => { ${formGuard(taskURL, languageId)} })();
+		if (ready === false) { return { kind: 'pending' }; }
+		if (ready !== true) { return { kind: 'not-sent', status: ready }; }
+		if (globalThis.__becoderAtCoderSent === ${JSON.stringify(requestId)}) { return { kind: 'unknown' }; }
+		const button = document.querySelector('#submit'), form = button.form;
+		const body = new FormData(form, button);
+		body.set('data.TaskScreenName', ${JSON.stringify(task.taskId)});
+		body.set('data.LanguageId', ${JSON.stringify(languageId)});
+		body.set('sourceCode', ${JSON.stringify(source)});
+		if (Array.from(body.values()).some(value => typeof value !== 'string')) { return { kind: 'not-sent', status: 'atcoder-form-encoding' }; }
+		if (Date.now() >= ${expiresAt}) { return { kind: 'not-sent', status: 'atcoder-send-expired' }; }
+		globalThis.__becoderAtCoderSent = ${JSON.stringify(requestId)};
+		try {
+			const response = await fetch(${JSON.stringify('https://atcoder.jp/contests/' + task.contestId + '/submit')}, { method: 'POST', body: new URLSearchParams(Array.from(body.entries())), credentials: 'same-origin', redirect: 'follow' });
+			if (response.status !== 200 || response.url !== ${JSON.stringify('https://atcoder.jp/contests/' + task.contestId + '/submissions/me')} || response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'text/html') { return { kind: 'unknown' }; }
+			const html = await response.text();
+			if (new TextEncoder().encode(html).byteLength > 4 * 1024 * 1024) { return { kind: 'unknown' }; }
+			return { kind: 'response', url: response.url, html };
+		} catch { return { kind: 'unknown' }; }
 	})()`;
 }

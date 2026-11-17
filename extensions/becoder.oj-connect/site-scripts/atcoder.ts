@@ -78,11 +78,6 @@ async function accountPage(signal: AbortSignal): Promise<Document> {
 	return new DOMParser().parseFromString(html, 'text/html');
 }
 
-export async function readAtCoderLogin(_input: unknown, requestId: string): Promise<LoginSummary> {
-	if (location.origin !== 'https://atcoder.jp') { throw new Error('AtCoder page changed.'); }
-	return withOjRead(requestId, async signal => loginSummary(await accountPage(signal)));
-}
-
 export async function logoutAtCoder(_input: unknown, requestId: string): Promise<boolean> {
 	if (location.origin !== 'https://atcoder.jp') { throw new Error('AtCoder page changed.'); }
 	return withOjRead(requestId, async signal => {

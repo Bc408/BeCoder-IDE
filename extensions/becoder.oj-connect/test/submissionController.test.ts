@@ -8,6 +8,7 @@ import type { IAtCoderSourcePayload } from 'becoder-oj-connect';
 import { SubmissionController, type SubmissionHost } from '../src/workflowController';
 import { AtCoderAdapter, type AtCoderHost } from '../src/adapters/atcoder/adapter';
 import { defaultDirectories } from '../src/settings';
+import { OjPreferences } from '../src/preferences';
 
 const snapshot = { uri: 'file:///C:/c++/atcoder/abc086_a.cpp', fileName: 'abc086_a.cpp', version: 7, family: 'cpp' as const, source: 'first\r\n稿\r\n' };
 function fixture() {
@@ -26,7 +27,9 @@ function fixture() {
 		chooseLanguage: async () => '6017', confirmDraft: async () => true,
 		openRecord: async () => { reveals++; }, runWithProgress: async (_name, operation) => operation(() => undefined)
 	};
-	return { controller: new SubmissionController(host), bridge, host, sent, releases: () => releases, reveals: () => reveals, cancels: () => cancels };
+	const values = new Map<string, unknown>();
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
+	return { controller: new SubmissionController(host, preferences), bridge, host, sent, releases: () => releases, reveals: () => reveals, cancels: () => cancels };
 }
 test('snapshot is fixed before asynchronous language choice and normalized without saving', async () => {
 	const f = fixture(), draft = { ...snapshot };
@@ -63,4 +66,25 @@ test('other site directory never falls back to AtCoder', async () => {
 	const f = fixture();
 	await assert.rejects(f.controller.submit({ ...snapshot, uri: 'file:///C:/c++/luogu/abc086_a.cpp' }), /available.*luogu/);
 	assert.strictEqual(f.sent.length, 0);
+});
+
+test('confirmed submission releases its page and busy state before the result panel finishes', async () => {
+	const f = fixture();
+	let open!: () => void, opened!: () => void;
+	const ready = new Promise<void>(resolve => { opened = resolve; });
+	f.host.openRecord = () => { opened(); return new Promise(resolve => { open = resolve; }); };
+	const first = f.controller.submit(snapshot);
+	await ready;
+	assert.strictEqual(f.releases(), 1, 'a slow result panel must not retain the task page');
+	let choose!: (value: string) => void;
+	f.host.chooseLanguage = () => new Promise(resolve => { choose = resolve; });
+	// A different source family forces a fresh language choice to hold the next task.
+	f.bridge.inspectTask = async () => ({ languages: [{ id: '5001', label: 'C17' }], hasDraft: false });
+	const second = f.controller.submit({ ...snapshot, family: 'c', fileName: 'abc086_a.c' });
+	await new Promise(resolve => setImmediate(resolve));
+	open(); await first;
+	await assert.rejects(f.controller.submit(snapshot), /progress/, 'old completion must not clear the new task');
+	f.host.openRecord = async () => undefined;
+	choose('5001'); await second;
+	assert.strictEqual(f.releases(), 2);
 });

@@ -11,6 +11,78 @@ import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { safeState, panelMessage, type PanelState, type PanelAction } from '../src/views/model';
 import { OjPreferences } from '../src/preferences';
+import type { RecordRef, RecordSnapshot } from '../src/domain';
+import { RecordController } from '../src/recordController';
+
+test('the AtCoder record panel respects the official polling interval', async () => {
+	const Module = require('module'), original = Module._load;
+	const modulePath = require.resolve('../src/views/recordPanel'); delete require.cache[modulePath];
+	const delays: number[] = [];
+	let done!: () => void;
+	const finished = new Promise<void>(resolve => { done = resolve; });
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { l10n: { t: (value: string) => value } }; }
+		if (id === '../recordController') {
+			return { RecordController: class extends RecordController {
+				constructor(read: ConstructorParameters<typeof RecordController>[0], options: ConstructorParameters<typeof RecordController>[1]) { super(read, { ...options, sleep: async ms => { delays.push(ms); } }); }
+			} };
+		}
+		if (id === './webview') { return { labels: () => ({}), Panel: class { update(state: Partial<PanelState>) { if (state.tracking === false) { done(); } } dispose() { } } }; }
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { RecordPanel } = require('../src/views/recordPanel');
+		const ref: RecordRef = { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
+		let reads = 0;
+		const panels = new RecordPanel({}, [{ site: 'atcoder', readRecord: async () => ({ ref, phase: ++reads === 1 ? 'judging' : 'finished', rawStatus: reads === 1 ? 'Judging' : 'AC', pollAfterMs: 750, sourceVerification: 'not-checked' }) }], async () => undefined, async () => undefined);
+		await panels.open(ref); await finished;
+		assert.deepStrictEqual(delays, [750]);
+		assert.strictEqual(reads, 2); panels.dispose();
+	} finally { Module._load = original; delete require.cache[modulePath]; }
+});
+
+test('Luogu stopped results retain their snapshot, offer a manual query, and ignore late closed reads', async () => {
+	const Module = require('module'), original = Module._load;
+	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void>; close: () => void }[] = [];
+	const modulePath = require.resolve('../src/views/recordPanel'); delete require.cache[modulePath];
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { l10n: { t: (value: string) => value } }; }
+		if (id === './webview') {
+			return { labels: () => ({}), Panel: class {
+				constructor(readonly _context: unknown, readonly state: PanelState, action: (value: PanelAction) => Promise<void>, private close: () => void) { captures.push({ state, action, close }); }
+				update(value: Partial<PanelState>) { Object.assign(this.state, value); } reveal() { } dispose() { this.close(); }
+			} };
+		}
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { RecordPanel } = require('../src/views/recordPanel');
+		const ref: RecordRef = { problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, id: '11', url: 'https://www.luogu.com.cn/record/11' };
+		for (const rawStatus of ['N/A', 'NEW']) {
+			let reads = 0, resolve!: (snapshot: RecordSnapshot) => void;
+			const snapshot: RecordSnapshot = { ref, phase: 'unknown', rawStatus, sourceVerification: 'unavailable' };
+			const panels = new RecordPanel({}, [{ site: 'luogu', readRecord: async () => ++reads === 1 ? snapshot : new Promise<RecordSnapshot>(done => { resolve = done; }) }], async () => undefined, async () => undefined);
+			await panels.open(ref);
+			await new Promise(done => setImmediate(done));
+			const capture = captures.at(-1)!;
+			assert.strictEqual(reads, 1);
+			assert.deepStrictEqual(capture.state.snapshot, snapshot);
+			assert.strictEqual(capture.state.tracking, false);
+			assert.strictEqual(capture.state.canRetry, true);
+			assert.match(capture.state.message!, rawStatus === 'N/A' ? /hidden/ : /unrecognized/);
+			const continuing = capture.action({ action: 'continueQuery' });
+			assert.strictEqual(capture.state.tracking, true);
+			assert.strictEqual(capture.state.canRetry, false);
+			resolve({ ...snapshot, phase: 'finished', rawStatus: 'AC' }); await continuing;
+			assert.strictEqual(capture.state.snapshot!.rawStatus, 'AC');
+			assert.strictEqual(reads, 2);
+			const closing = capture.action({ action: 'continueQuery' }); capture.close(); await closing;
+			resolve({ ...snapshot, phase: 'finished', rawStatus: 'WA' }); await Promise.resolve();
+			assert.strictEqual(capture.state.snapshot!.rawStatus, 'AC');
+			panels.dispose();
+		}
+	} finally { Module._load = original; delete require.cache[modulePath]; }
+});
 
 test('webview state cannot terminate its script and actions cannot inject a source or command', () => {
 	assert.ok(!safeState({ text: '</script><script>alert(1)</script>\u2028' }).includes('<'));
@@ -44,7 +116,7 @@ test('AtCoder statement defaults to English without silently choosing a compiler
 	const event = () => ({ dispose() { } });
 	const modulePath = require.resolve('../src/views/problemPanel'); delete require.cache[modulePath];
 	Module._load = function (id: string, ...args: unknown[]) {
-		if (id === 'vscode') { return { Uri: { parse: () => ({ fsPath: file }) }, workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event } }; }
+		if (id === 'vscode') { return { env: { language: 'zh-cn' }, Uri: { parse: () => ({ fsPath: file }) }, workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event } }; }
 		if (id === './webview') {
 			return {
 				labels: () => ({}), Panel: class {
@@ -71,6 +143,15 @@ test('AtCoder statement defaults to English without silently choosing a compiler
 		panels = new ProblemPanel({}, actions, preferences);
 		await panels.open(document, uri, source);
 		assert.strictEqual(captures[2].state.locale, 'ja'); assert.strictEqual(selected, 0); panels.dispose();
+		panels = new ProblemPanel({}, { ...actions, preferredLanguage: () => '999' }, preferences);
+		await panels.open({ ...document, ref: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } }, uri, source);
+		assert.strictEqual(captures[3].state.languageId, undefined, 'an expired preference must remain unselected');
+		assert.strictEqual(selected, 0, 'opening a statement cannot overwrite an expired preference'); panels.dispose();
+		values.set('luogu.cppCompiler', 'oops');
+		panels = new ProblemPanel({}, { ...actions, preferredLanguage: () => preferences.language('luogu', 'cpp') }, preferences);
+		await panels.open({ ...document, ref: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } }, uri, source);
+		assert.strictEqual(captures[4].state.languageId, undefined, 'a malformed explicit preference must remain unselected');
+		assert.strictEqual(selected, 0, 'opening a statement cannot overwrite a malformed explicit preference'); panels.dispose();
 	} finally { Module._load = original; delete require.cache[modulePath]; }
 });
 
@@ -78,11 +159,15 @@ test('a reconstructed webview receives the latest host state after ready', async
 	const Module = require('module'), original = Module._load;
 	let receive!: (value: unknown) => void;
 	const posted: unknown[] = []; let calls = 0;
+	let location = 'auto';
+	const columns: number[] = [];
 	const mock = {
-		l10n: { t: (value: string) => value }, ViewColumn: { Beside: 2 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') }, window: {
-			createWebviewPanel: () => ({
+		l10n: { t: (value: string) => value }, ViewColumn: { Beside: -2, Active: -1, One: 1, Two: 2, Three: 3 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') },
+		workspace: { getConfiguration: () => ({ get: () => location }) }, window: {
+			activeTextEditor: { viewColumn: 1 }, tabGroups: { all: [{ viewColumn: 1 }, { viewColumn: 3 }] },
+			createWebviewPanel: (_type: string, _title: string, options: { viewColumn: number }) => { columns.push(options.viewColumn); return {
 				webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: unknown) => { posted.push(structuredClone(value)); }, onDidReceiveMessage: (listener: typeof receive) => { receive = listener; return { dispose() { } }; } }, onDidDispose: () => ({ dispose() { } }), dispose() { }
-			})
+			}; }
 		}
 	};
 	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
@@ -99,6 +184,10 @@ test('a reconstructed webview receives the latest host state after ready', async
 		await Promise.resolve();
 		assert.strictEqual(calls, 1); assert.deepStrictEqual(posted.at(-1), { uuid, data: undefined, error: undefined });
 		panel.dispose();
+		for (location of ['active', 'beside', 'one', 'two', 'three', 'invalid']) {
+			new Panel({ extensionUri: 'extension' }, { kind: 'record', labels: {}, record: { id: '22' } }, async () => undefined, () => undefined).dispose();
+		}
+		assert.deepStrictEqual(columns, [3, -1, -2, 1, 2, 3, 3], 'only new panels follow the configured location; auto reuses the nearest right group');
 	} finally { Module._load = original; }
 });
 
@@ -113,7 +202,7 @@ test('open statement panels and the first submission picker keep the language di
 	const mock = {
 		l10n: { t: (value: string) => value }, env: { language: 'zh-cn' }, ViewColumn: { Beside: 2 },
 		Uri: { parse: (value: string) => ({ fsPath: fileURLToPath(value) }), joinPath: (...parts: unknown[]) => parts.join('/') },
-		workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event },
+		workspace: { getConfiguration: () => ({ get: () => undefined }), onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event },
 		window: {
 			createWebviewPanel: () => {
 				const messages: typeof posted[number] = []; posted.push(messages);

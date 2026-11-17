@@ -20,9 +20,9 @@ const serviceProbe = path.join(output, 'markdown-service.cjs');
 await build({ entryPoints: ['src/markdownService.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', external: ['./markdown'], outfile: serviceProbe });
 await cp('out/markdown.js', path.join(output, 'markdown.js'));
 assert.ok(JSON.stringify(await require(serviceProbe).default.renderTree('$a+b$')).includes('katex'));
-const labels = { testCases: '测试点信息', submittedAt: '提交时间', codeLength: '代码长度', source: '源码', viewSource: '在 BeCoder 中查看', compileSucceeded: '编译成功', compileFailed: '编译失败', submit: '提交', importCph: '导入 CPH', viewRecord: '查看结果', openOriginal: '打开原题', samples: '样例', sample: '样例', input: '输入', output: '输出', copy: '复制', copied: '已复制', language: '语言', continueQuery: '继续查询', stopTracking: '停止跟踪', record: '提交记录', score: '得分', time: '用时', owner: '用户', memory: '内存', compiler: '编译器输出', problem: '所属题目', verdict: '评测状态', resources: '用时/内存', statementLanguage: '题面语言', chooseLanguage: '提交时选择语言', verification_unavailable: '无法读取提交源码', tracking: '正在读取本次评测结果' };
+const labels = { testCases: '测试点信息', submittedAt: '提交时间', codeLength: '代码长度', source: '源码', viewSource: '在 BeCoder 中查看', compileSucceeded: '编译成功', compileFailed: '编译失败', submit: '提交', importCph: '导入 CPH', samples: '样例', input: '输入', output: '输出', copy: '复制', copied: '已复制', language: '语言', continueQuery: '继续查询', record: '提交记录', score: '得分', owner: '用户', compiler: '编译器输出', problem: '所属题目', verdict: '评测状态', resources: '用时/内存', statementLanguage: '题面语言', chooseLanguage: '提交时选择语言', tracking: '正在读取本次评测结果' };
 let state;
-Object.assign(labels, { importCph: '传送至 CPH', difficulty: '题目难度', tags: '题目标签', 'Time Limit': '时间限制', 'Memory Limit': '内存限制', samples: '输入输出样例', judging: 'Judging', copyFailed: '请选择并复制内容' });
+Object.assign(labels, { importCph: '传送至 CPH', difficulty: '题目难度', tags: '题目标签', 'Time Limit': '时间限制', 'Memory Limit': '内存限制', samples: '输入输出样例', copyFailed: '请选择并复制内容' });
 Object.assign(labels, { status_AC: '答案正确', status_WA: '答案错误', status_CE: '编译错误', status_WJ: '等待评测', status_WR: '等待重新评测' });
 labels.status_QLE = '超过询问次数限制';
 labels.compileUnavailable = '无法读取该记录的编译输出。';
@@ -71,7 +71,16 @@ try {
 		if (site === 'luogu') { section.content += '\r\n\r\n<span class="hostile-duplicate" style="color:red" STYLE="position:fixed;inset:0">duplicate styles</span>'; }
 		if (site === 'luogu') { section.content += '\n\nLiteral dollar: \\$5. Math: $a+b$\n\n$$\n\\begin{aligned}\na &= b\\\\\n\nc &= d\n\\end{aligned}\n$$\n\n| Group | Value |\n| --- | --- |\n| n | 100 |\n| ^ | 200 |\n| n,m | < |\n\n:::warning[Important]{open}\nRequired warning\n:::\n\n::anti-ai[]'; }
 		section.content += snippets.map(({ language, code }) => site === 'luogu' ? '\n\n```' + language + '\n' + code + '```\n' : language ? '<pre><code class="language-' + language + '">' + escape(code) + '</code></pre>' : '<pre>' + escape(code) + '</pre>').join('');
-		await page.goto(url); await page.locator('article').waitFor(); await page.locator('article pre').first().waitFor();
+		if (site === 'atcoder') {
+			section.content += '<p><a href="#a%2520b">Cross-section notes</a></p>';
+			state.problem.bodies[0].sections.push({ kind: 'notes', format: 'html', content: '<h3 id="a%20b" class="section-target">Cross-section target</h3>' });
+		}
+		await page.goto(url); await page.locator('article').first().waitFor(); await page.locator('article pre').first().waitFor();
+		if (site === 'atcoder') {
+			await page.locator('.section-target').waitFor();
+			await page.getByRole('link', { name: 'Cross-section notes', exact: true }).click();
+			assert.equal(await page.evaluate(() => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.className), 'section-target', 'real page hashes find targets across HTML sections');
+		}
 		if (site === 'luogu') {
 			assert.equal(await page.locator('.hostile-overlay').evaluate(element => getComputedStyle(element).position), 'static', 'author styles cannot cover application controls');
 			assert.equal(await page.locator('.hostile-duplicate').evaluate(element => getComputedStyle(element).position), 'static', 'duplicate raw attributes remain inert');
@@ -86,7 +95,21 @@ try {
 			const block = page.locator('article pre > code').nth(snippets.findIndex(value => value.language === language));
 			await block.waitFor({ timeout: 3000 }); const copiedCode = code; assert.equal(await block.textContent(), copiedCode);
 			if (language && language !== 'unknown-language') { await block.locator('.code-line > span[style]').first().waitFor({ timeout: 10000 }); }
-			const pre = block.locator('..'); await pre.hover();
+			const pre = block.locator('..');
+			if (language === 'php') {
+				await pre.evaluate(element => {
+					const before = document.createElement('button'); before.id = 'before-copy'; before.textContent = 'Before';
+					const after = document.createElement('button'); after.id = 'after-copy'; after.textContent = 'After';
+					element.before(before); element.after(after);
+				});
+				await page.mouse.move(0, 0); await page.locator('#before-copy').focus(); await page.keyboard.press('Tab');
+				assert.equal(await pre.locator('button').evaluate(button => document.activeElement === button), true, 'keyboard users can reach copy without a prior mouse hover');
+				assert.equal(await pre.locator('.copyButton').evaluate(element => getComputedStyle(element).opacity), '1');
+				await page.keyboard.press('Enter'); assert.equal(await page.evaluate(() => window.__copied), code);
+				await page.locator('#after-copy').focus();
+				await page.locator('#before-copy, #after-copy').evaluateAll(elements => elements.forEach(element => element.remove()));
+			}
+			await pre.hover();
 			assert.equal(await pre.locator('.copyButton').evaluate(element => getComputedStyle(element).position), 'absolute', 'copy control belongs at the code block corner');
 			const copy = pre.getByRole('button', { name: '复制', exact: true });
 			assert.equal(await copy.textContent(), '', 'copy controls show the icon without a text label');
@@ -189,7 +212,7 @@ try {
 				}
 			}
 		}
-		assert.equal(themeColors[0], themeColors[1], 'syntax colors follow live theme changes');
+		assert.equal(themeColors[0], themeColors[1], 'syntax colors stay fixed when the editor theme changes');
 		await page.getByRole('combobox', { name: '题面语言', exact: true }).selectOption('ja'); assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLocale', locale: 'ja' });
 		if (site === 'atcoder') {
 			// ABC467 E uses mathematical var nodes inside its input-format pre, not source code.
@@ -214,6 +237,20 @@ try {
 		}
 		const record = { problem: ref, id: '22', url: site === 'luogu' ? 'https://www.luogu.com.cn/record/22' : 'https://atcoder.jp/contests/abc086/submissions/22' };
 		if (site === 'atcoder') {
+			for (const phase of ['queued', 'judging', 'unknown']) {
+				state = { kind: 'record', labels, sourceName: 'solution.cpp', record, tracking: true, snapshot: { ref: record, phase, rawStatus: phase === 'queued' ? 'WJ' : phase === 'judging' ? '1/21' : 'unknown', score: '0', sourceVerification: 'not-checked', groups: [] } };
+				await page.goto(url); await page.locator('.record-verdict').waitFor();
+				assert.equal(await page.getByText(labels.score, { exact: true }).count(), 0, 'a placeholder score must stay hidden before a final verdict');
+				if (phase !== 'unknown') { await page.screenshot({ path: path.join(output, `atcoder-${phase}-score-hidden.png`), fullPage: true }); }
+				await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.tracking = false; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+				assert.equal(await page.getByText(labels.score, { exact: true }).count(), 0, 'stopping local tracking must not turn a placeholder into a final score');
+			}
+			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.snapshot.phase = 'finished'; next.snapshot.rawStatus = 'WA'; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+			await page.getByText(labels.score, { exact: true }).waitFor();
+			assert.equal(await page.locator('.record-info > div').filter({ has: page.getByText(labels.score, { exact: true }) }).locator('span').last().textContent(), '0', 'a genuine final zero score remains visible');
+			await page.screenshot({ path: path.join(output, 'atcoder-final-zero-score.png'), fullPage: true });
+			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); delete next.snapshot.score; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+			await page.getByText(labels.score, { exact: true }).waitFor({ state: 'detached' });
 			state = { kind: 'record', labels, sourceName: 'solution.cpp', record, tracking: true, snapshot: { ref: record, phase: 'judging', rawStatus: '1/21', sourceVerification: 'not-checked', groups: [] } };
 			await page.goto(url); await page.locator('.record-verdict').waitFor();
 			assert.equal(await page.locator('.testcase .spinner').count(), 21, 'real reported total drives the pending testcase grid');
@@ -275,6 +312,17 @@ try {
 		await page.screenshot({ path: path.join(output, `${site}-record.png`), fullPage: true });
 		state = { ...state, message: 'Connection stopped', canRetry: true };
 		await page.goto(url); await page.getByRole('button', { name: '继续查询', exact: true }).waitFor();
+		if (site === 'luogu') {
+			for (const [rawStatus, message] of [['N/A', '该评测结果已隐藏。可点击继续查询检查更新。'], ['NEW-STATUS', '暂不识别该评测状态。可点击继续查询检查更新。']]) {
+				state = { ...state, tracking: false, message, snapshot: { ref: record, phase: 'unknown', rawStatus, sourceVerification: 'unavailable', groups: [] } };
+				await page.goto(url); await page.getByRole('button', { name: '继续查询', exact: true }).waitFor();
+				assert.equal(await page.locator('.spinner').count(), 0);
+				assert.ok((await page.locator('[role="status"]').textContent()).includes(message));
+				await page.getByRole('button', { name: '继续查询', exact: true }).click();
+				assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'continueQuery' });
+				await page.screenshot({ path: path.join(output, `luogu-stopped-${rawStatus === 'N/A' ? 'hidden' : 'unknown'}.png`), fullPage: true });
+			}
+		}
 		if (site === 'atcoder') {
 			state = { ...state, message: undefined, canRetry: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', compileSucceeded: false, compileMessage: './Main.cpp:4: error: cin was not declared\n  ^~~\n', sourceVerification: 'unavailable' } };
 			await page.goto(url); await page.locator('pre').waitFor();
@@ -297,5 +345,5 @@ try {
 		}
 	}
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ passed: true, sites: 2, screenshots: 39, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
+	console.log(JSON.stringify({ passed: true, sites: 2, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

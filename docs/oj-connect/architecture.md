@@ -2,26 +2,32 @@
 
 [产品与开发入口](README.md) · [开发指南](../development.md)
 
-更新日期：2026-11-16。负责人已确认“统一内置扩展负责刷题业务，浏览器宿主保留真实会话，CPH 负责本地测试”。AtCoder 第一阶段快捷键闭环已获负责人确认；当前源码另已实现洛谷／AtCoder 的共同导入、题面与评测页，并按最新要求直接裁剪复用 vscode-luogu4.20.0 的保留前端，并使用现有共享内容渲染能力。共同流程设计和实施计划均已批准。洛谷闭环与使用体验已获认可；AtCoder 旧闭环及本轮基本闭环已获确认，最新体验收敛 stage 尚未验收。具体证据与限制见[当前状态](README.md#当前实现状态)，不能用旧 MVP、协议窗口或已认可的前版验证后续改动。
+更新日期：2026-11-17。负责人已确认“统一内置扩展负责刷题业务，浏览器宿主保留真实会话，CPH 负责本地测试”。AtCoder 第一阶段快捷键闭环已获负责人确认；当前源码另已实现洛谷／AtCoder 的共同导入、题面与评测页，并按最新要求直接裁剪复用 vscode-luogu4.20.0 的保留前端，并使用现有共享内容渲染能力。共同流程设计和实施计划均已批准。洛谷闭环与使用体验已获认可；2026-11-17 负责人已确认 AtCoder 代码提交能力闭环且达标，各轮其他界面与候选改动仍按各自记录验收。具体证据与限制见[当前状态](README.md#当前实现状态)，不能用旧 MVP、协议窗口或已认可的前版验证后续改动。
 
 ## 当前双站如何组织
+
+2026-11-17 去冗余审查已移除无生产入口的旧详情 JSON 实验链路，保留当前提交／评测使用的 HTML 与源码解析工具；该轮发现见[审查报告](review-2026-11-17-cleanup-settings.md)，后续修复及设置实施见[维护记录](maintenance-settings-2026-11-17.md)。
+
+2026-11-17 当前候选已按批准的[AtCoder 提交耗时优化设计](../superpowers/specs/2026-11-17-atcoder-submission-latency-design.md)收敛为按需建立本次官方提交页、正常验证、单次页面内请求和独立会话记录读取。干净 stage 构建与负责人验收单列，不把有限真实采证写成长时可靠率或固定时延承诺。
 
 源码当前由 `extensions/becoder.oj-connect/src/extension.ts` 装配两个适配器和同一个 `workflowController.ts`；未使用的适配器注册表和控制器重导出已移除。`domain.ts` 统一题目、语言、正式记录、结果及发送状态；`problemResolver.ts` 按直接父目录优先和文件名解析。
 
 | 所有者 | 当前职责与入口 |
 | --- | --- |
-| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；`recordController.ts` 读取明确 ID，AtCoder 每次读取后间隔2秒，正常跟踪无整轮截止；洛谷适配器等待推送并保留既有期限 |
+| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；确认回执后释放发送资源，再等待结果面板；`recordController.ts` 读取明确 ID，AtCoder 采用有效官网 Interval、缺失回退2秒，正常跟踪无整轮截止；洛谷适配器等待推送并保留既有期限 |
 | 站点适配 | `src/adapters/{luogu,atcoder}/adapter.ts` 将原站业务封装在临时任务内；`site-scripts/` 仅保留 AtCoder 固定网页操作 |
 | 共同界面 | `src/views/` 与 `webview/`；题面绑定源码和题目，评测页绑定正式 ID，Webview 消息不决定源码路径／正文／任意命令 |
 | 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
-| AtCoder 事务 | `atcoderTransaction.ts` 提前返回正式 ID，保留原生表单事务和合成回归包装；旧实验工具栏已移除；原表单、基线排旧、源码核对等保护保留 |
+| AtCoder 事务 | `atcoderTransaction.ts` 直接准备官方 submit 页，以完整表单内的明确源码／语言／题目进行一次页面内 fetch；无上传、Ace 同步和原生点击备用路线；复用返回列表及首次详情，保留基线排旧、账号、唯一候选和源码核对；正常全程不显现网页，验证超时在插件内提示 |
 | 洛谷传输 | `luoguSessionClient.ts` 编排固定操作；`luoguSessionTransport.ts` 从持久 BrowserSession 读取凭据，以 Node HTTPS 发送固定请求，验证码与提交共用该路径；显式退出保留 Session.fetch 的 Cookie 清理。同次提交已输入的验证码被明确拒绝三次后停止，并提示转内置浏览器手动提交／认证，不增加新认证。`luoguCsrfTokenManager.ts` 迁入上游管理器，`luoguProtocol.ts` 转换语义数据，原生主进程建立带同会话凭据的推送连接 |
 | Import／CPH | 浏览器双站 Import→`importController.ts`／`sourceStore.ts`→源码与题面；题面明确调用 CPH `importSamplesForSource`，其他站既有直接 CPH 导入保留 |
-| 登录管理 | `views/loginView.ts` 提供双站登录／退出与真实摘要；宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；未接入三站明确不可用 |
+| 登录管理 | `views/loginView.ts` 提供双站登录／退出与真实摘要；宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；未接入三站明确不可用 |
 
-AtCoder 的主动题面语言与 C／C++ 编译器版本通过扩展本机 Memento 保留；洛谷语言偏好与最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
+洛谷与 AtCoder 的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
 
-洛谷常规题面、准备、提交、账号摘要与记录查询不创建或依赖网页标签，按浏览器当前存储范围选择同一持久 Session；登录仍打开官网，验证码沿用上游的图片面板和输入框，留空刷新。HTTP 单次超时与人工等待分离；明确验证码错误继续原源码，未知回执不自动重交。关闭记录仅释放推送，重开按正式 ID 重新查询。AtCoder 继续使用已有网页事务和页面生命周期保护。当前源码实现不等于两站新构建的负责人验收，见 [当前状态](README.md#当前实现状态)。
+主动登录只等待模型与持久会话校验，不等待整页加载再显现浏览器。AtCoder 提交事务临时关闭隐藏页面的后台定时器节流，结束时恢复；不预热、不跨提交复用页面。确认详情作为首次结构化结果交接，后续使用同窗口／会话范围的 status/json 及必要终态详情，不持有任务页。
+
+洛谷常规题面、准备、提交、账号摘要与记录查询不创建或依赖网页标签，按浏览器当前存储范围选择同一持久 Session；登录仍打开官网，验证码沿用上游的图片面板和输入框，留空刷新。HTTP 单次超时与人工等待分离；明确验证码错误继续原源码，未知回执不自动重交。记录绑定其原生会话，存储范围切换后不从新会话继续读取；关闭记录向原会话释放推送，重开按正式 ID 及所属会话重新查询。推送失败时按实例身份移除故障连接，停止跟踪并保留当前结果；只有显式继续查询才重新读取并按需建连。已排队结果先于后续 close 错误交付。隐藏／未知结果停止自动跟踪并释放已有推送，保持原状态并提供手动查询；不进入零延迟 HTTP 轮询。AtCoder 使用单次页面内请求，发送页生命周期与会话只读结果查询分开。当前源码实现不等于两站新构建的负责人验收，见 [当前状态](README.md#当前实现状态)。
 
 洛谷响应转换由核心 `src/vs/platform/browserView/common/luoguProtocol.ts` 单一拥有，回归位于 `test/common/luoguProtocol.test.ts`；扩展中仅被测试使用的重复解析副本已移除。当前 OJ 静态构建入口为 `build-site-scripts.mts`、`build-webview.mts`，页面测试为 `test/render.mts`；仓库原生洛谷会话回归入口为 `scripts/test-luogu-session.cts`。运行时优先使用各自 package.json 的现行脚本，历史计划中的旧后缀不作为当前执行命令。
 

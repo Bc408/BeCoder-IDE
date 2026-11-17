@@ -22,7 +22,7 @@ import { BrowserViewStorageScope } from '../../../../../platform/browserView/com
 import { BrowserOjConnectContribution } from '../../electron-browser/features/browserOjConnectFeature.js';
 import { DeferredPromise } from '../../../../../base/common/async.js';
 
-function atCoderFixture() {
+function atCoderFixture(loading = false) {
 	const problem = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
 	const record = { problem, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
 	const snapshot = (rawStatus = 'Judging') => ({ ref: record, phase: rawStatus === 'Judging' ? 'judging' : 'finished', rawStatus, sourceVerification: 'not-checked' });
@@ -34,9 +34,10 @@ function atCoderFixture() {
 	let watch = async () => { };
 	let reveal = async () => { };
 	let prepare = async (): Promise<unknown> => undefined;
+	let login = async () => ({ site: 'atcoder', state: 'signed-in', label: 'fixture_user' });
 	const create = (id: string, url: string, storageScope = scope) => {
 		let disposed = false;
-		const model = { id, url, loading: false, storageScope, onDidNavigate: Event.None, onDidClose: Event.None, loadURL: async (value: string) => { model.url = value; } };
+		const model = { id, url, loading, storageScope, onDidNavigate: Event.None, onDidClose: Event.None, loadURL: async (value: string) => { model.url = value; } };
 		return { resource: { path: id }, get url() { return model.url; }, model, isDisposed: () => disposed, resolve: async () => model, dispose: () => { disposed = true; } };
 	};
 	const known = new Map<string, ReturnType<typeof create>>();
@@ -53,12 +54,13 @@ function atCoderFixture() {
 	};
 	const main = {
 		getChannel: () => ({
-			listen: (name: string) => name === 'onDidRequireOjInteraction' ? interaction.event : Event.None, call: async (name: string) => {
+			listen: (name: string) => name === 'onDidRequireOjInteraction' ? interaction.event : Event.None, call: async (name: string, args: unknown[]) => {
 				if (name === 'sendAndConfirmAtCoderTask') { return send(); }
 				if (name === 'reconcileAtCoderAttempt') { return { kind: 'record', record }; }
-				if (name === 'readAtCoderRecord') { recordReads++; return readRecord(); }
+				if (name === 'readAtCoderRecord') { assert.strictEqual(args[0], scope); recordReads++; return readRecord(); }
 				if (name === 'watchOjSession') { return watch(); }
 				if (name === 'prepareAtCoderTask') { return prepare(); }
+				if (name === 'readAtCoderLogin') { assert.strictEqual(args[1], scope); return login(); }
 				return undefined;
 			}
 		})
@@ -75,10 +77,12 @@ function atCoderFixture() {
 		setWatch: (value: typeof watch) => { watch = value; },
 		setReveal: (value: typeof reveal) => { reveal = value; },
 		setPrepare: (value: typeof prepare) => { prepare = value; },
+		setLogin: (value: typeof login) => { login = value; },
 		interact: (id: string) => interaction.fire({ windowId: mainWindow.vscodeWindowId, id }),
 		addCarrier: (id: string, storageScope: BrowserViewStorageScope) => { const input = create(id, problem.url, storageScope); known.set(id, input); return input; },
 		accept: async () => {
 			const page = await execute('openTask', problem.url, 'file:///C:/abc086_a.cpp');
+			await execute('inspectTask', page);
 			const outcome = await execute('sendAndConfirm', page, { source: 'int main() {}', fileName: 'abc086_a.cpp', languageId: '5001', replaceDraft: false });
 			await execute('release', page); return outcome;
 		},
@@ -90,19 +94,37 @@ function atCoderFixture() {
 
 suite('OJ Connect source shortcut', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
-	test('AtCoder signed-out preparation opens login with a return route and resumes the same task', async () => {
+	test('AtCoder signed-out preparation reports login without revealing or navigating a browser', async () => {
 		const fixture = atCoderFixture();
-		let attempts = 0;
+		let attempts = 0, reveals = 0;
 		fixture.setPrepare(async () => { if (!attempts++) { throw new Error('atcoder-login-required'); } });
-		fixture.setReveal(async () => {
-			const input = [...fixture.known.values()][0];
-			const login = new URL(input.model.url);
-			assert.strictEqual(login.pathname, '/login');
-			assert.strictEqual(login.searchParams.get('continue'), fixture.record.problem.url);
-			await input.model.loadURL(fixture.record.problem.url);
+		fixture.setReveal(async () => { reveals++; await [...fixture.known.values()][0].model.loadURL(fixture.record.problem.url); });
+		try {
+			await assert.rejects(fixture.accept(), /atcoder-login-required/);
+			assert.strictEqual(reveals, 0);
+			assert.strictEqual(attempts, 1);
+		} finally { fixture.dispose(); }
+	});
+	test('AtCoder account refresh reads the persistent session without an existing browser tab', async () => {
+		const fixture = atCoderFixture();
+		try {
+			assert.deepStrictEqual(await fixture.execute('loginSummary'), { site: 'atcoder', state: 'signed-in', label: 'fixture_user' });
+			assert.strictEqual(fixture.editors.editors.length, 0);
+			assert.strictEqual(fixture.creations, 0);
+		} finally { fixture.dispose(); }
+	});
+	test('AtCoder account refresh uses the selected storage scope rather than a different workspace account', async () => {
+		const fixture = atCoderFixture();
+		const unrelated = fixture.addCarrier('different-scope', BrowserViewStorageScope.Global);
+		fixture.setScope(BrowserViewStorageScope.Workspace);
+		fixture.setLogin(async () => {
+			assert.strictEqual(fixture.creations, 0);
+			return { site: 'atcoder', state: 'signed-in', label: 'workspace_user' };
 		});
-		try { await fixture.accept(); assert.strictEqual(attempts, 2); }
-		finally { fixture.dispose(); }
+		try {
+			assert.strictEqual((await fixture.execute('loginSummary') as { label: string }).label, 'workspace_user');
+			assert.strictEqual(unrelated.isDisposed(), false);
+		} finally { fixture.dispose(); }
 	});
 	test('AtCoder missing form is reported without revealing a signed-in problem page', async () => {
 		const fixture = atCoderFixture();
@@ -111,29 +133,32 @@ suite('OJ Connect source shortcut', () => {
 		try { await assert.rejects(fixture.accept(), /atcoder-form-missing/); }
 		finally { fixture.dispose(); }
 	});
-	test('AtCoder accepted receipt closes only its temporary verification tab including a late reveal', async () => {
+	test('AtCoder submission and result tracking never reveal a browser even when verification is pending', async () => {
 		const fixture = atCoderFixture();
 		const userTab = fixture.addCarrier('user-original-tab', BrowserViewStorageScope.Global);
 		fixture.editors.editors.push(userTab);
-		const opened = new DeferredPromise<void>(), allowReveal = new DeferredPromise<void>();
-		fixture.setReveal(async () => { opened.complete(); await allowReveal.p; });
+		let reveals = 0;
+		fixture.setReveal(async () => { reveals++; });
 		fixture.setSend(async () => {
-			const task = [...fixture.known.values()].find(input => input !== userTab)!;
-			fixture.interact(task.model.id); await opened.p;
+			fixture.interact([...fixture.known.values()].find(input => input !== userTab)!.model.id);
 			return { kind: 'record', record: fixture.record };
 		});
 		try {
-			const accepting = fixture.accept(); await opened.p; await allowReveal.complete(); await accepting;
-			assert.deepStrictEqual(fixture.editors.editors, [userTab], 'only the common result should remain after receipt; never close the user original tab');
-			assert.strictEqual((await fixture.read()).phase, 'judging', 'result can read through a new hidden carrier after the verification tab closes');
+			await fixture.accept();
+			assert.strictEqual((await fixture.read()).phase, 'judging');
+			assert.strictEqual(reveals, 0);
+			assert.deepStrictEqual(fixture.editors.editors, [userTab]);
 		} finally { fixture.dispose(); }
 	});
-	test('AtCoder shortcut owns its form and record carrier without changing a user task tab', async () => {
+	test('AtCoder shortcut releases its direct submit form before tracking without changing a user tab', async () => {
 		const fixture = atCoderFixture();
 		const userTab = fixture.addCarrier('user-task-with-draft', BrowserViewStorageScope.Global);
 		try {
 			await fixture.accept();
 			assert.strictEqual(fixture.creations, 1, 'a user task tab must not become the shortcut form');
+			const taskPage = [...fixture.known.values()].find(input => input !== userTab)!;
+			assert.strictEqual(taskPage.url, 'https://atcoder.jp/contests/abc086/submit?taskScreenName=abc086_a');
+			assert.strictEqual(taskPage.isDisposed(), true, 'receipt does not retain a submission page');
 			assert.strictEqual(userTab.isDisposed(), false);
 			const originalURL = userTab.model.url;
 			await fixture.read();
@@ -143,7 +168,7 @@ suite('OJ Connect source shortcut', () => {
 		} finally { fixture.dispose(); }
 		assert.strictEqual(userTab.isDisposed(), false, 'teardown only releases task-owned pages');
 	});
-	test('AtCoder reconciled receipt also closes its own verification tab without sending again', async () => {
+	test('AtCoder reconciliation stays hidden without sending again', async () => {
 		const fixture = atCoderFixture();
 		let sends = 0;
 		fixture.setSend(async () => {
@@ -152,7 +177,7 @@ suite('OJ Connect source shortcut', () => {
 		});
 		try {
 			await fixture.accept();
-			assert.strictEqual(fixture.editors.editors.length, 1);
+			assert.strictEqual(fixture.editors.editors.length, 0);
 			await fixture.execute('reconcile', 'pending-one');
 			assert.strictEqual(fixture.editors.editors.length, 0);
 			assert.strictEqual(sends, 1);
@@ -220,6 +245,46 @@ suite('OJ Connect source shortcut', () => {
 			assert.deepStrictEqual(calls.find(([name]) => name === 'openLuoguSession')?.[1], [mainWindow.vscodeWindowId, BrowserViewStorageScope.Global]);
 		} finally { contribution.dispose(); }
 	});
+	test('Luogu releases the original subscription after its browser storage scope changes', async () => {
+		const problem = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+		const record = { problem, id: '56', url: 'https://www.luogu.com.cn/record/56' };
+		let scope = BrowserViewStorageScope.Global;
+		const pending = new DeferredPromise<unknown>();
+		const started = new DeferredPromise<void>();
+		const subscriptions = new Set<string>();
+		const released: string[] = [];
+		const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: async () => scope };
+		const main = {
+			getChannel: () => ({
+				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+					if (name === 'openLuoguSession') { return String(args[1]); }
+					if (name === 'prepareLuoguTask') { return { languages: [{ id: '27', label: 'C++20', family: 'cpp' }], ownerKey: '1' }; }
+					if (name === 'submitLuoguTask') { return { kind: 'record', record }; }
+					if (name === 'readLuoguRecord') { subscriptions.add(String(args[0])); await started.complete(); return pending.p; }
+					if (name === 'updateLuoguSession') { released.push(String(args[0])); subscriptions.delete(String(args[0])); }
+					return undefined;
+				}
+			})
+		};
+		const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+		const contribution = new BrowserOjConnectContribution({ editors: [] } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], {} as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+		const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.luogu.' + suffix)!.handler(undefined!, ...args);
+		try {
+			const prepared = await execute('prepare', problem, 'file:///C:/P1001.cpp') as { handle: string };
+			await execute('send', prepared.handle, { source: 'int main() {}', fileName: 'P1001.cpp', languageId: '27' });
+			await execute('release', prepared.handle);
+			const reading = execute('readRecord', record) as Promise<unknown>;
+			const stopped = assert.rejects(reading, /stopped/);
+			await started.p;
+			scope = BrowserViewStorageScope.Workspace;
+			await execute('cancelRecord', record);
+			await pending.complete({ ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' });
+			await stopped;
+			assert.deepStrictEqual(released, [BrowserViewStorageScope.Global]);
+			assert.strictEqual(subscriptions.size, 0, 'closing must release the original session, not a newly selected one');
+		} finally { contribution.dispose(); }
+	});
+
 	test('AtCoder finished source snapshots are evicted when the result closes while confirmed receipts remain readable', async () => {
 		const fixture = atCoderFixture();
 		try {
@@ -234,56 +299,18 @@ suite('OJ Connect source shortcut', () => {
 			assert.strictEqual(fixture.recordReads, 2, 'a confirmed receipt can reopen after its cached content is evicted');
 		} finally { fixture.dispose(); }
 	});
-	test('released unfinished AtCoder records reopen without accepting unknown record identities', async () => {
-		const problem = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
-		const record = { problem, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
-		const known = new Map();
-		let creations = 0, recordReads = 0, reveals = 0;
-		const browsers = {
-			getKnownBrowserViews: () => known, resolveStorageScope: async () => BrowserViewStorageScope.Global, getOrCreateLazy: (id: string, options: { url: string }) => {
-				creations++;
-				let disposed = false;
-				const model = { id, url: options.url, loading: false, storageScope: BrowserViewStorageScope.Global, onDidNavigate: Event.None, onDidClose: Event.None, loadURL: async (url: string) => { model.url = url; } };
-				const input = { get url() { return model.url; }, model, isDisposed: () => disposed, resolve: async () => model, dispose: () => { disposed = true; } };
-				known.set(id, input); return input;
-			}
-		};
-		const main = {
-			getChannel: () => ({
-				listen: () => Event.None, call: async (name: string, args: unknown[]) => {
-					if (name === 'sendAndConfirmAtCoderTask') { return { kind: 'record', record }; }
-					if (name === 'readAtCoderRecord') {
-						recordReads++;
-						assert.strictEqual(known.get(args[0]).model.url, record.url);
-						return { ref: record, phase: 'judging', rawStatus: 'Judging', sourceVerification: 'not-checked' };
-					}
-					return undefined;
-				}
-			})
-		};
-		const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: Event.None, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
-		const contribution = new BrowserOjConnectContribution({ editors: [], openEditor: async () => { reveals++; } } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+	test('released unfinished AtCoder records reopen through their session without any carrier', async () => {
+		const fixture = atCoderFixture();
 		try {
-			const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.atcoder.' + suffix)!.handler(undefined!, ...args);
-			const read = async (value = record) => await execute('readRecord', value) as { phase: string };
-			await assert.rejects(() => read(), /atcoder-invalid-record/);
-			assert.strictEqual(creations, 0, 'a record without a confirmed receipt cannot open a browser');
-			const page = await execute('openTask', problem.url, 'file:///C:/abc086_a.cpp');
-			await execute('sendAndConfirm', page, { source: 'int main() {}', fileName: 'abc086_a.cpp', languageId: '5001', replaceDraft: false });
-			await execute('release', page);
-			assert.strictEqual((await read()).phase, 'judging');
-			await CommandsRegistry.getCommand('_becoder.ojConnect.releaseRecord')!.handler(undefined!, record);
-			assert.strictEqual((await read()).phase, 'judging', 'closing an unfinished result preserves its authority to reopen');
-			assert.strictEqual(creations, 2, 'reopening uses a new owned carrier after the old result lifetime is released');
-			await CommandsRegistry.getCommand('_becoder.ojConnect.releaseRecord')!.handler(undefined!, record);
-			for (const input of known.values()) { input.dispose(); }
-			assert.strictEqual((await read()).phase, 'judging', 'closing the old browser permits a new carrier for the known receipt');
-			assert.strictEqual(creations, 3);
-			await assert.rejects(() => read({ ...record, id: '56' }), /atcoder-invalid-record/);
-			assert.strictEqual(recordReads, 3);
-			assert.strictEqual(reveals, 0, 'reopening results does not reveal hidden carriers');
-		} finally { contribution.dispose(); }
-		assert.ok([...known.values()].every(input => input.isDisposed()));
+			await assert.rejects(() => fixture.read(), /atcoder-invalid-record/);
+			await fixture.accept();
+			assert.ok([...fixture.known.values()].every(input => input.isDisposed()));
+			assert.strictEqual((await fixture.read()).phase, 'judging');
+			await CommandsRegistry.getCommand('_becoder.ojConnect.releaseRecord')!.handler(undefined!, fixture.record);
+			assert.strictEqual((await fixture.read()).phase, 'judging');
+			assert.strictEqual(fixture.creations, 1, 'reading/reopening creates no record browser');
+			assert.strictEqual(fixture.recordReads, 2);
+		} finally { fixture.dispose(); }
 	});
 	test('AtCoder reopen rejects a different default session without taking over a user original-scope tab', async () => {
 		const fixture = atCoderFixture();
@@ -307,8 +334,7 @@ suite('OJ Connect source shortcut', () => {
 			await fixture.accept();
 			for (const input of fixture.known.values()) { input.dispose(); }
 			fixture.setScope(BrowserViewStorageScope.Workspace);
-			await fixture.execute('reconcile', 'attempt-55');
-			await assert.rejects(() => fixture.read(), /oj-connect-session-scope-changed/);
+			await assert.rejects(async () => fixture.execute('reconcile', 'attempt-55'), /oj-connect-session-scope-changed/);
 			assert.strictEqual(fixture.recordReads, 0);
 		} finally { fixture.dispose(); }
 	});
@@ -326,39 +352,6 @@ suite('OJ Connect source shortcut', () => {
 			await fixture.accept();
 			assert.strictEqual((await fixture.read()).rawStatus, 'WA', 'the new lifecycle must read its own result');
 			assert.strictEqual(fixture.recordReads, 2);
-		} finally { fixture.dispose(); }
-	});
-	for (const lifecycle of ['reset', 'dispose'] as const) {
-		test(`AtCoder pending carrier watch stops before native record read on ${lifecycle}`, async () => {
-			const fixture = atCoderFixture();
-			const started = new DeferredPromise<void>(), watched = new DeferredPromise<void>();
-			try {
-				await fixture.accept();
-				for (const input of fixture.known.values()) { input.dispose(); }
-				fixture.setWatch(async () => { started.complete(); await watched.p; });
-				const reading = fixture.read();
-				const rejected = assert.rejects(() => reading, /oj-connect-stopped|atcoder-invalid-record/);
-				await started.p; fixture[lifecycle](); await watched.complete(); await rejected;
-				assert.strictEqual(fixture.recordReads, 0, 'a stopped carrier cannot start the result request');
-			} finally { fixture.dispose(); }
-		});
-	}
-	test('releasing an AtCoder record while its carrier opens prevents a late read and allows reopening', async () => {
-		const fixture = atCoderFixture();
-		const started = new DeferredPromise<void>(), watched = new DeferredPromise<void>();
-		try {
-			await fixture.accept();
-			for (const input of fixture.known.values()) { input.dispose(); }
-			fixture.setWatch(async () => { started.complete(); await watched.p; });
-			const reading = fixture.read();
-			const rejected = assert.rejects(() => reading, /oj-connect-stopped/);
-			await started.p;
-			await CommandsRegistry.getCommand('_becoder.ojConnect.releaseRecord')!.handler(undefined!, fixture.record);
-			await watched.complete(); await rejected;
-			assert.strictEqual(fixture.recordReads, 0, 'closing the result invalidates a read before a native request starts');
-			fixture.setWatch(async () => { });
-			assert.strictEqual((await fixture.read()).phase, 'judging', 'the confirmed receipt can acquire a new record lifetime');
-			assert.strictEqual(fixture.recordReads, 1);
 		} finally { fixture.dispose(); }
 	});
 	test('releasing an AtCoder record during a native read cannot refill its finished cache', async () => {
@@ -418,6 +411,60 @@ suite('OJ Connect source shortcut', () => {
 		} finally { contribution.dispose(); }
 		assert.ok([...known.entries()].filter(([id]) => id !== 'blank-user-tab').every(([, input]) => input.isDisposed()), 'all hidden account carriers are released');
 		assert.strictEqual(known.get('blank-user-tab').isDisposed(), false, 'ordinary blank tabs remain untouched');
+	});
+	test('native account commands reveal loading login pages without waiting for website resources', async () => {
+		for (const site of ['luogu', 'atcoder']) {
+			const fixture = atCoderFixture(true);
+			let revealed = false;
+			fixture.setReveal(async () => { revealed = true; });
+			const opening = CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.login')!.handler(undefined!);
+			try {
+				await new Promise(resolve => setTimeout(resolve, 0));
+				assert.strictEqual(revealed, true, 'the browser should show its loading page before all resources finish');
+				assert.strictEqual([...fixture.known.values()][0].model.loading, true);
+				await opening;
+			} finally {
+				for (const input of fixture.known.values()) { input.model.loading = false; }
+				await opening;
+				fixture.dispose();
+			}
+		}
+	});
+	test('native account commands keep temporary sessions hidden and release failed login creation', async () => {
+		const fixture = atCoderFixture();
+		fixture.setScope(BrowserViewStorageScope.Ephemeral);
+		fixture.setReveal(async () => { assert.fail('temporary sessions must never become the shared login'); });
+		try {
+			await assert.rejects(async () => await fixture.execute('login'), /persistent browser session/);
+			assert.ok([...fixture.known.values()].every(input => input.isDisposed()));
+		} finally { fixture.dispose(); }
+	});
+	test('native account commands coalesce repeated clicks while session observation is pending', async () => {
+		const fixture = atCoderFixture(true), observed = new DeferredPromise<void>();
+		fixture.setWatch(() => observed.p);
+		const first = fixture.execute('login'), second = fixture.execute('login');
+		try {
+			await new Promise(resolve => setTimeout(resolve, 0));
+			assert.strictEqual(fixture.creations, 1);
+			await observed.complete();
+			for (const input of fixture.known.values()) { input.model.loading = false; }
+			await Promise.all([first, second]);
+			assert.strictEqual(fixture.creations, 1);
+		} finally { await observed.complete(); fixture.dispose(); }
+	});
+	test('native account commands do not reveal a login whose extension stopped during observation', async () => {
+		const fixture = atCoderFixture(), observed = new DeferredPromise<void>();
+		fixture.setWatch(() => observed.p);
+		fixture.setReveal(async () => { assert.fail('stopped login must never reveal a browser'); });
+		const opening = fixture.execute('login');
+		const rejected = assert.rejects(async () => await opening, /oj-connect-stopped/);
+		try {
+			await new Promise(resolve => setTimeout(resolve, 0));
+			fixture.reset();
+			await observed.complete();
+			await rejected;
+			assert.ok([...fixture.known.values()].every(input => input.isDisposed()));
+		} finally { await observed.complete(); fixture.dispose(); }
 	});
 	test('normal browser tabs opened after initialization refresh accounts while ephemeral tabs cannot supply login status', async () => {
 		const changes = new Emitter<void>(), navigation = new Emitter<void>(), loading = new Emitter<void>();

@@ -6,8 +6,10 @@
 import type { Root, RootContent } from 'hast';
 import { find, html, svg } from 'property-information';
 
+let fragmentSequence = 0;
+
 /** Only accepts the shared parser's already sanitized HAST, never website DOM. */
-export function contentFragment(tree: Root) {
+export function contentFragment(tree: Root, scope?: string) {
 	const fragment = document.createDocumentFragment();
 	const append = (parent: DocumentFragment | Element, children: readonly RootContent[], namespace?: string) => {
 		for (const child of children) {
@@ -26,5 +28,13 @@ export function contentFragment(tree: Root) {
 		}
 	};
 	append(fragment, tree.children);
+	// Native HTML sections may share a problem scope; other mounts stay independent.
+	const prefix = 'becoder-content-' + (scope ?? ++fragmentSequence) + '-';
+	fragment.querySelectorAll('[id]').forEach(element => { element.id = prefix + element.id; });
+	fragment.querySelectorAll('a[href^="#"]').forEach(element => {
+		try {
+			element.setAttribute('href', '#' + encodeURIComponent(prefix + decodeURIComponent(element.getAttribute('href')!.slice(1))));
+		} catch { element.removeAttribute('href'); }
+	});
 	return fragment;
 }

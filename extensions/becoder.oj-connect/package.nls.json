@@ -14,5 +14,19 @@
 	"refreshAccounts": "Refresh Login Status",
 	"accounts": "Login Status",
 	"login": "Sign In",
-	"logout": "Sign Out"
+	"logout": "Sign Out",
+	"luogu.cCompiler": "Luogu C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
+	"luogu.cppCompiler": "Luogu C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
+	"atcoder.cCompiler": "AtCoder C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"atcoder.cppCompiler": "AtCoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"statementEnglish": "English",
+	"statementJapanese": "Japanese",
+	"statementLanguage": "Preferred AtCoder statement language. Switching in a problem panel updates this personal setting. Falls back to content the problem actually provides.",
+	"panelLocation": "Where new problem and submission panels open. Existing panels are not moved.",
+	"panelAuto": "Automatic: reuse the nearest group to the right of the source, or open beside it.",
+	"panelActive": "Active editor group",
+	"panelBeside": "Beside the active editor group",
+	"panelOne": "First editor group",
+	"panelTwo": "Second editor group",
+	"panelThree": "Third editor group"
 }

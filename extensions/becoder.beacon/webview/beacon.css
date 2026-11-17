@@ -87,8 +87,9 @@ summary { cursor: pointer; padding: 4px 0; }
 .markdown blockquote { border-left: 3px solid var(--vscode-textBlockQuote-border); margin: .9em 0; padding: .1em 0 .1em 1em; color: var(--vscode-descriptionForeground); }
 .markdown a { color: var(--vscode-textLink-foreground); text-decoration: none; }
 .markdown a:hover { text-decoration: underline; }
-.markdown .katex-display { max-width: 100%; overflow-x: hidden; overflow-y: hidden; margin: .9em 0; }
+.markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; margin: .9em 0; }
 .markdown .katex-display > .katex { max-width: 100%; white-space: normal; }
+.markdown .katex-display > .katex > .katex-html { width: fit-content; min-width: 100%; }
 .message-status { color: var(--vscode-descriptionForeground); font-size: 12px; }
 .scroll-bottom { position: absolute; bottom: 10px; left: calc(50% - 16px); border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; background: var(--vscode-editor-background); box-shadow: 0 2px 8px var(--vscode-widget-shadow); }
 footer { padding: 6px 12px 8px; flex: 0 0 auto; }

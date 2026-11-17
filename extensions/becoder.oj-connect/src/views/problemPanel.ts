@@ -27,7 +27,7 @@ export class ProblemPanel implements vscode.Disposable {
 		const family = source.languageId === 'c' ? 'c' : 'cpp';
 		const languages = document.languages?.filter(option => option.family === family) ?? [];
 		const saved = this.actions.preferredLanguage(document.ref.site, family);
-		const languageId = languages.find(option => option.id === saved)?.id ?? (document.ref.site === 'atcoder' ? undefined : languages[0]?.id);
+		const languageId = languages.find(option => option.id === saved)?.id ?? (saved === undefined && !this.preferences?.hasLanguagePreference(document.ref.site, family) && document.ref.site !== 'atcoder' ? languages[0]?.id : undefined);
 		if (languageId && document.ref.site !== 'atcoder') { await this.updateLanguage(document.ref, languages, languageId); }
 		if (binding.uri !== sourceUri) { throw new Error(vscode.l10n.t('The original source is unavailable. Reopen the problem from the source editor.')); }
 		const existing = this.panels.get(key);
@@ -69,6 +69,14 @@ export class ProblemPanel implements vscode.Disposable {
 			if (panel.state.problem?.ref.site !== problem.site || binding.source.languageId !== selected.family) { continue; }
 			const options = panel.state.problem.ref.url === problem.url ? languages : panel.state.languages ?? [];
 			if (options.some(option => option.id === languageId)) { panel.update({ languages: options, languageId }); }
+		}
+	}
+	refreshPreferences(): void {
+		for (const { panel, binding } of this.panels.values()) {
+			const problem = panel.state.problem!;
+			const saved = this.actions.preferredLanguage(problem.ref.site, binding.source.languageId === 'c' ? 'c' : 'cpp');
+			const languageId = panel.state.languages?.find(option => option.id === saved)?.id;
+			panel.update({ languageId, ...(problem.ref.site === 'atcoder' ? { locale: this.preferences?.statementLocale(problem.bodies.map(body => body.locale)) } : {}) });
 		}
 	}
 	dispose(): void { for (const value of this.panels.values()) { value.panel.dispose(); } this.panels.clear(); }

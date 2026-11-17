@@ -33,12 +33,12 @@ pre.markdown-code > .copyButton {
 	position: absolute;
 	top: 0;
 	right: 0;
-	visibility: hidden;
+	opacity: 0;
 }
 
 pre.markdown-code:hover > .copyButton,
 pre.markdown-code:focus-within > .copyButton {
-	visibility: visible;
+	opacity: 1;
 }
 
 pre > .copyButton .vscode-button {

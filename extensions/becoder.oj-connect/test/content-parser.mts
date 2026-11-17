@@ -49,6 +49,42 @@ assert.equal(elements(urls, 'a')[0].properties.href, 'https://www.luogu.com.cn/p
 assert.ok(elements(urls, 'a').slice(1).every(node => !node.properties.href));
 assert.equal(elements(urls, 'img')[0].properties.src, 'https://example.org/img.png');
 
+const anchors = await renderer.renderHtmlTree('<a href="#details">Details</a><h3 id="details">Details</h3><a href="#%E8%AF%B4%E6%98%8E">Notes</a><div id="说明">Notes</div><div id="app" onclick="alert(1)">author</div>', 'https://atcoder.jp/');
+assert.equal(elements(anchors, 'h3')[0].properties.id, 'user-content-details', 'author IDs retain the sanitizer clobber prefix');
+assert.equal(elements(anchors, 'a')[0].properties.href, '#user-content-details', 'fragment links follow sanitized targets');
+assert.equal(decodeURIComponent(elements(anchors, 'a')[1].properties.href as string), '#user-content-说明');
+assert.equal(elements(anchors, 'div')[1].properties.id, 'user-content-app');
+assert.equal(elements(anchors, 'div')[1].properties.onClick, undefined);
+
+await build({ entryPoints: [path.join(root, 'extensions/becoder.shared/browser/content/dom.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'dom.cjs'), nodePaths });
+const { JSDOM } = require('jsdom');
+const document = new JSDOM('<!doctype html><main id="app"></main>').window.document;
+Object.assign(globalThis, { document });
+const { contentFragment } = require(path.join(output, 'dom.cjs'));
+const firstFragment = contentFragment(anchors), secondFragment = contentFragment(anchors);
+const firstTarget = firstFragment.querySelector('h3'), secondTarget = secondFragment.querySelector('h3');
+assert.notEqual(firstTarget.id, secondTarget.id, 'reused cached trees receive independent DOM namespaces');
+assert.equal(decodeURIComponent(firstFragment.querySelector('a').getAttribute('href')), '#' + firstTarget.id);
+assert.equal(decodeURIComponent(secondFragment.querySelector('a').getAttribute('href')), '#' + secondTarget.id);
+assert.equal(elements(anchors, 'h3')[0].properties.id, 'user-content-details', 'DOM mounting never mutates the shared cached tree');
+assert.notEqual(firstFragment.querySelectorAll('div')[1].id, 'app', 'author IDs cannot shadow host controls');
+
+const unusualAnchors = await renderer.renderHtmlTree('<a href="#a%2520b">Percent</a><h3 id="a%20b">Percent</h3><a href="#format">Input</a><pre id="format"><var>N</var></pre><a href="#app">Unknown</a>', 'https://atcoder.jp/');
+const unusualFragment = contentFragment(unusualAnchors);
+const unusualLinks = unusualFragment.querySelectorAll('a');
+assert.equal(decodeURIComponent(unusualLinks[0].hash.slice(1)), unusualFragment.querySelector('h3').id, 'literal percent IDs are decoded only once');
+assert.equal(decodeURIComponent(unusualLinks[1].hash.slice(1)), unusualFragment.querySelector('.oj-input-format').id, 'input-format transforms preserve sanitized IDs');
+assert.notEqual(unusualLinks[2].hash, '#app', 'unmatched author hashes cannot address host controls');
+for (const className of ['', 'oj-math-display']) {
+	const formulaAnchor = contentFragment(await renderer.renderHtmlTree('<a href="#math">Formula</a><var id="math" class="' + className + '">N</var>', 'https://atcoder.jp/'));
+	assert.equal(formulaAnchor.querySelectorAll('[id]').length, 1, 'formula rendering retains the author target');
+	assert.equal(decodeURIComponent(formulaAnchor.querySelector('a').hash.slice(1)), formulaAnchor.querySelector('[id]').id);
+}
+const crossLink = contentFragment(await renderer.renderHtmlTree('<a href="#details">Details</a>', 'https://atcoder.jp/'), 'problem-test');
+const crossTarget = contentFragment(await renderer.renderHtmlTree('<h3 id="details">Details</h3>', 'https://atcoder.jp/'), 'problem-test');
+assert.equal(decodeURIComponent(crossLink.querySelector('a').hash.slice(1)), crossTarget.querySelector('h3').id, 'separate sections share only their owning problem namespace');
+delete (globalThis as { document?: Document }).document;
+
 const math = await renderer.renderMarkdownTree('$$a+b\n=c+d$$\n\nLiteral \\$5\n\n$$\nunclosed');
 assert.ok(descendants(math, node => node.type === 'element' && hasClass(node, 'katex')).length > 0);
 assert.ok(text(math).includes('unclosed'));

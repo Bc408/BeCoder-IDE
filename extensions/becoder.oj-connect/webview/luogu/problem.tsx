@@ -12,7 +12,7 @@
  *  See ThirdPartyNotices.txt for the original license.
  *--------------------------------------------------------------------------------------------*/
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { VSCodeButton, VSCodeDropdown, VSCodeOption } from './uiToolkit';
 import SubmissionControls from './submissionControls';
 import type { PanelState } from '../../src/views/model';
@@ -24,7 +24,7 @@ import CopyablePre from './copyablePre';
 import { installCodeCopyButtons } from './codeCopy';
 import { CphIcon, Tag } from './presentation';
 
-function Content({ section, url }: { section: Section; url: string }) {
+function Content({ section, url, scope }: { section: Section; url: string; scope: string }) {
 	const root = useRef<HTMLElement>(null);
 	useEffect(() => {
 		let disposed = false, cleanup: (() => void) | undefined, syntax: { dispose(): void } | undefined;
@@ -38,7 +38,7 @@ function Content({ section, url }: { section: Section; url: string }) {
 		const render = async () => {
 			const tree = await send<Root>({ action: 'renderContent', content: section.content, format: section.format });
 			if (disposed) { return; }
-			article.replaceChildren(contentFragment(tree));
+			article.replaceChildren(contentFragment(tree, section.format === 'html' ? scope : undefined));
 			syntax = highlightCodeBlocks(article);
 			article.setAttribute('aria-busy', 'false');
 			cleanup = installCodeCopyButtons(article, window.__OJ_STATE__.labels);
@@ -53,18 +53,19 @@ function Content({ section, url }: { section: Section; url: string }) {
 			}
 		});
 		return () => { disposed = true; syntax?.dispose(); cleanup?.(); };
-	}, [section.format, section.content, url]);
+	}, [section.format, section.content, url, scope]);
 	return <article className={'luogu-markdown'} ref={root} />;
 }
 
 // Cropped from viewProblem/app.tsx: the original header, controls and paired sample layout.
 export default function Problem({ state }: { state: PanelState }) {
+	const scope = useId() + (state.locale ?? '');
 	const data = state.problem!, problemId = data.ref.nativeId.split('/').at(-1)!, languagesList = data.bodies.map(body => body.locale);
 	const choosedLanguage = state.locale ?? languagesList[0];
 	const problemContent = data.bodies.find(body => body.locale === choosedLanguage) ?? data.bodies[0];
 	const content = (notes: boolean) => problemContent?.sections.filter(section => section.kind !== 'sample-explanation' && (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
 		{section.heading && <h2>{section.heading}</h2>}
-		<Content section={section} url={data.ref.url} />
+		<Content section={section} url={data.ref.url} scope={scope} />
 	</div>);
 	return <>
 		<header>
@@ -100,7 +101,7 @@ export default function Problem({ state }: { state: PanelState }) {
 					{data.samples.map(({ input, output }, id) => <div key={id} className={'sample-grid'}>
 						<div><h3>{state.labels.input}#{id + 1}</h3><CopyablePre><code>{input}</code></CopyablePre></div>
 						<div><h3>{state.labels.output}#{id + 1}</h3><CopyablePre><code>{output}</code></CopyablePre></div>
-						{problemContent?.sections.filter(section => section.kind === 'sample-explanation' && section.sampleIndex === id).map((section, index) => <div className={'sample-explanation'} key={index}><h3>{state.labels.sampleExplanation} #{id + 1}</h3><Content section={section} url={data.ref.url} /></div>)}
+						{problemContent?.sections.filter(section => section.kind === 'sample-explanation' && section.sampleIndex === id).map((section, index) => <div className={'sample-explanation'} key={index}><h3>{state.labels.sampleExplanation} #{id + 1}</h3><Content section={section} url={data.ref.url} scope={scope} /></div>)}
 					</div>)}
 				</div>
 			</div>}

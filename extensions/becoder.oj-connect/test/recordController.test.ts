@@ -28,13 +28,26 @@ test('record failure and cancellation do not start another read or send', async 
 	await controller.track(ref, () => undefined, abort.signal);
 	assert.strictEqual(reads, 1);
 });
-test('replaced record and unknown-status deadline cannot masquerade as a final verdict', async () => {
+test('replaced record cannot masquerade as a final verdict', async () => {
 	const other = { ...ref, id: '12', url: 'https://www.luogu.com.cn/record/12' };
 	const controller = new RecordController(async () => ({ ref: other, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' }));
 	await assert.rejects(controller.track(ref, () => undefined, new AbortController().signal), /record/);
-	let now = 0;
-	const pending = new RecordController(async () => ({ ref, phase: 'unknown', rawStatus: 'new status', sourceVerification: 'unavailable' } as RecordSnapshot), { now: () => now, intervalMs: 1, timeoutMs: 2, sleep: async () => { now++; } });
-	await assert.rejects(pending.track(ref, () => undefined, new AbortController().signal), /timed out/);
+});
+
+test('Luogu hidden and unknown results stop after one read and allow an explicit fresh query', async () => {
+	for (const rawStatus of ['N/A', 'new status']) {
+		let reads = 0, sleeps = 0, now = 0;
+		const updates: RecordSnapshot[] = [];
+		const controller = new RecordController(async () => ({ ref, phase: ++reads === 1 ? 'unknown' : 'finished', rawStatus: reads === 1 ? rawStatus : 'AC', sourceVerification: 'unavailable' }), { now: () => now, timeoutMs: 2, sleep: async () => { sleeps++; now++; } });
+		await controller.track(ref, value => updates.push(value), new AbortController().signal);
+		assert.strictEqual(reads, 1);
+		assert.strictEqual(sleeps, 0);
+		assert.strictEqual(updates[0].phase, 'unknown');
+		assert.strictEqual(updates[0].rawStatus, rawStatus);
+		await controller.track(ref, value => updates.push(value), new AbortController().signal);
+		assert.strictEqual(reads, 2);
+		assert.strictEqual(updates[1].phase, 'finished');
+	}
 });
 
 test('AtCoder healthy judging continues beyond two minutes and stops on the final result', async () => {
@@ -55,4 +68,13 @@ test('closing an AtCoder result during a pending read ignores the late result', 
 	signal.abort(); await tracking;
 	finish({ ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' });
 	await Promise.resolve(); assert.deepStrictEqual(updates, []);
+});
+
+test('AtCoder polling follows a bounded official interval and falls back when it is absent', async () => {
+	const record: RecordRef = { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' };
+	let reads = 0;
+	const delays: number[] = [];
+	const controller = new RecordController(async () => ({ ref: record, phase: ++reads === 3 ? 'finished' : 'judging', rawStatus: reads === 3 ? 'AC' : 'WJ', sourceVerification: 'not-checked', ...(reads === 1 ? { pollAfterMs: 750 } : {}) }), { sleep: async ms => { delays.push(ms); } });
+	await controller.track(record, () => undefined, new AbortController().signal);
+	assert.deepStrictEqual(delays, [750, 2000]);
 });

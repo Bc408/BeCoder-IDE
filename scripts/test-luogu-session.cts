@@ -27,7 +27,7 @@ app.whenReady().then(async () => {
 		const context = { user: { uid: 123, name: 'fixture-user' }, data: { problem: { pid: 'P1001', name: 'A+B', content: { locale: 'zh-CN', description: 'Sum $a+b$.' }, samples: [['20 30\n', '50\n']], acceptLanguages: [27], limits: { time: [1000], memory: [524288] } }, translations: {} } };
 		const config = { CodeLanguage: { 27: { id: 27, name: 'C++20', fileExt: ['cpp'], canO2: true } }, RecordStatus: { 0: { name: 'Waiting', shortName: 'WJ' }, 1: { name: 'Judging', shortName: 'Judging' }, 12: { name: 'Accepted', shortName: 'AC' } } };
 		const html = value => '<meta name="csrf-token" content="9999999999:fixture"><script id="lentille-context" type="application/json">' + JSON.stringify(value) + '</script>';
-		let mode = 'ordinary', recordStatus = 12, blockedRecord;
+		let mode = 'ordinary', recordStatus = 12, recordVisible = true, blockedRecord;
 		const posts = [], requests = [], prompts = [];
 		const sockets = [];
 		let answers = [], waiting, sessionChanged;
@@ -50,7 +50,7 @@ app.whenReady().then(async () => {
 			}
 			if (url.pathname === '/record/22') {
 				if (blockedRecord) { const gate = blockedRecord; blockedRecord = undefined; gate.entered(); await gate.promise; }
-				return Response.json({ user: context.user, data: { canViewCode: true, canViewStatus: true, testcaseGroup: { 0: [0, 1] }, record: { id: 22, status: recordStatus, score: 100, language: 27, user: context.user, problem: { pid: 'P1001', type: 'P' }, sourceCode: payload.source, detail: {} } } });
+				return Response.json({ user: context.user, data: { canViewCode: true, canViewStatus: recordVisible, testcaseGroup: { 0: [0, 1] }, record: { id: 22, status: recordStatus, score: 100, language: 27, user: context.user, problem: { pid: 'P1001', type: 'P' }, sourceCode: payload.source, detail: {} } } });
 			}
 			if (['/', '/ranking', '/problem/P1001'].includes(url.pathname)) { return url.searchParams.has('_contentOnly') ? Response.json(context) : new Response(html(context), { headers: { 'Content-Type': 'text/html' } }); }
 			throw new Error('Unexpected fixture route: ' + url.pathname);
@@ -141,6 +141,48 @@ app.whenReady().then(async () => {
 		assert.equal((await terminal).phase, 'finished'); assert.equal(socket.closed, true);
 		recordStatus = 0;
 		await client.readRecord(ordinary.record, signal());
+		const failedSocket = sockets.at(-1), lateClose = failedSocket.onclose;
+		const failedRead = client.readRecord(ordinary.record, signal());
+		failedSocket.onerror();
+		await assert.rejects(failedRead, /luogu-push-failed/);
+		const failedSocketCount = sockets.length, readsAfterFailure = requests.filter(route => route === '/record/22').length;
+		await new Promise(resolve => setImmediate(resolve));
+		assert.equal(sockets.length, failedSocketCount, 'push failure must not automatically reconnect');
+		assert.equal(requests.filter(route => route === '/record/22').length, readsAfterFailure, 'push failure must not automatically reread');
+		assert.equal((await client.readRecord(ordinary.record, signal())).phase, 'queued', 'explicit continue must reread after push failure');
+		const replacement = sockets.at(-1);
+		assert.notEqual(replacement, failedSocket, 'explicit continue creates a fresh connection for an unfinished record');
+		assert.equal(requests.filter(route => route === '/record/22').length, readsAfterFailure + 1);
+		lateClose();
+		replacement.push({ id: 22, status: 1 }, true);
+		assert.equal((await client.readRecord(ordinary.record, signal())).phase, 'judging', 'a late old close must preserve the replacement');
+		assert.equal(requests.filter(route => route === '/record/22').length, readsAfterFailure + 1, 'the replacement must remain the active track');
+		client.releaseRecord(ordinary.record);
+		await client.readRecord(ordinary.record, signal());
+		const queuedTerminal = sockets.at(-1);
+		queuedTerminal.push({ id: 22, status: 12, score: '100' }, true);
+		recordStatus = 12; queuedTerminal.onclose();
+		assert.equal((await client.readRecord(ordinary.record, signal())).phase, 'finished', 'a queued terminal push survives immediate socket close');
+		recordStatus = 0;
+		await client.readRecord(ordinary.record, signal());
+		const unknownSocket = sockets.at(-1), readsBeforeUnknown = requests.filter(route => route === '/record/22').length;
+		unknownSocket.push({ id: 22, status: 99 }, true);
+		const unknown = await client.readRecord(ordinary.record, signal());
+		assert.equal(unknown.phase, 'unknown'); assert.equal(unknown.rawStatus, '99');
+		assert.equal(unknownSocket.closed, true, 'unknown status must stop the old push connection');
+		assert.equal(requests.filter(route => route === '/record/22').length, readsBeforeUnknown, 'unknown must preserve the push snapshot without an automatic reread');
+		recordStatus = 12;
+		assert.equal((await client.readRecord(ordinary.record, signal())).phase, 'finished', 'explicit continue after unknown must use fresh HTTP');
+		assert.equal(requests.filter(route => route === '/record/22').length, readsBeforeUnknown + 1);
+		recordVisible = false;
+		const socketsBeforeHidden = sockets.length;
+		const hidden = await client.readRecord(ordinary.record, signal());
+		assert.equal(hidden.phase, 'unknown'); assert.equal(hidden.rawStatus, 'N/A');
+		assert.equal(sockets.length, socketsBeforeHidden, 'hidden status must not create a push connection');
+		recordVisible = true;
+		assert.equal((await client.readRecord(ordinary.record, signal())).phase, 'finished', 'explicit continue after hidden must reread the official record');
+		recordStatus = 0;
+		await client.readRecord(ordinary.record, signal());
 		const closed = sockets.at(-1); client.releaseRecord(ordinary.record); assert.equal(closed.closed, true);
 		await client.readRecord(ordinary.record, signal());
 		assert.notEqual(sockets.at(-1), closed, 'reopening an unfinished record must reconnect by ID');
@@ -156,7 +198,7 @@ app.whenReady().then(async () => {
 		if (sessionChanged) { sessionChanged(); }
 		assert.equal((await client.prepare(problem, signal())).ownerKey, '123');
 		assert.equal(BrowserWindow.getAllWindows().length, 0, 'all operations worked with no browser tab');
-		console.log(JSON.stringify({ ok: true, electron: process.versions.electron, noBrowserWindow: true, ordinarySubmit: true, captcha400AndWrongAnswerRetry: true, definiteRejection: true, lostReceiptNoResend: true, redirectNoReplay: true, cancellationNoResend: true, pushLifecycle: true, reopenRecord: true, noLateSocket: true }));
+		console.log(JSON.stringify({ ok: true, electron: process.versions.electron, noBrowserWindow: true, ordinarySubmit: true, captcha400AndWrongAnswerRetry: true, definiteRejection: true, lostReceiptNoResend: true, redirectNoReplay: true, cancellationNoResend: true, pushLifecycle: true, pushFailureManualContinue: true, staleClosePreservesReplacement: true, queuedTerminalSurvivesClose: true, unknownManualContinue: true, hiddenManualContinue: true, reopenRecord: true, noLateSocket: true }));
 	} catch (error) { console.error(error.stack); process.exitCode = 1; }
 	finally { clearTimeout(watchdog); client?.dispose(); app.exit(process.exitCode || 0); }
 });

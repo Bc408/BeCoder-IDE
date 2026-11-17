@@ -137,7 +137,7 @@ export default function Record({ state }: { state: PanelState }) {
 		<div className={'record-info'}>
 			<div><span>{labels.problem}</span><a href={record.problem.url}>{record.problem.nativeId}</a></div>
 			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={record.problem.site === 'atcoder' ? labels['status_' + snapshot?.rawStatus] : undefined} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ'), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus, record.problem.site) : labels.tracking}</span></div>
-			{snapshot?.score !== undefined && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
+			{snapshot?.score !== undefined && (record.problem.site !== 'atcoder' || snapshot.phase === 'finished') && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
 			{snapshot?.language !== undefined && <div><span>{labels.language}</span><span>{snapshot.language}</span></div>}
 			{snapshot?.codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{snapshot.codeLength}</span></div>}

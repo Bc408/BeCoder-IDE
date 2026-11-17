@@ -69,7 +69,7 @@ export class AtCoderAdapter implements OjAdapter {
 					sendSignal.throwIfAborted();
 					if (consumed || disposed) { throw new Error('Submission session is consumed.'); }
 					consumed = true;
-					progress({ phase: 'sending', message: 'Complete browser verification if requested.' });
+					progress({ phase: 'sending', message: 'Submitting code.' });
 					const cancel = () => { void host.cancel(page).catch(() => undefined); };
 					sendSignal.addEventListener('abort', cancel, { once: true });
 					try { return await host.sendAndConfirm(page, { source: input.snapshot.source, fileName: input.snapshot.fileName, languageId: input.languageId, replaceDraft: input.replaceDraft }); }

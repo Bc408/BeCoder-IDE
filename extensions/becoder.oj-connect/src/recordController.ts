@@ -38,8 +38,8 @@ export class RecordController {
 				const snapshot = validateRecord(value);
 				if (snapshot.ref.url !== ref.url || snapshot.ref.problem.url !== ref.problem.url) { throw new Error('The record identity changed during tracking.'); }
 				onUpdate(snapshot);
-				if (snapshot.phase === 'finished') { return; }
-				await (this.options.sleep ?? pause)(this.options.intervalMs ?? 2000, combined);
+				if (snapshot.phase === 'finished' || (ref.problem.site === 'luogu' && snapshot.phase === 'unknown')) { return; }
+				await (this.options.sleep ?? pause)(this.options.intervalMs ?? (ref.problem.site === 'atcoder' ? snapshot.pollAfterMs : undefined) ?? 2000, combined);
 			}
 			combined.throwIfAborted();
 		} catch (error) {

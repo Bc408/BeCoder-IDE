@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { parseAtCoderRecords, newAtCoderCandidates } from '../../common/atcoderShortcut.js';
+import { parseAtCoderRecords, newAtCoderCandidates, atCoderHistoryOwner } from '../../common/atcoderShortcut.js';
 
 // Pure parsing/filtering tests with no tracked disposables.
 // eslint-disable-next-line local/code-ensure-no-disposables-leak-in-test
@@ -16,6 +16,12 @@ suite('AtCoder shortcut', () => {
 	test('a login/challenge template is not an empty baseline', () => {
 		assert.throws(() => parseAtCoderRecords('<table>Checking your browser</table>', 'abc086'), /unavailable/);
 		assert.throws(() => parseAtCoderRecords('<form action="/login"><table>Submission Time Code Size</table></form>', 'abc086'), /unavailable/);
+	});
+	test('an empty first-submission history still requires the signed-in owner', () => {
+		assert.strictEqual(atCoderHistoryOwner('<script>var userScreenName = "new_user";</script>', []), 'new_user');
+		assert.throws(() => atCoderHistoryOwner('<script>var userScreenName = "";</script>', []), /account/);
+		assert.throws(() => atCoderHistoryOwner('', []), /account/);
+		assert.throws(() => atCoderHistoryOwner('<script>var userScreenName = "other_user";</script>', [{ id: '1', taskId: 'abc086_a', owner: 'me', languageId: '6017' }]), /account/);
 	});
 	test('excludes old, other-task, other-account and other-language records', () => {
 		const record = { id: '11', taskId: 'abc086_a', owner: 'me', languageId: '6017' };

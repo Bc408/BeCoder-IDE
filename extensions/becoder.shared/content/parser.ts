@@ -219,7 +219,7 @@ function mathExpressions() {
 				const expression = child.tagName === 'pre' ? child.children!.find((node: MutableNode) => node.type === 'element' && node.tagName === 'code') : child;
 				const names = expression ? classes(expression) : [];
 				if (names.some(name => ['language-math', 'math-inline', 'math-display'].includes(name))) {
-					return { type: 'element', tagName: 'span', properties: { className: ['math-formula', child.tagName === 'pre' || names.includes('math-display') ? 'math-display' : 'math-inline'] }, children: expression!.children };
+					return { type: 'element', tagName: 'span', properties: { ...child.properties, className: ['math-formula', child.tagName === 'pre' || names.includes('math-display') ? 'math-display' : 'math-inline'] }, children: expression!.children };
 				}
 				walk(child);
 				return child;
@@ -243,13 +243,22 @@ function atcoderMath() {
 				if (child.type !== 'element') { continue; }
 				// AtCoder uses pre/var for mathematical input layouts, not source code.
 				if (!code && child.tagName === 'pre' && contains(child, 'var') && !contains(child, 'code')) {
-					child.tagName = 'div'; child.properties = { className: ['oj-input-format'] };
+					child.tagName = 'div'; child.properties = { ...child.properties, className: ['oj-input-format'] };
 				}
 				if (!code && child.tagName === 'var') {
 					const display = classes(child).includes('oj-math-display');
 					child.tagName = display ? 'pre' : 'code';
-					child.properties = { className: ['language-math', display ? 'math-display' : 'math-inline'] };
+					child.properties = { ...child.properties, className: ['language-math', display ? 'math-display' : 'math-inline'] };
 					child.children = [{ type: 'text', value: plainText(child) }];
+					// KaTeX replaces its code/pre node, so author targets live outside it.
+					const id = child.properties.id;
+					if (id) {
+						delete child.properties.id;
+						const expression = { ...child };
+						child.tagName = display ? 'div' : 'span';
+						child.properties = { id };
+						child.children = [expression];
+					}
 				}
 				walk(child, code || ['pre', 'code'].includes(child.tagName!));
 			}
@@ -278,9 +287,12 @@ function getLuoguProcessor() {
 
 /** Fixed Beacon policy, preserving its safe links and streaming math closure. */
 export function parseBeaconMarkdown(source: string, options: { streaming?: boolean } = {}): Root {
-	source = normalizeMath(source, options.streaming ?? false);
 	const processor = getBeaconProcessor();
-	return processor.runSync(processor.parse(source), new VFile(source)) as Root;
+	const tree = processor.parse(source);
+	const isCodeFree = containsCodeSyntax(source) ? createCodeOffsetLookup(source, tree) : () => true;
+	const normalized = normalizeMath(source, options.streaming ?? false, isCodeFree);
+	// Standard delimiters and code-only streams keep their original parsed tree.
+	return processor.runSync(normalized === source ? tree : processor.parse(normalized), new VFile(normalized)) as Root;
 }
 
 /** Shared content pipeline; dialects retain their existing math/content policies. */
@@ -293,13 +305,59 @@ export function parseMarkdown(source: string, options: { dialect: 'luogu' | 'bea
 
 let htmlProcessor: Processor<undefined, Root, Root>;
 
+function htmlFragmentLinks() {
+	return (tree: Root) => {
+		visit(tree, 'element', node => {
+			const href = node.properties.href;
+			if (typeof href !== 'string' || !href.startsWith('#')) { return; }
+			try {
+				node.properties.href = '#' + encodeURIComponent('user-content-' + decodeURIComponent(href.slice(1)));
+			} catch { delete node.properties.href; }
+		});
+	};
+}
+
 /** Native site HTML enters HAST directly; it never passes through Markdown. */
 export function parseHtml(source: string, baseURL: string): Root {
-	htmlProcessor ??= unified().use(rehypeSanitize, schema).use(normalizeUrls).use(atcoderMath).use(rehypeSafeKatex, { strict: 'ignore', trust: false, maxExpand: 1000 }).use(contentStructure);
+	htmlProcessor ??= unified().use(rehypeSanitize, { ...schema, attributes: { ...schema.attributes, '*': ['className', 'id'] } }).use(htmlFragmentLinks).use(normalizeUrls).use(atcoderMath).use(rehypeSafeKatex, { strict: 'ignore', trust: false, maxExpand: 1000 }).use(contentStructure);
 	const tree = fromHtml(source, { fragment: true });
 	return htmlProcessor.runSync(tree, new VFile({ data: { baseURL } })) as Root;
 }
 let markdownStructureParser: Processor<MarkdownRoot>;
+function containsCodeSyntax(source: string): boolean {
+	return source.includes('`') || source.includes('~~~') || source.includes('    ') || source.includes('\t');
+}
+function createCodeOffsetLookup(src: string, parsed: MarkdownRoot) {
+	let ranges: { start: number; end: number }[] | undefined;
+	return (start: number, end = start + 1) => {
+		if (!ranges) {
+			let mathContainsCode = false;
+			visit(parsed, node => {
+				if ((node.type === 'math' || node.type === 'inlineMath') && node.position && containsCodeSyntax(src.slice(node.position.start.offset, node.position.end.offset))) { mathContainsCode = true; }
+			});
+			// A malformed dollar formula can consume a later code fence. Only that
+			// exceptional case needs Markdown's code boundaries without math syntax.
+			if (mathContainsCode) {
+				markdownStructureParser ??= unified().use(remarkParse);
+				parsed = markdownStructureParser.parse(src);
+			}
+			ranges = [];
+			visit(parsed, node => {
+				if ((node.type === 'code' || node.type === 'inlineCode') && node.position) {
+					ranges!.push({ start: node.position.start.offset!, end: node.position.end.offset! });
+				}
+			});
+		}
+		let low = 0;
+		let high = ranges.length;
+		while (low < high) {
+			const middle = Math.floor((low + high) / 2);
+			if (ranges[middle].end <= start) { low = middle + 1; }
+			else { high = middle; }
+		}
+		return low === ranges.length || ranges[low].start >= end;
+	};
+}
 function createTextOffsetLookup(src: string) {
 	let ranges: { start: number; end: number }[] | undefined;
 	return (offset: number) => {

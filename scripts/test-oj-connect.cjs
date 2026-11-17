@@ -20,8 +20,8 @@ app.whenReady().then(async () => {
 		// Invoke the actual watcher against synthetic cookie notifications, without touching cookies.
 		const cookieEvents = new EventEmitter(), accountEvents = [], cookieWatchers = new Map();
 		const watcherHost = {
-			_getBrowserView: () => ({ owner: { mainWindowId: 1 }, getWebContentsView: () => ({ webContents: { session: { cookies: cookieEvents } } }), onDidClose: () => ({ dispose() {} }) }),
-			ojSessionWatchers: cookieWatchers, _onDidChangeOjSession: { fire: value => accountEvents.push(value) }
+			_getBrowserView: () => ({ owner: { mainWindowId: 1 }, session:{id:'fixture-session'}, getWebContentsView: () => ({ webContents: { getURL:()=> 'https://www.luogu.com.cn/', session: { cookies: cookieEvents } } }), onDidClose: () => ({ dispose() {} }),onDidNavigate:()=>({dispose(){}}) }),
+			ojSessionWatchers: cookieWatchers, atCoderAccountReads:new Map(),invalidateAtCoderAccount:BrowserViewMainService.prototype.invalidateAtCoderAccount, _onDidChangeOjSession: { fire: value => accountEvents.push(value) }
 		};
 		try {
 			await BrowserViewMainService.prototype.watchOjSession.call(watcherHost, 'cookie-fixture', 1);
@@ -37,6 +37,14 @@ app.whenReady().then(async () => {
 			assert.equal(accountEvents.length, 3, 'setting the same value again after removal must refresh the account');
 			cookieEvents.emit('changed', {}, { ...cookie, name: 'unrelated' }, 'explicit', false);
 			assert.equal(accountEvents.length, 3);
+			const atcoderCookie={domain:'.atcoder.jp',name:'REVEL_SESSION',value:'rotated-one'};
+			cookieEvents.emit('changed',{},atcoderCookie,'overwrite',true);
+			cookieEvents.emit('changed',{},atcoderCookie,'explicit',false);
+			cookieEvents.emit('changed',{}, {...atcoderCookie,value:'rotated-two'},'overwrite',true);
+			cookieEvents.emit('changed',{}, {...atcoderCookie,value:'rotated-two'},'explicit',false);
+			assert.equal(accountEvents.length,3,'ordinary AtCoder session rotation must not start another account check');
+			cookieEvents.emit('changed',{},atcoderCookie,'expired',true);
+			assert.deepEqual(accountEvents[3],{windowId:1,site:'atcoder'});
 			await assert.rejects(BrowserViewMainService.prototype.watchOjSession.call(watcherHost, 'cookie-fixture', 2), /owner/);
 		} finally {
 			for (const watcher of cookieWatchers.values()) { watcher.dispose(); }
@@ -46,28 +54,50 @@ app.whenReady().then(async () => {
 		// The Luogu browser-carrier fixture moved to test-luogu-session.cts and
 		// test-luogu-session-host.cjs. Keep the distinct AtCoder read-route regressions here.
 		const partition = 'oj-connect-atcoder-read-fixture';
+		let account='fixture_user', accountReads=0;
 		const atcoder = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
 		session.fromPartition(partition).protocol.handle('https', request => {
 			const url = new URL(request.url);
 			assert.equal(url.origin, 'https://atcoder.jp');
-			if (url.pathname === '/') { return new Response('<script>var userScreenName="fixture_user";</script>', { headers: { 'Content-Type': 'text/html' } }); }
+			if (url.pathname === '/') { accountReads++; return new Response(account===undefined?'Unknown page':`<script>var userScreenName="${account}";</script>`, { headers: { 'Content-Type': 'text/html' } }); }
 			if (/^\/contests\/abc086\/tasks\/abc086_a\/?$/.test(url.pathname)) { return new Response('<span class="h2">A - Product</span><div id="task-statement"><span class="lang-en"><section><p>Multiply a*b.</p></section></span></div>', { headers: { 'Content-Type': 'text/html' } }); }
 			throw new Error('Unexpected AtCoder fixture route: ' + request.url);
 		});
 		window = new BrowserWindow({ show: false, webPreferences: { partition, sandbox: true, contextIsolation: true } });
 		const load = async url => { await window.loadURL(url); if (window.webContents.isLoading()) { await new Promise(resolve => window.webContents.once('did-stop-loading', resolve)); } };
-		const view = { owner: { mainWindowId: 1 }, getURL: () => window.webContents.getURL(), getWebContentsView: () => ({ webContents: window.webContents }),
+		const view = { owner: { mainWindowId: 1 }, session: { storageScope: 'global' }, getURL: () => window.webContents.getURL(), getWebContentsView: () => ({ webContents: window.webContents }),
 			onDidClose: listener => { window.on('closed', listener); return { dispose: () => window.removeListener('closed', listener) }; },
 			onDidNavigate: listener => { const fn = (_event, url) => listener({ url }); window.webContents.on('did-navigate', fn); return { dispose: () => window.webContents.removeListener('did-navigate', fn) }; }
 		};
-		const service = { _getBrowserView: () => view, environmentMainService: { appRoot: root }, ojReads: new Map() };
-		for (const name of ['_runOjRead', 'readOjProblem', 'readOjLogin']) { service[name] = BrowserViewMainService.prototype[name]; }
+		const service = { _getBrowserView: () => view, environmentMainService: { appRoot: root }, ojReads: new Map(), atCoderAccountReads:new Map(), ojSession:(owner,scope)=>{assert.equal(owner,1);assert.equal(scope,'global');return{id:partition,electronSession:window.webContents.session};} };
+		for (const name of ['_runOjRead', 'readOjProblem', 'readOjLogin', 'readAtCoderLogin', 'invalidateAtCoderAccount']) { service[name] = BrowserViewMainService.prototype[name]; }
 		for (const suffix of ['?lang=en', '/']) {
 			await load(atcoder.url + suffix);
 			assert.equal((await service.readOjProblem('fixture', 1, atcoder)).ref.url, atcoder.url);
 		}
 		await assert.rejects(service.readOjProblem('fixture', 2, atcoder), /owner/);
 		assert.equal((await service.readOjLogin('fixture', 1, 'atcoder')).label, 'fixture_user', 'login summary must fetch the fresh account homepage');
+		const before=accountReads;
+		const summaries=await Promise.all(Array.from({length:8},()=>service.readAtCoderLogin(1,'global')));
+		assert.equal(accountReads-before,1,'concurrent sidebar refreshes must share one request');
+		assert.ok(summaries.every(value=>value.state==='signed-in'));
+		account='';assert.equal((await service.readAtCoderLogin(1,'global')).state,'signed-out');
+		account=undefined;assert.equal((await service.readAtCoderLogin(1,'global')).state,'unknown');
+		assert.equal(service.atCoderAccountReads.size,0);
+		// A slow response from before login/logout cannot be reused as the new identity.
+		const bodies=[];
+		service.ojSession=()=>({id:partition,electronSession:{fetch:async()=>new Response(new ReadableStream({start(controller){bodies.push(controller);}}),{headers:{'Content-Type':'text/html'}})}});
+		const stale=service.readAtCoderLogin(1,'global');
+		const rejected=assert.rejects(stale);
+		await new Promise(resolve=>setImmediate(resolve));
+		service.invalidateAtCoderAccount(1,partition);
+		const fresh=service.readAtCoderLogin(1,'global');
+		await new Promise(resolve=>setImmediate(resolve));
+		bodies[0].enqueue(new TextEncoder().encode('<script>var userScreenName="old_user";</script>'));bodies[0].close();
+		await rejected;
+		assert.equal(service.atCoderAccountReads.size,1,'the old request cannot delete its replacement');
+		bodies[1].enqueue(new TextEncoder().encode('<script>var userScreenName="new_user";</script>'));bodies[1].close();
+		assert.equal((await fresh).label,'new_user');assert.equal(service.atCoderAccountReads.size,0);
 		assert.equal(service.ojReads.size, 0);
 		console.log(JSON.stringify({ passed: true, realMainService: true, cookieRemovalRefresh: true, freshAtCoderLogin: true, atcoderQueryAndTrailingSlash: true, atcoderWindowIsolation: true }));
 	} catch (error) { console.error(error.stack); process.exitCode = 1; }

@@ -9,7 +9,7 @@ import { test } from 'node:test';
 test('shortcut sends with noncancelable status and preserves the manual verification fallback', async () => {
 	const Module = require('module'), original = Module._load;
 	const commands = new Map<string, () => Promise<void>>(), locations: number[] = [];
-	let shown = false, disposed = false;
+	let shown = false, disposed = false, migrationWrite = true;
 	let entered!: () => void, finish!: (value: unknown) => void;
 	const sending = new Promise<void>(resolve => { entered = resolve; });
 	const cancelled: unknown[][] = [];
@@ -18,6 +18,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 	const disposable = () => ({ dispose() { } });
 	const source = { uri: { scheme: 'file', fsPath: 'C:/practice/luogu/P1001.cpp', toString: () => 'file:///C:/practice/luogu/P1001.cpp' }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
 	const mock = {
+		ConfigurationTarget: { Global: 1 },
 		EventEmitter: class { event = disposable; fire() { } dispose() { } },
 		l10n: { t: (value: string, ...args: string[]) => value.replace('{0}', args[0]) }, ProgressLocation: { Window: 10, Notification: 15 },
 		commands: {
@@ -28,7 +29,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined }) },
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, inspect: () => undefined, update: async () => { if (migrationWrite) { migrationWrite = false; throw new Error('settings write failed'); } } }), onDidChangeConfiguration: () => ({ dispose() { } }) },
 		window: {
 			createStatusBarItem: () => status,
 			showWarningMessage: async (message: string) => { warnings.push(message); },
@@ -44,7 +45,11 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
 	try {
 		const extension = require('../src/extension');
-		extension.activate({ subscriptions: [], globalState: { get: () => undefined, update: async () => { } } });
+		const legacy = new Map([['atcoder.language.cpp', '6017']]);
+		await extension.activate({ subscriptions: [], globalState: { get: (key: string) => legacy.get(key), update: async (key: string) => { legacy.delete(key); } } });
+		assert.strictEqual(legacy.get('atcoder.language.cpp'), '6017', 'failed migration preserves the old preference');
+		assert.strictEqual(warnings.length, 1, 'migration failure warns once without disabling commands');
+		warnings.length = 0;
 		assert.ok(commands.has('_becoder.ojConnect.luogu.askCaptcha'), 'native verification must use the extension prompt');
 		const submitting = commands.get('becoder.ojConnect.submit')!();
 		await sending;
@@ -77,5 +82,7 @@ test('native failures retain the specific cause for submission diagnosis', () =>
 		const { userError } = require('../src/messages');
 		assert.match(userError('oj-connect-operation-timeout'), /oj-connect-operation-timeout/);
 		assert.match(userError('oj-connect-page-changed'), /oj-connect-page-changed/);
+		assert.strictEqual(userError('atcoder-login-required'), 'Sign in to AtCoder from the OJ Connect sidebar, then submit again.');
+		assert.strictEqual(userError('atcoder-browser-verification-required'), 'AtCoder requires manual verification. Submit in the built-in browser and complete verification manually.');
 	} finally { Module._load = original; }
 });

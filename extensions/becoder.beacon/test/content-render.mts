@@ -27,6 +27,22 @@ try {
 	const page = await browser.newPage();
 	await page.goto(`http://127.0.0.1:${address.port}`);
 	const publish = (text: string, status = 'streaming') => page.evaluate(({ text, status }) => window.postMessage({ type: 'snapshot', configured: true, busy: status === 'streaming', messages: [{ id: 100, role: 'assistant', text, reasoning: '', activities: [], status, createdAt: Date.now() }] }, '*'), { text, status });
+	const literalSource = 'auto s="```";\nauto t="\\(x\\)";\n';
+	for (const source of [
+		'> ```cpp\n' + literalSource.trimEnd().split('\n').map(line => '> ' + line).join('\n') + '\n> ```',
+		'- ```cpp\n' + literalSource.trimEnd().split('\n').map(line => '  ' + line).join('\n') + '\n  ```',
+		'> - ```cpp\r\n' + literalSource.trimEnd().split('\n').map(line => '>   ' + line).join('\r\n') + '\r\n>   ```',
+		'> ```cpp\n> auto s="```";\n> auto t="\\(x\\)";\n'
+	]) {
+		for (const status of ['complete', 'streaming']) {
+			await publish(source, status);
+			await page.waitForSelector('.code-block code');
+			await page.waitForFunction(() => document.querySelector('.code-block code')?.textContent?.includes('auto t='));
+			assert.equal(await page.locator('.code-block code').textContent(), source.includes('\r\n') ? literalSource.replace('\n', '\r\n') : literalSource, 'Markdown containers and unfinished streaming fences preserve code verbatim');
+		}
+	}
+	await publish('Text \\(unfinished\n\n```cpp\nauto end="\\)";\n```');
+	await page.waitForFunction(() => document.querySelector('.code-block code')?.textContent === 'auto end="\\)";\n');
 	const largeSource = 'int pending = 1;\n'.repeat(3000);
 	await publish('```cpp\n' + largeSource + '```', 'complete');
 	await page.waitForFunction(source => document.querySelector('.code-block code')?.textContent === source, largeSource);
@@ -87,5 +103,30 @@ try {
 	await failed.waitForFunction(() => document.querySelector('.code-block code')?.textContent === 'int readable = 5;\n');
 	await failed.waitForTimeout(500);
 	assert.equal(await failed.locator('.code-block code').textContent(), 'int readable = 5;\n', 'Resource failure leaves the complete source visible');
+	await page.setViewportSize({ width: 360, height: 800 });
+	const longFraction = '\\frac{' + Array.from({ length: 36 }, (_, index) => `a_{${index}}`).join('+') + '}{b}';
+	await publish('$$\n' + longFraction + '\n$$', 'complete');
+	await page.waitForSelector('.katex-display .katex-html');
+	await page.evaluate(async () => { await document.fonts.ready; await new Promise(requestAnimationFrame); });
+	const overflow = await page.locator('.katex-display').evaluate(display => {
+		const content = display.querySelector('.katex-html')!;
+		const initial = content.getBoundingClientRect();
+		const bounds = display.getBoundingClientRect();
+		display.scrollLeft = display.scrollWidth;
+		const final = content.getBoundingClientRect();
+		return { overflowX: getComputedStyle(display).overflowX, client: display.clientWidth, scroll: display.scrollWidth, left: initial.left - bounds.left, right: final.right - bounds.right, offset: display.scrollLeft, height: display.clientHeight, contentHeight: content.getBoundingClientRect().height, document: document.documentElement.scrollWidth, viewport: innerWidth };
+	});
+	assert.equal(overflow.overflowX, 'auto', 'An unbreakable formula scrolls inside its own display');
+	assert.ok(overflow.scroll > overflow.client && overflow.offset > 0, 'The long formula has a reachable scroll range');
+	assert.ok(overflow.left >= -1 && overflow.right <= 1, 'Both formula ends remain reachable without negative overflow');
+	assert.ok(overflow.document <= overflow.viewport, 'The formula never widens the chat');
+	assert.ok(overflow.height >= overflow.contentHeight - 1 && overflow.height > 25, 'The complete fraction remains visible vertically');
+	await page.locator('.katex-display').screenshot({ path: path.resolve(import.meta.dirname, '../../../tmp/beacon-render/math-overflow-review.png') });
+	await page.locator('.katex-display').evaluate(display => { display.scrollLeft = 0; });
+	await page.locator('.katex-display').screenshot({ path: path.resolve(import.meta.dirname, '../../../tmp/beacon-render/math-overflow-left-review.png') });
+	await publish('$$\nx^2+y^2=z^2\n$$', 'complete');
+	await page.waitForFunction(() => document.querySelector('.katex annotation')?.textContent?.trim() === 'x^2+y^2=z^2');
+	assert.ok(await page.locator('.katex-display').evaluate(display => display.scrollWidth <= display.clientWidth + 1), 'An ordinary formula retains its layout without a scrollbar');
+	await page.locator('.markdown').screenshot({ path: path.resolve(import.meta.dirname, '../../../tmp/beacon-render/math-ordinary-review.png') });
 	console.log('Pending syntax never hides source tails; stable lines survive append; replacement/language change are isolated.');
 } finally { await browser.close(); await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }

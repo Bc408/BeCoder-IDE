@@ -93,9 +93,11 @@ export function validateRecord(raw: unknown): RecordSnapshot {
 		if (value[name] !== undefined) { optional[name] = text(value[name], name === 'compileMessage' || name === 'source' ? 1024 * 1024 : 8192, true); }
 	}
 	if (value.compileSucceeded !== undefined && typeof value.compileSucceeded !== 'boolean') { throw new Error('oj-connect-invalid-record'); }
+	if (value.pollAfterMs !== undefined && (typeof value.pollAfterMs !== 'number' || !Number.isFinite(value.pollAfterMs) || value.pollAfterMs < 100 || value.pollAfterMs > 60000)) { throw new Error('oj-connect-invalid-record'); }
 	return {
 		ref, phase: value.phase as RecordSnapshot['phase'], rawStatus: text(value.rawStatus, 200, true), sourceVerification: value.sourceVerification as RecordSnapshot['sourceVerification'], ...optional,
 		...(value.compileSucceeded === undefined ? {} : { compileSucceeded: value.compileSucceeded as boolean }),
+		...(value.pollAfterMs === undefined ? {} : { pollAfterMs: value.pollAfterMs as number }),
 		...(value.groups === undefined ? {} : {
 			groups: array(value.groups, 128).map(rawGroup => {
 				const group = object(rawGroup);

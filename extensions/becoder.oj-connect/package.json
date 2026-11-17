@@ -99,6 +99,70 @@
 							"description": "%nowcoderDirectory%"
 						}
 					}
+				},
+				"becoder.ojConnect.luogu.cCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^(?:\\d+(?::o2)?)?$",
+					"description": "%luogu.cCompiler%"
+				},
+				"becoder.ojConnect.luogu.cppCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^(?:\\d+(?::o2)?)?$",
+					"description": "%luogu.cppCompiler%"
+				},
+				"becoder.ojConnect.atcoder.cCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%atcoder.cCompiler%"
+				},
+				"becoder.ojConnect.atcoder.cppCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%atcoder.cppCompiler%"
+				},
+				"becoder.ojConnect.atcoder.statementLanguage": {
+					"type": "string",
+					"enum": [
+						"en",
+						"ja"
+					],
+					"enumDescriptions": [
+						"%statementEnglish%",
+						"%statementJapanese%"
+					],
+					"default": "en",
+					"scope": "application",
+					"description": "%statementLanguage%"
+				},
+				"becoder.ojConnect.panelLocation": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"active",
+						"beside",
+						"one",
+						"two",
+						"three"
+					],
+					"enumDescriptions": [
+						"%panelAuto%",
+						"%panelActive%",
+						"%panelBeside%",
+						"%panelOne%",
+						"%panelTwo%",
+						"%panelThree%"
+					],
+					"default": "auto",
+					"scope": "window",
+					"description": "%panelLocation%"
 				}
 			}
 		},

@@ -14,7 +14,7 @@
 			"supported": true
 		}
 	},
-	"activationEvents": ["*", "onCommand:becoder.openSettings", "onCommand:becoder.configureCppSnippets", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.generateGchCache"],
+	"activationEvents": ["*", "onCommand:becoder.openSettings", "onCommand:becoder.configureAutoFormat", "onCommand:becoder.generateGchCache"],
 	"main": "./out/extension.js",
 	"scripts": {
 		"clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true }); require('fs').rmSync('out-test', { recursive: true, force: true })\"",
@@ -115,10 +115,6 @@
 				"command": "becoder.openSettings",
 				"title": "%command.openSettings%",
 				"icon": "$(settings-gear)"
-			},
-			{
-				"command": "becoder.configureCppSnippets",
-				"title": "%command.configureCppSnippets%"
 			},
 			{
 				"command": "becoder.configureAutoFormat",

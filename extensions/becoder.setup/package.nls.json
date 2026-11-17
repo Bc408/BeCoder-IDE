@@ -15,7 +15,6 @@
 	"displayName": "BeCoder IDE Features",
 	"description": "Competitive programming features, settings, and private toolchain management for BeCoder IDE.",
 	"command.openSettings": "BeCoder IDE: Settings",
-	"command.configureCppSnippets": "BeCoder IDE: Configure Code Snippets",
 	"command.configureAutoFormat": "BeCoder IDE: Configure Automatic Formatting",
 	"command.generateGchCache": "BeCoder IDE: Generate gch Cache",
 	"command.showAllFiles": "BeCoder IDE: Show All Files",

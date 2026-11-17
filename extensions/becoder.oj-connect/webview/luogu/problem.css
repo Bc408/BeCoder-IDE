@@ -12,14 +12,13 @@
 	> header {
 		display: flex;
 		border-bottom: 1px solid #7f7f7f7f;
-		flex-direction: row;
 		> :nth-child(1) {
-			flex: 1;
-			min-width: 0;
 			display: flex;
+			flex: 1;
 			flex-direction: column;
+			min-width: 0;
 			> :nth-child(1) {
-				flex: 1;
+				min-width: 0;
 			}
 			> :nth-child(2) {
 				display: flex;
@@ -41,16 +40,14 @@
 		> :nth-child(2) {
 			display: grid;
 			flex: 0 0 auto;
-			min-width: 0;
-			max-width: 50%;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+			grid-template-columns: repeat(2, auto);
 			grid-template-rows: repeat(2, min-content);
 			font-family: -apple-system, BlinkMacSystemFont, 'San Francisco',
 				'Helvetica Neue', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK',
 				'Source Han Sans', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei',
 				sans-serif;
 			margin: 10px;
-			@media screen and (max-width: 420px) {
+			@media screen and (max-width: 480px) {
 				display: none;
 			}
 			> div {
@@ -66,6 +63,7 @@
 			}
 			> .problem-limit {
 				border-bottom: 1px solid var(--vscode-editor-foreground);
+				white-space: nowrap;
 			}
 		}
 	}

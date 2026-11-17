@@ -169,18 +169,19 @@ export default function Record({ state }: { state: PanelState }) {
 			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={record.problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
 			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={snapshot && statusLabel(snapshot.rawStatus, labels)} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus) : labels.tracking}{progress && <span>{snapshot!.rawStatus}</span>}</span></div>
 			{snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
-			{snapshot?.testCaseSummary && <div><span>{labels.passedTests}</span><span>{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
 			{snapshot?.language !== undefined && <div><span>{labels.language}</span><span>{snapshot.language}</span></div>}
 			{snapshot?.codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{resourceText(snapshot.codeLength)}</span></div>}
-			{snapshot?.owner !== undefined && <div><span>{labels.owner}</span><span>{snapshot.owner}</span></div>}
+			{record.problem.site === 'luogu' && snapshot?.owner !== undefined && <div><span>{labels.owner}</span><span>{snapshot.owner}</span></div>}
 			{snapshot?.phase === 'finished' && (snapshot.time !== undefined || snapshot.memory !== undefined) && <div><span>{labels.resources}</span><span>{[resourceText(snapshot.time, true), resourceText(snapshot.memory)].filter(Boolean).join(' / ')}</span></div>}
 			{snapshot?.source !== undefined && <div><span>{labels.source}</span><a href={'#'} title={record.problem.site === 'nowcoder' ? labels.sentSource : labels.officialSource} onClick={event => { event.preventDefault(); void send({ action: 'viewSource' }).catch(() => undefined); }}>{labels.viewSource}</a></div>}
 		</div>
 		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
 		{snapshot?.sourceVerification === 'mismatch' && <p className={'notice'}>{labels.verification_mismatch}</p>}
-		{!!groups.length && <>
-			<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2><div>
+		{(!!groups.length || !!snapshot?.testCaseSummary) && <>
+			<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2>
+				{snapshot?.testCaseSummary && <p><span>{labels.passedTests}</span>{' '}{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</p>}
+			<div>
 				{groups.map((subtask, index) => <div key={index}>{!(record.problem.site === 'atcoder' && groups.length === 1 && subtask.name === 'Test Cases') && <h3>{subtask.name}</h3>}<div className={'testcase-grid'}>
 					{subtask.rows.map((testcase, index) => <TestCase key={index} animate={!!state.tracking && (snapshot?.phase === 'judging' || snapshot?.phase === 'queued')}>{testcase}</TestCase>)}
 				</div></div>)}

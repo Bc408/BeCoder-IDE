@@ -10,9 +10,9 @@
  */
 .submissionControls {
 	display: flex;
-	flex-wrap: wrap;
+	flex: 1;
 	align-items: flex-start;
-	max-width: 100%;
+	max-width: 257px;
 	min-width: 0;
 	gap: 5px;
 	> button {
@@ -21,6 +21,7 @@
 		overflow-wrap: normal;
 	}
 	> select {
-		max-width: 100%;
+		flex: 1;
+		min-width: 0;
 	}
 }

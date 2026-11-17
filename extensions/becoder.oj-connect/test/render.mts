@@ -65,6 +65,37 @@ try {
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
 	await page.route('https://example.org/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><rect width="100" height="30" fill="#507cab"/></svg>' }));
 	await page.route('https://www.nowcoder.com/equation?**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="24"><text y="18">a+b</text></svg>' }));
+	for (const site of ['luogu', 'atcoder', 'nowcoder']) {
+		const ref = { site, nativeId: site === 'luogu' ? 'B2005' : site === 'atcoder' ? 'abc086/abc086_a' : 'problem/18204', url: 'https://example.org/problem' };
+		state = { kind: 'problem', labels, sourceName: 'solution.cpp', languages: [{ id: 'cpp', label: 'C++23 (GCC 15.2.0) (O2)', family: 'cpp' }], languageId: 'cpp', problem: { ref, title: site === 'luogu' ? '入门测试题目' : 'A+B Problem', limits: [{ label: 'Time Limit', value: '1.00s' }, { label: 'Memory Limit', value: '128.00MiB' }], bodies: [{ locale: 'en', sections: [{ heading: '题目描述', format: 'markdown', content: '求两个整数的和。' }] }], samples: [] } };
+		if (site === 'atcoder') { state.problem.bodies.push({ locale: 'ja', sections: [] }); }
+		if (site === 'luogu') { Object.assign(state.problem, { title: '字符三角形', difficulty: { label: '入门', color: '#FE4C61' }, tags: [{ label: '模拟', color: '#3498db' }] }); }
+		for (const width of [320, 420, 480, 481, 532, 640, 700, 1000]) {
+			await page.setViewportSize({ width, height: 700 }); await page.goto(url);
+			await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
+			await page.locator('article').waitFor();
+			await page.screenshot({ path: path.join(output, `${site}-compact-header-${width}.png`) });
+			const titleGap = await page.locator('header').evaluate(element => {
+				const title = element.querySelector('h1'), toolbar = title.nextElementSibling;
+				const text = document.createRange(); text.selectNodeContents(title);
+				return toolbar.getBoundingClientRect().top - text.getBoundingClientRect().bottom - parseFloat(getComputedStyle(title).marginBottom);
+			});
+			assert.ok(titleGap < 12, `${site} actions follow the title without waiting for the metadata height at ${width}px: gap ${titleGap}`);
+			const row = await page.locator('header').evaluate(element => {
+				const cph = element.querySelector('button'), submit = element.querySelector('.submissionControls button'), select = element.querySelector('.submissionControls select');
+				return [cph, submit, select].map(control => { const box = control.getBoundingClientRect(); return { top: box.top, width: box.width }; });
+			});
+			assert.ok(row[0].top <= row[1].top && Math.abs(row[1].top - row[2].top) < 1, `${site} compiler stays beside submit when the toolbar wraps at ${width}px: ${JSON.stringify(row)}`);
+			if (width >= 640 || width <= 480) { assert.ok(Math.abs(row[0].top - row[1].top) < 1, `${site} actions stay on one row when space allows`); }
+			assert.ok(row[2].width >= 40, 'compiler selector retains a usable click target');
+			assert.ok(row[2].width <= 220, 'compiler selector stays compact instead of filling the toolbar');
+			assert.equal(await page.locator('.problem-limits').isVisible(), width > 480, 'metadata fits alongside the title in a third-width statement pane');
+			if (width > 480) {
+				assert.equal(await page.locator('.problem-limit').evaluateAll(elements => elements.every(element => [...element.children].every(child => child.getBoundingClientRect().height <= parseFloat(getComputedStyle(child).lineHeight) + 1))), true, 'limit labels and values remain on one line');
+			}
+			assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'compact header does not overflow');
+		}
+	}
 	for (const site of ['luogu', 'atcoder']) {
 		const ref = site === 'luogu' ? { site, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } : { site, nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
 		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'A - Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: '题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
@@ -210,13 +241,13 @@ try {
 			assert.equal(await page.locator('article pre > code').first().evaluate(code => getComputedStyle(code).backgroundColor), 'rgba(0, 0, 0, 0)', 'old page background cannot cover the fixed code palette');
 			themeColors.push(await page.locator('article code.language-php .code-line > span[style]').first().evaluate(element => getComputedStyle(element).color));
 			await page.addStyleTag({ content: `body { --vscode-editor-background:${dark ? '#1e1e1e' : '#fff'};--vscode-editor-foreground:${dark ? '#ddd' : '#222'};--vscode-descriptionForeground:${dark ? '#aaa' : '#666'};--vscode-button-background:#007acc;--vscode-button-hoverBackground:#006bb3;--vscode-button-foreground:#fff;--vscode-button-secondaryBackground:${dark ? '#333' : '#eee'};--vscode-button-secondaryForeground:${dark ? '#ddd' : '#222'};--vscode-focusBorder:#007acc;--vscode-textCodeBlock-background:${dark ? '#282828' : '#f4f4f4'};--vscode-font-size:14px;--vscode-font-family:'Segoe UI',sans-serif; }` });
-			for (const width of [260, 320, 420, 421, 460, 532, 1000]) {
+			for (const width of [260, 320, 420, 460, 480, 481, 532, 640, 1000]) {
 				await page.setViewportSize({ width, height: 900 });
 				if (site === 'luogu') {
-					if (width <= 420) { assert.equal(await page.locator('.problem-limits').isVisible(), false, 'metadata follows upstream hiding at 420px and below'); }
+					if (width <= 480) { assert.equal(await page.locator('.problem-limits').isVisible(), false, 'metadata leaves room for the title in narrow editors'); }
 					else {
 						await page.locator('.problem-difficulty .tag').waitFor({ state: 'visible' });
-						assert.equal(await page.locator('header').evaluate(element => { const title = element.firstElementChild.getBoundingClientRect(), metadata = element.lastElementChild.getBoundingClientRect(); return metadata.left >= title.right; }), true, 'metadata stays to the right rather than wrapping below the controls');
+						assert.equal(await page.locator('header').evaluate(element => { const title = element.querySelector('h1').getBoundingClientRect(), metadata = element.lastElementChild.getBoundingClientRect(); return metadata.left >= title.right; }), true, 'metadata stays to the right of the title');
 					}
 				}
 				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'header remains within a narrow editor');
@@ -303,7 +334,7 @@ try {
 		await page.screenshot({ path: path.join(output, `${site}-judging.png`), fullPage: true });
 		await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.snapshot.phase = 'finished'; next.snapshot.rawStatus = 'AC'; next.snapshot.groups[0].rows[0][1] = 'AC'; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
 		await page.locator('.testcase .spinner').waitFor({ state: 'detached' });
-		state = { kind: 'record', labels, sourceName: 'solution.cpp', record, snapshot: { ref: record, problemTitle: 'A+B Problem', problemDifficulty: { label: '入门', color: '#fe4c61' }, phase: 'finished', rawStatus: 'AC', score: '50', language: 'C++20', time: '40 ms', memory: '1 MiB', sourceVerification: 'unavailable', source: 'int main() {}', submittedAt: '2026-11-14 12:00:00', codeLength: '13 B', compileSucceeded: true, compileMessage: '  compiler output\n\n', groups: [{ name: 'Tests', rows: [['1', 'AC'], ['2', 'AC']] }] } };
+		state = { kind: 'record', labels, sourceName: 'solution.cpp', record, snapshot: { ref: record, problemTitle: 'A+B Problem', problemDifficulty: { label: '入门', color: '#fe4c61' }, phase: 'finished', rawStatus: 'AC', score: '50', owner: 'fixture-user', language: 'C++20', time: '40 ms', memory: '1 MiB', sourceVerification: 'unavailable', source: 'int main() {}', submittedAt: '2026-11-14 12:00:00', codeLength: '13 B', compileSucceeded: true, compileMessage: '  compiler output\n\n', groups: [{ name: 'Tests', rows: [['1', 'AC'], ['2', 'AC']] }] } };
 		await page.goto(url); await page.locator('.record-verdict').waitFor();
 		await page.addStyleTag({ content: 'body { --vscode-editor-background:#1e1e1e;--vscode-editor-foreground:#ddd;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 		assert.equal(await page.locator('.record-verdict').textContent(), 'Accepted', 'all supported sites use the full upstream verdict');
@@ -314,6 +345,7 @@ try {
 		assert.equal(await page.locator('.record-info > div').filter({ has: page.getByText('50', { exact: true }) }).locator('span').last().evaluate(element => getComputedStyle(element).color), 'rgb(243, 156, 17)', 'upstream partial score uses orange');
 		const infoLabels = await page.locator('.record-info > div > span:first-child').allTextContents();
 		assert.ok(infoLabels.indexOf(labels.language) < infoLabels.indexOf(labels.codeLength), 'language precedes code length like upstream');
+		assert.equal(await page.getByText(labels.owner, { exact: true }).count(), site === 'luogu' ? 1 : 0, 'only Luogu retains its owner row');
 		assert.equal(await page.getByRole('button', { name: '继续查询', exact: true }).count(), 0);
 		assert.equal(await page.getByRole('button', { name: '停止跟踪', exact: true }).count(), 0);
 		assert.equal(await page.getByText('无法读取提交源码', { exact: true }).count(), 0);
@@ -400,19 +432,24 @@ try {
 		if (phase !== 'finished') { assert.equal(await page.locator('.record-verdict').evaluate(element => getComputedStyle(element).color), 'rgb(52, 152, 219)', 'pending text and spinner share the readable judging blue'); }
 		assert.equal(await page.locator('.record-verdict .spinner').count(), phase === 'finished' ? 0 : 1);
 		assert.equal(await page.locator('.testcase').count(), 0, 'missing Nowcoder test details stay omitted');
-		const summary = page.locator('.record-info > div').filter({ has: page.locator('span:first-child', { hasText: labels.passedTests }) });
+		assert.equal(await page.locator('.record-info').getByText(labels.passedTests, { exact: true }).count(), 0, 'case totals are not record metadata');
+		const summary = page.locator('.testCaseData p');
 		assert.equal(await summary.count(), rawStatus === 'AC' || rawStatus === 'WA' ? 1 : 0);
-		if (await summary.count()) { assert.equal(await summary.locator('span').last().textContent(), rawStatus === 'AC' ? '24 / 24' : '3 / 24'); }
+		if (await summary.count()) {
+			assert.equal(await summary.textContent(), labels.passedTests + ' ' + (rawStatus === 'AC' ? '24 / 24' : '3 / 24'));
+			assert.equal(await page.locator('hr + .testCaseData > h2').textContent(), labels.testCases, 'case summary follows the shared separator and heading');
+		}
 		assert.equal(await page.locator('.record-info > div > span:first-child').filter({ hasText: new RegExp('^' + labels.score + '$') }).count(), 0, 'missing score stays omitted');
 		await page.screenshot({ path: path.join(output, `nowcoder-${rawStatus}.png`), fullPage: true });
 	}
-	state.snapshot = { ...state.snapshot, problemTitle: 'A+B(1)', phase: 'finished', rawStatus: 'AC', language: 'C++23', owner: 'fixture-user', source: 'int main() {}\n', compileMessage: undefined, compileSucceeded: undefined };
+	state.snapshot = { ...state.snapshot, problemTitle: 'A+B(1)', phase: 'finished', rawStatus: 'AC', testCaseSummary: { passed: 24, total: 24 }, language: 'C++23', owner: 'fixture-user', source: 'int main() {}\n', compileMessage: undefined, compileSucceeded: undefined };
 	await page.goto(url); await page.locator('.record-verdict').waitFor();
 	await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 	assert.equal(await page.locator('.record-info > div').first().locator('a').textContent(), 'NC18204 A+B(1)');
 	assert.equal(await page.getByText(labels.source, { exact: true }).count(), 1, 'the source row has one shared concise label');
 	assert.equal(await page.getByRole('link', { name: labels.viewSource }).getAttribute('title'), labels.sentSource, 'the local snapshot remains distinguishable from official source');
 	assert.equal(await page.getByText(labels.codeLength, { exact: true }).count(), 0, 'unavailable official length remains omitted');
+	assert.equal(await page.getByText(labels.owner, { exact: true }).count(), 0, 'Nowcoder hides the account field');
 	await page.screenshot({ path: path.join(output, 'nowcoder-record.png'), fullPage: true });
 	await page.goto(url + 'accounts');
 	assert.deepEqual(await page.evaluate(() => window.__messages.splice(0)), [{ ready: true }]);

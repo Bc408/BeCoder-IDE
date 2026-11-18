@@ -12,15 +12,14 @@ import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurati
 import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
-import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { EditorExtensions, IEditorFactoryRegistry } from '../../../common/editor.js';
 import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
-import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { IEditorService, SIDE_GROUP } from '../../../services/editor/common/editorService.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { BrowserHomeCommandId } from '../../browserView/common/browserHome.js';
 import { IExtensionManagementServerService } from '../../../services/extensionManagement/common/extensionManagement.js';
-import { GettingStartedInputSerializer, GettingStartedPage } from './gettingStarted.js';
-import { GettingStartedInput } from './gettingStartedInput.js';
+import { GettingStartedInputSerializer } from './gettingStarted.js';
+import { gettingStartedInputTypeId } from './gettingStartedInput.js';
 import { StartupPageEditorResolverContribution, StartupPageRunnerContribution } from './startupPage.js';
 
 registerAction2(class extends Action2 {
@@ -35,29 +34,21 @@ registerAction2(class extends Action2 {
 				id: MenuId.MenubarHelpMenu,
 				group: '1_welcome',
 				order: 1,
-			}, { id: MenuId.TitleBar, group: 'navigation', order: 11 }],
+			}],
 			metadata: {
 				description: localize2('minWelcomeDescription', 'Opens the BeCoder Welcome page.')
 			}
 		});
 	}
 
-	run(accessor: ServicesAccessor, options?: { toSide?: boolean; inactive?: boolean } | boolean): void {
-		const editorService = accessor.get(IEditorService);
+	run(accessor: ServicesAccessor, options?: { toSide?: boolean; inactive?: boolean } | boolean): Promise<unknown> {
 		const toSide = typeof options === 'object' ? options.toSide : options;
 		const inactive = typeof options === 'object' ? options.inactive : false;
-		editorService.openEditor({
-			resource: GettingStartedInput.RESOURCE,
-			options: { preserveFocus: toSide ?? false, inactive }
-		}, toSide ? SIDE_GROUP : undefined);
+		return accessor.get(ICommandService).executeCommand(BrowserHomeCommandId, { openToSide: toSide, preserveFocus: toSide ?? false, inactive });
 	}
 });
 
-Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer(GettingStartedInput.ID, GettingStartedInputSerializer);
-Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
-	EditorPaneDescriptor.create(GettingStartedPage, GettingStartedPage.ID, localize('welcome', "Welcome")),
-	[new SyncDescriptor(GettingStartedInput)]
-);
+Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer(gettingStartedInputTypeId, GettingStartedInputSerializer);
 
 export const WorkspacePlatform = new RawContextKey<'mac' | 'linux' | 'windows' | 'webworker' | undefined>(
 	'workspacePlatform',

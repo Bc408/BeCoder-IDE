@@ -191,6 +191,16 @@ suite('BrowserUrlBarWidget', () => {
 		assert.strictEqual(display.textContent, 'https://example.com/');
 	});
 
+	test('homepage keeps its internal blank URL out of the display and picker', () => {
+		const { widget, display, inputState, picker } = makeHarness();
+		inputState.url = 'about:blank';
+		widget.refreshUrl();
+		assert.strictEqual(display.textContent, '');
+		widget.openUrlPicker();
+		assert.strictEqual(picker.value, '');
+		assert.strictEqual(inputState.url, 'about:blank');
+	});
+
 	test('refreshUrl updates the display when the input URL changes', () => {
 		const { widget, display, inputState } = makeHarness();
 		inputState.url = 'https://newsite.test/path';

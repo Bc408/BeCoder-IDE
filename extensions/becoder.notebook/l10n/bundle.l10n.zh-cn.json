@@ -15,7 +15,7 @@
 	"Input: {0}": "所用输入：{0}",
 	"Open or add the folder containing this source file.": "请打开或添加包含此源码的文件夹。",
 	"Insert Image": "插入图片",
-	"Open a folder before creating or associating a Notebook.": "新建或关联笔记前请先打开文件夹。",
+	"Open a folder before associating a Notebook.": "关联笔记前请先打开文件夹。",
 	"Choose the folder used by this unsaved Notebook when running programs.": "选择这份未保存的笔记运行程序时使用的文件夹。",
 	"Completed": "正常退出",
 	"Compilation failed": "编译失败",

@@ -30,6 +30,9 @@ export enum BrowserSearchEngineId {
 export const BrowserSearchEngineSettingId =
 	'workbench.browser.searchEngine';
 
+export const BrowserCustomSearchEnginesSettingId =
+	'workbench.browser.customSearchEngines';
+
 /**
  * Value of {@link BrowserSearchEngineSettingId} when no search engine is
  * selected (address bar search disabled). Selecting any other value both
@@ -38,16 +41,10 @@ export const BrowserSearchEngineSettingId =
 export const BROWSER_SEARCH_NONE = 'none';
 
 /**
- * The address bar search setting value: either `'none'` (search disabled) or a
- * specific {@link BrowserSearchEngineId}.
- */
-export type BrowserSearchEngineValue = BrowserSearchEngineId | typeof BROWSER_SEARCH_NONE;
-
-/**
  * A search engine that can be selected as the integrated browser's default.
  */
 export interface IBrowserSearchEngine {
-	readonly id: BrowserSearchEngineId;
+	readonly id: string;
 	/** Human-readable label shown in the settings UI. */
 	readonly label: string;
 	/**
@@ -92,6 +89,38 @@ export const BROWSER_SEARCH_ENGINES: readonly IBrowserSearchEngine[] = [
 		buildSearchUrl: (q) => `https://duckduckgo.com/?q=${encodeQuery(q)}`,
 	},
 ];
+
+/** Built-ins and valid custom templates, in their configured display order. */
+export function getBrowserSearchEngines(customEngines?: unknown): readonly IBrowserSearchEngine[] {
+	const engines = [...BROWSER_SEARCH_ENGINES];
+	if (!customEngines || typeof customEngines !== 'object' || Array.isArray(customEngines)) {
+		return engines;
+	}
+
+	for (const [name, value] of Object.entries(customEngines)) {
+		if (!name || name !== name.trim() || name === BROWSER_SEARCH_NONE || engines.some(engine => engine.id === name) || typeof value !== 'string') {
+			continue;
+		}
+		const template = value.trim();
+		if (!template.includes('{query}')) {
+			continue;
+		}
+		try {
+			const url = new URL(template);
+			if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.hostname.includes('{query}') || url.username || url.password) {
+				continue;
+			}
+		} catch {
+			continue;
+		}
+		engines.push({
+			id: name,
+			label: name,
+			buildSearchUrl: query => template.replaceAll('{query}', encodeURIComponent(query)),
+		});
+	}
+	return engines;
+}
 
 /**
  * Classification of an address bar input. Mirrors the four non-deprecated
@@ -420,10 +449,11 @@ export function resolveAddressBarInputType(rawInput: string): AddressBarInputKin
  */
 export function buildSearchUrl(
 	query: string,
-	engineId: BrowserSearchEngineId,
+	engineId: string,
+	customEngines?: unknown,
 ): string {
 	const engine =
-		BROWSER_SEARCH_ENGINES.find((e) => e.id === engineId) ??
+		getBrowserSearchEngines(customEngines).find((e) => e.id === engineId) ??
 		BROWSER_SEARCH_ENGINES[0];
 	return engine.buildSearchUrl(query.trim().replace(/\s+/g, ' '));
 }
@@ -432,9 +462,9 @@ export function buildSearchUrl(
  * Human-readable label for the given search engine (e.g. "Bing"). Falls back
  * to the default engine's label for an unknown id.
  */
-export function getBrowserSearchEngineLabel(engineId: BrowserSearchEngineId): string {
+export function getBrowserSearchEngineLabel(engineId: string, customEngines?: unknown): string {
 	const engine =
-		BROWSER_SEARCH_ENGINES.find((e) => e.id === engineId) ??
+		getBrowserSearchEngines(customEngines).find((e) => e.id === engineId) ??
 		BROWSER_SEARCH_ENGINES[0];
 	return engine.label;
 }

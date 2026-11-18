@@ -4,7 +4,7 @@
 
 ## 创建与编辑
 
-先打开文件夹，再从“新建文件…”列表或“创建：新建 BeCoder Notebook”命令新建。资源管理器中新建的空 `.bcnb` 可直接打开为空白笔记；已有 `.bcnb` 与 `.bcnb-backup` 可独立打开。文件使用 version 2 单文件格式，不迁移开发期旧格式。
+无需打开文件夹，即可从首页、“新建文件…”列表或“创建：新建 BeCoder Notebook”命令新建未保存笔记，直接编辑，保存时选择文件名与位置。资源管理器中新建的空 `.bcnb` 可直接打开为空白笔记；已有 `.bcnb` 与 `.bcnb-backup` 可独立打开。文件使用 version 2 单文件格式，不迁移开发期旧格式。
 
 单元格支持 C、C++、Markdown 和独立 input（`becoder-input`）。Markdown 复用随包 KaTeX、字体与 Mermaid；图片在 Markdown 编辑态粘贴为附件，短 `attachment:` 引用和图片数据随同一次原生编辑进入撤销与保存。顶部“…”中的“设置”打开“.bcnb 支持”，可关闭图片附件粘贴；布局复用原生 Notebook 设置。其他语言可用 Markdown 围栏展示，普通编辑器及 ipynb 的语言支持不受此限制。
 
@@ -14,7 +14,7 @@ C/C++ 编辑器右上角提供关联笔记入口，按打开根的 `.notebook/<�
 
 在程序块下添加 input，点击 input 的运行按钮，捕获其上方最近 C/C++ 程序块与 input 的最新内容，包含未保存修改。程序块之间不共享状态，不拼接；运行不保存整本笔记，不改写原始 C/C++ 文件。每份 input 各自保留最近一次尝试的真实结果、编译时间与运行时间，重跑时替换本份旧结果。
 
-编译复用 [Runner API 与配置](../danielpinto8zz6.c-cpp-compile-run/docs/COMPILER_SETUP.md)，每次使用独立临时目录和短相对源码名“笔记名-code序号.c/cpp”；序号只计算程序块。程序工作目录为已保存笔记所在目录，未保存笔记使用选定的打开文件夹。读取和编辑不要求 Runner，用户运行需要可用的 Runner 和工作区信任。
+编译复用 [Runner API 与配置](../danielpinto8zz6.c-cpp-compile-run/docs/COMPILER_SETUP.md)，每次使用独立临时目录和短相对源码名“笔记名-code序号.c/cpp”；序号只计算程序块。程序工作目录为已保存笔记所在目录，未保存笔记在运行时确定所用的打开文件夹。读取和编辑不要求 Runner，用户运行需要可用的 Runner 和工作区信任。
 
 stdout/stderr 合并成普通连续输出，保留 ANSI 颜色，不按流染色。状态标题保持英文，控制文案跟随界面语言；程序运行上限为 2 秒、保留输出上限为 256 KiB，触限停止并如实显示结果。模型没有执行 API。已保存笔记位于当前窗口可用的 Beacon 根内时，用户运行还会形成该区的独立证据，不占 Runner/CPH 近期队列。
 

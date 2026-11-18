@@ -9,12 +9,15 @@ import { Emitter } from '../../../../../base/common/event.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
+import { onUnexpectedError } from '../../../../../base/common/errors.js';
 import { Action2, MenuId, registerAction2 } from '../../../../../platform/actions/common/actions.js';
 import { IConfigurationRegistry, Extensions as ConfigurationExtensions, ConfigurationScope } from '../../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IQuickInputButton, IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
+import { ILabelService } from '../../../../../platform/label/common/label.js';
+import { IRecentFile, IWorkspacesService } from '../../../../../platform/workspaces/common/workspaces.js';
 import { BrowserViewCommandId, BrowserViewStorageScope } from '../../../../../platform/browserView/common/browserView.js';
 import { BrowserHistoryStore, IBrowserHistoryEntry } from '../../../../../platform/browserView/common/browserHistory.js';
 import { workbenchConfigurationNodeBase } from '../../../../common/configuration.js';
@@ -54,6 +57,9 @@ export class BrowserHistoryFeature extends BrowserEditorContribution {
 	constructor(
 		editor: BrowserEditor,
 		@IQuickInputService private readonly _quickInputService: IQuickInputService,
+		@IWorkspacesService private readonly _workspacesService: IWorkspacesService,
+		@IEditorService private readonly _editorService: IEditorService,
+		@ILabelService private readonly _labelService: ILabelService,
 	) {
 		super(editor);
 	}
@@ -97,7 +103,7 @@ export class BrowserHistoryFeature extends BrowserEditorContribution {
 		if (!model || !history) {
 			return;
 		}
-		showHistoryPicker(this._quickInputService, model, history);
+		showHistoryPicker(this._quickInputService, model, history, this._workspacesService, this._editorService, this._labelService);
 	}
 
 	private _buildRecents(currentUrl: string | undefined, text: string): IBrowserUrlSuggestion[] {
@@ -206,26 +212,35 @@ function resolveFavicon(history: BrowserHistoryStore, hash: string): URI | undef
 
 // -- Management picker -----------------------------------------------
 
-interface HistoryQuickPickItem extends IQuickPickItem {
+interface WebHistoryQuickPickItem extends IQuickPickItem {
+	readonly kind: 'web';
 	readonly entryId: number;
 	readonly entryUrl: string;
 }
 
-interface HistorySeparator extends IQuickPickSeparator {
-	readonly entryIds: readonly number[];
+interface FileHistoryQuickPickItem extends IQuickPickItem {
+	readonly kind: 'file';
+	readonly fileUri: URI;
 }
 
-function showHistoryPicker(quickInputService: IQuickInputService, model: IBrowserViewModel, history: BrowserHistoryStore): void {
+type HistoryQuickPickItem = WebHistoryQuickPickItem | FileHistoryQuickPickItem;
+
+interface HistorySeparator extends IQuickPickSeparator {
+	readonly entryIds?: readonly number[];
+}
+
+function showHistoryPicker(quickInputService: IQuickInputService, model: IBrowserViewModel, history: BrowserHistoryStore, workspacesService: IWorkspacesService, editorService: IEditorService, labelService: ILabelService): void {
 	const disposables = new DisposableStore();
 	const picker = disposables.add(quickInputService.createQuickPick<HistoryQuickPickItem>({ useSeparators: true }));
-	picker.title = localize('browser.history.title', "Browser History");
-	picker.placeholder = localize('browser.history.placeholder', "Filter browser history");
+	picker.title = localize('browser.history.unifiedTitle', "History");
+	picker.placeholder = localize('browser.history.unifiedPlaceholder', "Search recent files and web history");
 	picker.matchOnDescription = true;
 	picker.matchOnDetail = true;
+	picker.sortByLabel = false;
 
 	const clearAllButton: IQuickInputButton = {
 		iconClass: ThemeIcon.asClassName(Codicon.trash),
-		tooltip: localize('browser.history.clearAll', "Clear All History"),
+		tooltip: localize('browser.history.clearWeb', "Clear Web History"),
 	};
 	const clearDayButton: IQuickInputButton = {
 		iconClass: ThemeIcon.asClassName(Codicon.trash),
@@ -237,34 +252,66 @@ function showHistoryPicker(quickInputService: IQuickInputService, model: IBrowse
 	};
 	picker.buttons = [clearAllButton];
 
+	let files: readonly IRecentFile[] = [];
+	let request = 0;
 	const rebuild = () => {
-		picker.items = buildPickerItems(history, clearDayButton, removeEntryButton);
+		picker.items = buildPickerItems(history, files, labelService, clearDayButton, removeEntryButton);
+	};
+	const refreshFiles = async () => {
+		const current = ++request;
+		picker.busy = true;
+		try {
+			const recent = await workspacesService.getRecentlyOpened();
+			if (!disposables.isDisposed && current === request) {
+				files = recent.files;
+				rebuild();
+			}
+		} catch (error) {
+			onUnexpectedError(error);
+		} finally {
+			if (!disposables.isDisposed && current === request) {
+				picker.busy = false;
+			}
+		}
 	};
 	rebuild();
 	disposables.add(history.onDidChange(rebuild));
+	disposables.add(workspacesService.onDidChangeRecentlyOpened(() => void refreshFiles()));
+	void refreshFiles();
 
 	disposables.add(picker.onDidTriggerButton(button => {
 		if (button === clearAllButton) {
-			void model.deleteHistory();
+			void model.deleteHistory().catch(onUnexpectedError);
 		}
 	}));
 
 	disposables.add(picker.onDidTriggerSeparatorButton(({ button, separator }) => {
-		if (button === clearDayButton) {
-			void model.deleteHistory((separator as HistorySeparator).entryIds);
+		const ids = (separator as HistorySeparator).entryIds;
+		if (button === clearDayButton && ids) {
+			void model.deleteHistory(ids).catch(onUnexpectedError);
 		}
 	}));
 
 	disposables.add(picker.onDidTriggerItemButton(({ button, item }) => {
 		if (button === removeEntryButton) {
-			void model.deleteHistory([item.entryId]);
+			if (item.kind === 'file') {
+				void workspacesService.removeRecentlyOpened([item.fileUri]).catch(onUnexpectedError);
+			} else {
+				void model.deleteHistory([item.entryId]).catch(onUnexpectedError);
+			}
 		}
 	}));
 
 	disposables.add(picker.onDidAccept(() => {
 		const selected = picker.selectedItems[0];
 		if (selected) {
-			void model.loadURL(selected.entryUrl);
+			if (selected.kind === 'file') {
+				// Let native editor routing choose a normal group instead of forcing
+				// files into the active, potentially locked browser group.
+				void editorService.openEditor({ resource: selected.fileUri, options: { pinned: true } }).catch(onUnexpectedError);
+			} else {
+				void model.loadURL(selected.entryUrl).catch(onUnexpectedError);
+			}
 		}
 		picker.hide();
 	}));
@@ -273,7 +320,7 @@ function showHistoryPicker(quickInputService: IQuickInputService, model: IBrowse
 	picker.show();
 }
 
-function buildPickerItems(history: BrowserHistoryStore, clearDayButton: IQuickInputButton, removeEntryButton: IQuickInputButton): (HistoryQuickPickItem | HistorySeparator)[] {
+function buildPickerItems(history: BrowserHistoryStore, files: readonly IRecentFile[], labelService: ILabelService, clearDayButton: IQuickInputButton, removeEntryButton: IQuickInputButton): (HistoryQuickPickItem | HistorySeparator)[] {
 	// Group by calendar day, newest-first within each day and across days.
 	const sorted = [...history.entries.items].sort((a, b) => b.time - a.time);
 	const groups = new Map<string, { label: string; entries: IBrowserHistoryEntry[] }>();
@@ -291,18 +338,32 @@ function buildPickerItems(history: BrowserHistoryStore, clearDayButton: IQuickIn
 	}
 
 	const out: (HistoryQuickPickItem | HistorySeparator)[] = [];
+	if (files.length > 0) {
+		out.push({ type: 'separator', label: localize('browser.history.recentFiles', "Recent Files") });
+		for (const file of files) {
+			out.push({
+				kind: 'file',
+				label: labelService.getUriBasenameLabel(file.fileUri),
+				description: file.label || labelService.getUriLabel(file.fileUri),
+				iconClass: ThemeIcon.asClassName(Codicon.file),
+				buttons: [removeEntryButton],
+				fileUri: file.fileUri,
+			});
+		}
+	}
 	for (const key of orderedKeys) {
 		const group = groups.get(key)!;
 		out.push({
 			type: 'separator',
 			id: key,
-			label: group.label,
+			label: key === orderedKeys[0] ? localize('browser.history.webGroup', "Web History · {0}", group.label) : group.label,
 			buttons: [clearDayButton],
 			entryIds: group.entries.map(e => e.id),
 		});
 		for (const entry of group.entries) {
 			const faviconUri = entry.icon ? resolveFavicon(history, entry.icon) : undefined;
 			out.push({
+				kind: 'web',
 				label: entry.title || entry.url,
 				description: entry.title ? entry.url : undefined,
 				iconPath: faviconUri ? { dark: faviconUri } : undefined,
@@ -359,7 +420,6 @@ class ShowBrowserHistoryAction extends Action2 {
 				group: BrowserActionGroup.Data,
 				order: 1,
 				when,
-				isHiddenByDefault: true,
 			},
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyH,

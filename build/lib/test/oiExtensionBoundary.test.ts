@@ -97,19 +97,17 @@ function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativ
 }
 
 suite('OI extension boundary', () => {
-	test('packages the BeCoder Welcome tab icon through the Getting Started resource route', () => {
-		const iconPath = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'common', 'media', 'becoder-icon.png');
-		assert.ok(fs.existsSync(iconPath), 'BeCoder Welcome tab icon is missing');
-
-		const inputSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'browser', 'gettingStartedInput.ts'), 'utf8');
-		assert.match(inputSource, /FileAccess\.asBrowserUri\('vs\/workbench\/contrib\/welcomeGettingStarted\/common\/media\/becoder-icon\.png'\)/);
-
-		const gulpfile = fs.readFileSync(path.join(repositoryRoot, 'build', 'gulpfile.vscode.ts'), 'utf8');
-		assert.match(gulpfile, /out-build\/vs\/workbench\/contrib\/welcomeGettingStarted\/common\/media\/becoder-icon\.png/);
-		assert.doesNotMatch(gulpfile, /welcomeGettingStarted\/common\/media\/\*\*/);
+	test('reuses the workbench icon for the native browser homepage', () => {
+		const iconPath = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'media', 'becoder-icon.png');
+		assert.ok(fs.existsSync(iconPath), 'BeCoder homepage icon is missing');
+		const styles = fs.readFileSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'browserView', 'electron-browser', 'media', 'browser.css'), 'utf8');
+		assert.match(styles, /url\(['"]\.\.\/\.\.\/\.\.\/\.\.\/browser\/media\/becoder-icon\.png['"]\)/);
+		for (const buildFile of ['build/gulpfile.vscode.ts', 'build/next/index.ts']) {
+			assert.doesNotMatch(fs.readFileSync(path.join(repositoryRoot, buildFile), 'utf8'), /welcomeGettingStarted\/common\/media\/becoder-icon\.png/);
+		}
 	});
 
-	test('keeps Welcome while removing walkthrough runtime and extension injection', () => {
+	test('restores legacy Welcome tabs into the native homepage without walkthrough injection', () => {
 		const welcomeRoot = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'welcomeGettingStarted', 'browser');
 		const page = fs.readFileSync(path.join(welcomeRoot, 'gettingStarted.ts'), 'utf8');
 		const contribution = fs.readFileSync(path.join(welcomeRoot, 'gettingStarted.contribution.ts'), 'utf8');
@@ -124,9 +122,12 @@ suite('OI extension boundary', () => {
 		assert.doesNotMatch(`${help}\n${notebookLayout}\n${notebookStartup}`, /IWalkthroughsService|workbench\.action\.openWalkthrough/);
 		assert.ok(!fs.existsSync(path.join(repositoryRoot, 'src', 'vs', 'workbench', 'contrib', 'remote')));
 		assert.ok(!fs.existsSync(path.join(welcomeRoot, 'gettingStartedAccessibleView.ts')));
-		assert.match(page, /buildStartList\(\)/);
-		assert.match(page, /buildRecentlyOpenedList\(\)/);
-		assert.match(page, /Show welcome page on startup/);
+		assert.match(page, /class GettingStartedInputSerializer/);
+		assert.match(page, /getOrCreateLazy\(generateUuid\(\)\)/);
+		assert.match(input, /workbench\.editors\.gettingStartedInput/);
+		assert.match(startup, /BrowserHomeCommandId/);
+		assert.ok(!fs.existsSync(path.join(welcomeRoot, 'gettingStartedList.ts')));
+		assert.ok(!fs.existsSync(path.join(welcomeRoot, 'media', 'gettingStarted.css')));
 	});
 
 	test('keeps the native user snippets configuration flow', () => {

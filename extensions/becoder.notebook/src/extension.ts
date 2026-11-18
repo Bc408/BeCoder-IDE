@@ -178,9 +178,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 		const edit = new vscode.WorkspaceEdit(); edit.set(cell.notebook.uri, [vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, becoder: { ...cell.metadata.becoder, name } })]); await vscode.workspace.applyEdit(edit);
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.notebook.new', async () => {
-		if (!hasFolder()) { return; }
-		const root = await chooseCreationRoot(); if (!root) { return; }
-		const document = await vscode.workspace.openNotebookDocument(beCoderNotebookType, new vscode.NotebookData([new vscode.NotebookCellData(vscode.NotebookCellKind.Markup, '', 'markdown')])); creationRoots.set(document, root);
+		const document = await vscode.workspace.openNotebookDocument(beCoderNotebookType, new vscode.NotebookData([new vscode.NotebookCellData(vscode.NotebookCellKind.Markup, '', 'markdown')]));
 		await vscode.window.showNotebookDocument(document);
 	}));
 	const associate = async () => {
@@ -248,7 +246,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 
 function hasFolder(): boolean {
 	if (vscode.workspace.workspaceFolders?.length) { return true; }
-	void vscode.window.showInformationMessage(vscode.l10n.t('Open a folder before creating or associating a Notebook.')); return false;
+	void vscode.window.showInformationMessage(vscode.l10n.t('Open a folder before associating a Notebook.')); return false;
 }
 async function chooseCreationRoot(): Promise<string | undefined> {
 	const folders = vscode.workspace.workspaceFolders?.filter(folder => folder.uri.scheme === 'file') ?? [];

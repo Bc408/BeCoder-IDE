@@ -57,13 +57,6 @@
 					"title": "%configuration.displayLanguage.title%",
 					"description": "%configuration.displayLanguage.description%"
 				},
-				"becoder.newFile.defaultLanguage": {
-					"type": "string",
-					"default": "cpp",
-					"scope": "window",
-					"title": "%configuration.newFileDefaultLanguage.title%",
-					"description": "%configuration.newFileDefaultLanguage%"
-				},
 				"becoder.welcome.onlineJudgeSites": {
 					"type": "object",
 					"additionalProperties": { "type": "string", "pattern": "^https?://[^\\s]+$" },

@@ -7,7 +7,6 @@ import { URI } from '../../../../base/common/uri.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import * as arrays from '../../../../base/common/arrays.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
-import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
@@ -17,7 +16,10 @@ import { Disposable, } from '../../../../base/common/lifecycle.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-import { GettingStartedEditorOptions, GettingStartedInput, gettingStartedInputTypeId } from './gettingStartedInput.js';
+import { gettingStartedInputTypeId, gettingStartedResource } from './gettingStartedInput.js';
+import { BrowserHomeCommandId } from '../../browserView/common/browserHome.js';
+import { IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { getTelemetryLevel } from '../../../../platform/telemetry/common/telemetryUtils.js';
@@ -41,26 +43,26 @@ export class StartupPageEditorResolverContribution extends Disposable implements
 	static readonly ID = 'workbench.contrib.startupPageEditorResolver';
 
 	constructor(
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IBrowserViewWorkbenchService browserViewService: IBrowserViewWorkbenchService,
 		@IEditorResolverService editorResolverService: IEditorResolverService
 	) {
 		super();
 
 		this._register(editorResolverService.registerEditor(
-			`${GettingStartedInput.RESOURCE.scheme}:/**`,
+			`${gettingStartedResource.scheme}:/**`,
 			{
-				id: GettingStartedInput.ID,
+				id: gettingStartedInputTypeId,
 				label: localize('welcome.displayName', "Welcome Page"),
 				priority: RegisteredEditorPriority.builtin,
 			},
 			{
 				singlePerResource: true,
-				canSupportResource: uri => uri.scheme === GettingStartedInput.RESOURCE.scheme,
+				canSupportResource: uri => uri.scheme === gettingStartedResource.scheme && uri.authority === gettingStartedResource.authority,
 			},
 			{
 				createEditorInput: ({ options }) => {
 					return {
-						editor: this.instantiationService.createInstance(GettingStartedInput, options as GettingStartedEditorOptions),
+						editor: browserViewService.getOrCreateLazy(generateUuid()),
 						options: {
 							...options,
 							pinned: false
@@ -125,7 +127,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 				if (startupEditorSetting.value === 'readme') {
 					await this.openReadme();
 				} else if (startupEditorSetting.value === 'welcomePage' || startupEditorSetting.value === 'welcomePageInEmptyWorkbench') {
-					await this.openGettingStarted(true);
+					await this.openGettingStarted();
 				} else if (startupEditorSetting.value === 'terminal') {
 					this.commandService.executeCommand(TerminalCommandId.CreateTerminalEditor);
 				}
@@ -161,26 +163,8 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		}
 	}
 
-	private async openGettingStarted(showTelemetryNotice?: boolean) {
-		const startupEditorTypeID = gettingStartedInputTypeId;
-		const editor = this.editorService.activeEditor;
-
-		// Ensure that the welcome editor won't get opened more than once
-		if (editor?.typeId === startupEditorTypeID || this.editorService.editors.some(e => e.typeId === startupEditorTypeID)) {
-			return;
-		}
-
-		if (startupEditorTypeID === gettingStartedInputTypeId) {
-			this.editorService.openEditor({
-				resource: GettingStartedInput.RESOURCE,
-				options: {
-					index: editor ? 0 : undefined,
-					pinned: false,
-					preserveFocus: this.shouldPreserveFocus(),
-					...{ showTelemetryNotice }
-				},
-			});
-		}
+	private async openGettingStarted() {
+		await this.commandService.executeCommand(BrowserHomeCommandId, { preserveFocus: this.shouldPreserveFocus() });
 	}
 
 	private shouldPreserveFocus(): boolean {

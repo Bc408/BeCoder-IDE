@@ -13,6 +13,7 @@ import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '..
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { IQuickInputService, IQuickPick, IQuickPickItem, IQuickPickSeparator, QuickInputHideReason } from '../../../../../platform/quickinput/common/quickInput.js';
 import { BrowserEditorInput } from '../../common/browserEditorInput.js';
+import { isBrowserHomeUrl } from '../../common/browserHome.js';
 import {
 	BrowserEditorContribution,
 	BrowserWidgetLocation,
@@ -196,9 +197,10 @@ export class BrowserUrlBarWidget extends Disposable {
 		this._renderUrl();
 	}
 
-	/** The canonical URL: model.url if attached, else the input's initial URL. */
+	/** The URL shown for editing; the local homepage has an empty address. */
 	private get _canonicalUrl(): string {
-		return this._host.input?.url ?? '';
+		const url = this._host.input?.url;
+		return isBrowserHomeUrl(url) ? '' : url!;
 	}
 
 	/** Placeholder text for the display and picker (host-provided or default). */

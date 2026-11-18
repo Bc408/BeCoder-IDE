@@ -15,6 +15,7 @@ import {
 	IBrowserViewKeyDownEvent,
 } from '../../../../../platform/browserView/common/browserView.js';
 import { IBrowserViewModel } from '../../common/browserView.js';
+import { isBrowserHomeUrl } from '../../common/browserHome.js';
 import {
 	BrowserEditor,
 	BrowserEditorContribution,
@@ -151,7 +152,7 @@ class WebContentsViewRendererFeature extends BrowserEditorContribution {
 	}
 
 	override tryFocus(): boolean {
-		if (!this.editor.input?.url) {
+		if (isBrowserHomeUrl(this.editor.input?.url)) {
 			return false;
 		}
 		this._container?.focus();
@@ -209,7 +210,7 @@ class WebContentsViewRendererFeature extends BrowserEditorContribution {
 	private _shouldShowPage(): boolean {
 		return this._editorVisible
 			&& !this._overlayObscured
-			&& !!this._model?.url
+			&& !isBrowserHomeUrl(this._model?.url)
 			&& !this._model?.error;
 	}
 
@@ -220,11 +221,11 @@ class WebContentsViewRendererFeature extends BrowserEditorContribution {
 	private _refresh(): void {
 		// Placeholder screenshot: shown whenever there's a page to render
 		// (covered by the WCV when it's up, visible during hide/show swaps).
-		const placeholderActive = !!this._model?.url && !this._model?.error;
+		const placeholderActive = !isBrowserHomeUrl(this._model?.url) && !this._model?.error;
 		this._placeholderScreenshot.style.display = placeholderActive ? '' : 'none';
 
 		// Overlay-pause overlay: fades in when an overlay obscures the page.
-		const pauseActive = !!this._model?.url && this._editorVisible && this._overlayObscured;
+		const pauseActive = !isBrowserHomeUrl(this._model?.url) && this._editorVisible && this._overlayObscured;
 		this._overlayPauseEl.classList.toggle('visible', pauseActive);
 
 		if (!this._model) {

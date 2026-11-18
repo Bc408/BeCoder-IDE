@@ -227,3 +227,53 @@ suite('BrowserSearch - getBrowserSearchEngineLabel', () => {
 	});
 });
 
+suite('BrowserSearch - custom engines', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+
+	test('preserves spaces and literal plus signs in path and fragment templates', () => {
+		const engines = { Path: 'https://example.com/search/{query}', Fragment: 'https://example.com/#/search/{query}' };
+		const query = 'a b+c/中文';
+		assert.strictEqual(decodeURIComponent(new URL(buildSearchUrl(query, 'Path', engines)).pathname), `/search/${query}`);
+		assert.strictEqual(decodeURIComponent(new URL(buildSearchUrl(query, 'Fragment', engines)).hash), `#/search/${query}`);
+	});
+
+	test('uses configured names and safely encodes every query placeholder', () => {
+		const engines = { 'My Search': 'https://search.example.com/?q={query}&again={query}' };
+		assert.strictEqual(getBrowserSearchEngineLabel('My Search', engines), 'My Search');
+		assert.strictEqual(
+			buildSearchUrl('  中文 C++ & x  ', 'My Search', engines),
+			'https://search.example.com/?q=%E4%B8%AD%E6%96%87%20C%2B%2B%20%26%20x&again=%E4%B8%AD%E6%96%87%20C%2B%2B%20%26%20x',
+		);
+	});
+
+	test('ignores malformed custom engines and protects built-in and disabled names', () => {
+		const engines = {
+			'': 'https://example.com/?q={query}',
+			' spaced ': 'https://example.com/?q={query}',
+			bing: 'https://unrelated.example/?q={query}',
+			none: 'https://unrelated.example/?q={query}',
+			missing: 'https://example.com/',
+			script: 'javascript:alert("{query}")',
+			file: 'file:///{query}',
+			broken: 'https://[invalid/?q={query}',
+			host: 'https://{query}.example.com/',
+			credentials: 'https://user:password@example.com/?q={query}',
+			number: 42,
+			valid: 'https://example.com/search/{query}',
+		};
+		for (const id of Object.keys(engines).filter(id => id !== 'bing' && id !== 'valid')) {
+			assert.strictEqual(getBrowserSearchEngineLabel(id, engines), 'Bing');
+		}
+		assert.strictEqual(getBrowserSearchEngineLabel('valid', engines), 'valid');
+		assert.strictEqual(buildSearchUrl('cats', 'bing', engines), 'https://www.bing.com/search?q=cats');
+		assert.strictEqual(buildSearchUrl('cats', 'script', engines), 'https://www.bing.com/search?q=cats');
+	});
+
+	test('falls back without throwing for manually malformed configuration', () => {
+		for (const engines of [undefined, null, [], 'engine', 1, { custom: null }]) {
+			assert.strictEqual(buildSearchUrl('cats', 'custom', engines), 'https://www.bing.com/search?q=cats');
+			assert.strictEqual(getBrowserSearchEngineLabel('custom', engines), 'Bing');
+		}
+	});
+});
+

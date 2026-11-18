@@ -20,6 +20,7 @@ import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { BrowserViewUri } from '../../../../../platform/browserView/common/browserViewUri.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { BrowserEditorInput } from '../../common/browserEditorInput.js';
+import { BrowserHomeCommandId, isBrowserHomeUrl } from '../../common/browserHome.js';
 import { logBrowserOpen } from '../../../../../platform/browserView/common/browserViewTelemetry.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../../platform/contextkey/common/contextkey.js';
 import { BrowserViewCommandId } from '../../../../../platform/browserView/common/browserView.js';
@@ -33,7 +34,6 @@ import { isLocalhostAuthority, isAllInterfacesAuthority } from '../../../../../p
 import { IConfigurationService, isConfigured } from '../../../../../platform/configuration/common/configuration.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
-import { ToggleTitleBarConfigAction } from '../../../../browser/parts/titlebar/titlebarActions.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { match } from '../../../../../base/common/glob.js';
 import { $, addDisposableListener, EventType } from '../../../../../base/browser/dom.js';
@@ -47,6 +47,7 @@ import { disposableTimeout } from '../../../../../base/common/async.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
 import { ResourceContextKey } from '../../../../common/contextkeys.js';
 import { Schemas } from '../../../../../base/common/network.js';
+import '../../../becoder/browser/beCoderNewTab.contribution.js';
 
 const CONTEXT_BROWSER_EDITOR_OPEN = new RawContextKey<boolean>('browserEditorOpen', false, localize('browser.editorOpen', "Whether any browser editor is currently open"));
 
@@ -392,6 +393,61 @@ class OpenFileInIntegratedBrowserAction extends Action2 {
 	}
 }
 
+class OpenBrowserHomeAction extends Action2 {
+	private opening: Promise<void> | undefined;
+
+	constructor() {
+		super({
+			id: BrowserHomeCommandId,
+			title: localize2('browser.home', 'Home'),
+			icon: Codicon.home,
+			f1: true,
+			menu: { id: MenuId.TitleBar, group: 'navigation', order: 10 },
+		});
+	}
+
+	run(accessor: ServicesAccessor, options?: { preserveFocus?: boolean; inactive?: boolean; openToSide?: boolean }): Promise<void> {
+		// Repeated clicks share only the current open operation; no later action is queued.
+		return this.opening ??= this.open(accessor, options).finally(() => { this.opening = undefined; });
+	}
+
+	private async open(accessor: ServicesAccessor, options?: { preserveFocus?: boolean; inactive?: boolean; openToSide?: boolean }): Promise<void> {
+		const editorService = accessor.get(IEditorService);
+		const groupsService = accessor.get(IEditorGroupsService);
+		const editorOptions = { pinned: true, ...(options?.preserveFocus === undefined ? {} : { preserveFocus: options.preserveFocus }), ...(options?.inactive === undefined ? {} : { inactive: options.inactive }) };
+		for (const group of groupsService.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE)) {
+			const home = group.editors.find((editor): editor is BrowserEditorInput => editor instanceof BrowserEditorInput && editor.canReuseAsHome);
+			if (home) {
+				await editorService.openEditor(home, editorOptions, group.id);
+				return;
+			}
+		}
+
+		const browserViewService = accessor.get(IBrowserViewWorkbenchService);
+		const group = await browserViewService.getPreferredGroup(options?.openToSide ? SIDE_GROUP : undefined);
+		await editorService.openEditor({ resource: BrowserViewUri.forId(generateUuid()), options: editorOptions }, group);
+	}
+}
+
+class GoHomeAction extends Action2 {
+	constructor() {
+		super({
+			id: 'workbench.action.browser.goHome',
+			title: localize2('browser.goHome', 'Home'),
+			icon: Codicon.home,
+			category: BrowserActionCategory,
+			precondition: BROWSER_EDITOR_ACTIVE,
+			menu: { id: MenuId.BrowserNavigationToolbar, group: 'navigation', order: 4 },
+		});
+	}
+
+	async run(accessor: ServicesAccessor, browserEditor = accessor.get(IEditorService).activeEditorPane): Promise<void> {
+		if (browserEditor instanceof BrowserEditor && browserEditor.model && !isBrowserHomeUrl(browserEditor.model.url)) {
+			await browserEditor.model.loadURL('about:blank');
+		}
+	}
+}
+
 class NewTabAction extends Action2 {
 	constructor() {
 		super({
@@ -415,7 +471,7 @@ class NewTabAction extends Action2 {
 		});
 	}
 
-	async run(accessor: ServicesAccessor, _browserEditor = accessor.get(IEditorService).activeEditorPane): Promise<void> {
+	async run(accessor: ServicesAccessor, _browserEditor = accessor.get(IEditorService).activeEditorPane, groupId?: GroupIdentifier): Promise<void> {
 		const editorService = accessor.get(IEditorService);
 		const telemetryService = accessor.get(ITelemetryService);
 		const browserViewService = accessor.get(IBrowserViewWorkbenchService);
@@ -423,7 +479,11 @@ class NewTabAction extends Action2 {
 
 		logBrowserOpen(telemetryService, 'newTabCommand');
 
-		await editorService.openEditor({ resource }, await browserViewService.getPreferredGroup());
+		const group = groupId === undefined ? await browserViewService.getPreferredGroup() : accessor.get(IEditorGroupsService).getGroup(groupId)?.id;
+		if (groupId !== undefined && group === undefined) {
+			return;
+		}
+		await editorService.openEditor({ resource, options: { pinned: true } }, group);
 	}
 }
 
@@ -485,19 +545,6 @@ class OpenOrListBrowsersAction extends Action2 {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.Slash,
 			},
-			menu: {
-				id: MenuId.TitleBar,
-				group: 'navigation',
-				order: 10,
-				when: ContextKeyExpr.and(
-					ContextKeyExpr.equals('config.workbench.browser.showInTitleBar', false).negate(),
-					ContextKeyExpr.or(
-						CONTEXT_BROWSER_EDITOR_OPEN,
-						// This is a hack to work around `true` just testing for truthiness of the key. It works since `1 == true` in JS.
-						ContextKeyExpr.equals('config.workbench.browser.showInTitleBar', 1)
-					)
-				),
-			}
 		});
 	}
 
@@ -533,15 +580,11 @@ registerAction2(QuickOpenBrowserAction);
 registerAction2(OpenIntegratedBrowserAction);
 registerAction2(OpenFileInIntegratedBrowserAction);
 registerAction2(OpenOrListBrowsersAction);
+registerAction2(OpenBrowserHomeAction);
+registerAction2(GoHomeAction);
 registerAction2(NewTabAction);
 registerAction2(CloseAllBrowserTabsAction);
 registerAction2(CloseAllBrowserTabsInGroupAction);
-
-registerAction2(class ToggleBrowserTitleBarButton extends ToggleTitleBarConfigAction {
-	constructor() {
-		super('workbench.browser.showInTitleBar', localize('toggle.browser', 'Integrated Browser'), localize('toggle.browserDescription', "Toggle visibility of the Integrated Browser button in title bar"), 8);
-	}
-});
 
 /**
  * Tracks whether any browser editor is open across all editor groups and
@@ -783,7 +826,7 @@ class BrowserTabUrlSuggestions extends BrowserEditorContribution {
 			onDidChange: this._onDidChange.event,
 			getSuggestions: async ({ input }) => {
 				// Only surface tab suggestions on a new / empty tab.
-				if (input.url) {
+				if (!isBrowserHomeUrl(input.url)) {
 					return [];
 				}
 				return this._collectSuggestions(input);
@@ -881,21 +924,6 @@ BrowserEditor.registerContribution(BrowserTabUrlSuggestions);
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	...workbenchConfigurationNodeBase,
 	properties: {
-		'workbench.browser.showInTitleBar': {
-			type: ['boolean', 'string'],
-			enum: [true, false, 'whenOpen'],
-			enumDescriptions: [
-				localize({ comment: ['This is the description for a setting. Values surrounded by single quotes are not to be translated.'], key: 'browser.showInTitleBar.true' }, 'The button is always shown in the title bar.'),
-				localize({ comment: ['This is the description for a setting. Values surrounded by single quotes are not to be translated.'], key: 'browser.showInTitleBar.false' }, 'The button is never shown in the title bar.'),
-				localize({ comment: ['This is the description for a setting. Values surrounded by single quotes are not to be translated.'], key: 'browser.showInTitleBar.whenOpen' }, 'The button is shown in the title bar when a browser editor is open.')
-			],
-			default: true,
-			experiment: { mode: 'startup' },
-			description: localize(
-				{ comment: ['This is the description for a setting.'], key: 'browser.showInTitleBar' },
-				'Controls whether the Integrated Browser button is shown in the title bar.'
-			)
-		},
 		'workbench.browser.openLocalhostLinks': {
 			type: 'boolean',
 			default: false,

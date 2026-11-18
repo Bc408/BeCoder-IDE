@@ -4524,6 +4524,7 @@
 			"toggleSidebar": "切换边栏"
 		},
 		"vs/workbench/browser/parts/editor/multiEditorTabsControl": {
+			"becoder.newHomeTab": "新建首页",
 			"addTab": "Add Tab",
 			"ariaLabelTabActions": "选项卡操作"
 		},
@@ -5839,6 +5840,7 @@
 			"authenticationlabel": "标签"
 		},
 		"vs/workbench/contrib/browserView/common/browserEditorInput": {
+			"browser.homeLabel": "首页",
 			"browser.editorLabel": "浏览器"
 		},
 		"vs/workbench/contrib/browserView/common/browserSearch": {
@@ -5948,6 +5950,11 @@
 			"browser.urlIsFavorited": "当前浏览器 URL 是否为收藏项"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserHistoryFeature": {
+			"browser.history.unifiedTitle": "历史记录",
+			"browser.history.unifiedPlaceholder": "搜索最近文件与网页历史",
+			"browser.history.clearWeb": "清除网页历史",
+			"browser.history.recentFiles": "最近文件",
+			"browser.history.webGroup": "网页历史 · {0}",
 			"browser.history": "历史记录",
 			"browser.history.clearAll": "清除所有历史记录",
 			"browser.history.clearDay": "清除当天的条目",
@@ -5997,10 +6004,12 @@
 			"browser.permissions.title": "{0} 的权限"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserSearchFeatures": {
-			"browser.search.engine.none": "无",
-			"browser.searchEngine": "控制从集成浏览器的地址栏搜索 Web 时使用的搜索引擎。选择“无”以禁用搜索。"
+			"browser.searchEngine": "集成浏览器地址栏与首页使用的搜索引擎。填写 `bing`、`google`、`yahoo`、`duckduckgo` 或 {0} 中的名称。填写 `none` 可禁用搜索。",
+			"browser.customSearchEngines": "自定义搜索引擎，按名称配置包含 `{query}` 的 HTTP(S) 地址，例如 `https://example.com/search?q={query}`。在 {0} 中选择名称。内置名称和 `none` 为保留名称。"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserTabManagementFeatures": {
+			"browser.home": "首页",
+			"browser.goHome": "返回首页",
 			"browser.backgroundGroup": "背景",
 			"browser.closeAll": "关闭所有浏览器标签页",
 			"browser.closeAllInGroup": "关闭组中的所有浏览器标签页",
@@ -6037,8 +6046,15 @@
 			"browser.openLocalhostLinks": "启用后，来自终端和其他来源的 localhost 链接 (localhost, 127.0.0.1, [::1]) 和所有接口链接 (0.0.0.0, [0:0:0:0:0:0:0:0], [::]) 将在集成浏览器中打开，而非系统浏览器。"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserWelcomeFeature": {
-			"browser.welcomeSubtitle": "在上方输入 URL 以开始使用。",
-			"browser.welcomeTitle": "浏览器"
+			"browser.home.subtitle": "一切就绪",
+			"browser.home.search": "搜索网页",
+			"browser.home.searchClear": "清空",
+			"browser.home.searchSubmit": "搜索",
+			"browser.home.newC": "新建 C 文件",
+			"browser.home.newCpp": "新建 C++ 文件",
+			"browser.home.newNotebook": "新建 BeCoder NoteBook",
+			"browser.home.customize": "自定义首页",
+			"browser.home.address": "输入网址"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/webContentsViewRendererFeature": {
 			"browser.overlayPauseDetail.notification": "关闭通知以继续使用浏览器。",
@@ -12783,52 +12799,6 @@
 		"vs/workbench/contrib/webviewPanel/browser/webviewPanel.contribution": {
 			"webview.editor.label": "Web 视图编辑器"
 		},
-		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted": {
-			"acessibleViewHint": "在无障碍视图中检查此项({0})。\r\n",
-			"acessibleViewHintNoKbOpen": "通过命令“打开无障碍视图”在无障碍视图中检查此项，该命令当前无法通过键绑定触发。\r\n",
-			"allDone": "标记为完成",
-			"checkboxTitle": "选中后，此页面将在启动时显示。",
-			"close": "隐藏",
-			"closeAriaLabel": "隐藏",
-			"footer": "{0} 收集使用情况数据。阅读我们的 {1} 并了解如何 {2}。",
-			"gettingStarted.allStepsComplete": "所有 {0} 个步骤均已完成!",
-			"gettingStarted.editingEvolved": "一切就绪",
-			"gettingStarted.keyboardTip": "提示: 使用键盘快捷方式 ",
-			"gettingStarted.someStepsComplete": "已完成 {0} 个步骤，共 {1} 个步骤",
-			"goBack": "返回",
-			"imageShowing": "显示 {0} 的图像",
-			"new": "新建",
-			"newItems": "已更新",
-			"nextOne": "下一节",
-			"noRecents": "你没有最近使用的文件夹，",
-			"openFolder": "打开文件夹",
-			"optOut": "选择退出",
-			"pickWalkthroughs": "打开演练...",
-			"privacy statement": "隐私声明",
-			"recent": "最近",
-			"show more recents": "显示所有最近使用的文件夹 {0}",
-			"showAll": "更多...",
-			"start": "启动",
-			"stepAutoCompleted": "步骤 {0} 已完成",
-			"stepDone": "{0}: 已完成",
-			"stepNotDone": "{0}: 未完成",
-			"toStart": "以开始。",
-			"videoAltText": "{0} 的视频",
-			"videoShowing": "显示 {0} 的视频",
-			"walkthroughs": "演练",
-			"welcome": "欢迎",
-			"welcomeAriaLabel": "关于编辑器快速入门的概述。",
-			"welcomePage.openFolderWithPath": "打开路径为 {1} 的文件夹 {0}",
-			"welcomePage.removeRecent": "从最近打开中删除",
-			"welcomePage.removeRecentAriaLabel": "从“最近打开”中移除 {0}",
-			"welcomePage.showOnStartup": "启动时显示欢迎页",
-			"recentInFolder": "文件夹内最近打开",
-			"noFolderFileRecents": "此文件夹中还没有最近打开的文件。",
-			"noWorkspaceFileRecents": "打开文件夹后，此处将显示最近打开的文件。",
-			"showMoreFolderRecents": "显示更多当前文件夹内最近打开的文件",
-			"welcomePage.openFileWithPath": "打开文件 {0}，完整路径 {1}",
-			"onlineJudges": "在线评测"
-		},
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution": {
 			"deprecationMessage": "已弃用，请使用全局 `workbench.reduceMotion`。",
 			"miWelcome": "欢迎",
@@ -12850,15 +12820,6 @@
 			"workbench.welcomePage.preferReducedMotion": "启用后，减少欢迎页中的移动。",
 			"workbench.welcomePage.walkthroughs.openOnInstall": "启用后，扩展的演练将在安装扩展时打开。",
 			"workspacePlatform": "当前工作区的平台，在远程或无服务器上下文中可能不同于 UI 的平台"
-		},
-		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedColors": {
-			"walkthrough.stepTitle.foreground": "每个演练步骤标题的前景色",
-			"welcomePage.background": "欢迎页面的背景色。",
-			"welcomePage.progress.background": "欢迎页面进度栏的前景色。",
-			"welcomePage.progress.foreground": "欢迎页面进度栏的背景色。",
-			"welcomePage.tileBackground": "“欢迎”页面上磁贴的背景色。",
-			"welcomePage.tileBorder": "“欢迎”页面上磁贴的边框颜色。",
-			"welcomePage.tileHoverBackground": "“欢迎”页面上磁贴的悬停背景色。"
 		},
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedExtensionPoint": {
 			"pathDeprecated": "已弃用。请改用“图像”或“Markdown”",
@@ -12900,10 +12861,6 @@
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedIcons": {
 			"gettingStartedChecked": "用于表示已完成的演练步骤",
 			"gettingStartedUnchecked": "用于表示尚未完成的演练步骤"
-		},
-		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedInput": {
-			"getStarted": "欢迎",
-			"walkthroughPageTitle": "演练: {0}"
 		},
 		"vs/workbench/contrib/welcomeGettingStarted/browser/gettingStartedService": {
 			"builtin": "内置",
@@ -14545,16 +14502,6 @@
 			"saveWorkspaceMessage": "你是否要将你的工作区配置保存为文件？",
 			"workspaceOpenedDetail": "已在另一个窗口打开工作区。请先关闭该窗口，然后重试。",
 			"workspaceOpenedMessage": "无法保存工作区“{0}”"
-		},
-		"vs/workbench/contrib/welcomeGettingStarted/common/gettingStartedStartEntries": {
-			"gettingStarted.newFile.title": "新建文件...",
-			"gettingStarted.newFile.description": "打开新的无标题文本文件、笔记本或自定义编辑器。",
-			"gettingStarted.openMac.title": "打开...",
-			"gettingStarted.openMac.description": "打开文件或文件夹以开始工作",
-			"gettingStarted.openFile.title": "打开文件...",
-			"gettingStarted.openFile.description": "打开文件以开始工作",
-			"gettingStarted.openFolder.title": "打开文件夹...",
-			"gettingStarted.openFolder.description": "打开文件夹以开始工作"
 		},
 		"vs/workbench/contrib/modernUI/browser/modernUI.contribution": {
 			"layoutDensity": "布局密度",

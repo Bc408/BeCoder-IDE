@@ -145,6 +145,12 @@
 	flex: 1;
 }
 
+.monaco-workbench .part.editor > .content .editor-group-container > .title > .tabs-and-actions-container:not(.wrapping):has(> .tabs-bar-new-tab) > .monaco-scrollable-element {
+	/* Keep the add button beside short tab lists, while retaining native scrolling when full. */
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
 .monaco-workbench .part.editor > .content .editor-group-container > .title > .tabs-and-actions-container > .monaco-scrollable-element .scrollbar {
 	z-index: 11;
 	cursor: default;
@@ -180,10 +186,15 @@
 
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
+	border: 0;
+	padding: 0;
+	background: transparent;
 	width: var(--editor-group-tab-height);
 	height: var(--editor-group-tab-height);
+	margin-right: auto;
 	cursor: pointer;
 	color: var(--vscode-tab-inactiveForeground);
 }
@@ -191,6 +202,11 @@
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab:hover {
 	color: var(--vscode-tab-hoverForeground);
 	background-color: var(--vscode-tab-hoverBackground);
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -3px;
 }
 
 .monaco-workbench .part.editor > .content .editor-group-container > .title > .tabs-and-actions-container.wrapping .tabs-container {

@@ -7,7 +7,7 @@ import { localize } from '../../../../nls.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
-import { EditorExtensions, IEditorFactoryRegistry } from '../../../common/editor.js';
+import { EditorExtensions, IEditorFactoryRegistry, EditorResourceAccessor, SideBySideEditor } from '../../../common/editor.js';
 import { BrowserEditor } from './browserEditor.js';
 import { BrowserEditorInput, BrowserEditorSerializer } from '../common/browserEditorInput.js';
 import { BrowserViewUri } from '../../../../platform/browserView/common/browserViewUri.js';
@@ -17,6 +17,10 @@ import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase 
 import { Schemas } from '../../../../base/common/network.js';
 import { IBrowserViewWorkbenchService } from '../common/browserView.js';
 import { BrowserViewWorkbenchService } from './browserViewWorkbenchService.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
 
 // Register actions and browser features
 import './features/webContentsViewRendererFeature.js';
@@ -99,3 +103,26 @@ class BrowserEditorResolverContribution implements IWorkbenchContribution {
 registerWorkbenchContribution2(BrowserEditorResolverContribution.ID, BrowserEditorResolverContribution, WorkbenchPhase.BlockStartup);
 
 registerSingleton(IBrowserViewWorkbenchService, BrowserViewWorkbenchService, InstantiationType.Delayed);
+
+/** Include files opened from Explorer/imports in the existing application recents. */
+export class BrowserRecentFilesContribution extends Disposable implements IWorkbenchContribution {
+
+	static readonly ID = 'workbench.contrib.browserRecentFiles';
+
+	constructor(
+		@IEditorService editorService: IEditorService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+	) {
+		super();
+		const rememberFile = () => {
+			const resource = EditorResourceAccessor.getOriginalUri(editorService.activeEditor, { supportSideBySide: SideBySideEditor.PRIMARY, filterByScheme: Schemas.file });
+			if (resource) {
+				void workspacesService.addRecentlyOpened([{ fileUri: resource }]).catch(onUnexpectedError);
+			}
+		};
+		this._register(editorService.onDidActiveEditorChange(rememberFile));
+		rememberFile();
+	}
+}
+
+registerWorkbenchContribution2(BrowserRecentFilesContribution.ID, BrowserRecentFilesContribution, WorkbenchPhase.AfterRestored);

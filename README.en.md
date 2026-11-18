@@ -34,7 +34,7 @@ Supports **64-bit Windows 10 and later**. Download Setup from [GitHub Releases](
 1. Choose a dedicated installation folder containing ASCII characters only, no longer than 70 characters, and not a drive root.
 2. The first launch opens the bundled `coding/helloCoder.cpp`.
 3. Write C/C++ and use the editor's upper-right run actions, or press **Ctrl+Alt+B** to run CPH samples.
-4. Open an OJ from Welcome, import samples from a supported problem page, then submit your solution yourself on the website.
+4. Open an OJ from Home, import samples from a supported problem page, then submit your solution yourself on the website.
 
 Reinstallation deletes and replaces the entire existing installation directory, including `data` and any files you put there. Back up everything you need first. Only workspaces, `.beaconWork` and `.notebook` outside that directory are unaffected. See [installation, data and removal (Chinese)](docs/getting-started.md).
 

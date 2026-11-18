@@ -25,9 +25,10 @@ import { IEditorService } from '../../../../services/editor/common/editorService
 import { IPreferencesService } from '../../../../services/preferences/common/preferences.js';
 import { IBrowserViewModel } from '../../common/browserView.js';
 import { BrowserEditorInput } from '../../common/browserEditorInput.js';
+import { isBrowserHomeUrl } from '../../common/browserHome.js';
 import {
 	BROWSER_SEARCH_NONE,
-	BrowserSearchEngineId,
+	BrowserCustomSearchEnginesSettingId,
 	BrowserSearchEngineSettingId,
 	buildSearchUrl,
 	getBrowserSearchEngineLabel,
@@ -144,7 +145,6 @@ class BrowserNavigationBar extends Disposable {
 
 	refreshUrl(): void { this._urlBar.refreshUrl(); }
 	previewUrl(url: string): void { this._urlBar.previewUrl(url); }
-	focusUrlInput(): void { this._urlBar.focusUrlInput(); }
 	openUrlPicker(): void { this._urlBar.openUrlPicker(); }
 	clear(): void { this._urlBar.clear(); }
 
@@ -154,9 +154,9 @@ class BrowserNavigationBar extends Disposable {
 	 * The configured address bar search engine, or `undefined` when search
 	 * routing is disabled (the setting is `'none'`).
 	 */
-	private get _searchEngine(): BrowserSearchEngineId | undefined {
+	private get _searchEngine(): string | undefined {
 		const value = this._configurationService.getValue<string>(BrowserSearchEngineSettingId);
-		return value && value !== BROWSER_SEARCH_NONE ? value as BrowserSearchEngineId : undefined;
+		return value && value !== BROWSER_SEARCH_NONE ? value : undefined;
 	}
 
 	/**
@@ -180,6 +180,7 @@ class BrowserNavigationBar extends Disposable {
 		if (!engineId) {
 			return [goTo];
 		}
+		const customEngines = this._configurationService.getValue<unknown>(BrowserCustomSearchEnginesSettingId);
 		const configureEngineButton: IBrowserUrlSuggestionAction = {
 			id: 'browser.configureSearchEngine',
 			iconClass: ThemeIcon.asClassName(Codicon.settingsGear),
@@ -188,10 +189,10 @@ class BrowserNavigationBar extends Disposable {
 		};
 		const search: IUrlPickerItem = {
 			id: text,
-			label: localize('browser.searchFor', "{0} - {1} Search", text, getBrowserSearchEngineLabel(engineId)),
+			label: localize('browser.searchFor', "{0} - {1} Search", text, getBrowserSearchEngineLabel(engineId, customEngines)),
 			iconClass: ThemeIcon.asClassName(Codicon.search),
 			buttons: [configureEngineButton],
-			apply: input => input.navigate(buildSearchUrl(text, engineId), { source: 'searchInput' }),
+			apply: input => input.navigate(buildSearchUrl(text, engineId, customEngines), { source: 'searchInput' }),
 		};
 		switch (resolveAddressBarInputType(text)) {
 			case 'url':
@@ -218,13 +219,6 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 	private readonly _canGoForwardContext: IContextKey<boolean>;
 	private readonly _pendingTryFocus = this._register(new MutableDisposable());
 
-	/**
-	 * Whether a navigation has been initiated on the current tab. Once true,
-	 * an empty URL means "navigation in flight" rather than "fresh tab", so
-	 * {@link tryFocus} keeps focus on the page instead of reopening the picker.
-	 */
-	private _hasInitiatedNavigation = false;
-
 	constructor(
 		editor: BrowserEditor,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -240,7 +234,7 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 		// Keep the URL bar presentation (placeholder, primary action) in sync
 		// when the user toggles search settings while the bar is visible.
 		this._register(configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(BrowserSearchEngineSettingId)) {
+			if (e.affectsConfiguration(BrowserSearchEngineSettingId) || e.affectsConfiguration(BrowserCustomSearchEnginesSettingId)) {
 				this._navbar.refreshUrl();
 			}
 		}));
@@ -267,19 +261,14 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 	}
 
 	protected override onModelAttached(model: IBrowserViewModel, store: DisposableStore): void {
-		// A model that is already loading on attach (e.g. switching back to a
-		// tab mid-navigation) counts as having initiated navigation.
-		this._hasInitiatedNavigation = model.loading;
 		this._updateFromModel(model);
 		store.add(model.onDidNavigate(() => this._updateFromModel(model)));
 		store.add(model.onWillNavigate(url => {
-			this._hasInitiatedNavigation = true;
 			this._navbar.previewUrl(url);
 		}));
 	}
 
 	override onModelDetached(): void {
-		this._hasInitiatedNavigation = false;
 		this._navbar.clear();
 		this._canGoBackContext.reset();
 		this._canGoForwardContext.reset();
@@ -287,6 +276,11 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 
 	override tryFocus(): boolean {
 		const input = this.editor.input;
+		this._pendingTryFocus.clear();
+		const url = this.editor.model?.url ?? (input instanceof BrowserEditorInput ? input.url : undefined);
+		if (isBrowserHomeUrl(url)) {
+			return false; // The local home contribution owns its search field.
+		}
 
 		// Defer one tick so editor-tab activation can focus the tab control first;
 		// then we move focus into the browser editor's URL flow.
@@ -295,12 +289,7 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 				return;
 			}
 
-			// A new tab (no URL loaded) auto-opens the picker so the user can immediately type / browse suggestions.
-			// Otherwise we move focus into the browser editor so it doesn't stay on the tab control.
-			const url = this.editor.model?.url ?? (input instanceof BrowserEditorInput ? input.url : undefined);
-			if (!url && !this._hasInitiatedNavigation) {
-				this._navbar.openUrlPicker();
-			} else {
+			if (!isBrowserHomeUrl(this.editor.model?.url ?? (input instanceof BrowserEditorInput ? input.url : undefined))) {
 				this.editor.ensureBrowserFocus();
 			}
 		}, 0);
@@ -311,10 +300,6 @@ export class BrowserNavigationFeatures extends BrowserEditorContribution {
 		this._navbar.refreshUrl();
 		this._canGoBackContext.set(model.canGoBack);
 		this._canGoForwardContext.set(model.canGoForward);
-	}
-
-	focusUrlInput(): void {
-		this._navbar.focusUrlInput();
 	}
 
 	openUrlPicker(): void {
@@ -536,7 +521,7 @@ class OpenBrowserSettingsAction extends Action2 {
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const preferencesService = accessor.get(IPreferencesService);
-		await preferencesService.openSettings({ query: `@id:workbench.browser.*` });
+		await preferencesService.openSettings({ query: '@id:workbench.browser.*,becoder.welcome.onlineJudgeSites,becoder.welcome.onlineJudges' });
 	}
 }
 

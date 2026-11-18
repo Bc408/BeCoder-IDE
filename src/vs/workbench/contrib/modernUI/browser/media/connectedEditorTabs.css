@@ -121,10 +121,15 @@
 	align-items: flex-start;
 }
 
-.modern-ui-tabs.modern-ui-connected-editor-tabs.monaco-workbench .part.editor > .content .editor-group-container > .title.tabs > .tabs-and-actions-container:not(.wrapping) > :is(.editor-actions, .editor-layout-actions) {
+.modern-ui-tabs.modern-ui-connected-editor-tabs.monaco-workbench .part.editor > .content .editor-group-container > .title.tabs > .tabs-and-actions-container:not(.wrapping) > :is(.editor-actions, .editor-layout-actions, .tabs-bar-new-tab) {
 	align-self: stretch;
 	height: auto;
 	margin-bottom: var(--vscode-strokeThickness);
+}
+
+.modern-ui-tabs.modern-ui-connected-editor-tabs.monaco-workbench .part.editor > .content .editor-group-container > .title.tabs > .tabs-and-actions-container.wrapping > .tabs-bar-new-tab {
+	align-self: flex-start;
+	height: calc(var(--editor-group-tab-height) + var(--vscode-spacing-size20) * 2);
 }
 
 .modern-ui-tabs.modern-ui-connected-editor-tabs.monaco-workbench .part.editor > .content .editor-group-container > .title.tabs .tabs-container,

@@ -3,75 +3,34 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize2 } from '../../../../nls.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { onUnexpectedError } from '../../../../base/common/errors.js';
+import { BrowserViewCommandId } from '../../../../platform/browserView/common/browserView.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../../../common/editor.js';
-import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
-import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
-import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
-import { BeCoderNewTabEditor } from './beCoderNewTabEditor.js';
-import { localizeNewTab, BeCoderNewTabInput } from './beCoderNewTabInput.js';
-
-Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
-	// allow-any-unicode-next-line
-	EditorPaneDescriptor.create(BeCoderNewTabEditor, BeCoderNewTabEditor.ID, localizeNewTab('New Tab', '新建标签页')),
-	[new SyncDescriptor(BeCoderNewTabInput)]
-);
-
-class BeCoderNewTabStartupContribution implements IWorkbenchContribution {
-
-	static readonly ID = 'workbench.contrib.beCoderNewTabStartup';
-
-	constructor(
-		@IEditorService private readonly editorService: IEditorService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ILifecycleService lifecycleService: ILifecycleService,
-	) {
-		void lifecycleService.when(LifecyclePhase.Restored).then(() => {
-			if (!this.editorService.activeEditor) {
-				return this.editorService.openEditor(this.instantiationService.createInstance(BeCoderNewTabInput));
-			}
-			return undefined;
-		}).catch(onUnexpectedError);
-	}
-}
-
-// Opening a convenience editor must never be allowed to participate in the
-// workbench's blocking startup path. In particular, packaged builds restore
-// editor groups after BlockStartup; waiting until that restoration is complete
-// also prevents the New Tab from racing the normal editor restoration.
-registerWorkbenchContribution2(BeCoderNewTabStartupContribution.ID, BeCoderNewTabStartupContribution, WorkbenchPhase.AfterRestored);
+import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
+import { IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
 
 registerAction2(class extends Action2 {
 	constructor() {
-		super({
-			id: 'becoder.action.openNewTab',
-			title: {
-				// allow-any-unicode-next-line
-				value: localizeNewTab('New Tab', '新建标签页'),
-				original: 'New Tab',
-			},
-			f1: true,
-		});
+		super({ id: 'becoder.action.openNewTab', title: localize2('becoder.newTab', 'New Tab'), f1: false });
 	}
 
-	run(accessor: ServicesAccessor) {
-		const editorService = accessor.get(IEditorService);
-		const instantiationService = accessor.get(IInstantiationService);
-		return editorService.openEditor(instantiationService.createInstance(BeCoderNewTabInput));
+	run(accessor: ServicesAccessor, groupId?: number): Promise<unknown> {
+		return accessor.get(ICommandService).executeCommand(BrowserViewCommandId.NewTab, undefined, groupId);
 	}
 });
 
-class BeCoderNewTabInputSerializer implements IEditorSerializer {
-	canSerialize(): boolean { return true; }
-	serialize(): string { return ''; }
-	deserialize(instantiationService: IInstantiationService): BeCoderNewTabInput {
-		return instantiationService.createInstance(BeCoderNewTabInput);
+/** Restore tabs saved by older builds into the same native browser homepage. */
+export class BeCoderNewTabInputSerializer implements IEditorSerializer {
+	canSerialize(): boolean { return false; }
+	serialize(): undefined { return undefined; }
+	deserialize(instantiationService: IInstantiationService): BrowserEditorInput {
+		return instantiationService.invokeFunction(accessor => accessor.get(IBrowserViewWorkbenchService).getOrCreateLazy(generateUuid()));
 	}
 }
 
-Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer(BeCoderNewTabInput.ID, BeCoderNewTabInputSerializer);
+Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer('workbench.editor.beCoderNewTab', BeCoderNewTabInputSerializer);

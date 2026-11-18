@@ -62,6 +62,7 @@ import { BugIndicatingError } from '../../../../base/common/errors.js';
 import { applyDragImage } from '../../../../base/browser/ui/dnd/dnd.js';
 import { IsTopRightEditorGroupContext } from '../../../common/contextkeys.js';
 import { nextCharLength } from '../../../../base/common/strings.js';
+import { BrowserViewCommandId } from '../../../../platform/browserView/common/browserView.js';
 
 interface IEditorInputLabel {
 	readonly editor: EditorInput;
@@ -299,6 +300,19 @@ export class MultiEditorTabsControl extends EditorTabsControl {
 		// container, which tab layout logic relies on (see #324902).
 		if (this.menuIds?.tabsBarAddTab) {
 			this.addTabContainer = this.createAddTabControl(this.tabsContainer, this.menuIds.tabsBarAddTab);
+		} else {
+			// Keep the normal add button outside the indexed tab children so it
+			// cannot take part in tab drag, wrapping or sticky-tab bookkeeping.
+			const addTabButton = $('button.tabs-bar-new-tab.codicon.codicon-add', {
+				type: 'button',
+				title: localize('becoder.newHomeTab', 'New Tab'),
+				'aria-label': localize('becoder.newHomeTab', 'New Tab'),
+			});
+			this.tabsAndActionsContainer.appendChild(addTabButton);
+			this._register(addDisposableListener(addTabButton, EventType.CLICK, event => {
+				EventHelper.stop(event, true);
+				this.openNewTabPage();
+			}));
 		}
 
 		// Create Editor Toolbar
@@ -311,14 +325,12 @@ export class MultiEditorTabsControl extends EditorTabsControl {
 	}
 
 	private openNewTabPage(): void {
-		// A group can be removed while handling its final tab close. Ignore this
-		// delayed callback instead of trying to reactivate a stale group.
 		if (!isCurrentEditorGroup(this.groupsView, this.groupView)) {
 			return;
 		}
 
 		this.groupsView.activateGroup(this.groupView.id);
-		void this.commandService.executeCommand('becoder.action.openNewTab');
+		void this.commandService.executeCommand(BrowserViewCommandId.NewTab, undefined, this.groupView.id);
 	}
 
 	private get tabCount(): number {
@@ -808,12 +820,6 @@ export class MultiEditorTabsControl extends EditorTabsControl {
 			this.clearEditorActionsToolbar();
 			this.updateEditorLayoutActionsToolbar();
 			this.updateTabsControlVisibility();
-
-			// Do not open a New Tab in a group that has been removed. Closing the
-			// last tab in a split group with `closeEmptyGroups` enabled can dispose
-			// this group before the title control receives this callback. Opening the
-			// New Tab then would reactivate a stale group and fail.
-			this.openNewTabPage();
 		}
 	}
 

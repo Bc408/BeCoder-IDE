@@ -23,6 +23,7 @@ import { logBrowserOpen } from '../../../../platform/browserView/common/browserV
 import { LRUCachedFunction } from '../../../../base/common/cache.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
+import { isBrowserHomeUrl } from './browserHome.js';
 
 const LOADING_SPINNER_SVG = (color: string | undefined) => `
 	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
@@ -84,6 +85,7 @@ export class BrowserEditorInput extends EditorInput {
 	private _model: IBrowserViewModel | undefined;
 	private _modelPromise: Promise<IBrowserViewModel> | undefined;
 	private _modelStore = this._register(new DisposableStore());
+	private _navigating = false;
 
 	private readonly _onBeforeDispose = this._register(new Emitter<IBeforeDisposeBrowserEditorEvent>());
 	readonly onBeforeDispose: Event<IBeforeDisposeBrowserEditorEvent> = this._onBeforeDispose.event;
@@ -114,11 +116,13 @@ export class BrowserEditorInput extends EditorInput {
 
 		this._modelStore.clear();
 		this._model = model;
+		this._navigating = false;
 
 		// Set up cleanup when the model is disposed
 		this._modelStore.add(this._model.onWillDispose(() => {
 			this._modelStore.clear();
 			this._model = undefined;
+			this._navigating = false;
 		}));
 
 		// Auto-close editor when webcontents closes
@@ -129,8 +133,17 @@ export class BrowserEditorInput extends EditorInput {
 		// Listen for label-relevant changes to fire onDidChangeLabel
 		this._modelStore.add(this._model.onDidChangeTitle(() => this._onDidChangeLabel.fire()));
 		this._modelStore.add(this._model.onDidChangeFavicon(() => this._onDidChangeLabel.fire()));
-		this._modelStore.add(this._model.onDidChangeLoadingState(() => this._onDidChangeLabel.fire()));
-		this._modelStore.add(this._model.onDidNavigate(() => this._onDidChangeLabel.fire()));
+		this._modelStore.add(this._model.onWillNavigate(() => { this._navigating = true; }));
+		this._modelStore.add(this._model.onDidChangeLoadingState(event => {
+			if (!event.loading) {
+				this._navigating = false;
+			}
+			this._onDidChangeLabel.fire();
+		}));
+		this._modelStore.add(this._model.onDidNavigate(() => {
+			this._navigating = false;
+			this._onDidChangeLabel.fire();
+		}));
 
 		this._onDidChangeLabel.fire();
 		this._onDidResolveModel.fire(model);
@@ -152,6 +165,11 @@ export class BrowserEditorInput extends EditorInput {
 	get url(): string | undefined {
 		// Use model URL if available, otherwise fall back to initial data
 		return this._model ? this._model.url : this._initialData.url;
+	}
+
+	get canReuseAsHome(): boolean {
+		// The committed URL can still be blank while a website navigation is pending.
+		return isBrowserHomeUrl(this.url) && !this._navigating && !this._model?.loading;
 	}
 
 	get title(): string | undefined {
@@ -215,6 +233,9 @@ export class BrowserEditorInput extends EditorInput {
 	}
 
 	override getIcon(): ThemeIcon | URI | undefined {
+		if (isBrowserHomeUrl(this.url)) {
+			return Codicon.home;
+		}
 		// Use model data if available, otherwise fall back to initial data
 		if (this._model) {
 			if (this._model.loading) {
@@ -235,12 +256,18 @@ export class BrowserEditorInput extends EditorInput {
 	}
 
 	override getName(): string {
+		if (isBrowserHomeUrl(this.url)) {
+			return localize('browser.homeLabel', "Home");
+		}
 		const hasTitle = this._model ? !!this._model.title : !!this._initialData.title;
 		const name = hasTitle ? this.title! : this.getDescription(Verbosity.SHORT) || BrowserEditorInput.DEFAULT_LABEL;
 		return truncate(name, MAX_TITLE_LENGTH);
 	}
 
 	override getTitle(verbosity = Verbosity.MEDIUM): string {
+		if (isBrowserHomeUrl(this.url)) {
+			return this.getName();
+		}
 		const hasTitle = this._model ? !!this._model.title : !!this._initialData.title;
 		const description = this.getDescription(verbosity);
 		const title = hasTitle ? `${this.title} (${description})` : description;
@@ -248,7 +275,7 @@ export class BrowserEditorInput extends EditorInput {
 	}
 
 	override getDescription(verbosity = Verbosity.MEDIUM): string | undefined {
-		return this.url && this.getURLTitles.get(this.url)[verbosity];
+		return !isBrowserHomeUrl(this.url) && this.url ? this.getURLTitles.get(this.url)[verbosity] : undefined;
 	}
 
 	private readonly getURLTitles = new LRUCachedFunction((url: string) => {

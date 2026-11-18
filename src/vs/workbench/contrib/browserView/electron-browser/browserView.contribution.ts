@@ -26,6 +26,7 @@ import { IWorkspacesService } from '../../../../platform/workspaces/common/works
 import './features/webContentsViewRendererFeature.js';
 import './features/browserNavigationFeatures.js';
 import './features/browserWelcomeFeature.js';
+import './features/browserAppearanceFeature.js';
 import './features/browserFavoritesFeature.js';
 import './features/browserHistoryFeature.js';
 import './features/browserPermissionsFeature.js';

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable } from '../../../base/common/lifecycle.js';
+import { Disposable, toDisposable } from '../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../base/common/event.js';
 import { IBrowserDeviceProfile } from '../common/browserView.js';
 import { ILogService } from '../../log/common/log.js';
@@ -21,6 +21,7 @@ import { ICDPConnection } from '../common/cdp/types.js';
 export class BrowserViewEmulator extends Disposable {
 
 	private _device: IBrowserDeviceProfile | undefined;
+	private _colorScheme: 'light' | 'dark' | undefined;
 	private readonly _defaultUserAgent: string;
 	private _lastLayout = { containerWidth: 1024, containerHeight: 768, scale: 1, hostZoom: 1 };
 	private _lastApplied: { viewportWidth: number; viewportHeight: number; scale: number; hostZoom: number; mobile: boolean } | undefined;
@@ -38,9 +39,13 @@ export class BrowserViewEmulator extends Disposable {
 		// Chromium may reset emulation on cross-process navigation.
 		const onNavigate = () => {
 			this._lastApplied = undefined;
-			void this._reapply();
+			this._reapply();
+			if (!this._device) {
+				void this._applyMedia().catch(err => this.logService.error('[BrowserViewEmulator] media update failed', err));
+			}
 		};
 		this.browser.webContents.on('did-navigate', onNavigate);
+		this._register(toDisposable(() => this.browser.webContents.removeListener('did-navigate', onNavigate)));
 
 		// Intercept external CDP emulation commands and fold them into the device profile so there is a single source of truth.
 		this._register(this.browser.debugger.registerCommandInterceptor((method, params, session) => this._intercept(method, params, session)));
@@ -48,6 +53,14 @@ export class BrowserViewEmulator extends Disposable {
 
 	get device(): IBrowserDeviceProfile | undefined {
 		return this._device;
+	}
+
+	async setColorScheme(colorScheme: 'light' | 'dark'): Promise<void> {
+		if (this._colorScheme === colorScheme) {
+			return;
+		}
+		this._colorScheme = colorScheme;
+		await this._applyMedia();
 	}
 
 	get emulatedScaleFactor(): number {
@@ -149,13 +162,29 @@ export class BrowserViewEmulator extends Disposable {
 			await this.browser.debugger.sendCommandRaw('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 });
 			if (this.device !== device) { return; } // Bail if device changed while we were awaiting
 
-			await this.browser.debugger.sendCommandRaw('Emulation.setEmulatedMedia', { features: this._device ? [{ name: 'pointer', value: mobile ? 'coarse' : 'fine' }] : [] });
+			await this._applyMedia();
 			if (this.device !== device) { return; } // Bail if device changed while we were awaiting
 
 			await this.browser.debugger.sendCommandRaw('Emulation.setEmitTouchEventsForMouse', { enabled: mobile });
 		} catch (err) {
 			this.logService.error('[BrowserViewEmulator] _applyTouchAndMedia failed', err);
 		}
+	}
+
+	private async _applyMedia(): Promise<void> {
+		if (this.browser.webContents.isDestroyed()) {
+			return;
+		}
+		// Keep theme and device preferences in one command: either update replaces
+		// the complete CDP media override, including on navigation or device reset.
+		const features: { name: string; value: string }[] = [];
+		if (this._colorScheme) {
+			features.push({ name: 'prefers-color-scheme', value: this._colorScheme });
+		}
+		if (this._device) {
+			features.push({ name: 'pointer', value: this._device.mobile ? 'coarse' : 'fine' });
+		}
+		await this.browser.debugger.sendCommandRaw('Emulation.setEmulatedMedia', { features });
 	}
 
 	/**

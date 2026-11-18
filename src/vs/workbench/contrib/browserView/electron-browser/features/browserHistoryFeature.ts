@@ -12,13 +12,12 @@ import { URI } from '../../../../../base/common/uri.js';
 import { onUnexpectedError } from '../../../../../base/common/errors.js';
 import { Action2, MenuId, registerAction2 } from '../../../../../platform/actions/common/actions.js';
 import { IConfigurationRegistry, Extensions as ConfigurationExtensions, ConfigurationScope } from '../../../../../platform/configuration/common/configurationRegistry.js';
-import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IQuickInputButton, IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { ILabelService } from '../../../../../platform/label/common/label.js';
 import { IRecentFile, IWorkspacesService } from '../../../../../platform/workspaces/common/workspaces.js';
-import { BrowserViewCommandId, BrowserViewStorageScope } from '../../../../../platform/browserView/common/browserView.js';
+import { BrowserViewCommandId } from '../../../../../platform/browserView/common/browserView.js';
 import { BrowserHistoryStore, IBrowserHistoryEntry } from '../../../../../platform/browserView/common/browserHistory.js';
 import { workbenchConfigurationNodeBase } from '../../../../common/configuration.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
@@ -36,7 +35,6 @@ import {
 } from '../browserEditor.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { KeyCode, KeyMod } from '../../../../../base/common/keyCodes.js';
-import { CONTEXT_BROWSER_STORAGE_SCOPE } from './browserDataStorageFeatures.js';
 
 const MAX_RECENTS = 3;
 const MAX_HISTORY = 6;
@@ -407,19 +405,19 @@ class ShowBrowserHistoryAction extends Action2 {
 	static readonly ID = BrowserViewCommandId.ShowHistory;
 
 	constructor() {
-		const when = ContextKeyExpr.and(BROWSER_EDITOR_ACTIVE, ContextKeyExpr.equals(CONTEXT_BROWSER_STORAGE_SCOPE.key, BrowserViewStorageScope.Ephemeral).negate());
 		super({
 			id: ShowBrowserHistoryAction.ID,
 			title: localize2('browser.showHistory', 'History'),
 			category: BrowserActionCategory,
 			icon: Codicon.history,
 			f1: true,
-			precondition: when,
+			// Recent files remain available even when web history is not persisted.
+			precondition: BROWSER_EDITOR_ACTIVE,
 			menu: {
 				id: MenuId.BrowserActionsToolbar,
-				group: BrowserActionGroup.Data,
+				group: BrowserActionGroup.History,
 				order: 1,
-				when,
+				when: BROWSER_EDITOR_ACTIVE,
 			},
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyH,

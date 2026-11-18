@@ -87,7 +87,7 @@
 					"type": "array",
 					"items": { "type": "string" },
 					"uniqueItems": true,
-					"default": ["Codeforces", "AtCoder", "洛谷", "蓝桥杯", "牛客", "HDOJ"],
+					"default": ["Codeforces", "AtCoder", "洛谷", "蓝桥杯", "牛客"],
 					"scope": "application",
 					"order": 4,
 					"title": "%configuration.welcome.onlineJudges.title%",

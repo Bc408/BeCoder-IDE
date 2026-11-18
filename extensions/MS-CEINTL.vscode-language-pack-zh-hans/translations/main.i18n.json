@@ -6013,6 +6013,12 @@
 			"browser.problem.unsupported": "此页面不支持 OJ Connect 题面。",
 			"browser.problem.failed": "无法导入题目：{0}"
 		},
+		"vs/workbench/contrib/browserView/electron-browser/features/browserAppearanceFeature": {
+			"browser.colorTheme.auto": "跟随 BeCoder",
+			"browser.colorTheme.light": "浅色",
+			"browser.colorTheme.dark": "深色",
+			"browser.colorTheme": "内置浏览器的颜色主题，包括工具栏与首页。网页收到相同的浅色或深色偏好，并自行决定如何显示。"
+		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserSearchFeatures": {
 			"browser.searchEngine": "集成浏览器地址栏与首页使用的搜索引擎。填写 `bing`、`google`、`yahoo`、`duckduckgo` 或 {0} 中的名称。填写 `none` 可禁用搜索。",
 			"browser.customSearchEngines": "自定义搜索引擎，按名称配置包含 `{query}` 的 HTTP(S) 地址，例如 `https://example.com/search?q={query}`。在 {0} 中选择名称。内置名称和 `none` 为保留名称。"

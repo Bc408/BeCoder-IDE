@@ -49,7 +49,14 @@ export class BrowserProblemActionViewContribution extends Disposable {
 					background-color: currentColor;
 				}
 				.browser-problem-actions-menu .action-item:nth-child(${index + 1}) .menu-item-check::before { content: none; }
-			`).join('') + '.browser-problem-actions-menu .action-item.disabled .menu-item-check { color: var(--vscode-disabledForeground); }';
+			`).join('') + `
+				.browser-problem-actions-menu .action-item.disabled .menu-item-check { color: var(--vscode-disabledForeground); }
+				.browser-root .browser-actions-toolbar [data-command-id="${BrowserViewCommandId.GetProblem}"] .action-label.icon {
+					background-image: none !important;
+					mask: ${asCSSUrl(ojIconUri)} center / 16px 16px no-repeat;
+					background-color: var(--vscode-icon-foreground);
+				}
+			`;
 		}, this._store);
 		this._register(items.register(MenuId.BrowserActionsToolbar, browserProblemMenu, (action, options, instantiation) => {
 			if (action instanceof SubmenuItemAction) {

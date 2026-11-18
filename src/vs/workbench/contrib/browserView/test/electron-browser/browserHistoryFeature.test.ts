@@ -6,14 +6,23 @@
 import assert from 'assert';
 import { DeferredPromise } from '../../../../../base/common/async.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
-import { Emitter } from '../../../../../base/common/event.js';
+import { Emitter, Event } from '../../../../../base/common/event.js';
+import { Action } from '../../../../../base/common/actions.js';
+import { ToolBar } from '../../../../../base/browser/ui/toolbar/toolbar.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { BrowserHistoryStore } from '../../../../../platform/browserView/common/browserHistory.js';
+import { BrowserViewCommandId, BrowserViewStorageScope } from '../../../../../platform/browserView/common/browserView.js';
+import { MenuId, MenuRegistry, isIMenuItem } from '../../../../../platform/actions/common/actions.js';
+import { MenuWorkbenchToolBar } from '../../../../../platform/actions/browser/toolbar.js';
+import { MockContextKeyService } from '../../../../../platform/keybinding/test/common/mockKeybindingService.js';
 import { IQuickInputButton, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { IRecentFile, IRecentlyOpened } from '../../../../../platform/workspaces/common/workspaces.js';
 import { BrowserHistoryFeature } from '../../electron-browser/features/browserHistoryFeature.js';
+import { BrowserNavigationFeatures } from '../../electron-browser/features/browserNavigationFeatures.js';
+import { BrowserUrlBarWidget } from '../../electron-browser/widgets/browserUrlBarWidget.js';
+import { CONTEXT_BROWSER_STORAGE_SCOPE } from '../../electron-browser/features/browserDataStorageFeatures.js';
 
 function fixture(store: Pick<DisposableStore, 'add'>) {
 	const hidden = new Emitter<void>();
@@ -67,6 +76,59 @@ function fixture(store: Pick<DisposableStore, 'add'>) {
 
 suite('Browser unified history', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
+	test('history remains available in every browser storage scope', () => {
+		const item = MenuRegistry.getMenuItems(MenuId.BrowserActionsToolbar).filter(isIMenuItem).find(item => item.command.id === BrowserViewCommandId.ShowHistory)!;
+		assert.ok(item);
+		for (const scope of [BrowserViewStorageScope.Global, BrowserViewStorageScope.Workspace, BrowserViewStorageScope.Ephemeral]) {
+			const context = new MockContextKeyService();
+			context.createKey('activeEditor', 'workbench.editor.browser');
+			context.createKey(CONTEXT_BROWSER_STORAGE_SCOPE.key, scope);
+			assert.notStrictEqual(item.when?.evaluate({ getValue: key => context.getContextKeyValue(key) }), false, `History menu hidden in ${scope}`);
+			assert.notStrictEqual(item.command.precondition?.evaluate({ getValue: key => context.getContextKeyValue(key) }), false, `History command disabled in ${scope}`);
+		}
+	});
+	test('narrow navigation keeps history inline while other actions overflow, then restores them', () => {
+		let actionsToolbar: ToolBar | undefined;
+		const instantiation = {
+			createChild: () => instantiation,
+			createInstance: (ctor: unknown, ...args: unknown[]) => {
+				if (ctor === MenuWorkbenchToolBar) {
+					const toolbar = new ToolBar(args[0] as HTMLElement, { showContextMenu: () => { } }, args[2] as ConstructorParameters<typeof ToolBar>[2]);
+					if (args[1] === MenuId.BrowserActionsToolbar) { actionsToolbar = toolbar; }
+					return toolbar;
+				}
+				if (ctor === BrowserUrlBarWidget) {
+					return { element: document.createElement('div'), dispose: () => { } };
+				}
+				return { dispose: () => { } };
+			},
+		};
+		const feature = store.add(new BrowserNavigationFeatures(
+			{ onDidChangeModel: Event.None } as never, instantiation as never, new MockContextKeyService(),
+			{ getValue: () => undefined, onDidChangeConfiguration: Event.None } as never, {} as never,
+		));
+		const navbar = feature.widgets[0].element;
+		document.body.appendChild(navbar);
+		store.add({ dispose: () => navbar.remove() });
+		let width = 340;
+		navbar.getBoundingClientRect = () => new DOMRect(0, 0, width, 32);
+		navbar.children[1].getBoundingClientRect = () => new DOMRect(140, 0, width - 140, 32);
+		const items = MenuRegistry.getMenuItems(MenuId.BrowserActionsToolbar).filter(isIMenuItem)
+			.filter(item => item.command.id === BrowserViewCommandId.ShowHistory || item.command.id === BrowserViewCommandId.OpenExternal)
+			.sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '') || (a.order ?? 0) - (b.order ?? 0));
+		assert.strictEqual(items.length, 2);
+		const toolbar = actionsToolbar!;
+		toolbar.setActions(items.map(item => store.add(new Action(item.command.id, item.command.id))));
+		const visibleIds = () => Array.from({ length: toolbar.getItemsLength() }, (_, index) => toolbar.getItemAction(index)?.id);
+		assert.ok(visibleIds().includes(BrowserViewCommandId.ShowHistory), 'History must stay inline at narrow widths');
+		assert.ok(!visibleIds().includes(BrowserViewCommandId.OpenExternal));
+		assert.strictEqual(toolbar.hasOverflow(), true);
+		width = 1400;
+		toolbar.relayout();
+		assert.ok(visibleIds().includes(BrowserViewCommandId.ShowHistory));
+		assert.ok(visibleIds().includes(BrowserViewCommandId.OpenExternal));
+		assert.strictEqual(toolbar.hasOverflow(), false);
+	});
 	test('groups native recent files before website history and preserves recency order', async () => {
 		const f = fixture(store);
 		f.contribution.showManagementPicker(); await f.settled();

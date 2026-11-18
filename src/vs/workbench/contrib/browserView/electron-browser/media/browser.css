@@ -30,6 +30,51 @@
 	width: 100%;
 	height: 100%;
 	outline: none !important;
+	background-color: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+
+	/* Local overrides leave the surrounding workbench and website CSS intact. */
+	&[data-browser-theme="light"] {
+		--vscode-editor-background: #ffffff;
+		--vscode-foreground: #333333;
+		--vscode-icon-foreground: #424242;
+		--vscode-descriptionForeground: #616161;
+		--vscode-disabledForeground: #757575;
+		--vscode-input-background: #f2f2f2;
+		--vscode-input-foreground: #333333;
+		--vscode-input-placeholderForeground: #767676;
+		--vscode-input-border: #cecece;
+		--vscode-focusBorder: #005fb8;
+		--vscode-toolbar-hoverBackground: #e8e8e8;
+		--vscode-button-secondaryBackground: #e5e5e5;
+		--vscode-button-secondaryForeground: #333333;
+		--vscode-button-secondaryHoverBackground: #cccccc;
+		--vscode-editorWidget-background: #f3f3f3;
+		--vscode-editorWidget-foreground: #333333;
+		--vscode-widget-border: #cecece;
+		--vscode-textLink-foreground: #005fb8;
+	}
+
+	&[data-browser-theme="dark"] {
+		--vscode-editor-background: #1f1f1f;
+		--vscode-foreground: #cccccc;
+		--vscode-icon-foreground: #cccccc;
+		--vscode-descriptionForeground: #9d9d9d;
+		--vscode-disabledForeground: #9d9d9d;
+		--vscode-input-background: #313131;
+		--vscode-input-foreground: #cccccc;
+		--vscode-input-placeholderForeground: #989898;
+		--vscode-input-border: #3c3c3c;
+		--vscode-focusBorder: #0078d4;
+		--vscode-toolbar-hoverBackground: #383838;
+		--vscode-button-secondaryBackground: #313131;
+		--vscode-button-secondaryForeground: #cccccc;
+		--vscode-button-secondaryHoverBackground: #3c3c3c;
+		--vscode-editorWidget-background: #252526;
+		--vscode-editorWidget-foreground: #cccccc;
+		--vscode-widget-border: #454545;
+		--vscode-textLink-foreground: #4daafc;
+	}
 
 	.browser-navbar {
 		display: flex;

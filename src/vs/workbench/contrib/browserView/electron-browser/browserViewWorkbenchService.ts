@@ -21,6 +21,8 @@ import { IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection }
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { findGroup } from '../../../services/editor/common/editorGroupFinder.js';
 import { Schemas } from '../../../../base/common/network.js';
+import { IThemeService } from '../../../../platform/theme/common/themeService.js';
+import { BrowserColorTheme, BrowserColorThemeSettingId, resolveBrowserAppearance } from '../common/browserAppearance.js';
 
 export const BrowserMaxHistoryEntriesSettingId = 'workbench.browser.maxHistoryEntries';
 export const BrowserNewTabPlacementSettingId = 'workbench.browser.newTabPlacement';
@@ -72,6 +74,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IWorkspaceTrustEnablementService private readonly workspaceTrustEnablementService: IWorkspaceTrustEnablementService,
 		@ILogService private readonly logService: ILogService,
+		@IThemeService private readonly themeService: IThemeService,
 	) {
 		super();
 		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
@@ -81,12 +84,13 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		// Send the full per-window configuration as a single unit, and resend it
 		// whenever any of its inputs change.
 		this._updateWindowConfiguration();
+		this._register(this.themeService.onDidColorThemeChange(() => this._updateWindowConfiguration()));
 		this._register(this.keybindingService.onDidUpdateKeybindings(() => this._updateWindowConfiguration()));
 		this._register(this.workspaceTrustManagementService.onDidChangeTrustedFolders(() => this._updateWindowConfiguration()));
 		this._register(this.workspaceTrustManagementService.onDidChangeTrust(() => this._updateWindowConfiguration()));
 		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => this._updateWindowConfiguration()));
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(BrowserMaxHistoryEntriesSettingId)) {
+			if (e.affectsConfiguration(BrowserMaxHistoryEntriesSettingId) || e.affectsConfiguration(BrowserColorThemeSettingId)) {
 				this._updateWindowConfiguration();
 			}
 		}));
@@ -349,6 +353,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 
 	private _updateWindowConfiguration(): void {
 		void this._browserViewService.updateWindowConfiguration(this._mainWindowId, {
+			appearance: resolveBrowserAppearance(this.configurationService.getValue<BrowserColorTheme>(BrowserColorThemeSettingId), this.themeService.getColorTheme()),
 			keybindings: this._getKeybindings(),
 			maxHistoryEntries: this.configurationService.getValue<number>(BrowserMaxHistoryEntriesSettingId),
 			trustedFileRoots: this._getTrustedFileRoots(),

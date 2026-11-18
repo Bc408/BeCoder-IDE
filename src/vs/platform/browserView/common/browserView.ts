@@ -71,6 +71,8 @@ export interface IBrowserViewRect {
  * owns. Sent as a single unit by the owning window.
  */
 export interface IBrowserViewWindowConfiguration {
+	/** Resolved appearance of the owning window's integrated browser. */
+	readonly appearance?: IBrowserViewAppearance;
 	/** Map of command ID to accelerator label for context menus. */
 	readonly keybindings: { [commandId: string]: string };
 	/** Maximum number of entries to retain per browser session history. */
@@ -91,6 +93,11 @@ export interface IBrowserViewWindowConfiguration {
 	 * untrusted folder to enforce.
 	 */
 	readonly trustAllFiles: boolean;
+}
+
+export interface IBrowserViewAppearance {
+	readonly colorScheme: 'light' | 'dark';
+	readonly backgroundColor: string;
 }
 
 export interface IBrowserViewBounds {

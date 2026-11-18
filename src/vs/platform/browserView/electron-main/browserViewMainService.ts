@@ -917,6 +917,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 		for (const [, view] of this.browserViews) {
 			if (view.owner.mainWindowId === windowId) {
+				if (config.appearance) {
+					view.setAppearance(config.appearance);
+				}
 				if (typeof config.maxHistoryEntries === 'number') {
 					view.session.history.setMaxEntries(config.maxHistoryEntries);
 				}
@@ -998,6 +1001,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			options
 		);
 		this.browserViews.set(id, view);
+		if (windowConfiguration?.appearance) {
+			view.setAppearance(windowConfiguration.appearance);
+		}
 		Event.once(view.onDidClose)(() => {
 			this.browserViews.deleteAndDispose(id);
 		});

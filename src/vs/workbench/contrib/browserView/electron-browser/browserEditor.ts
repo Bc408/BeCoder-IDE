@@ -39,6 +39,7 @@ export const BrowserActionCategory = localize2('browserCategory', "Browser");
 
 /** Menu groups used by browser-editor actions. */
 export enum BrowserActionGroup {
+	History = '0_history',
 	Tabs = '1_tabs',
 	Zoom = '2_zoom',
 	Tools = '3_tools',

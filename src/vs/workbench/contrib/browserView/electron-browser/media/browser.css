@@ -757,14 +757,13 @@
 			max-width: 672px;
 			margin: 0 auto;
 			overflow: hidden;
-			border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+			border: 1px solid color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
 			border-radius: 24px;
 			background: var(--vscode-input-background);
 			color: var(--vscode-input-foreground);
 
 			&:focus-within {
-				outline: 1px solid var(--vscode-focusBorder);
-				outline-offset: -1px;
+				border-color: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
 			}
 
 			input {
@@ -798,7 +797,8 @@
 				border: 0;
 				border-radius: 0;
 
-				&:focus-visible {
+				&:focus {
+					outline-color: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
 					outline-offset: -3px;
 				}
 
@@ -859,8 +859,10 @@
 			color: var(--vscode-foreground);
 			overflow-wrap: anywhere;
 
-			&:hover {
-				border-color: var(--vscode-focusBorder);
+			&:hover,
+			&:focus {
+				border-color: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+				outline: none;
 			}
 		}
 

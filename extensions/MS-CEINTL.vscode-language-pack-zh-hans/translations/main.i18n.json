@@ -6017,7 +6017,7 @@
 			"browser.colorTheme.auto": "跟随 BeCoder",
 			"browser.colorTheme.light": "浅色",
 			"browser.colorTheme.dark": "深色",
-			"browser.colorTheme": "内置浏览器的颜色主题，包括工具栏与首页。网页收到相同的浅色或深色偏好，并自行决定如何显示。"
+			"browser.colorTheme": "内置浏览器的颜色主题，包括工具栏与首页。跟随 BeCoder 时，按当前主题的深浅性处理。深色模式还会自动将网页转为深色，同时尊重网页的配色方案声明。"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserSearchFeatures": {
 			"browser.searchEngine": "集成浏览器地址栏与首页使用的搜索引擎。填写 `bing`、`google`、`yahoo`、`duckduckgo` 或 {0} 中的名称。填写 `none` 可禁用搜索。",

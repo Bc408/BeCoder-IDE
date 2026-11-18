@@ -34,6 +34,8 @@ CPH 跟随最近获得输入焦点的 C/C++ 源码，但不会主动展开侧栏
 
 可以关闭最后一个首页或全部编辑器，保持空编辑区；需要时再点击主页按钮。首页网站链接在宽屏每行最多显示七个，其余链接自动换行。
 
+`workbench.browser.colorTheme` 默认跟随 BeCoder：按当前主题的深浅性设置网页偏好，首页沿用 BeCoder 主题颜色；也可以固定浅色或深色。深色模式使用 Chromium 自动深色渲染，并尊重网页自身的配色方案声明。普通网页与 OJ Connect 打开的登录页面使用同一设置。
+
 首页搜索框与地址栏共用 `workbench.browser.searchEngine`。在原生设置中的 `workbench.browser.customSearchEngines` 登记引擎名称及含 `{query}` 的 HTTP/HTTPS 模板，再把名称填入搜索引擎设置；查询内容会自动编码。内置引擎和 `none`（仅输入网址）继续可用。
 
 在 **设置 → 扩展 → BeCoder IDE 功能** 中，“首页：网站列表”登记名称和 HTTP/HTTPS URL，“首页：显示的网站”控制显示内容与顺序。默认显示 Codeforces、AtCoder、洛谷、蓝桥杯、牛客和 HDOJ。先在前者添加名称与 URL，再在后者加入相同名称；修改立即生效，清空显示列表会隐藏该区域。首页中的 **自定义首页** 可直接打开相关原生设置。添加快捷入口不会自动增加题目解析能力。

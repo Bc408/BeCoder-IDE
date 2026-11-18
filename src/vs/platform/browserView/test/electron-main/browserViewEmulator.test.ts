@@ -28,9 +28,38 @@ suite('Browser appearance and device media', () => {
 		} as unknown as BrowserView;
 		const emulator = store.add(new BrowserViewEmulator(browser, new NullLogService()));
 		const media = () => commands.filter(command => command.method === 'Emulation.setEmulatedMedia').at(-1)?.params;
+		const autoDark = () => commands.filter(command => command.method === 'Emulation.setAutoDarkModeOverride');
 		const settled = async () => { for (let i = 0; i < 10; i++) { await Promise.resolve(); } };
-		return { emulator, contents, media, settled };
+		return { emulator, contents, media, autoDark, settled };
 	}
+
+	test('dark theme enables automatic page darkening and light theme disables it', async () => {
+		const f = fixture();
+		await f.emulator.setColorScheme('dark');
+		await f.emulator.setColorScheme('light');
+		assert.deepStrictEqual(f.autoDark().map(command => command.params), [{ enabled: true }, { enabled: false }]);
+	});
+
+	test('navigation restores automatic darkening after device emulation changes', async () => {
+		const f = fixture();
+		await f.emulator.setColorScheme('dark');
+		await f.emulator.setDevice({ mobile: true });
+		await f.settled();
+		await f.emulator.setDevice(undefined);
+		await f.settled();
+		const beforeNavigation = f.autoDark().length;
+		f.contents.emit('did-navigate');
+		await f.settled();
+		assert.strictEqual(f.autoDark().length, beforeNavigation + 1);
+		assert.deepStrictEqual(f.autoDark().at(-1)?.params, { enabled: true });
+	});
+
+	test('rapid theme changes leave both media and automatic darkening on the latest theme', async () => {
+		const f = fixture();
+		await Promise.all([f.emulator.setColorScheme('dark'), f.emulator.setColorScheme('light')]);
+		assert.deepStrictEqual(f.media(), { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+		assert.deepStrictEqual(f.autoDark().at(-1)?.params, { enabled: false });
+	});
 
 	test('color preference survives enabling and disabling mobile emulation', async () => {
 		const f = fixture();

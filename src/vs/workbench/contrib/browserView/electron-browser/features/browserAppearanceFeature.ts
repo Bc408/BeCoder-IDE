@@ -54,7 +54,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfigurat
 			default: 'auto',
 			enum: ['auto', 'light', 'dark'],
 			enumItemLabels: [localize('browser.colorTheme.auto', "Follow BeCoder"), localize('browser.colorTheme.light', "Light"), localize('browser.colorTheme.dark', "Dark")],
-			description: localize('browser.colorTheme', "Color theme for the integrated browser, including its toolbar and home page. Websites receive the same light or dark preference and decide how to display it."),
+			description: localize('browser.colorTheme', "Color theme for the integrated browser, including its toolbar and home page. Follow BeCoder uses the current theme's light or dark appearance. Dark mode also automatically darkens web pages, respecting their color scheme declarations."),
 			scope: ConfigurationScope.APPLICATION,
 			order: 105
 		}

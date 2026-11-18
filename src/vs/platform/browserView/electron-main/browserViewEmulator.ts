@@ -185,6 +185,11 @@ export class BrowserViewEmulator extends Disposable {
 			features.push({ name: 'pointer', value: this._device.mobile ? 'coarse' : 'fine' });
 		}
 		await this.browser.debugger.sendCommandRaw('Emulation.setEmulatedMedia', { features });
+		if (this._colorScheme && !this.browser.webContents.isDestroyed()) {
+			// Let Chromium recolor light pages while respecting their color-scheme declarations.
+			// Read the latest preference after awaiting: a newer theme may already be in flight.
+			await this.browser.debugger.sendCommandRaw('Emulation.setAutoDarkModeOverride', { enabled: this._colorScheme === 'dark' });
+		}
 	}
 
 	/**

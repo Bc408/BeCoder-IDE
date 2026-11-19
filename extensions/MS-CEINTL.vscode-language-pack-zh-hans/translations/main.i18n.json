@@ -6069,7 +6069,7 @@
 			"browser.home.newC": "新建 C 文件",
 			"browser.home.newCpp": "新建 C++ 文件",
 			"browser.home.newNotebook": "新建 BeCoder NoteBook",
-			"browser.home.customize": "自定义首页",
+			"browser.home.showOnStartup": "启动时显示欢迎页",
 			"browser.home.address": "输入网址"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/webContentsViewRendererFeature": {

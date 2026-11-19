@@ -6,13 +6,14 @@
 import { localize } from '../../../../../nls.js';
 import { $, addDisposableListener, isAncestorOfActiveElement, reset } from '../../../../../base/browser/dom.js';
 import { renderIcon } from '../../../../../base/browser/ui/iconLabel/iconLabels.js';
+import { Checkbox } from '../../../../../base/browser/ui/toggle/toggle.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
-import { BrowserViewCommandId } from '../../../../../platform/browserView/common/browserView.js';
+import { defaultCheckboxStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { IBrowserViewModel, INavigateOptions } from '../../common/browserView.js';
 import { BrowserEditorInput } from '../../common/browserEditorInput.js';
 import { isBrowserHomeUrl } from '../../common/browserHome.js';
@@ -95,9 +96,22 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 		this._addButton(create, localize('browser.home.newCpp', "New C++ File"), Codicon.fileCode, () => this.commandService.executeCommand('workbench.action.files.newUntitledFile', { languageId: 'cpp' }));
 		this._addButton(create, localize('browser.home.newNotebook', "New BeCoder NoteBook"), Codicon.notebook, () => this.commandService.executeCommand('becoder.notebook.new'));
 		content.appendChild(create);
-		const settings = $('.browser-home-settings');
-		this._addButton(settings, localize('browser.home.customize', "Customize Home"), Codicon.settingsGear, () => this.commandService.executeCommand(BrowserViewCommandId.OpenSettings));
-		content.appendChild(settings);
+		const startup = $('.browser-home-startup');
+		const startupLabel = localize('browser.home.showOnStartup', "Show welcome page on startup");
+		const showOnStartup = this._register(new Checkbox(startupLabel, this.configurationService.getValue('workbench.startupEditor') === 'welcomePage', defaultCheckboxStyles));
+		startup.appendChild(showOnStartup.domNode);
+		const label = $('span.browser-home-startup-label', undefined, startupLabel);
+		startup.appendChild(label);
+		this._register(addDisposableListener(label, 'click', () => {
+			showOnStartup.domNode.click();
+			showOnStartup.focus();
+		}));
+		this._register(showOnStartup.onChange(() => {
+			void this.configurationService.updateValue('workbench.startupEditor', showOnStartup.checked ? 'welcomePage' : 'none').catch(error => {
+				showOnStartup.checked = this.configurationService.getValue('workbench.startupEditor') === 'welcomePage';
+				this.notificationService.error(error);
+			});
+		}));
 		this._register(this.configurationService.onDidChangeConfiguration(event => {
 			if ([BrowserSearchEngineSettingId, BrowserCustomSearchEnginesSettingId].some(key => event.affectsConfiguration(key))) {
 				this._updateSearch();
@@ -105,10 +119,14 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 			if ([onlineJudgeSitesSetting, onlineJudgesSetting].some(key => event.affectsConfiguration(key))) {
 				this._updateSites();
 			}
+			if (event.affectsConfiguration('workbench.startupEditor')) {
+				showOnStartup.checked = this.configurationService.getValue('workbench.startupEditor') === 'welcomePage';
+			}
 		}));
 		this._updateSearch();
 		this._updateSites();
 		this._container.appendChild(content);
+		this._container.appendChild(startup);
 
 		this._widget = { location: BrowserWidgetLocation.ContentArea, element: this._container, order: 50 };
 	}

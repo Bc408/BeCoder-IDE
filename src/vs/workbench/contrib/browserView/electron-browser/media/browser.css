@@ -713,12 +713,14 @@
 		position: absolute;
 		inset: 0;
 		display: flex;
+		flex-direction: column;
 		overflow: auto;
 		background-color: var(--vscode-editor-background);
 		color: var(--vscode-foreground);
 
 		.browser-welcome-content {
 			box-sizing: border-box;
+			flex-shrink: 0;
 			width: 100%;
 			max-width: 1040px;
 			margin: auto;
@@ -887,20 +889,22 @@
 			}
 		}
 
-		.browser-home-settings {
-			margin-top: 24px;
+		.browser-home-startup {
+			display: flex;
+			flex-shrink: 0;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			padding: 12px 24px;
+			text-align: center;
 
-			button {
-				display: inline-flex;
-				align-items: center;
-				gap: 6px;
-				padding: 6px;
-				background: transparent;
-				color: var(--vscode-descriptionForeground);
+			.monaco-checkbox {
+				flex-shrink: 0;
+				margin-right: 0;
+			}
 
-				&:hover {
-					color: var(--vscode-textLink-foreground);
-				}
+			.browser-home-startup-label {
+				cursor: pointer;
 			}
 		}
 	}

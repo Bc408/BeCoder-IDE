@@ -26,7 +26,7 @@ export class LoginView implements vscode.WebviewViewProvider, vscode.Disposable 
 		const resources = vscode.Uri.joinPath(this.context.extensionUri, 'resources');
 		view.webview.options = { enableScripts: true, localResourceRoots: [resources] };
 		const names = { luogu: vscode.l10n.t('Luogu'), atcoder: 'AtCoder', codeforces: 'Codeforces', nowcoder: vscode.l10n.t('Nowcoder'), lanqiao: vscode.l10n.t('Lanqiao') };
-		const icons = Object.fromEntries(sites.map(site => [site, view.webview.asWebviewUri(vscode.Uri.joinPath(resources, site + '.png')).toString()])) as Record<SiteId, string>;
+		const icons = Object.fromEntries(sites.map(site => [site, view.webview.asWebviewUri(vscode.Uri.joinPath(resources, site + (site === 'luogu' || site === 'codeforces' ? '.svg' : '.png'))).toString()])) as Record<SiteId, string>;
 		view.webview.html = loginContent(this.rows, names, this.states, icons, view.webview.cspSource, randomBytes(20).toString('hex'));
 		this.subscriptions.push(view.webview.onDidReceiveMessage((message: unknown) => {
 			if (!message || typeof message !== 'object' || Object.keys(message).length !== 1) { return; }

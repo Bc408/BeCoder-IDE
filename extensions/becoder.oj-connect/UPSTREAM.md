@@ -74,8 +74,8 @@ uiToolkit、复制组件、请求通信、Time 的核心已经来自上游；不
 
 ## 平台标识（2026-11-17）
 
-resources/luogu.png、atcoder.png、nowcoder.png、codeforces.png、lanqiao.png 来自各平台官网 favicon，仅转换为 PNG 用于标识站点。名称、图形及商标权归各自平台所有，不将其宣称为本项目原创或适用本项目源码 GPL 授权；不表示平台为 BeCoder 背书。
+resources/atcoder.png、lanqiao.png 保留各平台官网 favicon，仅转换为 PNG；nowcoder.png 使用牛客官网的 500×500 分享标识。luogu.svg 使用洛谷官网的小标识，保留原路径与三色，仅收紧画布留白。codeforces.svg 采用 Simple Icons 的 CC0-1.0 矢量路径，将三柱拆分并恢复原 favicon 的黄／蓝／红配色，完整许可见 ThirdPartyNotices.txt。上述素材只用于标识站点；名称、图形及商标权归各自平台所有，不将其宣称为本项目原创或适用本项目源码 GPL 授权；不表示平台为 BeCoder 背书。
 
-来源：https://www.luogu.com.cn/favicon.ico 、https://img.atcoder.jp/assets/favicon.png 、https://ac.nowcoder.com/favicon.ico 、https://codeforces.com/favicon.ico 、https://static.shiyanlou.com/lanqiao/frontend/static/favicon.ico 。
+来源：https://img.atcoder.jp/assets/favicon.png 、https://static.shiyanlou.com/lanqiao/frontend/static/favicon.ico 、https://static.nowcoder.com/fe/common/share-logo.png 、https://fecdn.luogu.com.cn/columba/static.325908fec383795b.logo-single-color.svg 、https://github.com/simple-icons/simple-icons/blob/521c96fd04b0ea93034db8715eda5a4de27a58bb/icons/codeforces.svg 。
 
 本轮侧栏改为轻量 WebviewView，仅名称导航；依据负责人仅在官网手动退出的要求，已删除旧的程序化退出命令、服务接口、原生客户端退出方法及 AtCoder 注入退出脚本。上文关于退出的描述保留各历史阶段背景，不代表当前仍暴露这些能力。

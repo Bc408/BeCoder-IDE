@@ -48,11 +48,11 @@ const server = createServer(async (req, res) => {
 		if (req.url === '/accounts') {
 			const names = { luogu: '洛谷', atcoder: 'AtCoder', nowcoder: '牛客', codeforces: 'Codeforces', lanqiao: '蓝桥' };
 			const rows = Object.keys(names).map(site => ({ site, state: site === 'luogu' ? 'signed-in' : site === 'lanqiao' ? 'unavailable' : site === 'codeforces' ? 'unknown' : 'signed-out' }));
-			const icons = Object.fromEntries(Object.keys(names).map(site => [site, '/' + site + '.png']));
+			const icons = Object.fromEntries(Object.keys(names).map(site => [site, '/' + site + (site === 'luogu' || site === 'codeforces' ? '.svg' : '.png')]));
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
 			res.end(loginContent(rows, names, { 'signed-in': '已登录', 'signed-out': '未登录', unknown: '未检查', unavailable: '未接入' }, icons, '\'self\'', 'fixture').replace('<script nonce="fixture">', '<script nonce="fixture">window.__messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__messages.push(m)});'));
-		} else if (/^\/(luogu|atcoder|nowcoder|codeforces|lanqiao)\.png$/.test(req.url)) {
-			res.setHeader('Content-Type', 'image/png');
+		} else if (/^\/((luogu|codeforces)\.svg|(atcoder|nowcoder|lanqiao)\.png)$/.test(req.url)) {
+			res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png');
 			res.end(await readFile(path.resolve('resources', req.url.slice(1))));
 		} else if (req.url === '/') {
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -745,8 +745,10 @@ try {
 	assert.equal(await page.locator('[data-site="codeforces"] button').isDisabled(), false);
 	assert.equal(await page.locator('[data-site="codeforces"]').getAttribute('data-state'), 'unknown');
 	assert.equal(await page.locator('[data-site="lanqiao"] button').isDisabled(), true);
-	assert.equal(await page.locator('[data-site="luogu"] img').evaluate(element => getComputedStyle(element).opacity), '1');
-	assert.equal(await page.locator('[data-site="atcoder"] img').evaluate(element => getComputedStyle(element).opacity), '0.35');
+	for (const icon of await page.locator('.account img').all()) {
+		assert.equal(await icon.evaluate(element => getComputedStyle(element).opacity), '1');
+		assert.equal(await icon.evaluate(element => getComputedStyle(element).filter), 'none');
+	}
 	await page.getByRole('button', { name: 'AtCoder', exact: true }).click();
 	assert.deepEqual(await page.evaluate(() => window.__messages), [{ site: 'atcoder' }]);
 	await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { rows: [{ site: 'atcoder', state: 'signed-in', text: '已登录 · fixture-user' }] } })));

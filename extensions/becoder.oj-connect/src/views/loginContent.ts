@@ -10,8 +10,8 @@ export function loginContent(rows: readonly LoginSummary[], names: Record<SiteId
 	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${source}; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';"><style nonce="${nonce}">
 		body { padding: 4px 12px; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); user-select: none; }
 		.account { display: grid; grid-template-columns: 20px max-content minmax(0,1fr); align-items: center; gap: 8px; min-height: 30px; }
-		img { width: 18px; height: 18px; object-fit: contain; background: #fff; border-radius: 2px; opacity: .35; filter: grayscale(1); }
-		[data-state="signed-in"] img { opacity: 1; filter: none; }
+		img { width: 18px; height: 18px; object-fit: contain; border-radius: 2px; }
+		[data-site="atcoder"] img { background: #fafafa; }
 		button { border: 0; padding: 3px 0; background: transparent; color: var(--vscode-textLink-foreground); font: inherit; cursor: pointer; }
 		button:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
 		button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }

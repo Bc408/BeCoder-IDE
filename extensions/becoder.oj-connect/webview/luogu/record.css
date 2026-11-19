@@ -15,6 +15,12 @@
 	flex-wrap: wrap;
 }
 
+.record-progress {
+	color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground));
+	font-size: 0.9em;
+	font-weight: normal;
+}
+
 #app.oj-record {
 	> h1:first-child {
 		font-size: 20px;

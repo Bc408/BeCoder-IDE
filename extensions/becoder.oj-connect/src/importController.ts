@@ -13,7 +13,9 @@ import { browserProblem } from './browserProblem';
 export function browserImportTarget(input: string, directories: () => SiteDirectories, adapters: readonly OjAdapter[]): { directory: string; fileName: string } | undefined {
 	const problem = browserProblem(input);
 	if (!problem) { return undefined; }
-	return { directory: directories()[problem.site], fileName: adapters.find(adapter => adapter.site === problem.site)!.fileName(problem) };
+	const adapter = adapters.find(adapter => adapter.site === problem.site);
+	if (!adapter) { return undefined; }
+	return { directory: directories()[problem.site], fileName: adapter.fileName(problem) };
 }
 
 export interface ImportHost {

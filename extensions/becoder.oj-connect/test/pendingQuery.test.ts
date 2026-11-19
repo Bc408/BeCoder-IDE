@@ -37,7 +37,7 @@ async function fixture(t: TestContext) {
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), openTextDocument: async () => source },
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), onDidGrantWorkspaceTrust: () => ({ dispose() { } }), openTextDocument: async () => source },
 		window: {
 			activeTextEditor: { document: source, viewColumn: 1 },
 			registerWebviewViewProvider: disposable,

@@ -82,7 +82,7 @@ export class SubmissionController {
 					catch (error) { throw new OperationError('track', 'record', error instanceof Error ? error.message : String(error), record); }
 				} else if (outcome.kind === 'unconfirmed') {
 					if (validateProblemRef(outcome.problem).url !== problem.url || !outcome.attemptId) { throw new OperationError('confirm', 'unconfirmed', 'The submission receipt could not be confirmed.'); }
-				} else if (outcome.kind !== 'not-sent') { throw new OperationError('confirm', 'unconfirmed', 'The submission receipt could not be confirmed.'); }
+				} else if (outcome.kind !== 'not-sent' && outcome.kind !== 'rejected') { throw new OperationError('confirm', 'unconfirmed', 'The submission receipt could not be confirmed.'); }
 				return outcome;
 			});
 		} catch (error) {

@@ -14,7 +14,7 @@ export interface SubmissionSession {
 }
 
 export interface OjAdapter {
-	readonly site: 'luogu' | 'atcoder' | 'nowcoder';
+	readonly site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces';
 	resolve(input: string): ProblemRef | undefined;
 	fileName(problem: ProblemRef): string;
 	readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument>;

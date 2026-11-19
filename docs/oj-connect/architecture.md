@@ -2,30 +2,35 @@
 
 [产品与开发入口](README.md) · [开发指南](../development.md)
 
-更新日期：2026-11-17。负责人已确认“统一内置扩展负责刷题业务，浏览器宿主保留真实会话，CPH 负责本地测试”。AtCoder 第一阶段快捷键闭环已获负责人确认；当前源码另已实现洛谷／AtCoder 的共同导入、题面与评测页，并按最新要求直接裁剪复用 vscode-luogu4.20.0 的保留前端，并使用现有共享内容渲染能力。共同流程设计和实施计划均已批准。洛谷闭环与使用体验已获认可；2026-11-17 负责人已确认 AtCoder 代码提交能力闭环且达标，各轮其他界面与候选改动仍按各自记录验收。具体证据与限制见[当前状态](README.md#当前实现状态)，不能用旧 MVP、协议窗口或已认可的前版验证后续改动。
+更新日期：2026-11-18。负责人已确认“统一内置扩展负责刷题业务，浏览器宿主保留真实会话，CPH 负责本地测试”。AtCoder 第一阶段快捷键闭环已获负责人确认；当前源码另已实现洛谷／AtCoder 的共同导入、题面与评测页，并按最新要求直接裁剪复用 vscode-luogu4.20.0 的保留前端，并使用现有共享内容渲染能力。共同流程设计和实施计划均已批准。洛谷闭环与使用体验已获认可；2026-11-17 负责人已确认 AtCoder 代码提交能力闭环且达标，各轮其他界面与候选改动仍按各自记录验收。具体证据与限制见[当前状态](README.md#当前实现状态)，不能用旧 MVP、协议窗口或已认可的前版验证后续改动。
 
-## 当前三站如何组织
+## 当前四站候选如何组织
+
+2026-11-18 CF 候选已按[批准设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)与[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)加入共同流程；[协议证据](codeforces-protocol-evidence.md)记录隔离采证。仅接入 `codeforces.com` 普通公开比赛的赛后练习，拒绝 Gym、进行中、虚拟参赛、group、私有／团队、镜像及 output-only，不丢弃原入口上下文。当前源码、协议探针、产品运行、最终构建与负责人验收分别成立，后几项仍待本轮记录，不由旧构建或探针补齐。
 
 2026-11-17 去冗余审查已移除无生产入口的旧详情 JSON 实验链路，保留当前提交／评测使用的 HTML 与源码解析工具；该轮发现见[审查报告](review-2026-11-17-cleanup-settings.md)，后续修复及设置实施见[维护记录](maintenance-settings-2026-11-17.md)。
 
 2026-11-17 当前候选已按批准的[AtCoder 提交耗时优化设计](../superpowers/specs/2026-11-17-atcoder-submission-latency-design.md)收敛为按需建立本次官方提交页、正常验证、单次页面内请求和独立会话记录读取。干净 stage 构建与负责人验收单列，不把有限真实采证写成长时可靠率或固定时延承诺。
 
-源码当前由 `extensions/becoder.oj-connect/src/extension.ts` 装配三个适配器和同一个 `workflowController.ts`；未使用的适配器注册表和控制器重导出已移除。`domain.ts` 统一题目、语言、正式记录、结果及发送状态；`problemResolver.ts` 按直接父目录优先和文件名解析。
+源码当前由 `extensions/becoder.oj-connect/src/extension.ts` 装配洛谷、AtCoder、Codeforces、牛客四个适配器和同一个 `workflowController.ts`；未使用的适配器注册表和控制器重导出已移除。`domain.ts` 统一题目、语言、正式记录、结果及发送状态；`problemResolver.ts` 按直接父目录优先和文件名解析。
 
 | 所有者 | 当前职责与入口 |
 | --- | --- |
-| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；确认回执后释放发送资源，再等待结果面板；`recordController.ts` 读取明确 ID，三站每轮约120秒，到期保留记录并允许继续查询；AtCoder 优先官网 Interval、缺失回退2秒，洛谷等待推送，牛客沿用2秒 |
-| 站点适配 | `src/adapters/{luogu,atcoder,nowcoder}/adapter.ts` 将原站业务封装在临时任务内；`site-scripts/` 仅保留 AtCoder 固定网页操作 |
+| 共同工作流 | `workflowController.ts` 固定源码、语言、草稿确认、取消与并发；确认回执后释放发送资源，再等待结果面板；`recordController.ts` 读取明确 ID，四站每轮约120秒，到期保留记录并允许继续查询；AtCoder 优先官网 Interval、缺失回退2秒，洛谷等待推送，牛客与 CF 沿用2秒 |
+| 站点适配 | `src/adapters/{luogu,atcoder,codeforces,nowcoder}/adapter.ts` 将原站业务封装在临时任务内；`site-scripts/` 包含 AtCoder 固定网页操作与 CF 题面读取 |
 | 共同界面 | `src/views/` 与 `webview/`；题面绑定源码和题目，评测页绑定正式 ID，Webview 消息不决定源码路径／正文／任意命令 |
-| 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts`／`nowcoderBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
+| 受限宿主 | `browserOjConnectFeature.ts` 固定命令和本窗口页面；`atcoderBridge.ts`／`luoguBridge.ts`／`codeforcesBridge.ts`／`nowcoderBridge.ts` 管理不可伪造句柄与正式回执；`browserViewMainService.ts` 执行固定 recipe、真实 session、取消和只读核对 |
 | AtCoder 事务 | `atcoderTransaction.ts` 直接准备官方 submit 页，以完整表单内的明确源码／语言／题目进行一次页面内 fetch；无上传、Ace 同步和原生点击备用路线；复用返回列表及首次详情，保留基线排旧、账号、唯一候选和源码核对；正常全程不显现网页，验证超时在插件内提示 |
+| CF 原生事务 | `codeforcesSessionClient.ts` 持有同窗口／存储范围／账号的官方表单、提交前记录边界及临时回执；`codeforcesProtocol.ts` 用静态 HTML 与 Acorn 字面量核对普通赛后 Practice、`outputOnlyIndices` 和动态语言，拒绝 output-only；`codeforcesTransport.ts` 用显式 Session、Cookie 与手动重定向的 `net.request` 只发送一次源码；确认唯一新记录并回读源码，未知受理仅只读核对 |
 | 洛谷传输 | `luoguSessionClient.ts` 编排固定操作；`luoguSessionTransport.ts` 从持久 BrowserSession 读取凭据，以 Node HTTPS 发送固定请求，验证码与提交共用该路径；退出由内置浏览器中的官网处理。同次提交已输入的验证码被明确拒绝三次后停止，并提示转内置浏览器手动提交／认证，不增加新认证。`luoguCsrfTokenManager.ts` 迁入上游管理器，`luoguProtocol.ts` 转换语义数据，原生主进程建立带同会话凭据的推送连接 |
-| Import／CPH | 浏览器固定主动作 Get Problem→`importController.ts`／`sourceStore.ts`→源码与题面；菜单 Import to CPH 始终使用 Companion，命中三站时复用 adapter 的目录与文件名，其他题源保留 CPH 默认行为；题面另通过 `importSamplesForSource` 关联绑定源码 |
-| 登录管理 | `views/loginView.ts` 以轻量 WebviewView 显示各站标识与真实摘要；仅名称可点击，未登录打开官网登录入口，已登录打开协议摘要提供的官方个人页，缺少可靠身份时沿官网登录入口重定向；退出仅在内置浏览器官网手动完成。宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；CF与蓝桥明确不可用 |
+| Import／CPH | 浏览器固定主动作 Get Problem→`importController.ts`／`sourceStore.ts`→源码与题面；菜单 Import to CPH 始终使用 Companion，命中四站时复用 adapter 的目录与文件名，其他题源保留 CPH 默认行为；题面另通过 `importSamplesForSource` 关联绑定源码 |
+| 登录管理 | `views/loginView.ts` 以轻量 WebviewView 显示各站标识与真实摘要；仅名称可点击，未登录打开官网登录入口，已登录打开协议摘要提供的官方个人页，缺少可靠身份时沿官网登录入口重定向；退出仅在内置浏览器官网手动完成。宿主观察普通持久浏览器会话与导航／加载事件合并刷新，不轮询；AtCoder 摘要直接读取当前存储范围的 Session 首页，不创建或依赖网页标签；同一范围的并发检查合并，登录／退出使旧读取失效；普通 REVEL_SESSION 轮换不触发重查；CF 摘要读取同一持久 Session 的官方账号，读取失败保留未知；蓝桥明确不可用 |
 
-三站的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
+四站的 C／C++ 编译器 ID 分别保存在各自用户设置键中，互不混用；AtCoder 题面语言同样使用用户设置。页面和快捷键通过一个偏好读写入口读取各自键，不再维护编译器内存 Map 或第二套 Memento 权威。旧 AtCoder Memento 首次激活迁移，不覆盖显式设置，成功后清理旧键；失败提示但不阻止激活。最近记录仍在当前窗口内。没有持久题目绑定库，没有独立账号存储。站点脚本、Webview bundle、样式和字体均来自本扩展静态构建。`webview/luogu/` 直接迁入固定版本的题面、提交区、记录、控件及 CSS，`main.tsx` 只装配共用状态；UUID 请求回复仅消费面板动作白名单。按钮与快捷键共用站点／语言族偏好。
 
 主动登录只等待模型与持久会话校验，不等待整页加载再显现浏览器。AtCoder 提交事务临时关闭隐藏页面的后台定时器节流，结束时恢复；不预热、不跨提交复用页面。确认详情作为首次结构化结果交接，后续使用同窗口／会话范围的 status/json 及必要终态详情，不持有任务页。
+
+2026-11-19 登录稳定性候选修复：四站登录入口只复用当前存储范围内地址匹配的登录页，普通官网页与草稿保持原样。AtCoder 已读摘要窗口和 CF 原生客户端按真实 Session ID 接收身份失效通知；不同工作区 Session 隔离，普通 Cookie 轮换不触发刷新循环。浏览器存储范围设置变化或授予工作区信任时，扩展立即清除旧摘要并取消旧读取，再查询当前范围。隔离回归与 stage 构建不能代替真实账号的负责人验收。
 
 洛谷常规题面、准备、提交、账号摘要与记录查询不创建或依赖网页标签，按浏览器当前存储范围选择同一持久 Session；登录仍打开官网，验证码沿用上游的图片面板和输入框，留空刷新。HTTP 单次超时与人工等待分离；明确验证码错误继续原源码，未知回执不自动重交。记录绑定其原生会话，存储范围切换后不从新会话继续读取；关闭记录向原会话释放推送，重开按正式 ID 及所属会话重新查询。推送失败时按实例身份移除故障连接，停止跟踪并保留当前结果；只有显式继续查询才重新读取并按需建连。已排队结果先于后续 close 错误交付。隐藏／未知结果停止自动跟踪并释放已有推送，保持原状态并提供手动查询；不进入零延迟 HTTP 轮询。AtCoder 使用单次页面内请求，发送页生命周期与会话只读结果查询分开。当前源码实现不等于两站新构建的负责人验收，见 [当前状态](README.md#当前实现状态)。
 
@@ -37,9 +42,13 @@
 
 2026-11-16 负责人判断该情况涉及洛谷交互式认证，明确不引入新认证形式，改为若干次失败后提示浏览器手动提交。源码据此将本次图片验证码答案失败上限设为三次；首次无答案的挑战、留空刷新与取消不计数。只对精确“验证码错误”且无正式 rid 的明确拒绝计数；未知受理仍不得重发。该产品收尾决策不等于独立证明网站内部认证机制，也不宣称已经修复该机制的自动认证能力。共享渲染已有后续实施与测量，历史基线和当前结果见[渲染记录](rendering-review-2026-11-16.md)，不再将整项描述为只读方案。
 
+CF 的准备、发送、受理核对及结果读取不创建／导航网页，不预热；人工登录和正常官网验证由用户主动打开内置浏览器完成。题面读取复用当前官网页的 CPH 解析结果及 CF 固定 DOM reader，公式转换后进入共同安全内容管线。题目 `4/A` 规范为普通 contest URL，文件为 `codeforces/4_a.cpp`，真实后缀如 `A1` 保留；通用下划线文件名不在目录外自动认领。`codeforces.cCompiler`／`codeforces.cppCompiler` 分开保存当次官方表单可用的语言 ID，与其他站点互不混用。共同评测保留原始进度，只展示真实测试点和可核对的元数据；没有正式分数、代码长度、终态资源时省略，源码明确为官网回读并报告核对结论，不生成 CF 用户字段。
+
+发送结果共用 `SubmissionOutcome`：`not-sent` 表示明确未发出源码，`rejected` 表示官网明确拒绝且无新记录，`unconfirmed` 保留受理不明尝试并只读核对，`record` 代表唯一确认的正式记录。CF 仅在 200 响应包含同账号、同题目的完整提交表单，以及源码字段精确的重复错误时返回 `rejected`；结束本次尝试并提示原因，不保存待查询回执。拒绝正文不写入日志，只记录状态码和固定分类。403、未知错误、残缺页面和身份不符均不能据此判定重复。其他站点保留已有行为。
+
 ## 目标所有者
 
-牛客当前候选采用与手动 ACM 交题一致的固定 Session 请求路线，见[设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)和[证据](nowcoder-protocol-evidence.md)。`nowcoderSessionClient.ts` 拥有固定 HTTP 操作、一次发送及会话失效；`electron-main/nowcoderProtocol.ts` 按需加载 Acorn 解析官网 pageInfo／env 静态字面量并映射题面、语言和结果。身份校验位于不依赖 Acorn 的 `nowcoderBridge.ts`，供 workbench 与主进程共用。无提交页、预热或备用通道，无第二套账号存储。只读跟踪与发送资源独立，未知受理不重交。三站均采用共同约120秒期限，原有站点查询节奏保留。当前实现与真实验收证据分列。
+牛客当前候选采用与手动 ACM 交题一致的固定 Session 请求路线，见[设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)和[证据](nowcoder-protocol-evidence.md)。`nowcoderSessionClient.ts` 拥有固定 HTTP 操作、一次发送及会话失效；`electron-main/nowcoderProtocol.ts` 按需加载 Acorn 解析官网 pageInfo／env 静态字面量并映射题面、语言和结果。身份校验位于不依赖 Acorn 的 `nowcoderBridge.ts`，供 workbench 与主进程共用。无提交页、预热或备用通道，无第二套账号存储。只读跟踪与发送资源独立，未知受理不重交。四站均采用共同约120秒期限，原有站点查询节奏保留。当前实现与真实验收证据分列。
 
 ```mermaid
 flowchart LR
@@ -75,14 +84,14 @@ extensions/becoder.oj-connect/
     workflowController.ts 提交任务与取消、防重边界
     browserHost.ts        类型明确的宿主调用
     views/                登录摘要、独立题面、独立评测页
-    adapters/{luogu,atcoder,nowcoder}/  三站适配
-  site-scripts/           AtCoder 固定原站操作
+    adapters/{luogu,atcoder,codeforces,nowcoder}/  四站适配
+  site-scripts/           AtCoder 固定原站操作与 CF 题面读取
   webview/luogu/          裁剪复用的上游 React 组件／样式
   webview/main.tsx        共同状态装配
   test/                   路由、导入、状态与界面测试
 ```
 
-未来各站点放在同一扩展的 `adapters/` 下，复用用户流程和界面。洛谷是视觉和使用基线，接入须按各站实际差异适配，不做外围功能的朴素叠加。题目标识、官网会话与语言 ID 按站点解释，不将不同站点的同名状态或题号强行等同。未知、部分结果、字段缺失均保留原始信息。统一体验不要求全部站点采用相同 HTTP 或推送协议；CF与蓝桥的调研不构成已实施或官方承诺。
+未来各站点放在同一扩展的 `adapters/` 下，复用用户流程和界面。洛谷是视觉和使用基线，接入须按各站实际差异适配，不做外围功能的朴素叠加。题目标识、官网会话与语言 ID 按站点解释，不将不同站点的同名状态或题号强行等同。未知、部分结果、字段缺失均保留原始信息。统一体验不要求全部站点采用相同 HTTP 或推送协议；CF 当前候选不等于产品运行或负责人验收完成，蓝桥仍未接入。
 
 下一站接入前，先核实当前题面、语言目录、登录与验证、正式回执和结果更新的真实路线，再据此确定适配范围。发现公开或所谓“官方接口”只构成调研线索，不能直接承诺提交能力；需要网页的站点可复用已验证的原生事务，需要请求的站点可使用固定受限操作，不预设所有站点共用一种传输。每站以同一条源码→看题／导入→快捷键提交→本次正式结果的用户流程验收，不因侧栏有站点名称或单个请求成功就声明支持。
 
@@ -102,7 +111,7 @@ extensions/becoder.oj-connect/
 | 停止请求 | 释放等待、读取与页面观察；停止跟踪不等于撤回已发出的解答 |
 | 读取站点登录摘要 | 返回当前会话可确认的登录状态及必要显示信息；失败／未检查不冒充已退出 |
 
-这些操作当前已有三站固定接点与编译期 DTO；CF与蓝桥未接入。核心只保留宿主需要的权限与执行职责，不把完整用户流程重新塞回 `BrowserViewMainService`。
+这些操作当前已有四站固定接点与编译期 DTO；CF 为本轮候选，蓝桥未接入。核心只保留宿主需要的权限与执行职责，不把完整用户流程重新塞回 `BrowserViewMainService`。
 
 提交的不可逆发送边界由宿主持有。扩展重复调用、取消后验证晚到，都不能造成自动重发。扩展停用或宿主连接结束时终止该请求后续动作；AtCoder 另观察网页关闭／导航，洛谷任务不随普通网页关闭而结束。发生不确定状态时允许重新读取正式结果，不自动重新提交代码。洛谷登录使用官网，验证码优先复用插件图片交互；不再向网页插入自制验证码表单。
 
@@ -110,9 +119,9 @@ extensions/becoder.oj-connect/
 
 ## 导入、目录与 CPH
 
-浏览器工具栏使用固定主动作 Get Problem 的原生分体按钮，右侧菜单依次为 Get Problem、Import to CPH，不记忆或提升上次动作。主动作只对三站支持身份可用，禁用时菜单箭头仍可打开。Get Problem 先读取当前浏览器题目，再在工作区配置站点目录下创建／打开源码及独立题面，不初始化 CPH。目标不存在时创建目录与文件；同名源码存在时仅打开，保护未保存稿。多工作区根只选择一次，没有打开文件夹时明确提示，不能猜写入位置。
+浏览器工具栏使用固定主动作 Get Problem 的原生分体按钮，右侧菜单依次为 Get Problem、Import to CPH，不记忆或提升上次动作。主动作只对四站支持身份可用，禁用时菜单箭头仍可打开。Get Problem 先读取当前浏览器题目，再在工作区配置站点目录下创建／打开源码及独立题面，不初始化 CPH。目标不存在时创建目录与文件；同名源码存在时仅打开，保护未保存稿。多工作区根只选择一次，没有打开文件夹时明确提示，不能猜写入位置。
 
-URL 能力判断不预读题目或账号：主进程从固定内置路径加载 OJ 扩展的纯 `browserProblem` 模块，组合既有三站 task resolver，不激活扩展；CPH 能力清单从实际 Companion parser 注册表随构建生成，不另维护站点正则。导航、加载、关闭会使旧能力失效并取消未完成导入；内部请求 ID 保留有界的先到取消，防止扩展激活期间取消丢失。
+URL 能力判断不预读题目或账号：主进程从固定内置路径加载 OJ 扩展的纯 `browserProblem` 模块，组合四站 task resolver，不激活扩展；CPH 能力清单从实际 Companion parser 注册表随构建生成，不另维护站点正则。导航、加载、关闭会使旧能力失效并取消未完成导入；内部请求 ID 保留有界的先到取消，防止扩展激活期间取消丢失。
 
 目录设置是站点直子目录名，需验证为合法、互不歧义的单级子目录，写入目标必须留在所选工作区内。设置修改影响后续导入与目录识别，不自动迁移用户文件。目录与文件名规则从同一解析入口取得，题面命令和提交命令不各自实现一份。
 

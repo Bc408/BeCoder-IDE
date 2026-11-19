@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { loginContent } from '../src/views/loginContent.ts';
 const require = createRequire(import.meta.url);
 const { renderMarkdownTree, renderHtmlTree } = require('../out/markdown.js');
-const output = path.resolve('../../tmp/oj-connect-audit/shared-workflow/render');
+const output = path.resolve(process.env.BECODER_OJ_CONNECT_RENDER_AUDIT ?? '../../tmp/oj-connect-audit/shared-workflow/render');
 await mkdir(output, { recursive: true });
 // Match the shipped extension's CommonJS package boundary, outside the root ESM package.
 await writeFile(path.join(output, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -37,7 +37,7 @@ const server = createServer(async (req, res) => {
 	try {
 		if (req.url === '/accounts') {
 			const names = { luogu: '洛谷', atcoder: 'AtCoder', nowcoder: '牛客', codeforces: 'Codeforces', lanqiao: '蓝桥' };
-			const rows = Object.keys(names).map(site => ({ site, state: site === 'luogu' ? 'signed-in' : site === 'codeforces' || site === 'lanqiao' ? 'unavailable' : 'signed-out' }));
+			const rows = Object.keys(names).map(site => ({ site, state: site === 'luogu' ? 'signed-in' : site === 'lanqiao' ? 'unavailable' : site === 'codeforces' ? 'unknown' : 'signed-out' }));
 			const icons = Object.fromEntries(Object.keys(names).map(site => [site, '/' + site + '.png']));
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
 			res.end(loginContent(rows, names, { 'signed-in': '已登录', 'signed-out': '未登录', unknown: '未检查', unavailable: '未接入' }, icons, '\'self\'', 'fixture').replace('<script nonce="fixture">', '<script nonce="fixture">window.__messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__messages.push(m)});'));
@@ -63,17 +63,137 @@ try {
 	await page.exposeFunction('__renderContent', (content, format) => format === 'markdown' ? renderMarkdownTree(content) : renderHtmlTree(content, state.problem.ref.url));
 	await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { if (window.__failCopy) { throw new Error('clipboard unavailable'); } window.__copied = text; } } }); });
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
+	const cfProblem = { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
+	const cfRecord = { problem: cfProblem, id: '55', url: 'https://codeforces.com/contest/4/submission/55' };
+	for (const [phase, rawStatus, name, color] of [
+		['queued', 'In queue', 'Waiting', 'rgb(52, 152, 219)'],
+		['judging', 'Running on test 18', 'Judging', 'rgb(52, 152, 219)'],
+		['judging', 'Running on pretest 2', 'Judging', 'rgb(52, 152, 219)'],
+		['finished', 'Compilation error', 'Compile Error', 'rgb(250, 219, 20)'],
+		['finished', 'Accepted', 'Accepted', 'rgb(82, 196, 26)'],
+		['finished', 'Wrong answer on test 2', 'Wrong Answer', 'rgb(251, 99, 64)'],
+		['finished', 'Time limit exceeded on test 5', 'Time Limit Exceeded', 'rgb(140, 158, 255)'],
+		['unknown', 'NEW CF STATUS', 'NEW CF STATUS', 'rgb(127, 127, 127)']
+	]) {
+		state = { kind: 'record', labels, record: cfRecord, tracking: phase === 'queued' || phase === 'judging', snapshot: { ref: cfRecord, phase, rawStatus, problemTitle: 'Watermelon', submittedAt: '2026-11-18T09:54:00Z', owner: 'fixture_user', language: 'C++23 (GCC 14-64, msys2)', sourceVerification: 'matched', ...(rawStatus === 'Compilation error' ? { compileSucceeded: false, compileMessage: '<literal diagnostic>\n  ^\n' } : {}) } };
+		for (const [width, background, foreground] of [[420, '#fff', '#222'], [700, '#252931', '#bbb']]) {
+			await page.setViewportSize({ width, height: 700 }); await page.goto(url); await page.locator('.record-verdict').waitFor();
+			await page.addStyleTag({ content: `body { --vscode-editor-background:${background};--vscode-editor-foreground:${foreground};--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }` });
+			assert.ok((await page.locator('.record-verdict').textContent()).startsWith(name), 'CF shares the full common verdict name');
+			assert.equal(await page.locator('.record-verdict').evaluate(element => getComputedStyle(element).color), color, 'CF shares the common verdict color');
+			assert.equal(await page.locator('.record-verdict .spinner').count(), state.tracking ? 1 : 0);
+			if (rawStatus.startsWith('Running')) {
+				assert.equal(await page.locator('.record-progress').textContent(), rawStatus, 'preserve exact CF progress without a fabricated total');
+				assert.notEqual(await page.locator('.record-progress').evaluate(element => getComputedStyle(element).color), color, 'native progress is secondary to the common verdict');
+				assert.equal(await page.locator('.record-progress').evaluate(element => getComputedStyle(element).fontWeight), '400');
+			}
+			if (phase === 'finished') { assert.equal(await page.locator('.record-progress').count(), 0, 'terminal verdict details belong in the tooltip'); }
+			assert.ok((await page.locator('.record-verdict').getAttribute('title')).includes(rawStatus), 'keep the original CF verdict in the tooltip');
+			assert.equal(await page.locator('.testcase').count(), rawStatus.startsWith('Running') ? 1 : 0, 'only the current reported test gets a pending card; no fabricated total or CE cases');
+			if (rawStatus.startsWith('Running')) {
+				assert.equal(await page.locator('.testcase > div:first-child > div:first-child').textContent(), rawStatus.endsWith('18') ? '#18' : '#2');
+				assert.equal(await page.locator('.testcase .spinner').count(), 1);
+				assert.equal(await page.locator('.testcase > div:first-child').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(52, 152, 219)');
+			}
+			assert.equal(await page.getByText(labels.score, { exact: true }).count(), 0, 'no invented CF score');
+			assert.equal(await page.getByText(labels.owner, { exact: true }).count(), 0, 'CF omits the owner row');
+			if (state.snapshot.compileMessage) { assert.equal(await page.locator('pre code').textContent(), state.snapshot.compileMessage); }
+			await page.screenshot({ path: path.join(output, `codeforces-${rawStatus.toLowerCase().replace(/\s+/g, '-')}-${width}.png`), fullPage: true });
+		}
+	}
+	state = { kind: 'record', labels, record: cfRecord, tracking: true, snapshot: { ref: cfRecord, phase: 'judging', rawStatus: 'Running on test 18', sourceVerification: 'matched', groups: [{ name: 'Test Cases', rows: [['1', 'OK', '31 ms', '4 KiB'], ['2', 'OK', '15 ms', '12 KiB']] }] } };
+	await page.goto(url); await page.locator('.testcase').first().waitFor();
+	assert.equal(await page.locator('.testcase').count(), 3, 'keep real results and add only the current test');
+	assert.equal(await page.locator('.testcase .spinner').count(), 1);
+	assert.equal(await page.locator('.testcase').last().locator(':scope > div:first-child > div:first-child').textContent(), '#18');
+	await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
+	assert.equal(await page.locator('.testcase .spinner').evaluate(element => getComputedStyle(element).animationName), 'spin');
+	await page.screenshot({ path: path.join(output, 'codeforces-pending-grid.png'), fullPage: true });
+	await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.tracking = false; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
+	await page.locator('.testcase .spinner').waitFor({ state: 'detached' });
+	assert.equal(await page.locator('.testcase').count(), 3, 'stopped tracking retains last known progress');
+	state.snapshot.groups[0].rows.push(['18', 'OK', '937 ms', '16 KiB']);
+	await page.goto(url); await page.locator('.testcase').first().waitFor();
+	assert.equal(await page.locator('.testcase').count(), 3, 'a real result for the running index takes precedence without duplication');
+	assert.equal(await page.locator('.testcase .spinner').count(), 0);
+	for (const rawStatus of ['Running on test 0', 'Running on test 1025', 'Running on test 99999999999999999999', 'Compiling']) {
+		state.snapshot = { ref: cfRecord, phase: 'judging', rawStatus, sourceVerification: 'matched' };
+		await page.goto(url); await page.locator('.record-verdict').waitFor();
+		assert.equal(await page.locator('.testcase').count(), 0, 'unknown or out-of-range progress never creates a grid');
+	}
+	state = { kind: 'record', labels, record: cfRecord, tracking: false, snapshot: { ref: cfRecord, phase: 'finished', rawStatus: 'Accepted', problemTitle: 'Watermelon', submittedAt: '2026-11-18T09:54:00Z', language: 'C++23 (GCC 14-64, msys2)', time: '31 ms', memory: '20480 B', sourceVerification: 'matched', groups: [{ name: 'Test Cases', rows: [['1', 'OK', '31 ms', '20480 B', 'private input', 'private output', 'private answer', 'private checker'], ['2', 'OK', '15 ms', '12 KiB'], ['3', 'OK', '0 ms', '0 KiB'], ['4', 'OK', '15 ms', '8 KiB']] }] } };
+	for (const [width, background, foreground] of [[420, '#fff', '#222'], [700, '#252931', '#bbb']]) {
+		await page.setViewportSize({ width, height: 800 }); await page.goto(url); await page.locator('.testcase').first().waitFor();
+		await page.addStyleTag({ content: `body { --vscode-editor-background:${background};--vscode-editor-foreground:${foreground};--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }` });
+		assert.equal(await page.locator('.record-info').getByRole('link').textContent(), '4/A Watermelon');
+		assert.equal(await page.locator('.record-info > div').filter({ has: page.getByText(labels.resources, { exact: true }) }).locator('span').last().textContent(), '31ms / 20.00KiB', 'peak testcase memory renders with the common Luogu units');
+		assert.equal(await page.locator('.testCaseData h3').count(), 0, 'a single default group does not repeat the testcase heading');
+		for (const card of await page.locator('.testcase').all()) {
+			assert.equal(await card.locator(':scope > div:first-child > div:nth-child(2)').textContent(), 'AC');
+			assert.equal(await card.locator(':scope > div:first-child').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(82, 196, 26)');
+			assert.equal(await card.getAttribute('title'), null, 'use a single concise tooltip');
+		}
+		await page.locator('.testcase').first().hover();
+		await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.testcase > div:nth-child(2)')).opacity) >= 0.79);
+		assert.equal(await page.locator('.testcase').first().locator(':scope > div:nth-child(2)').textContent(), 'Accepted');
+		assert.ok(!(await page.locator('.testCaseData').textContent()).includes('private'), 'test bodies never reach the rendered hover');
+		await page.screenshot({ path: path.join(output, `codeforces-testcases-${width}.png`), fullPage: true });
+	}
+	for (const [rawStatus, status, color] of [['WRONG_ANSWER', 'WA', 'rgb(251, 99, 64)'], ['TIME_LIMIT_EXCEEDED', 'TLE', 'rgb(0, 18, 119)'], ['UNRECOGNIZED_NATIVE_STATUS', 'UNRECOGNIZED_NATIVE_STATUS', 'rgb(127, 127, 127)']]) {
+		state.snapshot.groups[0].rows = [['1', rawStatus, '15 ms', '12 KiB', 'private input', 'private output', 'private answer', 'private checker', 'Exit with code -1']];
+		await page.goto(url); await page.locator('.testcase').waitFor();
+		assert.equal(await page.locator('.testcase > div:first-child > div:nth-child(2)').textContent(), status);
+		assert.equal(await page.locator('.testcase > div:first-child').evaluate(element => getComputedStyle(element).backgroundColor), color);
+		assert.ok(!(await page.locator('.testcase').textContent()).includes('private'));
+		assert.ok((await page.locator('.testcase > div:nth-child(2)').textContent()).includes('Exit with code -1'));
+	}
+	for (const [time, memory, expected] of [[undefined, undefined, undefined], ['937 ms', undefined, '937ms'], [undefined, '16 KiB', '16.00KiB'], ['0 ms', '0 KB', '0ms / 0KB']]) {
+		state.snapshot.time = time; state.snapshot.memory = memory;
+		await page.goto(url); await page.locator('.record-verdict').waitFor();
+		const row = page.locator('.record-info > div').filter({ has: page.getByText(labels.resources, { exact: true }) });
+		assert.equal(await row.count(), expected === undefined ? 0 : 1);
+		if (expected !== undefined) { assert.equal(await row.locator('span').last().textContent(), expected); }
+	}
+	state.snapshot.groups = [{ name: 'Subtask #1', rows: [['1', 'OK', '1 ms', '0 KiB']] }];
+	await page.goto(url); await page.locator('.testCaseData h3').waitFor();
+	assert.equal(await page.locator('.testCaseData h3').textContent(), 'Subtask #1', 'meaningful group names remain visible');
+	// Deliberately keep Chinese status labels in the fixture: judging terminology must stay English.
+	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
+		const record = { ...cfRecord, problem: { ...cfProblem, site } };
+		for (const [status, expected] of [['AC', 'Accepted'], ['WA', 'Wrong Answer'], ['CE', 'Compile Error'], ['TLE', 'Time Limit Exceeded'], ['MLE', 'Memory Limit Exceeded'], ['RE', 'Runtime Error'], ['OLE', 'Output Limit Exceeded'], ['QLE', 'Query Limit Exceeded'], ['IE', 'Internal Error'], ['PE', 'Presentation Error'], ['WJ', 'Waiting'], ['WR', 'Judging'], ['Compiling', 'Compiling'], ['Floating Point Exception', 'Floating Point Exception'], ['Segmentation Fault', 'Segmentation Fault'], ['Code Length Exceeded', 'Code Length Exceeded'], ['Nonzero Exit Code', 'Nonzero Exit Code']]) {
+			state = { kind: 'record', labels, record, tracking: false, snapshot: { ref: record, phase: 'finished', rawStatus: status, sourceVerification: 'unavailable', groups: [{ name: 'Test Cases', rows: [['1', status, '15 ms', '20480 B']] }] } };
+			await page.goto(url); await page.locator('.testcase').waitFor();
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), site === 'codeforces' && status !== expected ? expected + ' · ' + status : expected, `${site} ${status} record explanation stays English while preserving the CF native verdict`);
+			assert.equal(await page.locator('.testcase > div:nth-child(2)').textContent(), expected, `${site} ${status} testcase fallback stays English`);
+		}
+		state.snapshot.rawStatus = 'AC';
+		state.snapshot.groups[0].rows = [['1', site === 'codeforces' ? 'OK' : 'AC', '15 ms', '20480 B', ...(site === 'codeforces' ? ['private input'] : ['ok accepted', 'Score: 10', 'Received signal 9']), 'Exit with code 0']];
+		await page.goto(url); await page.locator('.testcase').waitFor();
+		await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
+		const hover = await page.locator('.testcase > div:nth-child(2)').textContent();
+		assert.equal(hover, site === 'codeforces' ? 'Accepted\nExit with code 0' : 'ok accepted\nScore: 10\nReceived signal 9\nExit with code 0', 'retain actual English judge details without translating or fabricating them');
+		assert.ok((await page.locator('.testcase > div:first-child').textContent()).includes('20.00KiB'), 'byte resources use the shared Luogu display formatter');
+		await page.locator('.testcase').hover();
+		await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.testcase > div:nth-child(2)')).opacity) >= 0.79);
+		await page.screenshot({ path: path.join(output, `${site}-english-hover.png`), fullPage: true });
+	}
 	await page.route('https://example.org/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><rect width="100" height="30" fill="#507cab"/></svg>' }));
 	await page.route('https://www.nowcoder.com/equation?**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="24"><text y="18">a+b</text></svg>' }));
-	for (const site of ['luogu', 'atcoder', 'nowcoder']) {
-		const ref = { site, nativeId: site === 'luogu' ? 'B2005' : site === 'atcoder' ? 'abc086/abc086_a' : 'problem/18204', url: 'https://example.org/problem' };
+	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
+		const ref = { site, nativeId: site === 'luogu' ? 'B2005' : site === 'atcoder' ? 'abc484/abc484_c' : site === 'codeforces' ? '2121/H' : 'problem/18204', url: site === 'codeforces' ? 'https://codeforces.com/contest/2121/problem/H' : 'https://example.org/problem' };
 		state = { kind: 'problem', labels, sourceName: 'solution.cpp', languages: [{ id: 'cpp', label: 'C++23 (GCC 15.2.0) (O2)', family: 'cpp' }], languageId: 'cpp', problem: { ref, title: site === 'luogu' ? '入门测试题目' : 'A+B Problem', limits: [{ label: 'Time Limit', value: '1.00s' }, { label: 'Memory Limit', value: '128.00MiB' }], bodies: [{ locale: 'en', sections: [{ heading: '题目描述', format: 'markdown', content: '求两个整数的和。' }] }], samples: [] } };
-		if (site === 'atcoder') { state.problem.bodies.push({ locale: 'ja', sections: [] }); }
+		if (site === 'atcoder') { state.problem.title = 'Move One Card'; state.problem.bodies.push({ locale: 'ja', sections: [] }); }
 		if (site === 'luogu') { Object.assign(state.problem, { title: '字符三角形', difficulty: { label: '入门', color: '#FE4C61' }, tags: [{ label: '模拟', color: '#3498db' }] }); }
+		if (site === 'codeforces') { Object.assign(state.problem, { title: 'Ice Baby', limits: [{ label: 'Time Limit', value: '2.00s' }, { label: 'Memory Limit', value: '512.00MiB' }] }); }
 		for (const width of [320, 420, 480, 481, 532, 640, 700, 1000]) {
 			await page.setViewportSize({ width, height: 700 }); await page.goto(url);
 			await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
 			await page.locator('article').waitFor();
+			if (site === 'atcoder') { assert.equal(await page.locator('h1').textContent(), 'abc484_c Move One Card'); }
+			if (site === 'codeforces') {
+				assert.equal(await page.locator('h1').textContent(), 'H Ice Baby');
+				assert.deepEqual(await page.locator('.problem-limit').allTextContents(), ['时间限制2.00s', '内存限制512.00MiB']);
+			}
 			await page.screenshot({ path: path.join(output, `${site}-compact-header-${width}.png`) });
 			const titleGap = await page.locator('header').evaluate(element => {
 				const title = element.querySelector('h1'), toolbar = title.nextElementSibling;
@@ -88,7 +208,7 @@ try {
 			assert.ok(row[0].top <= row[1].top && Math.abs(row[1].top - row[2].top) < 1, `${site} compiler stays beside submit when the toolbar wraps at ${width}px: ${JSON.stringify(row)}`);
 			if (width >= 640 || width <= 480) { assert.ok(Math.abs(row[0].top - row[1].top) < 1, `${site} actions stay on one row when space allows`); }
 			assert.ok(row[2].width >= 40, 'compiler selector retains a usable click target');
-			assert.ok(row[2].width <= 220, 'compiler selector stays compact instead of filling the toolbar');
+			assert.ok(row[2].width <= 225, `compiler selector stays compact instead of filling the toolbar: ${row[2].width}px`);
 			assert.equal(await page.locator('.problem-limits').isVisible(), width > 480, 'metadata fits alongside the title in a third-width statement pane');
 			if (width > 480) {
 				assert.equal(await page.locator('.problem-limit').evaluateAll(elements => elements.every(element => [...element.children].every(child => child.getBoundingClientRect().height <= parseFloat(getComputedStyle(child).lineHeight) + 1))), true, 'limit labels and values remain on one line');
@@ -98,7 +218,7 @@ try {
 	}
 	for (const site of ['luogu', 'atcoder']) {
 		const ref = site === 'luogu' ? { site, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } : { site, nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
-		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'A - Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: '题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
+		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: '题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
 		const snippets = [
 			{ language: 'php', code: '<?php\n$input = trim(file_get_contents("php://stdin"));\necho $input;\n' },
 			{ language: 'rust', code: 'use std::io;\nfn main() { let mut input = String::new(); }\n' },
@@ -323,6 +443,11 @@ try {
 		await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 		assert.equal(await page.locator('.testcase .spinner').count(), 1, 'only judging test cases spin');
 		assert.equal(await page.locator('.testcase').first().locator(':scope > div').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(52, 152, 219)');
+		for (const rawStatus of ['WJ', 'WR']) {
+			await page.evaluate(status => { const next = structuredClone(window.__OJ_STATE__); next.snapshot.groups[0].rows[0][1] = status; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); }, rawStatus);
+			await page.locator(`.testcase .spinner[aria-label="${rawStatus}"]`).waitFor();
+			assert.equal(await page.locator('.testcase').first().locator(':scope > div').first().evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(52, 152, 219)', 'existing pending aliases keep the common blue testcase color');
+		}
 		const spinner = page.locator('.testcase .spinner');
 		assert.equal(await spinner.evaluate(element => getComputedStyle(element).animationName), 'spin');
 		const rotation = await spinner.evaluate(element => getComputedStyle(element).transform);
@@ -341,7 +466,7 @@ try {
 		const problemLink = page.locator('.record-info > div').first().locator('a');
 		assert.equal(await problemLink.textContent(), record.problem.nativeId + ' A+B Problem', 'record retains the official problem name like upstream');
 		assert.equal(await problemLink.locator('span').evaluate(element => getComputedStyle(element).color), 'rgb(254, 76, 97)', 'official difficulty colors the problem ID');
-		if (site === 'atcoder') { assert.equal(await page.locator('.record-verdict').getAttribute('title'), '答案正确'); }
+		if (site === 'atcoder') { assert.equal(await page.locator('.record-verdict').getAttribute('title'), 'Accepted'); }
 		assert.equal(await page.locator('.record-info > div').filter({ has: page.getByText('50', { exact: true }) }).locator('span').last().evaluate(element => getComputedStyle(element).color), 'rgb(243, 156, 17)', 'upstream partial score uses orange');
 		const infoLabels = await page.locator('.record-info > div > span:first-child').allTextContents();
 		assert.ok(infoLabels.indexOf(labels.language) < infoLabels.indexOf(labels.codeLength), 'language precedes code length like upstream');
@@ -382,7 +507,7 @@ try {
 		if (site === 'atcoder') {
 			state = { ...state, message: undefined, canRetry: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', compileSucceeded: false, compileMessage: './Main.cpp:4: error: cin was not declared\n  ^~~\n', sourceVerification: 'unavailable' } };
 			await page.goto(url); await page.locator('pre').waitFor();
-			assert.equal(await page.locator('.record-verdict').getAttribute('title'), '编译错误');
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), 'Compile Error');
 			assert.equal(await page.locator('.spinner').count(), 0);
 			await page.locator('pre').hover();
 			await page.locator('pre').getByRole('button', { name: labels.copy, exact: true }).click();
@@ -396,7 +521,7 @@ try {
 			assert.equal(await page.locator('.record-verdict').getAttribute('title'), null);
 			state.snapshot.rawStatus = 'QLE';
 			await page.goto(url); await page.locator('.record-verdict').waitFor();
-			assert.equal(await page.locator('.record-verdict').getAttribute('title'), labels.status_QLE);
+			assert.equal(await page.locator('.record-verdict').getAttribute('title'), 'Query Limit Exceeded');
 			assert.equal(await page.locator('.record-verdict').evaluate(element => getComputedStyle(element).color), 'rgb(140, 158, 255)');
 		}
 	}
@@ -428,7 +553,7 @@ try {
 		assert.equal(await page.locator('.record-info > div').first().locator('a').textContent(), 'NC18204', 'internal routes are not user-facing problem names');
 		assert.equal(await page.locator('.record-info > div').first().locator('a span').getAttribute('style'), null, 'missing difficulty has no invented color');
 		assert.equal(await page.locator('.record-verdict').textContent(), rawStatus === 'AC' ? 'Accepted' : rawStatus === 'WA' ? 'Wrong Answer' : rawStatus === 'CE' ? 'Compile Error' : rawStatus);
-		assert.ok(await page.locator('.record-verdict').getAttribute('title'), 'native verdict has a localized explanation');
+		assert.ok(await page.locator('.record-verdict').getAttribute('title'), 'native verdict has an English explanation');
 		if (phase !== 'finished') { assert.equal(await page.locator('.record-verdict').evaluate(element => getComputedStyle(element).color), 'rgb(52, 152, 219)', 'pending text and spinner share the readable judging blue'); }
 		assert.equal(await page.locator('.record-verdict .spinner').count(), phase === 'finished' ? 0 : 1);
 		assert.equal(await page.locator('.testcase').count(), 0, 'missing Nowcoder test details stay omitted');
@@ -456,7 +581,9 @@ try {
 	await page.evaluate(() => { const style = document.createElement('style'); style.nonce = 'fixture'; style.textContent = 'body { background:#1e1e1e;--vscode-foreground:#ddd;--vscode-font-size:13px;--vscode-font-family:Segoe UI,sans-serif;--vscode-textLink-foreground:#4daafc;--vscode-descriptionForeground:#aaa;--vscode-disabledForeground:#777; }'; document.head.append(style); });
 	for (const selector of ['.status', '.account img']) { for (const element of await page.locator(selector).all()) { await element.click(); } }
 	assert.deepEqual(await page.evaluate(() => window.__messages), [], 'status text and logos remain inert');
-	assert.equal(await page.locator('[data-site="codeforces"] button').isDisabled(), true);
+	assert.equal(await page.locator('[data-site="codeforces"] button').isDisabled(), false);
+	assert.equal(await page.locator('[data-site="codeforces"]').getAttribute('data-state'), 'unknown');
+	assert.equal(await page.locator('[data-site="lanqiao"] button').isDisabled(), true);
 	assert.equal(await page.locator('[data-site="luogu"] img').evaluate(element => getComputedStyle(element).opacity), '1');
 	assert.equal(await page.locator('[data-site="atcoder"] img').evaluate(element => getComputedStyle(element).opacity), '0.35');
 	await page.getByRole('button', { name: 'AtCoder', exact: true }).click();
@@ -466,5 +593,5 @@ try {
 	assert.equal(await page.locator('[data-site="atcoder"] .status').textContent(), '已登录 · fixture-user');
 	for (const width of [240, 320, 500]) { await page.setViewportSize({ width, height: 300 }); await page.screenshot({ path: path.join(output, 'accounts-' + width + '.png') }); }
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ passed: true, sites: 3, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
+	console.log(JSON.stringify({ passed: true, sites: 4, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

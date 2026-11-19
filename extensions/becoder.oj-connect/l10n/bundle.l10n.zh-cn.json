@@ -1,4 +1,5 @@
 {
+	"Codeforces rejected this submission because you have already submitted exactly the same code for this problem. No new submission was created. View the earlier submission or choose another problem.": "CF 已拒绝本次提交：该题已提交过完全相同的代码，本次未生成新记录。请查看原提交，或选择其他题目。",
 	"Passed tests": "通过测试点",
 	"AtCoder problem URL for {0}": "{0} 对应的 AtCoder 题目链接",
 	"Enter an official AtCoder problem URL.": "请输入 AtCoder 官方题目链接。",
@@ -162,5 +163,13 @@
 	"Sign in to Nowcoder from the OJ Connect sidebar, then submit again.": "请从 OJ Connect 侧栏登录牛客，然后重新提交。",
 	"Only public Nowcoder ACM standard input/output problems and ended public individual contests are supported.": "目前支持牛客 ACM 公开标准输入输出题，以及已结束的公开个人赛题。",
 	"Source from the official record": "官网记录源码",
-	"Source sent in this submission; not yet checked against the official record": "本次发送的源码，尚未从官网核对"
+	"Source sent in this submission; not yet checked against the official record": "本次发送的源码，尚未从官网核对",
+	"Enter a matching problem number or an official Luogu/AtCoder/Codeforces/Nowcoder URL.": "请输入匹配的题号或洛谷、AtCoder、Codeforces、牛客官方题目链接。",
+	"Sign in to Codeforces from the OJ Connect sidebar, then submit again.": "请从 OJ Connect 侧栏登录 Codeforces，然后重新提交。",
+	"Open Codeforces in the built-in browser and complete verification manually, then retry the appropriate action.": "请在内置浏览器中打开 Codeforces 并手动完成验证，再重试对应操作。",
+	"Only ordinary ended public Codeforces contest problems in practice mode are supported.": "目前仅支持 Codeforces 普通公开比赛题的赛后练习。",
+	"The Codeforces request timed out. Check the connection and try the action again.": "Codeforces 请求超时。请检查网络连接后重试对应操作。",
+	"The Codeforces login session changed. Refresh its account status, then try the action again.": "Codeforces 登录会话已变化。请刷新账号状态后重试对应操作。",
+	"The Codeforces connection stopped. Reopen OJ Connect and try the action again.": "Codeforces 连接已停止。请重新打开 OJ Connect 后重试对应操作。",
+	"The Codeforces operation was cancelled. Try the action again.": "Codeforces 操作已取消。请重试对应操作。"
 }

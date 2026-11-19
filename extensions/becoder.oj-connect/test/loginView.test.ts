@@ -61,7 +61,7 @@ test('account actions route supported states to their fixed native site commands
 test('unsupported sites and unavailable rows have no account action', async () => {
 	for (const site of ['luogu', 'atcoder', 'codeforces', 'nowcoder', 'lanqiao'] as const) {
 		for (const state of ['signed-in', 'signed-out', 'unknown', 'unavailable'] as const) {
-			if ((site === 'luogu' || site === 'atcoder' || site === 'nowcoder') && state !== 'unavailable') { continue; }
+			if ((site === 'luogu' || site === 'atcoder' || site === 'nowcoder' || site === 'codeforces') && state !== 'unavailable') { continue; }
 			const events: string[] = [];
 			assert.strictEqual(await openAccount({ site, state }, async command => { events.push(command); }, async () => { events.push('refresh'); }, async url => { events.push(url); }), false);
 			assert.deepStrictEqual(events, []);
@@ -105,5 +105,60 @@ test('a late account check cannot replace newer state or post after view disposa
 		login!.dispose();
 		reads[0]({ site: 'luogu', state: 'signed-out' }); await new Promise(resolve => setTimeout(resolve, 0));
 		assert.strictEqual(posts.length, count, 'obsolete completion cannot overwrite or contact a disposed view');
+	} finally { login?.dispose(); Module._load = original; }
+});
+
+test('changing account scope clears the old identity immediately and rejects the obsolete read', async () => {
+	const Module = require('module'), original = Module._load;
+	const disposable = () => ({ dispose() { } });
+	const mock = { l10n: { t: (text: string) => text }, Uri: { joinPath: () => ({ toString: () => 'https://local.test/icon.png' }) } };
+	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
+	let login: import('../src/views/loginView').LoginView | undefined;
+	try {
+		const { LoginView } = require('../src/views/loginView');
+		const reads: { finish: (value: unknown) => void; signal: AbortSignal }[] = [], posts: any[] = [], commands: string[] = [];
+		const adapters = [{ site: 'luogu', loginSummary: (signal: AbortSignal) => new Promise(resolve => reads.push({ finish: resolve, signal })) }] as unknown as OjAdapter[];
+		let message!: (value: unknown) => void;
+		const view = { visible: true, webview: { options: {}, html: '', cspSource: 'https://local.test', asWebviewUri: (uri: unknown) => uri, postMessage: async (value: unknown) => { posts.push(value); return true; }, onDidReceiveMessage: (listener: typeof message) => { message = listener; return disposable(); } }, onDidChangeVisibility: disposable, onDidDispose: disposable };
+		login = new LoginView({ extensionUri: {} }, adapters, async (command: string) => { commands.push(command); }, async (url: string) => { commands.push(url); });
+		login!.resolveWebviewView(view as unknown as import('vscode').WebviewView);
+		reads[0].finish({ site: 'luogu', state: 'signed-in', label: 'old-user', profileUrl: 'https://www.luogu.com.cn/user/123' });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		assert.match(posts.at(-1).rows[0].text, /old-user/);
+		const obsolete = login!.refresh();
+		const current = login!.refresh(true);
+		assert.strictEqual(reads[1].signal.aborted, true);
+		assert.strictEqual(posts.at(-1).rows[0].state, 'unknown');
+		assert.doesNotMatch(posts.at(-1).rows[0].text, /old-user/);
+		assert.strictEqual(posts.at(-1).rows.find((row: any) => row.site === 'lanqiao').state, 'unavailable');
+		reads[1].finish({ site: 'luogu', state: 'signed-in', label: 'obsolete-user' }); await obsolete;
+		assert.strictEqual(posts.at(-1).rows[0].state, 'unknown', 'old scope cannot restore its identity');
+		reads[2].finish({ site: 'luogu', state: 'signed-out' }); await current;
+		message({ site: 'luogu' });
+		assert.deepStrictEqual(commands, ['_becoder.ojConnect.luogu.login'], 'cleared profile cannot open the old account');
+	} finally { login?.dispose(); Module._load = original; }
+});
+
+test('registered accounts are clickable before their first login check completes', () => {
+	const Module = require('module'), original = Module._load;
+	const disposable = () => ({ dispose() { } });
+	const mock = { l10n: { t: (text: string) => text }, Uri: { joinPath: () => ({ toString: () => 'https://local.test/icon.png' }) } };
+	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
+	let login: import('../src/views/loginView').LoginView | undefined;
+	try {
+		const { LoginView } = require('../src/views/loginView'), { JSDOM } = require('jsdom');
+		const adapters = ['luogu', 'atcoder', 'nowcoder', 'codeforces'].map(site => ({ site, loginSummary: async () => ({ site, state: 'unknown' }) })) as unknown as OjAdapter[];
+		const view = { webview: { options: {}, html: '', cspSource: 'https://local.test', asWebviewUri: (uri: unknown) => uri, postMessage: async () => true, onDidReceiveMessage: disposable }, onDidChangeVisibility: disposable, onDidDispose: disposable };
+		login = new LoginView({ extensionUri: {} }, adapters, async () => undefined, async () => undefined);
+		login!.resolveWebviewView(view as unknown as import('vscode').WebviewView);
+		const dom = new JSDOM(view.webview.html);
+		try {
+			for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
+				const row = dom.window.document.querySelector(`[data-site="${site}"]`)!;
+				assert.strictEqual(row.dataset.state, 'unknown');
+				assert.strictEqual(row.querySelector('button')!.disabled, false);
+			}
+			assert.strictEqual(dom.window.document.querySelector('[data-site="lanqiao"] button')!.disabled, true);
+		} finally { dom.window.close(); }
 	} finally { login?.dispose(); Module._load = original; }
 });

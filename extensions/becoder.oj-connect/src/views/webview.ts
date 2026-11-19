@@ -25,13 +25,6 @@ export function labels(): Record<string, string> {
 		officialSource: vscode.l10n.t('Source from the official record'), sentSource: vscode.l10n.t('Source sent in this submission; not yet checked against the official record'),
 		compileSucceeded: vscode.l10n.t('Compilation succeeded'), compileFailed: vscode.l10n.t('Compilation failed'),
 		compileUnavailable: vscode.l10n.t('Compiler output is unavailable for this record.'),
-		status_AC: vscode.l10n.t('Accepted'), status_WA: vscode.l10n.t('Wrong answer'), status_CE: vscode.l10n.t('Compilation error'),
-		status_TLE: vscode.l10n.t('Time limit exceeded'), status_MLE: vscode.l10n.t('Memory limit exceeded'), status_RE: vscode.l10n.t('Runtime error'),
-		status_OLE: vscode.l10n.t('Output limit exceeded'), status_IE: vscode.l10n.t('Internal judge error'), status_WJ: vscode.l10n.t('Waiting for judging'), status_WR: vscode.l10n.t('Waiting for rejudging'),
-		status_QLE: vscode.l10n.t('Query limit exceeded'),
-		status_Judging: vscode.l10n.t('Judging'), status_Compiling: vscode.l10n.t('Compiling'), status_PE: vscode.l10n.t('Presentation error'),
-		'status_Floating Point Exception': vscode.l10n.t('Floating point exception'), 'status_Segmentation Fault': vscode.l10n.t('Segmentation fault'),
-		'status_Code Length Exceeded': vscode.l10n.t('Code length exceeded'), 'status_Nonzero Exit Code': vscode.l10n.t('Nonzero exit code'),
 		owner: vscode.l10n.t('User'), compiler: vscode.l10n.t('Compiler Output'),
 		'verification_mismatch': vscode.l10n.t('The record source differs from the submitted source.'),
 	};

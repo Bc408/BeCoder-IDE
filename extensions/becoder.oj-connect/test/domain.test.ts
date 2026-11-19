@@ -5,10 +5,14 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { validateProblem, validateRecord, validateProblemRef } from '../src/domain';
+import { validateProblem, validateRecord, validateProblemRef, validateOutcome } from '../src/domain';
 import { cphSamples } from '../src/cphHost';
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('an explicit website rejection crosses the DTO boundary without becoming an unsent or pending attempt', () => {
+	assert.deepStrictEqual(validateOutcome({ kind: 'rejected', reason: 'codeforces-duplicate-source', source: 'private' }), { kind: 'rejected', reason: 'codeforces-duplicate-source' });
+	assert.throws(() => validateOutcome({ kind: 'rejected', reason: '' }));
+});
 test('Nowcoder records preserve their public or contest identity and accept positive IDs of any prefix', () => {
 	for (const nativeId of ['problem/18204', 'contest/5657/A']) {
 		const problem = { site: 'nowcoder', nativeId, url: 'https://ac.nowcoder.com/acm/' + nativeId };

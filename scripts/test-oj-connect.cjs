@@ -10,18 +10,19 @@ const path = require('path');
 const assert = require('assert/strict');
 const { EventEmitter } = require('events');
 const root = path.resolve(__dirname, '..');
-app.setPath('userData', path.join(root, 'tmp/oj-connect-audit/shared-workflow/native-fixture-data'));
+const audit = process.env.BECODER_OJ_CONNECT_HOST_AUDIT;
+app.setPath('userData', audit ? path.join(audit, 'atcoder-profile') : path.join(root, 'tmp/oj-connect-audit/shared-workflow/native-fixture-data'));
 app.whenReady().then(async () => {
 	let window;
 	try {
 		global._VSCODE_PRODUCT_JSON = require(path.join(root, 'product.json'));
 		global._VSCODE_PACKAGE_JSON = require(path.join(root, 'package.json'));
-		const { BrowserViewMainService } = require(path.join(root, 'tmp/oj-connect-audit/native-luogu-main.cjs'));
+		const { BrowserViewMainService } = require(audit ? path.join(audit, 'main.cjs') : path.join(root, 'tmp/oj-connect-audit/native-luogu-main.cjs'));
 		// Invoke the actual watcher against synthetic cookie notifications, without touching cookies.
 		const cookieEvents = new EventEmitter(), accountEvents = [], cookieWatchers = new Map();
 		const watcherHost = {
 			_getBrowserView: () => ({ owner: { mainWindowId: 1 }, session:{id:'fixture-session'}, getWebContentsView: () => ({ webContents: { getURL:()=> 'https://www.luogu.com.cn/', session: { cookies: cookieEvents } } }), onDidClose: () => ({ dispose() {} }),onDidNavigate:()=>({dispose(){}}) }),
-			ojSessionWatchers: cookieWatchers, atCoderAccountReads:new Map(),invalidateAtCoderAccount:BrowserViewMainService.prototype.invalidateAtCoderAccount, _onDidChangeOjSession: { fire: value => accountEvents.push(value) }
+			ojSessionWatchers: cookieWatchers, atCoderAccounts: new Map(), atCoderAccountReads:new Map(),invalidateAtCoderAccount:BrowserViewMainService.prototype.invalidateAtCoderAccount, _onDidChangeOjSession: { fire: value => accountEvents.push(value) }
 		};
 		try {
 			await BrowserViewMainService.prototype.watchOjSession.call(watcherHost, 'cookie-fixture', 1);
@@ -69,7 +70,8 @@ app.whenReady().then(async () => {
 			onDidClose: listener => { window.on('closed', listener); return { dispose: () => window.removeListener('closed', listener) }; },
 			onDidNavigate: listener => { const fn = (_event, url) => listener({ url }); window.webContents.on('did-navigate', fn); return { dispose: () => window.webContents.removeListener('did-navigate', fn) }; }
 		};
-		const service = { _getBrowserView: () => view, environmentMainService: { appRoot: root }, ojReads: new Map(), atCoderAccountReads:new Map(), ojSession:(owner,scope)=>{assert.equal(owner,1);assert.equal(scope,'global');return{id:partition,electronSession:window.webContents.session};} };
+		const identityEvents = [];
+		const service = { _getBrowserView: () => view, environmentMainService: { appRoot: root }, ojReads: new Map(), atCoderAccounts: new Map(), atCoderAccountReads:new Map(), _onDidChangeOjSession: { fire: event => identityEvents.push(event) }, ojSession:(owner,scope)=>{assert.ok([1, 2, 3].includes(owner));assert.equal(scope,'global');return{id: owner === 3 ? 'workspace:other' : partition,electronSession:window.webContents.session};} };
 		for (const name of ['_runOjRead', 'readOjProblem', 'readOjLogin', 'readAtCoderLogin', 'invalidateAtCoderAccount']) { service[name] = BrowserViewMainService.prototype[name]; }
 		for (const suffix of ['?lang=en', '/']) {
 			await load(atcoder.url + suffix);
@@ -98,8 +100,46 @@ app.whenReady().then(async () => {
 		assert.equal(service.atCoderAccountReads.size,1,'the old request cannot delete its replacement');
 		bodies[1].enqueue(new TextEncoder().encode('<script>var userScreenName="new_user";</script>'));bodies[1].close();
 		assert.equal((await fresh).label,'new_user');assert.equal(service.atCoderAccountReads.size,0);
+		// A window that only read a summary still shares login changes with its Session.
+		service.ojSession = owner => ({ id: owner === 3 ? 'workspace:other' : partition, electronSession: { fetch: async () => new Response('<script>var userScreenName="new_user";</script>', { headers: { 'Content-Type': 'text/html' } }) } });
+		await service.readAtCoderLogin(2, 'global'); await service.readAtCoderLogin(3, 'global');
+		identityEvents.length = 0;
+		let navigateAccount;
+		const sharedCookies = new EventEmitter(), sharedWatchers = new Map();
+		const sharedWatcher = { ...service, ojSessionWatchers: sharedWatchers, _getBrowserView: () => ({ owner: { mainWindowId: 1 }, session: { id: partition },
+			getWebContentsView: () => ({ webContents: { getURL: () => 'https://atcoder.jp/', session: { cookies: sharedCookies } } }),
+			onDidNavigate(listener) { navigateAccount = listener; return { dispose() {} }; }, onDidClose: () => ({ dispose() {} }) }) };
+		await BrowserViewMainService.prototype.watchOjSession.call(sharedWatcher, 'atcoder-account', 1);
+		navigateAccount({ url: 'https://atcoder.jp/login' });
+		assert.deepEqual(identityEvents, [{ windowId: 1, site: 'atcoder' }, { windowId: 2, site: 'atcoder' }], 'login changes notify every window using the same Session, without a browser tab');
+		identityEvents.length = 0;
+		sharedCookies.emit('changed', {}, { domain: '.atcoder.jp', name: 'REVEL_SESSION', value: 'ordinary-rotation' }, 'overwrite', true);
+		sharedCookies.emit('changed', {}, { domain: '.atcoder.jp', name: 'REVEL_SESSION', value: 'ordinary-rotation' }, 'explicit', false);
+		assert.equal(identityEvents.length, 0, 'ordinary rotation never invalidates either window');
+		sharedCookies.emit('changed', {}, { domain: '.atcoder.jp', name: 'REVEL_SESSION', value: 'expired' }, 'expired', true);
+		assert.deepEqual(identityEvents, [{ windowId: 1, site: 'atcoder' }, { windowId: 2, site: 'atcoder' }], 'expiry notifies all windows using the expired Session');
+		for (const watcher of sharedWatchers.values()) { watcher.dispose(); }
+		const pendingBodies = new Map();
+		service.ojSession = owner => ({ id: owner === 3 ? 'workspace:other' : partition, electronSession: { fetch: async () => new Response(new ReadableStream({ start(controller) { pendingBodies.set(owner, controller); } }), { headers: { 'Content-Type': 'text/html' } }) } });
+		const firstRead = service.readAtCoderLogin(1, 'global'), secondRead = service.readAtCoderLogin(2, 'global'), isolatedRead = service.readAtCoderLogin(3, 'global');
+		const firstRejected = assert.rejects(firstRead), secondRejected = assert.rejects(secondRead);
+		await new Promise(resolve => setImmediate(resolve));
+		service.invalidateAtCoderAccount(1, partition);
+		for (const body of pendingBodies.values()) { body.enqueue(new TextEncoder().encode('<script>var userScreenName="late_user";</script>')); body.close(); }
+		await Promise.all([firstRejected, secondRejected]);
+		assert.equal((await isolatedRead).label, 'late_user', 'another workspace account read stays alive');
+		identityEvents.length = 0;
+		service.ojSession = () => ({ id: partition, electronSession: { fetch: async () => new Response('<script>var userScreenName="changed_user";</script>', { headers: { 'Content-Type': 'text/html' } }) } });
+		assert.equal((await service.readAtCoderLogin(1, 'global')).label, 'changed_user', 'verified identity change preserves the successful source read');
+		assert.deepEqual(identityEvents, [{ windowId: 1, site: 'atcoder' }, { windowId: 2, site: 'atcoder' }]);
+		await service.readAtCoderLogin(2, 'global');
+		assert.equal(identityEvents.length, 2, 'refreshing the notified peer cannot start an identity refresh loop');
+		for (const name of ['codeforcesRequests', 'codeforcesClients', 'nowcoderRequests', 'nowcoderClients', 'nowcoderAttempts', 'luoguRequests', 'luoguClients', 'atCoderRequests', 'atCoderRecords', 'atCoderAttempts', 'luoguAttempts']) { service[name] = new Map(); }
+		await BrowserViewMainService.prototype.cancelOjOperations.call(service, 2);
+		identityEvents.length = 0; service.invalidateAtCoderAccount(1, partition);
+		assert.deepEqual(identityEvents, [{ windowId: 1, site: 'atcoder' }], 'a closed window no longer receives account changes');
 		assert.equal(service.ojReads.size, 0);
-		console.log(JSON.stringify({ passed: true, realMainService: true, cookieRemovalRefresh: true, freshAtCoderLogin: true, atcoderQueryAndTrailingSlash: true, atcoderWindowIsolation: true }));
+		console.log(JSON.stringify({ passed: true, realMainService: true, cookieRemovalRefresh: true, freshAtCoderLogin: true, atcoderQueryAndTrailingSlash: true, atcoderWindowIsolation: true, sharedAccountNavigation: true, sharedReadInvalidation: true, identityRefreshNoLoop: true, closedWindowReleased: true }));
 	} catch (error) { console.error(error.stack); process.exitCode = 1; }
 	finally { window?.destroy(); app.exit(process.exitCode || 0); }
 });

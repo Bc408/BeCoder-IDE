@@ -4,4 +4,5 @@
  *--------------------------------------------------------------------------------------------*/
 
 export { readAtCoderProblem } from './atcoder';
+export { readCodeforcesProblem } from './codeforcesProblem';
 export { cancelOjRead } from './reads';

@@ -154,6 +154,20 @@
 					"scope": "window",
 					"description": "%panelLocation%"
 				},
+				"becoder.ojConnect.codeforces.cCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%codeforces.cCompiler%"
+				},
+				"becoder.ojConnect.codeforces.cppCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^\\d*$",
+					"description": "%codeforces.cppCompiler%"
+				},
 				"becoder.ojConnect.nowcoder.cCompiler": {
 					"type": "string",
 					"default": "",

@@ -8,7 +8,7 @@
 
 OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder、Codeforces、牛客和蓝桥。以 vscode-luogu 的核心刷题体验为标杆，用户围绕当前 C/C++ 源码，通过快捷键看题、提交和查看本次评测结果。每个站点在扩展内部拥有独立适配模块。
 
-左侧侧栏仅用于统一管理这五个站点的登录状态与登录／退出入口。2026-11-15 已确认侧栏与普通内置浏览器共用对应站点会话；登录打开官网，退出同时对共享会话生效，其他站点不受影响。当前候选源码已加入洛谷、AtCoder、牛客三站入口与自动摘要更新；CF与蓝桥不提供登录动作；实际闭环确认与最新候选待验收项见[当前实现状态](#当前实现状态)。详细设计见[洛谷会话与交互修复设计](../superpowers/specs/2026-11-15-oj-connect-luogu-session-design.md)。找题在内置浏览器中完成；独立题面页与独立评测记录页由 OJ Connect 提供。样例管理和本地测试继续使用内置 CPH。
+左侧侧栏仅用于统一管理这五个站点的登录状态与登录／退出入口。2026-11-15 已确认侧栏与普通内置浏览器共用对应站点会话；登录打开官网，退出同时对共享会话生效，其他站点不受影响。当前候选源码已加入洛谷、AtCoder、Codeforces、牛客四站入口与自动摘要更新；蓝桥不提供登录动作；实际闭环确认与最新候选待验收项见[当前实现状态](#当前实现状态)。详细设计见[洛谷会话与交互修复设计](../superpowers/specs/2026-11-15-oj-connect-luogu-session-design.md)。找题在内置浏览器中完成；独立题面页与独立评测记录页由 OJ Connect 提供。样例管理和本地测试继续使用内置 CPH。
 
 ## 已确认的主流程
 
@@ -45,7 +45,7 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 题目猜测采用简单规则：识别到配置中的站点目录时，在该站点内按文件名提取题号；未识别到站点目录时，尝试通过文件名的站点特征／前缀判断。格式不匹配或该站找不到题目时提示用户输入，不静默改用另一个站点。
 
-浏览器导入的默认文件名应使用该站可反向解析的题目标识。例如洛谷的 `P1001.cpp`、AtCoder 的 `abc086_a.cpp`；各站具体格式在对应适配与测试中定义。比赛上下文属于站点题目标识的一部分，不能为了简化文件名而将不同比赛题目混为同一道。
+浏览器导入的默认文件名应使用该站可反向解析的题目标识。例如洛谷的 `P1001.cpp`、CF 的 `codeforces/4_a.cpp`、AtCoder 的 `abc086_a.cpp`；各站具体格式在对应适配与测试中定义。比赛上下文属于站点题目标识的一部分，不能为了简化文件名而将不同比赛题目混为同一道。
 
 不新增持久的“源码—题目绑定库”，不新增移动／重命名后的关联冲突处理机制。实现以文件位置、文件名和本次操作上下文为依据。上游插件读取既有 CPH 配置的实现是参考证据，不代表 OJ Connect 已决定用 CPH 元数据覆盖上述目录规则。
 
@@ -71,7 +71,13 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 ## 当前实现状态
 
-2026-11-17 牛客 ACM 候选已接入现有 OJ Connect，使用负责人选定的 `/nccommon/submit_cd` 与 `/nccommon/status`，不校验 ID 前缀、不保留现代备用路线。公开 `nowcoder/18204.cpp` 与比赛 `nowcoder/5657_A.cpp` 保留入口身份；登录共用原生 Session，常规操作不创建网页。三站已统一约 120 秒本地跟踪、保留记录及继续查询。Acorn 8.16.0 生产依赖按批准用于静态字面量解析，未执行官网脚本。实现与本轮验证见[接入实施记录](nowcoder-implementation-2026-11-17.md)，[证据摘要](nowcoder-protocol-evidence.md)、[设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)及[计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)保留协议与边界依据；CF 与蓝桥仍未接入。此前研究提交不替代本候选真实验收。
+2026-11-18 CF 赛后练习候选已按[批准设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)与[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)加入第四个适配器、登录摘要、共同题面／评测和同源码 CPH 入口。仅支持官网普通公开比赛赛后练习；核对官方 Finished／Practice 与题型字面量，拒绝 output-only、Gym、进行中、虚拟、group、私有／团队和镜像入口。身份 `4/A` 对应 `codeforces/4_a.cpp`，真实后缀保留，直接父目录优先，通用下划线文件名不跨站自动猜测；CF 的 C／C++ 编译器偏好按本站设置分别保存，目录来自当次官方表单。
+
+CF 准备、单次原生 POST、正式回执核对及结果查询共用当前窗口和存储范围的持久 Session，不创建或导航提交页，不预热。只有账号、题目、编译器及官网回读源码唯一匹配的新记录才确认；受理不明只查询。共同记录页保留原站进度和真实测试点，缺失的分数、代码长度、终态资源省略，CF 不显示用户字段。[隔离协议采证](codeforces-protocol-evidence.md)与实际产品运行分别记录。下列带日期记录保留当轮站点范围与验证事实。
+
+2026-11-19 负责人自行换题提交 `2202/B`，截图确认新记录 `399067816` 为 Accepted，共同记录页显示 10 个通过测试点；本机日志同时显示一次源码 POST、本人列表核对、官网源码读取及后续结果更新完成。该记录证明本次产品交题闭环，不代表所有异常情形均已验收。负责人确认此前 `2192/A` 完全相同源码重交涉及 CF 的重复源码限制，并要求修正提示。后续源码仅对同账号、同题目的完整官方表单中明确的重复源码错误返回 `rejected`，释放尝试并显示未生成新记录；未知响应仍为 `unconfirmed`，旧 AC 不充当新回执。本次提示候选的真实复测和新 stage 验收另行进行。
+
+2026-11-17 牛客 ACM 候选已接入现有 OJ Connect，使用负责人选定的 `/nccommon/submit_cd` 与 `/nccommon/status`，不校验 ID 前缀、不保留现代备用路线。公开 `nowcoder/18204.cpp` 与比赛 `nowcoder/5657_A.cpp` 保留入口身份；登录共用原生 Session，常规操作不创建网页。三站已统一约 120 秒本地跟踪、保留记录及继续查询。Acorn 8.16.0 生产依赖按批准用于静态字面量解析，未执行官网脚本。实现与本轮验证见[接入实施记录](nowcoder-implementation-2026-11-17.md)，[证据摘要](nowcoder-protocol-evidence.md)、[设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)及[计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)保留协议与边界依据；当轮 CF 与蓝桥仍未接入，CF 的后续候选见本节最新记录。此前研究提交不替代本候选真实验收。
 
 正式推送前的轻量复查、hook、许可和清理状态见[2026-11-17 发布准备](publication-preparation-2026-11-17.md)。该记录不表示已执行提交或云端发布。
 
@@ -111,7 +117,8 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 ## 开发文档与证据
 
-- [牛客 ACM 协议证据](nowcoder-protocol-evidence.md)、[接入设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)与[实施计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)：负责人已选官网 ACM 链路，产品尚未实施；剩余边界、真实证据与检查／验收分别记录。
+- [CF 赛后练习接入设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)、[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)与[协议采证](codeforces-protocol-evidence.md)：2026-11-18 负责人已确认设计并批准实施，当前四站候选已加入 CF 适配；四次隔离实交证明协议样本可行，不替代本轮产品运行、最终构建或负责人验收。
+- [牛客 ACM 协议证据](nowcoder-protocol-evidence.md)、[接入设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)与[实施计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)：负责人已选官网 ACM 链路，2026-11-17 候选实现见[实施记录](nowcoder-implementation-2026-11-17.md)；剩余边界、真实证据与检查／验收分别记录。
 - [分支发布前审查](publish-review-2026-11-16.md)：本轮缺陷修复、去冗余、计划语义、许可和验证边界；不代表已经提交或推送。
 - [技术架构](architecture.md)：当前源码所有者、目标扩展结构、宿主接口边界和迁移验收。
 - [共同流程与洛谷接入设计](shared-workflow-design.md)：已整体确认的裁剪、共同页面、数据边界、站点契约与统一交互。

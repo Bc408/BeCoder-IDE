@@ -33,11 +33,14 @@ import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { NowcoderSessionClient } from './nowcoderSessionClient.js';
 import { assertNowcoderProblem } from '../common/nowcoderBridge.js';
+import { CodeforcesSessionClient } from './codeforcesSessionClient.js';
+import { createCodeforcesPost } from './codeforcesTransport.js';
+import { assertCodeforcesProblem } from '../common/codeforcesBridge.js';
 import { LuoguSessionClient } from './luoguSessionClient.js';
 import { fetchLuoguDirect } from './luoguSessionTransport.js';
 import { ILogService } from '../../log/common/log.js';
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs for the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload } from 'becoder-oj-connect';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -61,6 +64,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly browserViews = this._register(new DisposableMap<string, BrowserView>());
 	private readonly atCoderRequests = new Map<string, AbortController>();
 	private readonly atCoderAccountReads = new Map<string, { windowId: number; controller: AbortController; result: Promise<LoginSummary> }>();
+	private readonly atCoderAccounts = new Map<string, { windowIds: Set<number>; identity?: string }>();
 	private readonly ojReads = new Map<string, { windowId: number; operation?: string; cancel(): void }>();
 	private readonly atCoderRecords = new Map<string, { windowId: number; snapshot: RecordSnapshot; initial: boolean }>();
 	private readonly atCoderRecordRequests = new Map<string, { controller: AbortController; done: Promise<void> }>();
@@ -69,6 +73,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly nowcoderClients = new Map<string, { windowId: number; client: NowcoderSessionClient }>();
 	private readonly nowcoderRequests = new Map<string, { windowId: number; requestId: string; controller: AbortController }>();
 	private readonly nowcoderAttempts = new Map<string, { sessionId: string; windowId: number; outcome: SubmissionOutcome; expires: number }>();
+	private readonly codeforcesClients = new Map<string, { windowId: number; session: BrowserSession; client: CodeforcesSessionClient }>();
+	private readonly codeforcesRequests = new Map<string, { windowId: number; requestId: string; controller: AbortController }>();
 	private readonly luoguClients = new Map<string, { windowId: number; session: BrowserSession; client: LuoguSessionClient }>();
 	private readonly luoguCaptchas = new Map<string, { windowId: number; client: LuoguSessionClient; signal: AbortSignal; resolve(answer: string | undefined): void }>();
 	private readonly _onDidRequireLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string; image: string }>());
@@ -76,7 +82,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly _onDidCancelLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string }>());
 	readonly onDidCancelLuoguCaptcha = this._onDidCancelLuoguCaptcha.event;
 	private readonly ojSessionWatchers = this._register(new DisposableMap<string>());
-	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' }>());
+	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' }>());
 	readonly onDidChangeOjSession = this._onDidChangeOjSession.event;
 	private readonly luoguAttempts = new Map<string, { problem: ProblemRef; viewId: string; windowId: number; ownerKey: string; sourceHash: string; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
@@ -100,8 +106,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
+		this._register(toDisposable(() => { for (const request of this.codeforcesRequests.values()) { request.controller.abort(); } for (const { client } of this.codeforcesClients.values()) { client.dispose(); } this.codeforcesRequests.clear(); this.codeforcesClients.clear(); }));
 		this._register(toDisposable(() => { for (const request of this.atCoderRecordRequests.values()) { request.controller.abort(); } this.atCoderRecords.clear(); }));
-		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.atCoderAccountReads.values()) { request.controller.abort(); } for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); for (const { client } of this.nowcoderClients.values()) { client.dispose(); } this.nowcoderClients.clear(); for (const request of this.nowcoderRequests.values()) { request.controller.abort(); } }));
+		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.atCoderAccountReads.values()) { request.controller.abort(); } this.atCoderAccounts.clear(); for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); for (const { client } of this.nowcoderClients.values()) { client.dispose(); } this.nowcoderClients.clear(); for (const request of this.nowcoderRequests.values()) { request.controller.abort(); } }));
 	}
 
 	async getOrCreateBrowserView(id: string, options: IBrowserViewCreateOptions): Promise<IBrowserViewState> {
@@ -341,7 +348,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	/** Fixed owned script resources only. No operation name or script is exposed through the service API. */
-	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
+	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem' | 'readCodeforcesProblem', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
 		const view = this._getBrowserView(id);
 		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
 		const contents = view.getWebContentsView().webContents;
@@ -349,7 +356,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		const available = () => !contents.isDestroyed() && !contents.isLoading() && canonical(contents.getURL()) === canonical(expectedURL);
 		if (!available()) { throw new Error('oj-connect-page-changed'); }
 		const origin = new URL(expectedURL).origin;
-		if (origin !== 'https://www.luogu.com.cn' && origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
+		if (operation === 'readCodeforcesProblem' ? origin !== 'https://codeforces.com' : origin !== 'https://www.luogu.com.cn' && origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
 		let changed = false;
 		const stop = () => { changed = true; task.controller.abort(new Error('oj-connect-page-changed')); };
 		const watcher = combinedDisposable(view.onDidClose(stop), view.onDidNavigate(stop));
@@ -379,10 +386,13 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjOperations(windowId: number): Promise<void> {
+		for (const request of this.codeforcesRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
+		for (const [key, entry] of this.codeforcesClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.codeforcesClients.delete(key); } }
 		for (const request of this.nowcoderRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
 		for (const [key, entry] of this.nowcoderClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.nowcoderClients.delete(key); } }
 		for (const [key, entry] of this.nowcoderAttempts) { if (entry.windowId === windowId) { this.nowcoderAttempts.delete(key); } }
 		for (const request of this.atCoderAccountReads.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
+		for (const [sessionId, account] of this.atCoderAccounts) { account.windowIds.delete(windowId); if (!account.windowIds.size) { this.atCoderAccounts.delete(sessionId); } }
 		for (const request of this.luoguRequests.values()) { if (request.windowId === windowId) { await request.cancel(); } }
 		for (const [key, entry] of this.luoguClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.luoguClients.delete(key); } }
 		for (const request of this.ojReads.values()) { if (request.windowId === windowId) { request.cancel(); } }
@@ -396,10 +406,23 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjPreparations(windowId: number): Promise<void> {
-		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder' || request.operation === 'prepareNowcoder')) { request.cancel(); } }
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder' || request.operation === 'prepareNowcoder' || request.operation === 'prepareCodeforces')) { request.cancel(); } }
 	}
 
 	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
+		if (problem.site === 'codeforces') {
+			assertCodeforcesProblem(problem);
+			const view = this._getBrowserView(id);
+			if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
+			const actualURL = view.getWebContentsView().webContents.getURL(), url = new URL(actualURL);
+			const contest = /^\/contest\/([1-9]\d*)\/problem\/([A-Z][A-Z0-9]*)\/?$/.exec(url.pathname);
+			const problemset = /^\/problemset\/problem\/([1-9]\d*)\/([A-Z][A-Z0-9]*)\/?$/.exec(url.pathname);
+			const identity = contest ?? problemset;
+			if (url.origin !== 'https://codeforces.com' || url.username || url.password || !identity || identity[1] + '/' + identity[2] !== problem.nativeId || [...url.searchParams.keys()].some(key => key !== 'locale')) { throw new Error('oj-connect-page-changed'); }
+			const parsed = await this.parseProblem(id, windowId);
+			if (parsed.url !== actualURL) { throw new Error('oj-connect-page-changed'); }
+			return await this._runOjRead(id, windowId, actualURL, 'readCodeforcesProblem', { problem, companion: JSON.parse(parsed.json) }) as ProblemDocument;
+		}
 		if (problem.site === 'nowcoder') { return this.nowcoderClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
@@ -426,7 +449,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 				// AtCoder rewrites REVEL_SESSION on ordinary GETs, including login checks.
 				// Login navigation and explicit logout refresh identity; rotation is not logout.
 				if (site === 'atcoder' && (!removed || cause === 'overwrite')) { return; }
-				if (site === 'atcoder') { this.invalidateAtCoderAccount(windowId, view.session.id); }
+				if (site === 'atcoder') { this.invalidateAtCoderAccount(windowId, view.session.id); return; }
 				const key = domain + ':' + cookie.name, digest = String(removed) + ':' + createHash('sha256').update(cookie.value).digest('hex');
 				if (observed.get(key) === digest) { return; }
 				observed.set(key, digest); this._onDidChangeOjSession.fire({ windowId, site });
@@ -435,18 +458,39 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		cookies.on('changed', changed);
 		const closed = view.onDidClose(() => this.ojSessionWatchers.deleteAndDispose(id));
 		let loginPage = /^https:\/\/atcoder\.jp\/login(?:[/?#]|$)/.test(contents.getURL());
+		let codeforcesAccountPage = /^https:\/\/codeforces\.com\/(?:enter|logout)(?:[/?#]|$)/.test(contents.getURL());
 		const navigation = view.onDidNavigate(event => {
 			const nextLogin = /^https:\/\/atcoder\.jp\/login(?:[/?#]|$)/.test(event.url);
 			if (loginPage || nextLogin) { this.invalidateAtCoderAccount(windowId, view.session.id); }
 			loginPage = nextLogin;
+			const nextCodeforcesAccountPage = /^https:\/\/codeforces\.com\/(?:enter|logout)(?:[/?#]|$)/.test(event.url);
+			if (codeforcesAccountPage || nextCodeforcesAccountPage) {
+				this.invalidateCodeforcesSession(view.session.id, windowId);
+			}
+			codeforcesAccountPage = nextCodeforcesAccountPage;
 		});
 		this.ojSessionWatchers.set(id, combinedDisposable(closed, navigation, toDisposable(() => cookies.removeListener('changed', changed))));
 	}
 
-	private invalidateAtCoderAccount(windowId: number, sessionId: string): void {
-		const key = windowId + ':' + sessionId, pending = this.atCoderAccountReads.get(key);
-		this.atCoderAccountReads.delete(key);
-		pending?.controller.abort();
+	private invalidateAtCoderAccount(windowId: number, sessionId: string, source?: AbortController): void {
+		const windows = new Set([windowId, ...(this.atCoderAccounts.get(sessionId)?.windowIds ?? [])]);
+		for (const owner of windows) {
+			const key = owner + ':' + sessionId, pending = this.atCoderAccountReads.get(key);
+			if (pending && pending.controller !== source) { this.atCoderAccountReads.delete(key); pending.controller.abort(); }
+		}
+		for (const owner of windows) { this._onDidChangeOjSession.fire({ windowId: owner, site: 'atcoder' }); }
+	}
+
+	private invalidateCodeforcesSession(sessionId: string, windowId: number, source?: CodeforcesSessionClient): void {
+		const windows = new Set([windowId]);
+		for (const entry of this.codeforcesClients.values()) {
+			if (entry.session.id !== sessionId) { continue; }
+			windows.add(entry.windowId);
+			// observe() already invalidated the source and accepted its new identity.
+			// Peer invalidation clears their old identity before the notified refresh.
+			if (entry.client !== source) { entry.client.invalidate(source ? 'identity-change' : 'account-navigation'); }
+		}
+		for (const owner of windows) { this._onDidChangeOjSession.fire({ windowId: owner, site: 'codeforces' }); }
 	}
 
 	private ojSession(windowId: number, scope: BrowserViewStorageScope): BrowserSession {
@@ -462,6 +506,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	async readAtCoderLogin(windowId: number, scope: BrowserViewStorageScope): Promise<LoginSummary> {
 		const session = this.ojSession(windowId, scope);
+		let account = this.atCoderAccounts.get(session.id);
+		if (!account) { account = { windowIds: new Set() }; this.atCoderAccounts.set(session.id, account); }
+		account.windowIds.add(windowId);
 		const key = windowId + ':' + session.id;
 		const pending = this.atCoderAccountReads.get(key);
 		if (pending) { return pending.result; }
@@ -483,7 +530,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			const html = Buffer.concat(chunks).toString('utf8');
 			for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
 				const match = /\buserScreenName\s*=\s*(["'])([a-zA-Z0-9_]*)\1/.exec(script[1]);
-				if (match) { return match[2] ? { site: 'atcoder', state: 'signed-in', label: match[2], profileUrl: 'https://atcoder.jp/users/' + match[2] } : { site: 'atcoder', state: 'signed-out' }; }
+				if (match) {
+					const changed = account.identity !== undefined && account.identity !== match[2]; account.identity = match[2];
+					if (changed) { this.invalidateAtCoderAccount(windowId, session.id, controller); }
+					return match[2] ? { site: 'atcoder', state: 'signed-in', label: match[2], profileUrl: 'https://atcoder.jp/users/' + match[2] } : { site: 'atcoder', state: 'signed-out' };
+				}
 			}
 			return { site: 'atcoder', state: 'unknown' };
 		})();
@@ -491,6 +542,52 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		try { return await result; }
 		finally { clearTimeout(timer); if (this.atCoderAccountReads.get(key)?.controller === controller) { this.atCoderAccountReads.delete(key); } }
 	}
+
+	async openCodeforcesSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
+		const session = this.ojSession(windowId, scope), key = windowId + ':' + session.id;
+		if (!this.codeforcesClients.has(key)) {
+			const client = new CodeforcesSessionClient({
+				trace: (event, details) => this.logService.info('[OJ Connect CF]', event, { windowId, ...details }),
+				fetch: (url, init) => session.electronSession.fetch(url, init),
+				post: createCodeforcesPost(session.electronSession),
+				getSigningCookie: async () => {
+					const cookies = await session.electronSession.cookies.get({ url: 'https://codeforces.com/', name: '39ce7' });
+					return cookies.length === 1 ? cookies[0].value : undefined;
+				},
+				// The verified account reader owns identity. Cookie rotation is not logout.
+				onSessionChange: () => toDisposable(() => { }),
+				onIdentityChange: () => { if (this.codeforcesClients.get(key)?.client === client) { this.invalidateCodeforcesSession(session.id, windowId, client); } }
+			});
+			this.codeforcesClients.set(key, { windowId, session, client });
+		}
+		return session.id;
+	}
+	private codeforcesClient(id: string, windowId: number): CodeforcesSessionClient {
+		const entry = this.codeforcesClients.get(windowId + ':' + id), window = this.windowsMainService.getWindowById(windowId);
+		if (!entry || !window || entry.session.storageScope === BrowserViewStorageScope.Workspace && entry.session.id !== 'workspace:' + window.openedWorkspace?.id) { throw new Error('codeforces-session-owner'); }
+		return entry.client;
+	}
+	async prepareCodeforcesTask(id: string, windowId: number, problem: ProblemRef) {
+		assertCodeforcesProblem(problem); const key = generateUuid(), controller = new AbortController();
+		this.ojReads.set(key, { windowId, operation: 'prepareCodeforces', cancel: () => controller.abort() });
+		try { return await this.codeforcesClient(id, windowId).prepare(problem, controller.signal); }
+		finally { this.ojReads.delete(key); }
+	}
+	async submitCodeforcesTask(id: string, windowId: number, problem: ProblemRef, payload: ICodeforcesSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome> {
+		assertCodeforcesProblem(problem); const client = this.codeforcesClient(id, windowId), key = windowId + ':' + id;
+		if (this.codeforcesRequests.has(key)) { throw new Error('codeforces-submission-busy'); }
+		if (typeof requestId !== 'string' || !requestId || requestId.length > 200) { throw new Error('codeforces-invalid-request'); }
+		const request = { windowId, requestId, controller: new AbortController() }; this.codeforcesRequests.set(key, request);
+		try { return await client.submit(problem, payload, ownerKey, requestId, request.controller.signal); }
+		finally { if (this.codeforcesRequests.get(key) === request) { this.codeforcesRequests.delete(key); } }
+	}
+	async cancelCodeforcesTask(id: string, windowId: number, requestId: string): Promise<void> {
+		this.codeforcesClient(id, windowId); const pending = this.codeforcesRequests.get(windowId + ':' + id);
+		if (pending?.requestId === requestId) { pending.controller.abort(); }
+	}
+	async readCodeforcesRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot> { return this.codeforcesClient(id, windowId).readRecord(record, new AbortController().signal); }
+	async releaseCodeforcesRecord(id: string, windowId: number, record: RecordRef): Promise<void> { this.codeforcesClient(id, windowId).releaseRecord(record); }
+	async reconcileCodeforcesAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome> { return this.codeforcesClient(id, windowId).reconcile(attemptId, new AbortController().signal); }
 
 	async openNowcoderSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
 		const session = this.ojSession(windowId, scope), key = windowId + ':' + session.id;
@@ -651,7 +748,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		else if (operation === 'releaseLuoguRecord' && record) { assertLuoguProblem(record.problem); client.releaseRecord(record); }
 		else { throw new Error('oj-connect-operation'); }
 	}
-	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder'): Promise<LoginSummary> {
+	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary> {
+		if (site === 'codeforces') { return this.codeforcesClient(id, windowId).login(new AbortController().signal); }
 		if (site === 'nowcoder') { return this.nowcoderClient(id, windowId).login(new AbortController().signal); }
 		if (site === 'luogu') { return this.luoguClient(id, windowId).login(new AbortController().signal); }
 		const view = this._getBrowserView(id);

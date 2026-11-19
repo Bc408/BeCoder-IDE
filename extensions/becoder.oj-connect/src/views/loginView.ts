@@ -12,12 +12,14 @@ import { loginContent } from './loginContent';
 import { userError } from '../messages';
 
 export class LoginView implements vscode.WebviewViewProvider, vscode.Disposable {
-	private rows: LoginSummary[] = sites.map(site => ({ site, state: site === 'luogu' || site === 'atcoder' || site === 'nowcoder' ? 'unknown' : 'unavailable' }));
+	private rows: LoginSummary[];
 	private request: AbortController | undefined;
 	private view: vscode.WebviewView | undefined;
 	private subscriptions: vscode.Disposable[] = [];
 	private readonly states = { 'signed-in': vscode.l10n.t('Signed in'), 'signed-out': vscode.l10n.t('Signed out'), unknown: vscode.l10n.t('Not checked'), unavailable: vscode.l10n.t('Not connected yet') };
-	constructor(private readonly context: vscode.ExtensionContext, private readonly adapters: readonly OjAdapter[], private readonly execute: (command: string) => Promise<unknown>, private readonly open: (url: string) => Promise<void>) { }
+	constructor(private readonly context: vscode.ExtensionContext, private readonly adapters: readonly OjAdapter[], private readonly execute: (command: string) => Promise<unknown>, private readonly open: (url: string) => Promise<void>) {
+		this.rows = sites.map(site => ({ site, state: adapters.some(adapter => adapter.site === site) ? 'unknown' : 'unavailable' }));
+	}
 	resolveWebviewView(view: vscode.WebviewView): void {
 		this.subscriptions.splice(0).forEach(value => value.dispose());
 		this.view = view;
@@ -34,8 +36,12 @@ export class LoginView implements vscode.WebviewViewProvider, vscode.Disposable 
 		}), view.onDidChangeVisibility(() => { if (view.visible) { void this.refresh(); } }), view.onDidDispose(() => { this.view = undefined; this.request?.abort(); this.subscriptions.splice(0).forEach(value => value.dispose()); }));
 		void this.refresh();
 	}
-	async refresh(): Promise<void> {
+	async refresh(reset = false): Promise<void> {
 		this.request?.abort(); const request = new AbortController(); this.request = request;
+		if (reset) {
+			this.rows = sites.map(site => ({ site, state: this.adapters.some(adapter => adapter.site === site) ? 'unknown' : 'unavailable' }));
+			this.update();
+		}
 		const rows = await loginRows(this.adapters, request.signal);
 		if (!request.signal.aborted) {
 			this.rows = rows;

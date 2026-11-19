@@ -6,22 +6,7 @@
 import { type ProblemRef, type ProblemDocument, type Section, validateProblem } from '../src/domain';
 import { atCoderProblem } from '../src/adapters/atcoder/task';
 import { withOjRead } from './reads';
-
-// Adapted from vscode-luogu v4.20.0 src/utils/stringUtils.ts.
-// Copyright (c) 2018 yltx. MIT License; see ThirdPartyNotices.txt.
-function formatTime(time: number): string {
-	if (time < 1e3) { return `${time}ms`; }
-	if (time < 60 * 1e3) { return `${(time / 1e3).toFixed(2)}s`; }
-	if (time < 60 * 60 * 1e3) { return `${(time / (60 * 1e3)).toFixed(2)}min`; }
-	if (time < 24 * 60 * 60 * 1e3) { return `${(time / (60 * 60 * 1e3)).toFixed(2)}h`; }
-	return `${(time / (24 * 60 * 60 * 1e3)).toFixed(2)}d`;
-}
-function formatMemory(memory: number): string {
-	if (memory < 2 ** 10) { return `${memory}B`; }
-	if (memory < 2 ** 20) { return `${(memory / 2 ** 10).toFixed(2)}KiB`; }
-	if (memory < 2 ** 30) { return `${(memory / 2 ** 20).toFixed(2)}MiB`; }
-	return `${(memory / 2 ** 30).toFixed(2)}GiB`;
-}
+import { formatTime, formatMemory } from './limits';
 
 export async function readAtCoderProblem(problem: ProblemRef, requestId: string): Promise<ProblemDocument> {
 	if (problem.site !== 'atcoder' || atCoderProblem(location.href)?.url !== problem.url) { throw new Error('AtCoder problem changed.'); }
@@ -91,7 +76,9 @@ export async function readAtCoderProblem(problem: ProblemRef, requestId: string)
 		if (Number.isFinite(timeMs) && timeMs > 0) { limits.push({ label: 'Time Limit', value: formatTime(timeMs) }); }
 		if (Number.isFinite(memoryBytes) && memoryBytes > 0) { limits.push({ label: 'Memory Limit', value: formatMemory(memoryBytes) }); }
 		const heading = page.querySelector('h2, .h2');
-		const title = heading ? [...heading.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim() : '';
+		const officialTitle = heading ? [...heading.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim() : '';
+		const prefix = problem.nativeId.split('_').at(-1)! + ' - ';
+		const title = officialTitle.toLowerCase().startsWith(prefix.toLowerCase()) ? officialTitle.slice(prefix.length) : officialTitle;
 		const languages = [...(page.querySelector<HTMLSelectElement>('select[name="data.LanguageId"]')?.options ?? [])].flatMap(option => {
 			const label = option.textContent?.trim() ?? '', family = label.startsWith('C++') ? 'cpp' : /^C(?:\d|\s|$)/.test(label) ? 'c' : undefined;
 			return !option.disabled && family && /^\d+$/.test(option.value) ? [{ id: option.value, label, family }] : [];

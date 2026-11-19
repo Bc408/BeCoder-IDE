@@ -79,7 +79,7 @@ function atCoderFixture(loading = false) {
 		setPrepare: (value: typeof prepare) => { prepare = value; },
 		setLogin: (value: typeof login) => { login = value; },
 		interact: (id: string) => interaction.fire({ windowId: mainWindow.vscodeWindowId, id }),
-		addCarrier: (id: string, storageScope: BrowserViewStorageScope) => { const input = create(id, problem.url, storageScope); known.set(id, input); return input; },
+		addCarrier: (id: string, storageScope: BrowserViewStorageScope, url = problem.url) => { const input = create(id, url, storageScope); known.set(id, input); return input; },
 		accept: async () => {
 			const page = await execute('openTask', problem.url, 'file:///C:/abc086_a.cpp');
 			await execute('inspectTask', page);
@@ -92,8 +92,116 @@ function atCoderFixture(loading = false) {
 	};
 }
 
+function codeforcesFixture() {
+	const problem = { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
+	const record = { problem, id: '55', url: 'https://codeforces.com/contest/4/submission/55' };
+	const sessionChanged = new Emitter<{ windowId: number; site: 'codeforces' }>();
+	const stopped = new Emitter<void>();
+	let scope = BrowserViewStorageScope.Global, sends = 0, reads = 0;
+	let resolveScope = async () => scope;
+	let send = async (): Promise<unknown> => ({ kind: 'record', record });
+	let read = async (): Promise<unknown> => ({ ref: record, phase: 'finished', rawStatus: 'Accepted', sourceVerification: 'matched' });
+	let prepare = async (): Promise<unknown> => ({ languages: [{ id: '54', label: 'GNU G++17 7.3.0', family: 'cpp' }], hasDraft: false, ownerKey: 'fixture_user' });
+	const released: string[] = [];
+	const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: () => resolveScope(), getOrCreateLazy: () => { throw new Error('CF submission must not create a browser'); } };
+	const main = {
+		getChannel: () => ({
+			listen: (name: string) => name === 'onDidChangeOjSession' ? sessionChanged.event : Event.None,
+			call: async (name: string, args: unknown[]) => {
+				if (name === 'openCodeforcesSession') { return String(args[1]); }
+				if (name === 'prepareCodeforcesTask') { return prepare(); }
+				if (name === 'submitCodeforcesTask') { sends++; const value = await send() as { kind: string }; return value.kind === 'unconfirmed' ? { ...value, attemptId: args[5] } : value; }
+				if (name === 'readCodeforcesRecord') { reads++; return read(); }
+				if (name === 'releaseCodeforcesRecord') { released.push(String(args[0])); }
+				if (name === 'reconcileCodeforcesAttempt') { return { kind: 'record', record }; }
+				if (name === 'readOjLogin') { return { site: 'codeforces', state: 'signed-in', label: 'fixture_user', profileUrl: 'https://codeforces.com/profile/fixture_user' }; }
+				return undefined;
+			}
+		})
+	};
+	const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: stopped.event, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+	const contribution = new BrowserOjConnectContribution({ editors: [], openEditor: () => { throw new Error('CF submission must not reveal a browser'); } } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+	const execute = async (suffix: string, ...args: unknown[]): Promise<unknown> => {
+		const command = CommandsRegistry.getCommand('_becoder.ojConnect.codeforces.' + suffix);
+		assert.ok(command, 'CF fixed command is registered: ' + suffix);
+		return command.handler(undefined!, ...args);
+	};
+	return {
+		problem, record, execute, released, get sends() { return sends; }, get reads() { return reads; },
+		setResolveScope(value: typeof resolveScope) { resolveScope = value; },
+		setScope(value: BrowserViewStorageScope) { scope = value; }, setPrepare(value: typeof prepare) { prepare = value; }, setRead(value: typeof read) { read = value; }, setSend(value: typeof send) { send = value; },
+		accept: async () => { const form = await execute('prepare', problem, 'file:///C:/codeforces/4_a.cpp') as { handle: string }; const value = await execute('send', form.handle, { source: 'int main(){}', fileName: '4_a.cpp', languageId: '54' }); await execute('release', form.handle); return value; },
+		invalidate: () => sessionChanged.fire({ windowId: mainWindow.vscodeWindowId, site: 'codeforces' }),
+		reset: () => stopped.fire(), dispose: () => { contribution.dispose(); sessionChanged.dispose(); stopped.dispose(); }
+	};
+}
+
 suite('OJ Connect source shortcut', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
+	test('CF account, submit, result and reconciliation use fixed Session commands without a browser', async () => {
+		const f = codeforcesFixture();
+		try {
+			assert.strictEqual((await f.execute('loginSummary') as { label: string }).label, 'fixture_user');
+			await f.accept();
+			assert.strictEqual((await f.execute('readRecord', f.record) as { rawStatus: string }).rawStatus, 'Accepted');
+			f.setSend(async () => ({ kind: 'unconfirmed', problem: f.problem, attemptId: 'attempt', message: 'receipt unknown' }));
+			const attempt = await f.accept() as { attemptId: string };
+			assert.strictEqual((await f.execute('reconcile', attempt.attemptId) as { kind: string }).kind, 'record');
+			assert.strictEqual(f.sends, 2, 'reconciliation cannot resend code');
+		} finally { f.dispose(); }
+	});
+	test('CF send refuses a changed storage scope and canceled late preparation', async () => {
+		const f = codeforcesFixture();
+		try {
+			const form = await f.execute('prepare', f.problem, 'file:///C:/codeforces/4_a.cpp') as { handle: string };
+			f.setScope(BrowserViewStorageScope.Workspace);
+			await assert.rejects(f.execute('send', form.handle, { source: 'int main(){}', fileName: '4_a.cpp', languageId: '54' }), /scope-changed/);
+			assert.strictEqual(f.sends, 0);
+			const pending = new DeferredPromise<unknown>();
+			const started = new DeferredPromise<void>();
+			f.setPrepare(async () => { await started.complete(); return pending.p; });
+			const preparing = f.execute('prepare', f.problem, 'file:///C:/codeforces/4_a.cpp');
+			const rejected = assert.rejects(preparing, /stopped/);
+			await started.p; await f.execute('cancelPreparation');
+			await pending.complete({ languages: [{ id: '54', family: 'cpp', label: 'GNU G++17' }], ownerKey: 'fixture_user' });
+			await rejected;
+			assert.strictEqual(f.sends, 0);
+		} finally { f.dispose(); }
+	});
+	test('CF cancellation while resolving scope prevents native dispatch', async () => {
+		const f = codeforcesFixture(), pending = new DeferredPromise<BrowserViewStorageScope>(), started = new DeferredPromise<void>();
+		try {
+			const form = await f.execute('prepare', f.problem, 'file:///C:/codeforces/4_a.cpp') as { handle: string };
+			f.setResolveScope(async () => { await started.complete(); return pending.p; });
+			const sending = f.execute('send', form.handle, { source: 'int main(){}', fileName: '4_a.cpp', languageId: '54' });
+			const rejected = assert.rejects(sending, /cancelled/);
+			await started.p; await f.execute('cancel', form.handle);
+			await pending.complete(BrowserViewStorageScope.Global); await rejected;
+			assert.strictEqual(f.sends, 0);
+		} finally { f.dispose(); }
+	});
+	test('CF cached result is invalidated by verified account changes and releases its original Session', async () => {
+		const f = codeforcesFixture();
+		try {
+			await f.accept(); await f.execute('readRecord', f.record); await f.execute('readRecord', f.record);
+			assert.strictEqual(f.reads, 1);
+			f.invalidate(); f.setRead(async () => { throw new Error('codeforces-session-changed'); });
+			await assert.rejects(f.execute('readRecord', f.record), /session-changed/);
+			f.setScope(BrowserViewStorageScope.Workspace);
+			await f.execute('cancelRecord', f.record);
+			assert.deepStrictEqual(f.released, [String(BrowserViewStorageScope.Global)]);
+		} finally { f.dispose(); }
+	});
+	test('CF late record response cannot outlive closed tracking', async () => {
+		const f = codeforcesFixture(), pending = new DeferredPromise<unknown>(), started = new DeferredPromise<void>();
+		try {
+			await f.accept(); f.setRead(async () => { await started.complete(); return pending.p; });
+			const reading = f.execute('readRecord', f.record), rejected = assert.rejects(reading, /stopped/);
+			await started.p; await f.execute('cancelRecord', f.record);
+			await pending.complete({ ref: f.record, phase: 'finished', rawStatus: 'Accepted', sourceVerification: 'matched' });
+			await rejected;
+		} finally { f.dispose(); }
+	});
 	test('AtCoder signed-out preparation reports login without revealing or navigating a browser', async () => {
 		const fixture = atCoderFixture();
 		let attempts = 0, reveals = 0;
@@ -480,9 +588,33 @@ suite('OJ Connect source shortcut', () => {
 			assert.strictEqual(fixture.recordReads, 2);
 		} finally { fixture.dispose(); }
 	});
-	for (const site of ['luogu', 'atcoder', 'nowcoder']) {
+	for (const [site, loginURL] of [
+		['luogu', 'https://www.luogu.com.cn/auth/login'],
+		['atcoder', 'https://atcoder.jp/login'],
+		['nowcoder', 'https://www.nowcoder.com/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/')],
+		['codeforces', 'https://codeforces.com/enter']
+	]) {
+		for (const count of [1, 2]) {
+			test(site + ' login preserves ' + count + ' ordinary same-origin pages and reuses its exact login page', async () => {
+				const fixture = atCoderFixture();
+				const normalURL = new URL('/ordinary-page', loginURL).href;
+				const ordinary = Array.from({ length: count }, (_, index) => fixture.addCarrier('ordinary-' + index, BrowserViewStorageScope.Global, normalURL));
+				const login = CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.login')!;
+				try {
+					await login.handler(undefined!);
+					assert.strictEqual(fixture.creations, 1, 'a normal site page is not a login destination');
+					assert.strictEqual(fixture.editors.editors[0].url, loginURL);
+					assert.ok(ordinary.every(input => input.url === normalURL && !input.isDisposed()), 'ordinary pages and their drafts remain intact');
+					await login.handler(undefined!);
+					assert.strictEqual(fixture.creations, 1, 'repeat clicks reuse the exact login destination');
+					assert.strictEqual(fixture.editors.editors[0], fixture.editors.editors[1]);
+				} finally { fixture.dispose(); }
+			});
+		}
+	}
+	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
 		test(site + ' login does not reuse an identical page from another storage scope', async () => {
-			const loginURL = site === 'luogu' ? 'https://www.luogu.com.cn/auth/login' : site === 'atcoder' ? 'https://atcoder.jp/login' : 'https://www.nowcoder.com/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/');
+			const loginURL = site === 'luogu' ? 'https://www.luogu.com.cn/auth/login' : site === 'atcoder' ? 'https://atcoder.jp/login' : site === 'codeforces' ? 'https://codeforces.com/enter' : 'https://www.nowcoder.com/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/');
 			const known = new Map(), opened: BrowserViewStorageScope[] = [];
 			const create = (id: string, storageScope: BrowserViewStorageScope) => {
 				const model = { id, url: loginURL, loading: false, storageScope, onDidNavigate: Event.None, onDidClose: Event.None };

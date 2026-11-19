@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- BeCoder's internal type-only extension bridge contract.
-import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ILuoguSourcePayload, INowcoderSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
+import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
 import { Disposable, DisposableStore, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { timeout } from '../../../../../base/common/async.js';
@@ -15,6 +15,7 @@ import { IMainProcessService } from '../../../../../platform/ipc/common/mainProc
 import { BrowserViewStorageScope, IBrowserViewService, ipcBrowserViewChannelName } from '../../../../../platform/browserView/common/browserView.js';
 import { AtCoderBridgeController, AtCoderPageGeneration } from '../../../../../platform/browserView/common/atcoderBridge.js';
 import { NowcoderBridgeController, assertNowcoderProblem } from '../../../../../platform/browserView/common/nowcoderBridge.js';
+import { CodeforcesBridgeController, assertCodeforcesProblem } from '../../../../../platform/browserView/common/codeforcesBridge.js';
 import { LuoguBridgeController, assertLuoguProblem } from '../../../../../platform/browserView/common/luoguBridge.js';
 import type { BrowserEditorInput } from '../../common/browserEditorInput.js';
 import { type IBrowserViewModel, IBrowserViewWorkbenchService } from '../../common/browserView.js';
@@ -29,6 +30,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 	private bridge: AtCoderBridgeController;
 	private luoguBridge: LuoguBridgeController;
 	private nowcoderBridge: NowcoderBridgeController;
+	private codeforcesBridge: CodeforcesBridgeController;
 	constructor(
 		@IEditorService editors: IEditorService,
 		@IBrowserViewWorkbenchService browsers: IBrowserViewWorkbenchService,
@@ -72,6 +74,12 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const rememberNowcoder = (outcome: SubmissionOutcome, sessionId: string) => {
 			if (outcome.kind === 'record') { nowcoderSessions.set(outcome.record.url, sessionId); }
 			else if (outcome.kind === 'unconfirmed') { nowcoderSessions.set(outcome.attemptId, sessionId); }
+			return outcome;
+		};
+		const codeforcesSessions = new Map<string, string>();
+		const rememberCodeforces = (outcome: SubmissionOutcome, sessionId: string) => {
+			if (outcome.kind === 'record') { codeforcesSessions.set(outcome.record.url, sessionId); }
+			else if (outcome.kind === 'unconfirmed') { codeforcesSessions.set(outcome.attemptId, sessionId); }
 			return outcome;
 		};
 		const recordLifetimes = new Map<string, AbortController>();
@@ -131,7 +139,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		const active = () => !!extensions.getExtensionsStatus()['becoder.oj-connect']?.activationStarted;
 		this._register(service.onDidChangeOjSession(event => {
 			if (event.windowId === owner) {
-				if (event.site === 'luogu' || event.site === 'nowcoder') { for (const [url, record] of finishedRecords) { if (record.ref.problem.site === event.site) { finishedRecords.delete(url); } } }
+				if (event.site === 'luogu' || event.site === 'nowcoder' || event.site === 'codeforces') { for (const [url, record] of finishedRecords) { if (record.ref.problem.site === event.site) { finishedRecords.delete(url); } } }
 				refreshAccounts();
 			}
 		}));
@@ -154,7 +162,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				if (input.isDisposed() || !model || model.storageScope === BrowserViewStorageScope.Ephemeral) { continue; }
 				watchModel(model);
 				const origin = originOf(model.url);
-				if (origin === 'https://www.luogu.com.cn' || origin === 'https://atcoder.jp' || origin === 'https://ac.nowcoder.com' || origin === 'https://www.nowcoder.com') { void service.watchOjSession(model.id, owner).catch(() => undefined); }
+				if (origin === 'https://www.luogu.com.cn' || origin === 'https://atcoder.jp' || origin === 'https://ac.nowcoder.com' || origin === 'https://www.nowcoder.com' || origin === 'https://codeforces.com') { void service.watchOjSession(model.id, owner).catch(() => undefined); }
 			}
 		};
 		if (browsers.onDidChangeBrowserViews) { this._register(browsers.onDidChangeBrowserViews(watchBrowsers)); }
@@ -169,7 +177,8 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				return !item.isDisposed() && storageScope !== BrowserViewStorageScope.Ephemeral && (scope === undefined || storageScope === scope);
 			});
 			const exact = all.filter(item => item.url && canonical(item.url) === canonical(url));
-			const candidates = taskOwned ? [] : exact.length || scope === undefined ? exact : all.filter(item => item.url && originOf(item.url) === origin);
+			// Login must reach its requested page without replacing an ordinary site tab or its draft.
+			const candidates = taskOwned ? [] : exact;
 			const preferred = siteViews.get(origin);
 			if (candidates.length > 1 && !candidates.includes(preferred!)) { throw new Error('oj-connect-browser-ambiguous'); }
 			let input = candidates.includes(preferred!) ? preferred : candidates[0];
@@ -217,6 +226,10 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			return service.openNowcoderSession(owner, await browsers.resolveStorageScope());
 		};
+		const codeforcesSessionId = async () => {
+			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
+			return service.openCodeforcesSession(owner, await browsers.resolveStorageScope());
+		};
 		this._register(service.onDidRequireLuoguCaptcha(event => {
 			if (event.windowId !== owner || !active()) { return; }
 			void _commands.executeCommand<string | undefined>('_becoder.ojConnect.luogu.askCaptcha', event.image, event.requestId)
@@ -226,19 +239,21 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (event.windowId === owner) { void _commands.executeCommand('_becoder.ojConnect.luogu.cancelCaptcha', event.requestId).catch(() => undefined); }
 		}));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.luogu.getCaptcha', (_accessor, requestId: string) => service.getLuoguCaptcha(owner, requestId)));
-		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder') => {
+		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces') => {
 			if (problem?.site !== site) { throw new Error('oj-connect-problem-route'); }
 			if (site === 'nowcoder') { assertNowcoderProblem(problem); return service.readOjProblem(await nowcoderSessionId(), owner, problem); }
-			if (site === 'luogu') { assertLuoguProblem(problem); }
+			if (site === 'codeforces') { assertCodeforcesProblem(problem); }
+			else if (site === 'luogu') { assertLuoguProblem(problem); }
 			else { const task = atCoderTask(problem.url); if (!task || problem.nativeId !== task.contestId + '/' + task.taskId) { throw new Error('oj-connect-problem-route'); } }
 			if (site === 'luogu') { return service.readOjProblem(await luoguSessionId(), owner, problem); }
-			const input = await openPage(problem.url);
+			const input = site === 'codeforces' ? await openPage(problem.url, undefined, await browsers.resolveStorageScope(), true) : await openPage(problem.url);
 			if (!input.model) { throw new Error('oj-connect-page-not-ready'); }
 			const page = { viewId: input.model.id };
 			try { return await service.readOjProblem(input.model.id, owner, problem); }
 			finally { release(page); }
 		};
-		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder'): Promise<LoginSummary> => {
+		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary> => {
+			if (site === 'codeforces') { return service.readOjLogin(await codeforcesSessionId(), owner, site); }
 			if (site === 'nowcoder') { return service.readOjLogin(await nowcoderSessionId(), owner, site); }
 			if (site === 'luogu') { return service.readOjLogin(await luoguSessionId(), owner, site); }
 			try { return await service.readAtCoderLogin(owner, await browsers.resolveStorageScope()); }
@@ -377,17 +392,63 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				return outcome;
 			}
 		});
+		const createCodeforcesBridge = () => new CodeforcesBridgeController({
+			newHandle: generateUuid,
+			isCurrent: () => active(),
+			open: async problem => {
+				const epoch = preparationEpoch, id = await codeforcesSessionId();
+				const form = await service.prepareCodeforcesTask(id, owner, problem);
+				if (epoch !== preparationEpoch || !active()) { throw new Error('oj-connect-stopped'); }
+				if (await codeforcesSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				if (epoch !== preparationEpoch || !active()) { throw new Error('oj-connect-stopped'); }
+				return { viewId: id, url: 'https://codeforces.com/', ownerKey: form.ownerKey, languages: form.languages };
+			},
+			send: async (page, problem, payload, requestId, signal) => {
+				const epoch = lifecycleEpoch;
+				if (await codeforcesSessionId() !== page.viewId) { throw new Error('oj-connect-session-scope-changed'); }
+				signal.throwIfAborted();
+				assertLifecycle(epoch);
+				const outcome = await service.submitCodeforcesTask(page.viewId, owner, problem, payload, page.ownerKey, requestId);
+				assertLifecycle(epoch);
+				return rememberCodeforces(outcome, page.viewId);
+			},
+			cancel: (page, requestId) => service.cancelCodeforcesTask(page.viewId, owner, requestId),
+			readRecord: async record => {
+				const epoch = lifecycleEpoch, id = codeforcesSessions.get(record.url);
+				if (id === undefined) { throw new Error('oj-connect-session-scope-changed'); }
+				const signal = recordLifetime(record);
+				await recordCancellations.get(record.url);
+				assertRecord(epoch, signal);
+				if (await codeforcesSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				assertRecord(epoch, signal);
+				const cached = finishedRecords.get(record.url); if (cached) { return cached; }
+				const snapshot = await service.readCodeforcesRecord(id, owner, record);
+				assertRecord(epoch, signal);
+				return finishRead(snapshot, epoch);
+			},
+			reconcile: async attemptId => {
+				const epoch = lifecycleEpoch, id = codeforcesSessions.get(attemptId);
+				if (id === undefined || await codeforcesSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				assertLifecycle(epoch);
+				const outcome = await service.reconcileCodeforcesAttempt(id, owner, attemptId);
+				assertLifecycle(epoch);
+				rememberCodeforces(outcome, id);
+				if (outcome.kind !== 'unconfirmed') { codeforcesSessions.delete(attemptId); }
+				return outcome;
+			}
+		});
+		this.codeforcesBridge = createCodeforcesBridge();
 		this.luoguBridge = createLuoguBridge();
 		this.nowcoderBridge = createNowcoderBridge();
 		this.bridge = createBridge();
 		const closeBackground = () => { for (const input of ownedInputs) { if (!editors.editors.includes(input)) { input.dispose(); } } ownedInputs.clear(); };
-		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge, nowcoder = this.nowcoderBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); this.nowcoderBridge = createNowcoderBridge(); void nowcoder.dispose(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
+		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); codeforcesSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge, nowcoder = this.nowcoderBridge, codeforces = this.codeforcesBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); this.nowcoderBridge = createNowcoderBridge(); this.codeforcesBridge = createCodeforcesBridge(); void codeforces.dispose(); void nowcoder.dispose(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
 		this._register(extensions.onWillStop(reset));
 		this._register(extensions.onDidChangeExtensions(event => { if (event.removed.some(item => item.identifier.value.toLowerCase() === 'becoder.oj-connect')) { reset(); } }));
 		this._register(extensions.onDidChangeExtensionsStatus(ids => {
 			if (ids.some(id => id.value.toLowerCase() === 'becoder.oj-connect') && !extensions.getExtensionsStatus()['becoder.oj-connect']?.activationStarted) { reset(); }
 		}));
-		this._register(toDisposable(() => { lifecycleEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void this.nowcoderBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
+		this._register(toDisposable(() => { lifecycleEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); codeforcesSessions.clear(); attemptScopes.clear(); void this.bridge.dispose(); void this.luoguBridge.dispose(); void this.nowcoderBridge.dispose(); void this.codeforcesBridge.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); }));
 		const luoguPrefix = '_becoder.ojConnect.luogu.';
 		const releaseLuoguRecord = (record: RecordRef): Promise<void> => {
 			stopRecord(record);
@@ -416,9 +477,21 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			return pending.finally(() => { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } });
 		};
 		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseNowcoderRecord(record)));
+		const codeforcesPrefix = '_becoder.ojConnect.codeforces.';
+		const releaseCodeforcesRecord = (record: RecordRef): Promise<void> => {
+			stopRecord(record);
+			const id = codeforcesSessions.get(record.url);
+			if (id === undefined) { return Promise.resolve(); }
+			const previous = recordCancellations.get(record.url);
+			const pending = (async () => { await previous; await service.releaseCodeforcesRecord(id, owner, record); })();
+			recordCancellations.set(record.url, pending);
+			return pending.finally(() => { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } });
+		};
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseCodeforcesRecord(record)));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.releaseRecord', async (_accessor, record: RecordRef) => {
 			if (record?.problem.site === 'luogu') { await releaseLuoguRecord(record); }
 			else if (record?.problem.site === 'nowcoder') { await releaseNowcoderRecord(record); }
+			else if (record?.problem.site === 'codeforces') { await releaseCodeforcesRecord(record); }
 			else if (record) {
 				stopRecord(record);
 				const scope = recordScopes.get(record.url);
@@ -429,12 +502,12 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				}
 			}
 		}));
-		for (const site of ['luogu', 'atcoder', 'nowcoder'] as const) {
-			const origin = site === 'luogu' ? 'https://www.luogu.com.cn' : site === 'nowcoder' ? 'https://www.nowcoder.com' : 'https://atcoder.jp';
+		for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces'] as const) {
+			const origin = site === 'luogu' ? 'https://www.luogu.com.cn' : site === 'nowcoder' ? 'https://www.nowcoder.com' : site === 'codeforces' ? 'https://codeforces.com' : 'https://atcoder.jp';
 			this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.' + site + '.login', async () => {
 				// Explicit login is interactive: show the browser while the website loads.
 				// Background problem and submission operations still require a ready document.
-				const input = await openPage(origin + (site === 'luogu' ? '/auth/login' : site === 'nowcoder' ? '/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/') : '/login'), undefined, await browsers.resolveStorageScope(), false, false);
+				const input = await openPage(origin + (site === 'luogu' ? '/auth/login' : site === 'nowcoder' ? '/login?callBack=' + encodeURIComponent('https://ac.nowcoder.com/') : site === 'codeforces' ? '/enter' : '/login'), undefined, await browsers.resolveStorageScope(), false, false);
 				try { await reveal(input); } finally { release({ viewId: input.model!.id }); }
 			}));
 		}
@@ -457,6 +530,15 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'reconcile', (_accessor, attemptId: string) => this.nowcoderBridge.reconcile(attemptId)));
 		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'nowcoder')));
 		this._register(CommandsRegistry.registerCommand(nowcoderPrefix + 'loginSummary', () => loginSummary('nowcoder')));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancelPreparation', cancelPreparation));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'prepare', (_accessor, problem: ProblemRef, sourceUri: string) => this.codeforcesBridge.prepare(problem, sourceUri)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'send', (_accessor, handle: string, payload: ICodeforcesSourcePayload) => this.codeforcesBridge.send(handle, payload)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancel', (_accessor, handle: string) => this.codeforcesBridge.cancel(handle)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'release', (_accessor, handle: string) => this.codeforcesBridge.release(handle)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readRecord', (_accessor, record: RecordRef) => this.codeforcesBridge.readRecord(record)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'reconcile', (_accessor, attemptId: string) => this.codeforcesBridge.reconcile(attemptId)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'codeforces')));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'loginSummary', () => loginSummary('codeforces')));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'atcoder')));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.loginSummary', () => loginSummary('atcoder')));
 		const prefix = '_becoder.ojConnect.atcoder.';

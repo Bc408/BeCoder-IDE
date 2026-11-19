@@ -35,12 +35,15 @@ declare module 'becoder-oj-connect' {
 	export interface SubmissionProgress { readonly phase: 'preparing' | 'interaction' | 'sending' | 'confirming'; readonly message: string }
 	export type SubmissionOutcome = { readonly kind: 'record'; readonly record: RecordRef }
 		| { readonly kind: 'not-sent'; readonly reason: string }
+		| { readonly kind: 'rejected'; readonly reason: string }
 		| { readonly kind: 'unconfirmed'; readonly problem: ProblemRef; readonly message: string; readonly attemptId: string };
 	export interface LoginSummary { readonly site: SiteId; readonly state: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable'; readonly label?: string; readonly profileUrl?: string }
 	export interface ILuoguPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
 	export interface ILuoguSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
 	export interface INowcoderPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
 	export interface INowcoderSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
+	export interface ICodeforcesPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
+	export interface ICodeforcesSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
 	export interface IAtCoderPageRef { handle: string; url: string }
 	export interface IAtCoderTaskForm { languages: { id: string; label: string }[]; hasDraft: boolean }
 	export interface IAtCoderSourcePayload { source: string; fileName: string; languageId: string; replaceDraft: boolean }

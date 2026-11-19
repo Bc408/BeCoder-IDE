@@ -1,6 +1,6 @@
 {
 	"displayName": "OJ Connect",
-	"description": "在 BeCoder 中查看题面、导入样例并向洛谷与 AtCoder 提交代码。",
+	"description": "在 BeCoder 中阅读题目、导入样例并向洛谷、AtCoder、Codeforces 和牛客提交代码。",
 	"submit": "提交当前代码",
 	"configurationTitle": "OJ Connect",
 	"directories": "用于题目识别与导入的站点子目录名称。修改名称不会移动现有文件。",
@@ -28,5 +28,7 @@
 	"panelTwo": "第二个编辑组",
 	"panelThree": "第三个编辑组",
 	"nowcoder.cCompiler": "牛客 的 C 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。",
-	"nowcoder.cppCompiler": "牛客 的 C++ 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。"
+	"nowcoder.cppCompiler": "牛客 的 C++ 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。",
+	"codeforces.cCompiler": "Codeforces C 编译器 ID。从题面或提交时选择后保存到此处，对所有项目生效。留空表示没有偏好；不可用版本需要重新选择。",
+	"codeforces.cppCompiler": "Codeforces C++ 编译器 ID。从题面或提交时选择后保存到此处，对所有项目生效。留空表示没有偏好；不可用版本需要重新选择。"
 }

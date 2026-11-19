@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, SubmissionOutcome } from 'becoder-oj-connect';
+import { codeforcesProblem } from './adapters/codeforces/task';
 import { atCoderProblem } from './adapters/atcoder/task';
 import { luoguProblem } from './adapters/luogu/task';
 import { nowcoderProblem } from './adapters/nowcoder/task';
@@ -35,7 +36,7 @@ function metadata(raw: unknown): { label: string; color?: string } {
 export function validateProblemRef(raw: unknown): ProblemRef {
 	const value = object(raw);
 	const url = text(value.url);
-	const parsed = value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : value.site === 'nowcoder' ? nowcoderProblem(url) : undefined;
+	const parsed = value.site === 'codeforces' ? codeforcesProblem(url) : value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : value.site === 'nowcoder' ? nowcoderProblem(url) : undefined;
 	if (!parsed || parsed.url !== url || parsed.nativeId !== value.nativeId) { throw new Error('oj-connect-invalid-problem'); }
 	return parsed;
 }
@@ -44,7 +45,8 @@ export function validateRecordRef(raw: unknown): RecordRef {
 	if (!/^[1-9]\d*$/.test(id)) { throw new Error('oj-connect-invalid-record'); }
 	const expected = problem.site === 'luogu' ? 'https://www.luogu.com.cn/record/' + id
 		: problem.site === 'nowcoder' ? 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=' + id
-			: 'https://atcoder.jp/contests/' + problem.nativeId.split('/')[0] + '/submissions/' + id;
+			: problem.site === 'codeforces' ? 'https://codeforces.com/contest/' + problem.nativeId.split('/')[0] + '/submission/' + id
+				: 'https://atcoder.jp/contests/' + problem.nativeId.split('/')[0] + '/submissions/' + id;
 	if (url !== expected) { throw new Error('oj-connect-invalid-record'); }
 	return { problem, id, url };
 }
@@ -52,6 +54,7 @@ export function validateOutcome(raw: unknown): SubmissionOutcome {
 	const value = object(raw);
 	if (value.kind === 'record') { return { kind: 'record', record: validateRecordRef(value.record) }; }
 	if (value.kind === 'not-sent') { return { kind: 'not-sent', reason: text(value.reason, 2000) }; }
+	if (value.kind === 'rejected') { return { kind: 'rejected', reason: text(value.reason, 2000) }; }
 	if (value.kind === 'unconfirmed') { return { kind: 'unconfirmed', problem: validateProblemRef(value.problem), attemptId: text(value.attemptId, 200), message: text(value.message, 2000) }; }
 	throw new Error('oj-connect-invalid-receipt');
 }

@@ -15,6 +15,7 @@
 import React from 'react';
 import { VSCodeButton } from './uiToolkit';
 import type { PanelState } from '../../src/views/model';
+import type { SiteId } from '../../src/domain';
 import send from '../request';
 import CopyablePre from './copyablePre';
 import Time from './time';
@@ -103,29 +104,30 @@ const RecordStatus: Record<
 	}
 };
 function statusColor(status: string, text = false): string {
-	const normalized = status.trim().toLowerCase();
+	const raw = status.trim().toLowerCase();
+	const normalized = statusName(status).trim().toLowerCase();
 	const presentation = Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized);
-	if (text && ['waiting', 'compiling', 'judging', 'wj', 'wr'].includes(normalized)) { return RecordStatus[1].color; }
+	if (text && ['waiting', 'compiling', 'judging'].includes(normalized)) { return RecordStatus[1].color; }
+	if (raw === 'wj' || raw === 'wr') { return RecordStatus[1].color; }
 	if (presentation) { return text && ['#001277', 'rgb(14, 29, 105)'].includes(presentation.color) ? '#8c9eff' : presentation.color; }
-	if (normalized === 'qle') { return text ? '#8c9eff' : RecordStatus[5].color; }
-	if (normalized === 'ie') { return text ? '#8c9eff' : RecordStatus[11].color; }
-	if (normalized === 'pe') { return RecordStatus[6].color; }
-	// Other sites retain their raw status; only known pending aliases share Judging.
-	if (/^(WJ|WR|\d+\s*\/)/i.test(status)) { return RecordStatus[1].color; }
+	if (raw === 'qle') { return text ? '#8c9eff' : RecordStatus[5].color; }
+	if (raw === 'ie') { return text ? '#8c9eff' : RecordStatus[11].color; }
+	if (raw === 'pe') { return RecordStatus[6].color; }
 	return '#7f7f7f';
 }
 
 function statusName(status: string): string {
 	const normalized = status.trim().toLowerCase();
-	const aliases: Record<string, string> = { wj: 'Waiting', wr: 'Judging', ie: 'Internal Error', qle: 'Query Limit Exceeded', pe: 'Presentation Error' };
-	return Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized)?.name ?? aliases[normalized] ?? (/^\d+\s*\/\s*\d+/.test(status) ? 'Judging' : status);
+	const aliases: Record<string, string> = { wj: 'Waiting', wr: 'Judging', 'in queue': 'Waiting', 'compilation error': 'Compile Error', ie: 'Internal Error', qle: 'Query Limit Exceeded', pe: 'Presentation Error' };
+	const testVerdict = /^(wrong answer|runtime error|time limit exceeded|memory limit exceeded|presentation error) on (?:test|pretest) \d+$/i.exec(status.trim());
+	const officialName = testVerdict && (Object.values(RecordStatus).find(value => value.name.toLowerCase() === testVerdict[1].toLowerCase())?.name ?? aliases[testVerdict[1].toLowerCase()]);
+	return Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized)?.name ?? aliases[normalized] ?? officialName ?? (/^(?:\d+\s*\/\s*\d+|running on (?:test|pretest)\s+\d+)/i.test(status) ? 'Judging' : status);
 }
 
-function statusLabel(status: string, labels: PanelState['labels']): string | undefined {
-	const aliases: Record<string, string> = { Waiting: 'WJ', Judging: 'Judging', Compiling: 'Compiling' };
+// Judge terminology stays English, like Luogu checker details, regardless of the UI locale.
+function statusLabel(status: string): string | undefined {
 	const name = statusName(status);
-	const code = Object.values(RecordStatus).find(value => value.name === name)?.shortName;
-	return labels['status_' + (aliases[name] ?? code ?? status)];
+	return Object.values(RecordStatus).some(value => value.name === name) || ['Compiling', 'Internal Error', 'Query Limit Exceeded', 'Presentation Error', 'Floating Point Exception', 'Segmentation Fault', 'Code Length Exceeded', 'Nonzero Exit Code'].includes(name) ? name : undefined;
 }
 
 // Same thresholds and precision as vscode-luogu 4.20.0 stringUtils.ts.
@@ -160,14 +162,22 @@ export default function Record({ state }: { state: PanelState }) {
 	const problemName = record.problem.site === 'nowcoder' ? record.problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : record.problem.nativeId;
 	const pending = !!state.tracking && (!snapshot || snapshot.phase === 'queued' || snapshot.phase === 'judging');
 	const progress = snapshot?.phase === 'judging' && record.problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
+	const codeforcesProgress = record.problem.site === 'codeforces' && snapshot?.phase === 'judging' && /^running on (?:test|pretest) \d+$/i.test(snapshot.rawStatus) ? snapshot.rawStatus : undefined;
+	const verdictTitle = snapshot && ([...new Set([statusLabel(snapshot.rawStatus), record.problem.site === 'codeforces' ? snapshot.rawStatus : undefined].filter(Boolean))].join(' · ') || undefined);
 	const total = progress && Number(progress[1]) <= Number(progress[2]) && Number(progress[2]) <= 1024 ? Number(progress[2]) : 0;
 	// These are waiting positions from the site's reported total, not testcase names or verdicts.
-	const groups = snapshot?.groups?.length ? snapshot.groups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
+	let groups = snapshot?.groups?.length ? snapshot.groups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
+	const currentTest = codeforcesProgress ? Number(/\d+$/.exec(codeforcesProgress)?.[0]) : 0;
+	if (Number.isSafeInteger(currentTest) && currentTest > 0 && currentTest <= 1024 && !groups.some(group => group.rows.some(row => row[0] === String(currentTest)))) {
+		// CF reports the current index, not a total or verdicts for the preceding tests.
+		const current = [String(currentTest), 'Judging'];
+		groups = groups.length ? groups.map((group, index) => index === 0 ? { ...group, rows: [...group.rows, current] } : group) : [{ name: 'Test Cases', rows: [current] }];
+	}
 	return <>
 		<h1><a href={record.url} onClick={event => { event.preventDefault(); void send({ action: 'openOriginal' }).catch(() => undefined); }}>{record.problem.site === 'luogu' ? 'R' : '#'}{record.id}</a> {labels.record}</h1>
 		<div className={'record-info'}>
 			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={record.problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
-			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={snapshot && statusLabel(snapshot.rawStatus, labels)} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus) : labels.tracking}{progress && <span>{snapshot!.rawStatus}</span>}</span></div>
+			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={verdictTitle} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus) : labels.tracking}{progress && <span>{snapshot!.rawStatus}</span>}{codeforcesProgress && <span className={'record-progress'}>{codeforcesProgress}</span>}</span></div>
 			{snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
 			{snapshot?.language !== undefined && <div><span>{labels.language}</span><span>{snapshot.language}</span></div>}
@@ -182,20 +192,26 @@ export default function Record({ state }: { state: PanelState }) {
 			<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2>
 				{snapshot?.testCaseSummary && <p><span>{labels.passedTests}</span>{' '}{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</p>}
 			<div>
-				{groups.map((subtask, index) => <div key={index}>{!(record.problem.site === 'atcoder' && groups.length === 1 && subtask.name === 'Test Cases') && <h3>{subtask.name}</h3>}<div className={'testcase-grid'}>
-					{subtask.rows.map((testcase, index) => <TestCase key={index} animate={!!state.tracking && (snapshot?.phase === 'judging' || snapshot?.phase === 'queued')}>{testcase}</TestCase>)}
+				{groups.map((subtask, index) => <div key={index}>{!(groups.length === 1 && subtask.name === 'Test Cases') && <h3>{subtask.name}</h3>}<div className={'testcase-grid'}>
+					{subtask.rows.map((testcase, index) => <TestCase key={index} site={record.problem.site} animate={!!state.tracking && (snapshot?.phase === 'judging' || snapshot?.phase === 'queued')}>{testcase}</TestCase>)}
 				</div></div>)}
 			</div></div>
 		</>}
 		{(snapshot?.compileMessage || snapshot?.compileSucceeded !== undefined) && <><hr /><div><h2>{labels.compiler}</h2>{snapshot.compileSucceeded !== undefined && <p>{snapshot.compileSucceeded ? labels.compileSucceeded : labels.compileFailed}</p>}{snapshot.compileMessage ? <CopyablePre><code>{snapshot.compileMessage}</code></CopyablePre> : record.problem.site === 'atcoder' && snapshot.rawStatus === 'CE' && <p>{labels.compileUnavailable}</p>}</div></>}
 	</>;
 }
-function TestCase({ children: data, animate }: { children: readonly string[]; animate: boolean }) {
-	const judging = animate && /^(judging|running|WJ|WR|1|\d+\s*\/\s*\d+)$/i.test(data[1] ?? '');
-	return <div className={'testcase'} tabIndex={0}>
-		<div style={{ backgroundColor: statusColor(data[1] ?? '') }}>
-			<div>#{data[0]}</div><div>{judging ? <Spinner label={data[1]} /> : data[1]}</div>{!judging && <div>{[resourceText(data[2], true), resourceText(data[3])].filter(Boolean).join(' / ')}</div>}
+function TestCase({ children: data, animate, site }: { children: readonly string[]; animate: boolean; site: SiteId }) {
+	const rawStatus = data[1] ?? '';
+	const nativeName = site === 'codeforces' ? statusName(rawStatus.replace(/_/g, ' ')) : rawStatus;
+	const status = site === 'codeforces'
+		? rawStatus === 'OK' ? 'AC' : Object.values(RecordStatus).find(value => value.name === nativeName)?.shortName ?? rawStatus
+		: rawStatus;
+	const judging = animate && /^(judging|running|WJ|WR|1|\d+\s*\/\s*\d+)$/i.test(status);
+	const details = site === 'codeforces' ? [statusLabel(status) ?? nativeName, ...data.slice(4).filter(value => /^Exit with code -?\d{1,16}$/.test(value))].filter(Boolean).join('\n') : data.slice(4).filter(Boolean).join('\n') || statusLabel(status);
+	return <div className={'testcase'} tabIndex={0} title={site !== 'codeforces' && status !== rawStatus ? rawStatus : undefined}>
+		<div style={{ backgroundColor: statusColor(status) }}>
+			<div>#{data[0]}</div><div>{judging ? <Spinner label={status} /> : status}</div>{!judging && <div>{[resourceText(data[2], true), resourceText(data[3])].filter(Boolean).join(' / ')}</div>}
 		</div>
-		<div>{data.slice(4).filter(Boolean).join('\n')}</div>
+		{details && <div>{details}</div>}
 	</div>;
 }

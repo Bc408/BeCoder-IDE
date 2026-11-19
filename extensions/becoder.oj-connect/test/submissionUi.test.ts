@@ -16,6 +16,9 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 	const warnings: string[] = [];
 	const status = { text: '', tooltip: '', command: '', show: () => { shown = true; }, dispose: () => { disposed = true; } };
 	const disposable = () => ({ dispose() { } });
+	let configurationChanged!: (event: { affectsConfiguration: (section: string) => boolean }) => void;
+	let trustGranted!: () => void;
+	let login!: { refresh: (reset?: boolean) => Promise<void> };
 	const source = { uri: { scheme: 'file', fsPath: 'C:/practice/luogu/P1001.cpp', toString: () => 'file:///C:/practice/luogu/P1001.cpp' }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
 	const mock = {
 		ConfigurationTarget: { Global: 1 },
@@ -29,13 +32,13 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, inspect: () => undefined, update: async () => { if (migrationWrite) { migrationWrite = false; throw new Error('settings write failed'); } } }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, inspect: () => undefined, update: async () => { if (migrationWrite) { migrationWrite = false; throw new Error('settings write failed'); } } }), onDidChangeConfiguration: (listener: typeof configurationChanged) => { configurationChanged = listener; return disposable(); }, onDidGrantWorkspaceTrust: (listener: typeof trustGranted) => { trustGranted = listener; return disposable(); } },
 		window: {
 			createStatusBarItem: () => status,
 			showWarningMessage: async (message: string) => { warnings.push(message); },
 			showInformationMessage: async () => undefined,
 			showErrorMessage: async (message: string) => { throw new Error(message); },
-			activeTextEditor: { document: source, viewColumn: 1 }, registerWebviewViewProvider: disposable,
+			activeTextEditor: { document: source, viewColumn: 1 }, registerWebviewViewProvider: (_id: string, provider: typeof login) => { login = provider; return disposable(); },
 			showQuickPick: async (options: unknown[]) => options[0],
 			withProgress: async (options: { location: number }, operation: (progress: unknown, token: unknown) => Promise<void>) => {
 				locations.push(options.location); return operation({ report() { } }, { onCancellationRequested: disposable });
@@ -47,6 +50,15 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 		const extension = require('../src/extension');
 		const legacy = new Map([['atcoder.language.cpp', '6017']]);
 		await extension.activate({ subscriptions: [], globalState: { get: (key: string) => legacy.get(key), update: async (key: string) => { legacy.delete(key); } } });
+		const refresh = login.refresh.bind(login), resets: (boolean | undefined)[] = [];
+		login.refresh = async reset => { resets.push(reset); };
+		configurationChanged({ affectsConfiguration: section => section === 'editor.fontSize' });
+		assert.deepStrictEqual(resets, []);
+		configurationChanged({ affectsConfiguration: section => section === 'workbench.browser.dataStorage' });
+		assert.deepStrictEqual(resets, [true], 'storage scope changes must immediately invalidate account rows');
+		trustGranted();
+		assert.deepStrictEqual(resets, [true, true], 'granting trust changes temporary scope to persistent scope');
+		login.refresh = refresh;
 		assert.strictEqual(legacy.get('atcoder.language.cpp'), '6017', 'failed migration preserves the old preference');
 		assert.strictEqual(warnings.length, 1, 'migration failure warns once without disabling commands');
 		warnings.length = 0;
@@ -70,6 +82,21 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 		await limited;
 		assert.deepStrictEqual(warnings, ['Please submit in the built-in browser and complete verification manually.']);
 		assert.strictEqual(disposed, true, 'bounded verification releases the shortcut status');
+		warnings.length = 0;
+		disposed = false;
+		source.uri.fsPath = 'C:/practice/codeforces/4_a.cpp';
+		source.uri.toString = () => 'file:///C:/practice/codeforces/4_a.cpp';
+		const duplicateStarted = new Promise<void>(resolve => { entered = resolve; });
+		const duplicate = commands.get('becoder.ojConnect.submit')!();
+		await duplicateStarted;
+		finish({ kind: 'rejected', reason: 'codeforces-duplicate-source' });
+		await duplicate;
+		assert.strictEqual(warnings.length, 1);
+		assert.match(warnings[0], /Codeforces.*same code.*no new submission/i);
+		assert.doesNotMatch(warnings[0], /unconfirmed|continue querying|operation stopped/i);
+		assert.strictEqual(disposed, true);
+		await commands.get('becoder.ojConnect.continueQuery')!();
+		assert.strictEqual(warnings.length, 1, 'a rejected attempt must not install a pending receipt');
 		await extension.deactivate();
 	} finally { Module._load = original; }
 });
@@ -84,5 +111,12 @@ test('native failures retain the specific cause for submission diagnosis', () =>
 		assert.match(userError('oj-connect-page-changed'), /oj-connect-page-changed/);
 		assert.strictEqual(userError('atcoder-login-required'), 'Sign in to AtCoder from the OJ Connect sidebar, then submit again.');
 		assert.strictEqual(userError('atcoder-browser-verification-required'), 'AtCoder requires manual verification. Submit in the built-in browser and complete verification manually.');
+		assert.match(userError('codeforces-login-required'), /Sign in to Codeforces/);
+		assert.match(userError('codeforces-browser-verification-required'), /browser.*verification/);
+		assert.match(userError('codeforces-practice-unavailable'), /ended public Codeforces/);
+		assert.match(userError('codeforces-request-timeout'), /timed out.*connection/);
+		assert.match(userError('codeforces-session-changed'), /session changed.*account status/);
+		assert.match(userError('codeforces-session-stopped'), /connection stopped/);
+		assert.match(userError('codeforces-operation-cancelled'), /was cancelled/);
 	} finally { Module._load = original; }
 });

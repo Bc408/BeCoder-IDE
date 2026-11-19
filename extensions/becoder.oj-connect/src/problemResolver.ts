@@ -19,6 +19,6 @@ export function resolveProblem(filePath: string, directories: SiteDirectories, a
 		const problem = adapter.resolve(name);
 		return problem ? { kind: 'problem', problem } : { kind: 'inputRequired', site };
 	}
-	const matches = adapters.filter(adapter => adapter.site !== 'nowcoder').map(adapter => adapter.resolve(name)).filter((value): value is ProblemRef => !!value);
+	const matches = adapters.filter(adapter => adapter.site !== 'nowcoder' && adapter.site !== 'codeforces').map(adapter => adapter.resolve(name)).filter((value): value is ProblemRef => !!value);
 	return matches.length === 1 ? { kind: 'problem', problem: matches[0] } : { kind: 'inputRequired' };
 }

@@ -5,8 +5,9 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost } from './browserHost';
+import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost } from './browserHost';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
+import { CodeforcesAdapter } from './adapters/codeforces/adapter';
 import { NowcoderAdapter } from './adapters/nowcoder/adapter';
 import { LuoguAdapter } from './adapters/luogu/adapter';
 import { SubmissionController } from './workflowController';
@@ -42,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.askCaptcha', (image: string, requestId: string) => captcha.ask(image, requestId)),
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.cancelCaptcha', (requestId: string) => captcha.cancel(requestId))
 	);
-	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute))];
+	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute)), new CodeforcesAdapter(new CommandCodeforcesHost(execute))];
 	const directories = () => readDirectories(vscode.workspace.getConfiguration('becoder.ojConnect').get('directories'));
 	const original = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
 	const login = new LoginView(context, adapters, execute, original);
@@ -60,7 +61,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
 		const candidates = adapters.filter(adapter => !site || adapter.site === site);
 		const resolve = (value: string) => { const found = candidates.map(adapter => adapter.resolve(value)).filter((item): item is ProblemRef => !!item); return found.length === 1 ? found[0] : undefined; };
-		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder/Nowcoder URL.') });
+		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder/Codeforces/Nowcoder URL.') });
 		return value === undefined ? undefined : resolve(value);
 	};
 	controller = new SubmissionController({
@@ -115,6 +116,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (outcome.reason === 'luogu-browser-verification-required' || outcome.reason === 'nowcoder-browser-verification-required') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
 			else { await vscode.window.showInformationMessage(vscode.l10n.t('No code was submitted: {0}', userError(outcome.reason))); }
 		}
+		else if (outcome?.kind === 'rejected') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
 		else if (outcome?.kind === 'unconfirmed') {
 			const value: Pending = { outcome, sourceUri: input.uri }; pending = value;
 			const query = vscode.l10n.t('Continue Querying');
@@ -134,7 +136,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, source.uri.toString(), source); }
 	});
 	context.subscriptions.push(problems, records, importer,
-		vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('becoder.ojConnect')) { problems.refreshPreferences(); } })
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration('becoder.ojConnect')) { problems.refreshPreferences(); }
+			if (event.affectsConfiguration('workbench.browser.dataStorage')) { void login.refresh(true); }
+		}),
+		vscode.workspace.onDidGrantWorkspaceTrust(() => { void login.refresh(true); })
 	);
 	const guard = (action: () => Promise<unknown>) => async () => {
 		try { await action(); }

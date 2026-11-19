@@ -21,6 +21,7 @@ app.whenReady().then(async () => {
 		const { BrowserViewMainService } = require(path.join(audit, 'shortcut-main.cjs'));
 		const { AtCoderBridgeController } = require(path.join(audit, 'shortcut-bridge.cjs'));
 		const { SubmissionController } = require(path.join(root, 'extensions/becoder.oj-connect/out/workflowController.js'));
+		const { OjPreferences } = require(path.join(root, 'extensions/becoder.oj-connect/out/preferences.js'));
 		const { AtCoderAdapter } = require(path.join(root, 'extensions/becoder.oj-connect/out/adapters/atcoder/adapter.js'));
 		const { defaultDirectories } = require(path.join(root, 'extensions/becoder.oj-connect/out/settings.js'));
 		const task = 'https://atcoder.jp/contests/abc086/tasks/abc086_a';
@@ -117,7 +118,8 @@ app.whenReady().then(async () => {
 			await reset(); let handle = 0, revealed, released = false;
 			const bridge = new AtCoderBridgeController({ newHandle: () => String(++handle), isPageCurrent: () => !window.isDestroyed() && window.webContents.getURL() === submit, openTask: async url => { await load(submit); return { viewId: 'fixture', url }; }, inspectTask: page => service.prepareAtCoderTask(page.viewId, 1, page.url), sendAndConfirm: (page, value) => service.sendAndConfirmAtCoderTask(page.viewId, 1, page.url, value), readRecord: record => service.readAtCoderRecord(scope, 1, record), cancel: page => service.cancelAtCoderTask(page.viewId, 1), release: () => { released = true; window.destroy(); } });
 			const adapter = new AtCoderAdapter(Object.assign(bridge, { readProblem: async () => { throw new Error('unused'); }, loginSummary: async () => ({ site: 'atcoder', state: 'unknown' }) }));
-			const controller = new SubmissionController({ adapters: [adapter], directories: () => defaultDirectories, requestProblem: async () => undefined, chooseLanguage: async () => '6017', confirmDraft: async () => true, runWithProgress: async (_name, operation) => operation(() => undefined), openRecord: async record => { assert.equal(released, true); revealed = record; } });
+			const preferences = new Map();
+			const controller = new SubmissionController({ adapters: [adapter], directories: () => defaultDirectories, requestProblem: async () => undefined, chooseLanguage: async () => '6017', confirmDraft: async () => true, runWithProgress: async (_name, operation) => operation(() => undefined), openRecord: async record => { assert.equal(released, true); revealed = record; } }, new OjPreferences({ get: key => preferences.get(key), update: async (key, value) => { preferences.set(key, value); } }));
 			try { const receipt = await controller.submit({ uri: 'file:///C:/practice/atcoder/abc086_a.cpp', fileName: 'abc086_a.cpp', version: 7, family: 'cpp', source }); assert.equal(receipt.kind, 'record'); assert.equal(revealed.id, '11'); assert.equal((await adapter.readRecord(receipt.record, new AbortController().signal)).rawStatus, 'AC'); assert.equal(posts, 1); } finally { await controller.dispose(); await bridge.dispose(); execute = createWindow(); }
 		});
 		console.log(JSON.stringify({ passed, failed }));

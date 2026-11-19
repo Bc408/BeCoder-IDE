@@ -1,6 +1,6 @@
 {
 	"displayName": "OJ Connect",
-	"description": "Read problems, import samples and submit code to Luogu and AtCoder in BeCoder.",
+	"description": "Read problems, import samples and submit code to Luogu, AtCoder, Codeforces and Nowcoder in BeCoder.",
 	"submit": "Submit Current Code",
 	"configurationTitle": "OJ Connect",
 	"directories": "Site subdirectory names for problem detection and imports. Changing names does not move files.",
@@ -28,5 +28,7 @@
 	"panelTwo": "Second editor group",
 	"panelThree": "Third editor group",
 	"nowcoder.cCompiler": "Nowcoder C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
-	"nowcoder.cppCompiler": "Nowcoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice."
+	"nowcoder.cppCompiler": "Nowcoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"codeforces.cCompiler": "Codeforces C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"codeforces.cppCompiler": "Codeforces C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice."
 }

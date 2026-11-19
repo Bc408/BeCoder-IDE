@@ -14,7 +14,7 @@ export interface NowcoderPage {
 	readonly tagId: '4';
 	readonly subTagId: '0' | '1';
 	readonly doneQuestionId: string;
-	readonly languageURL: string;
+	readonly languageURL?: string;
 	readonly document: ProblemDocument;
 }
 
@@ -164,7 +164,6 @@ export async function parseNowcoderPage(problem: ProblemRef, html: string): Prom
 		if (info.contestId !== parts[1] || info.isFinished !== true || info.isTeamSignUp !== false || settings.needPassword !== false || settings.needCharge !== false) { throw new Error('nowcoder-unsupported-contest'); }
 	} else if (info.problemId !== parts[1]) { throw new Error('nowcoder-problem-mismatch'); }
 	const scripts = [...html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']((?:https:)?\/\/static\.nowcoder\.com\/acm\/nowcoder\/[\d.]+\/javascripts-acm\/lib\/env\.js)["'][^>]*>/gi)];
-	if (scripts.length !== 1) { throw new Error('nowcoder-language-config-missing'); }
 	const title = plain(fragments(html, 'terminal-topic-title')[0]?.content ?? '').trim();
 	let body = fragments(html, 'subject-describe')[0]?.content;
 	if (!title || !body) { throw new Error('nowcoder-statement-missing'); }
@@ -185,7 +184,7 @@ export async function parseNowcoderPage(problem: ProblemRef, html: string): Prom
 		const time = /^(\u65f6\u95f4|Time)/i.test(match[1]), limit = cppLimit(match[2], time);
 		return limit === undefined ? [] : [{ label: time ? 'Time Limit' : 'Memory Limit', value: limit }];
 	});
-	return { questionId: info.questionId as string, tagId: '4', subTagId: contest ? '1' : '0', doneQuestionId: parts[1], languageURL: new URL(scripts[0][1], problem.url).href, document: { ref: problem, title, bodies: [{ locale: 'zh-CN', sections: [...statementSections(body), ...explanations] }], samples, limits, interactive: false } };
+	return { questionId: info.questionId as string, tagId: '4', subTagId: contest ? '1' : '0', doneQuestionId: parts[1], ...(scripts.length === 1 ? { languageURL: new URL(scripts[0][1], problem.url).href } : {}), document: { ref: problem, title, bodies: [{ locale: 'zh-CN', sections: [...statementSections(body), ...explanations] }], samples, limits, interactive: false } };
 }
 
 /** Read catalogue literals and the ACM host override; never evaluate the downloaded bundle. */

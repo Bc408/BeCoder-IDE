@@ -5,10 +5,25 @@
 
 import assert from 'assert';
 import { decodeAtCoderHTML, parseAtCoderRecordHTML, checkAtCoderSourceResponse, extractAtCoderSourceHTML } from '../../common/atcoderSubmission.js';
+import * as atCoderSubmission from '../../common/atcoderSubmission.js';
 
 // Pure HTML/response parsing; no tracked IDisposable instances.
 // eslint-disable-next-line local/code-ensure-no-disposables-leak-in-test
 suite('AtCoder record parsing', () => {
+	test('readonly compiler catalogue reads the contest submit form independently of source and verification', () => {
+		const parse = Reflect.get(atCoderSubmission, 'parseAtCoderLanguages');
+		assert.strictEqual(typeof parse, 'function');
+		const problem = { site: 'atcoder' as const, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
+		const html = '<html><body><form method="post" action="/contests/abc484/submit"><select name="data.TaskScreenName"><option value="abc484_c" selected>C</option></select><div id="select-lang"><select name="data.LanguageId"><option value="1">C++23 (GCC 15.2.0)</option><option value="2">C23 (GCC 14.2.0)</option><option value="3">Python</option><option disabled value="4">C++20</option></select></div></form></body></html>';
+		assert.deepStrictEqual(parse(problem, html), [{ id: '1', label: 'C++23 (GCC 15.2.0)', family: 'cpp' }, { id: '2', label: 'C23 (GCC 14.2.0)', family: 'c' }]);
+		const grouped = html.replace('<div id="select-lang">', '<div id="select-lang-abc484_c">').replace('</form>', '<div id="select-lang-abc484_d"><select><option value="999">C++17 (Other task)</option></select></div></form>');
+		assert.deepStrictEqual(parse(problem, grouped).map(option => option.id), ['1', '2'], 'the official per-task group excludes other task directories');
+		assert.throws(() => parse(problem, html.replace('abc484_c" selected', 'abc484_d" selected')), /task/);
+		assert.throws(() => parse(problem, html.replace('action="/contests/abc484/submit"', 'action="https://evil.test/submit"')), /form/);
+		assert.throws(() => parse(problem, '<html><body><form action="/login"><input name="username"></form></body></html>'), /login-required/);
+		assert.throws(() => parse(problem, '<html><body>Just a moment</body></html>'), /form/);
+		assert.throws(() => parse(problem, html.replace('</html>', '')), /incomplete/);
+	});
 
 	const url = 'https://atcoder.jp/contests/abc086/submissions/80773297';
 	test('session-only HTML parser preserves source, real tests and compiler output', () => {

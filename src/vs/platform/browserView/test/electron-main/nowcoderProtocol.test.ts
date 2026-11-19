@@ -87,6 +87,16 @@ suite('Nowcoder ACM protocol', () => {
 		}
 		await assert.rejects(() => parseNowcoderPage(publicProblem, page(`subTagId:'0',doneQuestionId:'18204',extra:doSomething()`)));
 	});
+	test('statement parsing preserves content when the language resource entry is missing or ambiguous', async () => {
+		const script = '<script src="//static.nowcoder.com/acm/nowcoder/2.0.120/javascripts-acm/lib/env.js"></script>';
+		const html = page(`contestId:'5657',subTagId:'1',doneQuestionId:'5657',isFinished:true,isTeamSignUp:false,settingInfo:{needPassword:false,needCharge:false}`);
+		for (const content of [html.replace(script, ''), html + script]) {
+			const value = await parseNowcoderPage(problem, content);
+			assert.strictEqual(value.document.title, 'A+B');
+			assert.deepStrictEqual(value.document.samples, [{ input: ' 1 2\n', output: '3\n' }]);
+			assert.strictEqual(value.languageURL, undefined);
+		}
+	});
 	test('ACM language catalogue applies only literal host overrides and keeps C and C++ options', async () => {
 		const source = `({93058:function(){var g=[{id:'1',lang:'C',version:'clang11',suffix:'c',demoCode:external[0]},{id:'2',lang:'C++',version:'old',suffix:'cpp'},{id:'38',lang:'C++(g++ 13)',version:'g++ 13',suffix:'cpp'},{id:'4',lang:'Java',version:'17'}];var x=[];window.location.host.includes('ac.nowcoder.com')&&(x=['2','38','4','1'],g[1].lang='C++ clang18',g[1].version='clang++18');}})`;
 		assert.deepStrictEqual(await nowcoderLanguages(source), [{ id: '2', label: 'C++ clang18', family: 'cpp' }, { id: '38', label: 'C++(g++ 13)', family: 'cpp' }, { id: '1', label: 'C', family: 'c' }]);

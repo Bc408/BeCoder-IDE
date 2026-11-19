@@ -17,7 +17,7 @@ export class LoginView implements vscode.WebviewViewProvider, vscode.Disposable 
 	private view: vscode.WebviewView | undefined;
 	private subscriptions: vscode.Disposable[] = [];
 	private readonly states = { 'signed-in': vscode.l10n.t('Signed in'), 'signed-out': vscode.l10n.t('Signed out'), unknown: vscode.l10n.t('Not checked'), unavailable: vscode.l10n.t('Not connected yet') };
-	constructor(private readonly context: vscode.ExtensionContext, private readonly adapters: readonly OjAdapter[], private readonly execute: (command: string) => Promise<unknown>, private readonly open: (url: string) => Promise<void>) {
+	constructor(private readonly context: vscode.ExtensionContext, private readonly adapters: readonly OjAdapter[], private readonly execute: (command: string) => Promise<unknown>, private readonly open: (url: string) => Promise<void>, private readonly onSignedIn: (site: SiteId) => void = () => undefined) {
 		this.rows = sites.map(site => ({ site, state: adapters.some(adapter => adapter.site === site) ? 'unknown' : 'unavailable' }));
 	}
 	resolveWebviewView(view: vscode.WebviewView): void {
@@ -44,8 +44,10 @@ export class LoginView implements vscode.WebviewViewProvider, vscode.Disposable 
 		}
 		const rows = await loginRows(this.adapters, request.signal);
 		if (!request.signal.aborted) {
+			const signedIn = rows.filter(row => row.state === 'signed-in' && this.rows.find(previous => previous.site === row.site)?.state !== 'signed-in');
 			this.rows = rows;
 			this.update();
+			for (const row of signedIn) { this.onSignedIn(row.site); }
 		}
 	}
 	private update(): void { void this.view?.webview.postMessage({ rows: this.rows.map(row => ({ site: row.site, state: row.state, text: this.states[row.state] + (row.label ? ' · ' + row.label : '') })) }); }

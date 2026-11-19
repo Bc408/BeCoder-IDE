@@ -41,6 +41,8 @@ function atCoderFixture(loading = false) {
 		return { resource: { path: id }, get url() { return model.url; }, model, isDisposed: () => disposed, resolve: async () => model, dispose: () => { disposed = true; } };
 	};
 	const known = new Map<string, ReturnType<typeof create>>();
+	const problemReads: unknown[][] = [];
+	const problemWaits: unknown[][] = [];
 	const editors = {
 		editors: [] as ReturnType<typeof create>[],
 		openEditor: async (input: ReturnType<typeof create>) => { await reveal(); editors.editors.push(input); },
@@ -61,6 +63,8 @@ function atCoderFixture(loading = false) {
 				if (name === 'watchOjSession') { return watch(); }
 				if (name === 'prepareAtCoderTask') { return prepare(); }
 				if (name === 'readAtCoderLogin') { assert.strictEqual(args[1], scope); return login(); }
+				if (name === 'readOjProblem') { problemReads.push(args); return { ref: args[2], title: 'A+B', bodies: [], samples: [], limits: [], interactive: false }; }
+				if (name === 'waitForOjProblemDocument') { problemWaits.push(args); const input = known.get(String(args[0])); if (input) { input.model.loading = false; } }
 				return undefined;
 			}
 		})
@@ -69,7 +73,7 @@ function atCoderFixture(loading = false) {
 	const contribution = new BrowserOjConnectContribution(editors as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
 	const execute = (suffix: string, ...args: unknown[]): unknown => CommandsRegistry.getCommand('_becoder.ojConnect.atcoder.' + suffix)!.handler(undefined!, ...args);
 	return {
-		record, snapshot, known, editors, execute,
+		record, snapshot, known, editors, execute, problemReads, problemWaits,
 		get creations() { return creations; }, get recordReads() { return recordReads; },
 		setScope: (value: BrowserViewStorageScope) => { scope = value; },
 		setRead: (value: typeof readRecord) => { readRecord = value; },
@@ -138,6 +142,39 @@ function codeforcesFixture() {
 
 suite('OJ Connect source shortcut', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
+	for (const site of ['atcoder', 'codeforces'] as const) {
+		test(site + ' statement reads reuse the exact problem page only in the current persistent scope', async () => {
+			const f = atCoderFixture();
+			const problem = site === 'atcoder' ? f.record.problem : { site, nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
+			const command = CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.readProblem')!;
+			try {
+				const existing = f.addCarrier('ordinary-task', BrowserViewStorageScope.Global, problem.url);
+				await command.handler(undefined!, problem);
+				assert.strictEqual(f.creations, 0);
+				assert.strictEqual(f.problemReads[0][0], 'ordinary-task');
+				assert.strictEqual(f.problemWaits.length, 0, 'an existing user page is never stopped');
+				assert.strictEqual(existing.isDisposed(), false, 'reading never closes the user page');
+				f.setScope(BrowserViewStorageScope.Workspace);
+				await command.handler(undefined!, problem);
+				assert.strictEqual(f.creations, 1, 'another session cannot supply the current account page');
+				assert.strictEqual(f.problemWaits.length, 1, 'only a newly created hidden reader gets the early document boundary');
+				assert.notStrictEqual(f.problemReads[1][0], 'ordinary-task');
+				await command.handler(undefined!, problem);
+				assert.strictEqual(f.creations, 1, 'the same hidden task page can serve another statement read');
+				assert.strictEqual(f.problemWaits.length, 1, 'a reused reader is not stopped again');
+			} finally { f.dispose(); }
+		});
+		test(site + ' newly created statement reader delegates resource stopping to its owned main-process boundary', async () => {
+			const f = atCoderFixture(true);
+			const problem = site === 'atcoder' ? f.record.problem : { site, nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
+			try {
+				await CommandsRegistry.getCommand('_becoder.ojConnect.' + site + '.readProblem')!.handler(undefined!, problem);
+				assert.strictEqual(f.creations, 1);
+				assert.strictEqual(f.problemWaits.length, 1);
+				assert.deepStrictEqual(f.problemWaits[0], [f.problemReads[0][0], mainWindow.vscodeWindowId, problem.url]);
+			} finally { f.dispose(); }
+		});
+	}
 	test('CF account, submit, result and reconciliation use fixed Session commands without a browser', async () => {
 		const f = codeforcesFixture();
 		try {

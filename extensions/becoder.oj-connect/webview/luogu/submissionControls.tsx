@@ -22,6 +22,8 @@ import { SubmitIcon } from './presentation';
 export default function SubmissionControls({ state }: { state: PanelState }) {
 	const [submitting, setSubmitting] = useState(false);
 	const languages = state.languages ?? [];
+	const placeholder = languages.length ? state.labels.chooseLanguage : state.languagesLoading ? state.labels.languagesLoading : state.problem?.languageError === 'login-required' ? state.labels.languagesLoginRequired : state.labels.languagesUnavailable;
+	const compilerTitle = (languages.find(language => language.id === state.languageId)?.label ?? placeholder) + (state.usingCompilerCatalogue ? ' · ' + state.labels.compilerCatalogue : '');
 	const submitCurrentDocument = async () => {
 		if (submitting) { return; }
 		setSubmitting(true);
@@ -34,9 +36,10 @@ export default function SubmissionControls({ state }: { state: PanelState }) {
 			<SubmitIcon />
 		</VSCodeButton>
 		<VSCodeDropdown ariaLabelledby={state.labels.language} value={state.languageId ?? ''}
+			title={compilerTitle}
 			disabled={submitting || languages.length === 0}
 			onChange={event => { void send({ action: 'selectLanguage', languageId: event.target.value }).catch(() => undefined); }}>
-			{!state.languageId && <VSCodeOption value={''}>{state.labels.chooseLanguage}</VSCodeOption>}
+			{!state.languageId && <VSCodeOption value={''}>{placeholder}</VSCodeOption>}
 			{languages.map(language => <VSCodeOption value={language.id} key={language.id}>{language.label}</VSCodeOption>)}
 		</VSCodeDropdown>
 	</div>;

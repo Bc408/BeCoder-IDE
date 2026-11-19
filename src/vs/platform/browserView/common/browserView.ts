@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs shared with the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
 import { Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
@@ -527,6 +527,10 @@ export interface IBrowserViewService {
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
 
 	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
+	/** Only for a newly created hidden OJ reader: retain its DOM and stop remaining subresources. */
+	waitForOjProblemDocument(id: string, windowId: number, expectedURL: string): Promise<void>;
+	readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue>;
+	cancelOjLanguageRead(windowId: number, requestId: string): Promise<void>;
 	cancelOjOperations(windowId: number): Promise<void>;
 	cancelOjPreparations(windowId: number): Promise<void>;
 	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary>;

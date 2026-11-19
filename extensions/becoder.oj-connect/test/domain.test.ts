@@ -9,6 +9,13 @@ import { validateProblem, validateRecord, validateProblemRef, validateOutcome } 
 import { cphSamples } from '../src/cphHost';
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('compiler catalogue failure preserves a readable problem and only accepts fixed error categories', () => {
+	const input = { ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false };
+	for (const languageError of ['unavailable', 'login-required']) {
+		assert.strictEqual(validateProblem({ ...input, languageError }).languageError, languageError);
+	}
+	assert.throws(() => validateProblem({ ...input, languageError: 'private website response' }), /language/);
+});
 test('an explicit website rejection crosses the DTO boundary without becoming an unsent or pending attempt', () => {
 	assert.deepStrictEqual(validateOutcome({ kind: 'rejected', reason: 'codeforces-duplicate-source', source: 'private' }), { kind: 'rejected', reason: 'codeforces-duplicate-source' });
 	assert.throws(() => validateOutcome({ kind: 'rejected', reason: '' }));

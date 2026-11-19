@@ -24,7 +24,7 @@ import { htmlAttributeEncodeValue } from '../../../base/common/strings.js';
 import { promises as fs } from 'fs';
 import { join } from '../../../base/common/path.js';
 import { readBeaconBrowserPage } from '../../beacon/common/beaconBrowserPage.js';
-import { checkAtCoderSourceResponse, parseAtCoderRecordHTML, decodeAtCoderHTML } from '../common/atcoderSubmission.js';
+import { checkAtCoderSourceResponse, parseAtCoderRecordHTML, decodeAtCoderHTML, parseAtCoderLanguages } from '../common/atcoderSubmission.js';
 import { atCoderFormScript, atCoderTask, atCoderSubmitURL, IAtCoderSourcePayload, IAtCoderTaskForm } from '../common/atcoderWorkflow.js';
 import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt } from './atcoderTransaction.js';
 import { assertLuoguProblem } from '../common/luoguBridge.js';
@@ -35,12 +35,13 @@ import { NowcoderSessionClient } from './nowcoderSessionClient.js';
 import { assertNowcoderProblem } from '../common/nowcoderBridge.js';
 import { CodeforcesSessionClient } from './codeforcesSessionClient.js';
 import { createCodeforcesPost } from './codeforcesTransport.js';
+import { createOjLanguageRead } from './ojLanguageTransport.js';
 import { assertCodeforcesProblem } from '../common/codeforcesBridge.js';
 import { LuoguSessionClient } from './luoguSessionClient.js';
 import { fetchLuoguDirect } from './luoguSessionTransport.js';
 import { ILogService } from '../../log/common/log.js';
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs for the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload } from 'becoder-oj-connect';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -63,9 +64,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 
 	private readonly browserViews = this._register(new DisposableMap<string, BrowserView>());
 	private readonly atCoderRequests = new Map<string, AbortController>();
+	private readonly cancelledOjLanguageReads = new Set<string>();
 	private readonly atCoderAccountReads = new Map<string, { windowId: number; controller: AbortController; result: Promise<LoginSummary> }>();
 	private readonly atCoderAccounts = new Map<string, { windowIds: Set<number>; identity?: string }>();
 	private readonly ojReads = new Map<string, { windowId: number; operation?: string; cancel(): void }>();
+	private readonly ojProblemDocuments = new WeakMap<Electron.WebContents, string>();
 	private readonly atCoderRecords = new Map<string, { windowId: number; snapshot: RecordSnapshot; initial: boolean }>();
 	private readonly atCoderRecordRequests = new Map<string, { controller: AbortController; done: Promise<void> }>();
 	private readonly atCoderAttempts = new Map<string, { context: AtCoderAttempt; session: BrowserSession; windowId: number; timer: ReturnType<typeof setTimeout> }>();
@@ -311,6 +314,41 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return browserProblem(url);
 	}
 
+	async waitForOjProblemDocument(id: string, windowId: number, expectedURL: string): Promise<void> {
+		const view = this._getBrowserView(id), target = new URL(expectedURL), started = Date.now();
+		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
+		if (view.session.storageScope === BrowserViewStorageScope.Ephemeral) { throw new Error('OJ Connect requires a persistent browser session.'); }
+		if (target.username || target.password || target.hash || target.search || !(atCoderTask(expectedURL) || target.origin === 'https://codeforces.com' && /^\/contest\/[1-9]\d*\/problem\/[A-Z][A-Z0-9]*$/.test(target.pathname))) { throw new Error('oj-connect-problem-route'); }
+		const contents = view.getWebContentsView().webContents, requestId = generateUuid();
+		await new Promise<void>((resolve, reject) => {
+			let finished = false;
+			const timer = setTimeout(() => finish(new Error('oj-connect-page-not-ready')), 20000);
+			const finish = (error?: Error) => {
+				if (finished) { return; } finished = true;
+				if (timer) { clearTimeout(timer); }
+				contents.removeListener('dom-ready', ready); contents.removeListener('did-stop-loading', check); contents.removeListener('did-start-navigation', navigating);
+				closed.dispose(); this.ojReads.delete(requestId);
+				if (error) { reject(error); } else { resolve(); }
+			};
+			const check = () => {
+				if (contents.isDestroyed()) { finish(new Error('oj-connect-page-changed')); return; }
+				const actual = contents.getURL();
+				if (actual && actual !== 'about:blank' && actual !== expectedURL) { finish(new Error('oj-connect-page-changed')); return; }
+				if (actual === expectedURL && !contents.isLoading()) { finish(); return; }
+				if (actual === expectedURL && this.ojProblemDocuments.get(contents) === expectedURL && !view.getState().visible) { contents.stop(); }
+			};
+			const ready = () => { if (!contents.isDestroyed()) { this.ojProblemDocuments.set(contents, contents.getURL()); } check(); };
+			const navigating = (details: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
+				if (details.isMainFrame && !details.isSameDocument && (details.url !== expectedURL || contents.getURL() && contents.getURL() !== 'about:blank')) { finish(new Error('oj-connect-page-changed')); }
+			};
+			const closed = view.onDidClose(() => finish(new Error('oj-connect-page-changed')));
+			contents.on('dom-ready', ready); contents.on('did-stop-loading', check); contents.on('did-start-navigation', navigating);
+			this.ojReads.set(requestId, { windowId, operation: 'readOjProblemDocument', cancel: () => finish(new Error('oj-connect-stopped')) });
+			check();
+		});
+		this.logService?.info('[OJ Connect problem]', { site: target.hostname === 'atcoder.jp' ? 'atcoder' : 'codeforces', phase: 'document-ready', elapsedMs: Date.now() - started });
+	}
+
 	async parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }> {
 		const view = this._getBrowserView(id);
 		if (view.owner.mainWindowId !== windowId) {
@@ -410,6 +448,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
+		const started = Date.now();
 		if (problem.site === 'codeforces') {
 			assertCodeforcesProblem(problem);
 			const view = this._getBrowserView(id);
@@ -421,7 +460,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			if (url.origin !== 'https://codeforces.com' || url.username || url.password || !identity || identity[1] + '/' + identity[2] !== problem.nativeId || [...url.searchParams.keys()].some(key => key !== 'locale')) { throw new Error('oj-connect-page-changed'); }
 			const parsed = await this.parseProblem(id, windowId);
 			if (parsed.url !== actualURL) { throw new Error('oj-connect-page-changed'); }
-			return await this._runOjRead(id, windowId, actualURL, 'readCodeforcesProblem', { problem, companion: JSON.parse(parsed.json) }) as ProblemDocument;
+			const document = await this._runOjRead(id, windowId, actualURL, 'readCodeforcesProblem', { problem, companion: JSON.parse(parsed.json) }) as ProblemDocument;
+			this.logService?.info('[OJ Connect problem]', { site: 'codeforces', phase: 'statement-read', elapsedMs: Date.now() - started });
+			return document;
 		}
 		if (problem.site === 'nowcoder') { return this.nowcoderClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
@@ -432,7 +473,49 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			if (!current || current.contestId + '/' + current.taskId !== problem.nativeId) { throw new Error('oj-connect-page-changed'); }
 		}
 		// Canonical problem identity and the exact document being observed are separate.
-		return await this._runOjRead(id, windowId, actualURL, 'readAtCoderProblem', problem) as ProblemDocument;
+		const document = await this._runOjRead(id, windowId, actualURL, 'readAtCoderProblem', problem) as ProblemDocument;
+		this.logService?.info('[OJ Connect problem]', { site: 'atcoder', phase: 'statement-read', elapsedMs: Date.now() - started });
+		return document;
+	}
+
+
+	async cancelOjLanguageRead(windowId: number, requestId: string): Promise<void> {
+		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-language-request-id'); }
+		const key = 'language:' + windowId + ':' + requestId;
+		const request = this.ojReads.get(key);
+		if (request) { request.cancel(); }
+		else { this.cancelledOjLanguageReads.add(key); if (this.cancelledOjLanguageReads.size > 128) { this.cancelledOjLanguageReads.delete(this.cancelledOjLanguageReads.values().next().value!); } }
+	}
+	async readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue> {
+		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-language-request-id'); }
+		if (problem.site === 'codeforces') { assertCodeforcesProblem(problem); }
+		else if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
+		const key = 'language:' + windowId + ':' + requestId;
+		if (this.cancelledOjLanguageReads.delete(key)) { throw new Error('oj-language-cancelled'); }
+		if (this.ojReads.has(key)) { throw new Error('oj-language-request-busy'); }
+		const session = this.ojSession(windowId, scope), controller = new AbortController(), started = Date.now();
+		const current = () => { controller.signal.throwIfAborted(); if (this.ojSession(windowId, scope) !== session) { throw new Error('oj-connect-session-scope-changed'); } };
+		this.ojReads.set(key, { windowId, operation: 'readLanguages:' + problem.site + ':' + session.id, cancel: () => controller.abort(new Error('oj-language-cancelled')) });
+		try {
+			let languages: readonly LanguageOption[];
+			const read = createOjLanguageRead(session.electronSession);
+			if (problem.site === 'codeforces') {
+				const id = await this.openCodeforcesSession(windowId, scope); current();
+				const [contest, index] = problem.nativeId.split('/');
+				languages = await this.codeforcesClient(id, windowId).readLanguages(problem, controller.signal, signal => read('https://codeforces.com/contest/' + contest + '/submit?problemIndex=' + index, signal));
+			} else {
+				languages = parseAtCoderLanguages(problem, await read(atCoderSubmitURL(problem.url), controller.signal));
+			}
+			current();
+			this.logService?.info('[OJ Connect languages]', { site: problem.site, elapsedMs: Date.now() - started, options: languages.length });
+			return { languages };
+		} catch (error) {
+			current();
+			const reason = error instanceof Error && /^(?:oj-language|codeforces|atcoder)-[a-z-]+$/.test(error.message) ? error.message : 'oj-language-unavailable';
+			if (/session-(?:changed|stopped|owner)|operation-cancelled/.test(reason)) { throw error; }
+			this.logService?.info('[OJ Connect languages]', { site: problem.site, elapsedMs: Date.now() - started, reason });
+			return { languages: [], languageError: reason.endsWith('login-required') ? 'login-required' : 'unavailable' };
+		} finally { this.ojReads.delete(key); }
 	}
 
 	async watchOjSession(id: string, windowId: number): Promise<void> {
@@ -478,6 +561,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			const key = owner + ':' + sessionId, pending = this.atCoderAccountReads.get(key);
 			if (pending && pending.controller !== source) { this.atCoderAccountReads.delete(key); pending.controller.abort(); }
 		}
+		for (const request of this.ojReads.values()) { if (windows.has(request.windowId) && request.operation === 'readLanguages:atcoder:' + sessionId) { request.cancel(); } }
 		for (const owner of windows) { this._onDidChangeOjSession.fire({ windowId: owner, site: 'atcoder' }); }
 	}
 
@@ -596,10 +680,11 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			let cookieState = await fingerprint();
 			if (!this.windowsMainService.getWindowById(windowId)) { throw new Error('oj-connect-owner'); }
 			if (this.nowcoderClients.has(key)) { return session.id; }
-			const synchronize = async () => { const next = await fingerprint(); if (next !== cookieState) { cookieState = next; client.invalidate(); this._onDidChangeOjSession.fire({ windowId, site: 'nowcoder' }); } };
+			const synchronize = async () => { const next = await fingerprint(); if (next !== cookieState) { cookieState = next; await client.refreshIdentity(); } };
 			const client = new NowcoderSessionClient({
 				fetch: (url, init) => session.electronSession.fetch(url, init),
 				synchronizeSession: synchronize,
+				onIdentityChange: () => { if (this.nowcoderClients.get(key)?.client === client) { this._onDidChangeOjSession.fire({ windowId, site: 'nowcoder' }); } },
 				onSessionChange: () => {
 					let disposed = false;
 					const changed = (_event: Electron.Event, cookie: Electron.Cookie, cause: string, removed: boolean) => {
@@ -1099,10 +1184,15 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			options
 		);
 		this.browserViews.set(id, view);
+		const contents = view.getWebContentsView().webContents;
+		const documentReady = () => this.ojProblemDocuments.set(contents, contents.getURL());
+		const documentNavigating = (details: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => { if (details.isMainFrame && !details.isSameDocument) { this.ojProblemDocuments.delete(contents); } };
+		contents.on('dom-ready', documentReady); contents.on('did-start-navigation', documentNavigating);
 		if (windowConfiguration?.appearance) {
 			view.setAppearance(windowConfiguration.appearance);
 		}
 		Event.once(view.onDidClose)(() => {
+			contents.removeListener('dom-ready', documentReady); contents.removeListener('did-start-navigation', documentNavigating); this.ojProblemDocuments.delete(contents);
 			this.browserViews.deleteAndDispose(id);
 		});
 

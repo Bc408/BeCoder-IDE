@@ -9,13 +9,15 @@ import type { OjAdapter, SubmissionSession } from './adapters/adapter';
 import { resolveProblem } from './problemResolver';
 import type { SiteDirectories, SiteId } from './settings';
 import { OperationError } from './operationError';
-import type { OjPreferences } from './preferences';
+import { defaultLanguage, type OjPreferences } from './preferences';
+import { resolveCompiler } from './compilerCatalogue';
 
 export interface SubmissionHost {
 	readonly adapters: readonly OjAdapter[];
 	directories(): SiteDirectories;
 	requestProblem(fileName: string, site?: SiteId): Promise<ProblemRef | undefined>;
 	chooseLanguage(options: readonly LanguageOption[], fileName: string, site: SiteId, problem: ProblemRef): Promise<string | undefined>;
+	onLanguages?(problem: ProblemRef, options: readonly LanguageOption[]): void;
 	confirmDraft(fileName: string): Promise<boolean>;
 	runWithProgress<T>(fileName: string, operation: (progress: (value: SubmissionProgress) => void) => Promise<T>): Promise<T>;
 	openRecord(record: RecordRef, sourceUri: string): Promise<void>;
@@ -50,13 +52,17 @@ export class SubmissionController {
 				request.session = await adapter.prepare(problem, snapshot.uri, progress, signal);
 				signal.throwIfAborted();
 				const session = request.session;
+				this.host.onLanguages?.(problem, session.languages);
+				signal.throwIfAborted();
 				const options = session.languages.filter(option => option.family === snapshot.family);
 				if (!options.length) { throw new OperationError('prepare', 'not-sent', 'No matching language is currently available.'); }
-				let languageId = this.preferredLanguage(adapter.site, snapshot.family);
+				const saved = this.preferredLanguage(adapter.site, snapshot.family);
+				let languageId = resolveCompiler(adapter.site, snapshot.family, saved, options);
+				if (saved === undefined && !this.preferences.hasLanguagePreference(adapter.site, snapshot.family)) { languageId = defaultLanguage(options, snapshot.family)?.id; }
 				if (!options.some(option => option.id === languageId)) { languageId = await this.host.chooseLanguage(options, snapshot.fileName, adapter.site, problem); }
 				signal.throwIfAborted();
 				if (!languageId) { return undefined; }
-				if (!options.some(option => option.id === languageId)) { throw new OperationError('prepare', 'not-sent', 'The selected language is no longer available.'); }
+				if (languageId.startsWith('catalogue:') || !options.some(option => option.id === languageId)) { throw new OperationError('prepare', 'not-sent', 'The selected language is no longer available.'); }
 				const replaceDraft = session.hasDraft ? await this.host.confirmDraft(snapshot.fileName) : false;
 				signal.throwIfAborted();
 				if (session.hasDraft && !replaceDraft) { return undefined; }

@@ -18,8 +18,10 @@ declare module 'becoder-oj-connect' {
 		readonly limits: readonly { readonly label: string; readonly value: string }[];
 		readonly interactive: boolean;
 		readonly languages?: readonly LanguageOption[];
+		readonly languageError?: 'unavailable' | 'login-required';
 	}
 	export interface LanguageOption { readonly id: string; readonly label: string; readonly family: 'c' | 'cpp' }
+	export interface LanguageCatalogue { readonly languages: readonly LanguageOption[]; readonly languageError?: 'unavailable' | 'login-required' }
 	export interface RecordRef { readonly problem: ProblemRef; readonly id: string; readonly url: string }
 	export interface RecordSnapshot {
 		readonly ref: RecordRef; readonly phase: 'queued' | 'judging' | 'finished' | 'unknown';

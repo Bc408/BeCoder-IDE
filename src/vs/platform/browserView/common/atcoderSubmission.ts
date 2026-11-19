@@ -4,7 +4,48 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only OJ record contract.
-import type { RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+import type { RecordRef, RecordSnapshot, ProblemRef, LanguageOption } from 'becoder-oj-connect';
+
+/** Inert catalogue extraction from the actual contest form; no source or verification fields are consumed. */
+export function parseAtCoderLanguages(problem: ProblemRef, html: string): LanguageOption[] {
+	const task = /^https:\/\/atcoder\.jp\/contests\/([a-zA-Z0-9_-]+)\/tasks\/([a-zA-Z0-9_-]+)$/.exec(problem.url);
+	if (problem.site !== 'atcoder' || !task || problem.nativeId !== task[1] + '/' + task[2]) { throw new Error('atcoder-task-route'); }
+	if (html.length > 4 * 1024 * 1024 || !/<\/html\s*>/i.test(html)) { throw new Error('atcoder-form-incomplete'); }
+	const inert = html.replace(/<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>|<textarea\b[^>]*>[\s\S]*?<\/textarea\s*>/gi, '');
+	if (/<input\b[^>]*\bname=["']username["']/i.test(inert)) { throw new Error('atcoder-login-required'); }
+	const attrs = (source: string): Record<string, string> => {
+		const result: Record<string, string> = Object.create(null);
+		for (const match of source.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+			const key = match[1].toLowerCase(); if (Object.hasOwn(result, key)) { throw new Error('atcoder-form-invalid'); }
+			result[key] = decodeAtCoderHTML(match[2] ?? match[3]);
+		}
+		return result;
+	};
+	const forms = [...inert.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form\s*>/gi)].filter(match => {
+		const value = attrs(match[1]);
+		try { const action = new URL(value.action ?? '', problem.url); return value.method?.toLowerCase() === 'post' && action.origin === 'https://atcoder.jp' && action.pathname === '/contests/' + task[1] + '/submit' && !action.username && !action.password && !action.search && !action.hash; } catch { return false; }
+	});
+	if (forms.length !== 1) { throw new Error('atcoder-form-invalid'); }
+	const form = forms[0][2], selects = [...form.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select\s*>/gi)];
+	const options = (body: string) => [...body.matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option\s*>/gi)];
+	const targets = selects.filter(match => attrs(match[1]).name === 'data.TaskScreenName');
+	const fixed = [...form.matchAll(/<input\b([^>]*)>/gi)].filter(match => attrs(match[1]).name === 'data.TaskScreenName');
+	const selected = targets.length === 1 ? options(targets[0][2]).filter(match => /\bselected(?:\s|=|$)/i.test(match[1])) : [];
+	const targetValue = selected.length === 1 ? attrs(selected[0][1]).value : fixed.length === 1 ? attrs(fixed[0][1]).value : undefined;
+	if (targetValue !== task[2]) { throw new Error('atcoder-task-mismatch'); }
+	// Official contest.js activates #select-lang-{task}; other tasks may have different directories.
+	const groups = [...form.matchAll(/<div\b([^>]*)>([\s\S]*?)<\/div\s*>/gi)].filter(match => attrs(match[1]).id === 'select-lang-' + task[2]);
+	if (groups.length > 1) { throw new Error('atcoder-language-unavailable'); }
+	const activeSelects = groups.length === 1 ? [...groups[0][2].matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select\s*>/gi)] : selects.filter(match => attrs(match[1]).name !== 'data.TaskScreenName' && !/\bhidden(?:\s|=|$)/i.test(match[1]));
+	const currentSelects = activeSelects.filter(match => (attrs(match[1]).class ?? '').split(/\s+/).includes('current'));
+	const catalogues = (currentSelects.length ? currentSelects : activeSelects).map(match => options(match[2]).flatMap(option => {
+		const value = attrs(option[1]), label = decodeAtCoderHTML(option[2].replace(/<[^>]*>/g, '')).trim();
+		const family = /^C\+\+(?:\d|\s|\()/.test(label) ? 'cpp' as const : /^C(?:\d|\s|\()/.test(label) ? 'c' as const : undefined;
+		return family && /^\d+$/.test(value.value) && !/\bdisabled(?:\s|=|$)/i.test(option[1]) ? [{ id: value.value, label, family }] : [];
+	})).filter(options => options.length);
+	if (!catalogues.length || catalogues.some(options => options.length > 100 || options.some(option => option.label.length > 200) || new Set(options.map(option => option.id)).size !== options.length) || catalogues.some(options => JSON.stringify(options) !== JSON.stringify(catalogues[0]))) { throw new Error('atcoder-language-unavailable'); }
+	return catalogues[0];
+}
 
 /** AtCoder escapes source as HTML text; decode once, without executing a document. */
 export function decodeAtCoderHTML(value: string): string {

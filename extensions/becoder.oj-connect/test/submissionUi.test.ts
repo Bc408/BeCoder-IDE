@@ -6,6 +6,54 @@
 import assert from 'assert';
 import { test } from 'node:test';
 
+test('background compiler commands cancel promptly and ignore a late catalogue response', async () => {
+	const Module = require('module'), original = Module._load;
+	const loaded = new Set(Object.keys(require.cache));
+	const modulePath = require.resolve('../src/extension'); delete require.cache[modulePath];
+	const calls: { command: string; args: unknown[]; resolve: (value: unknown) => void }[] = [];
+	const mock = {
+		commands: {
+			executeCommand: (command: string, ...args: unknown[]) => {
+				if (command.endsWith('.cancelLanguageRead')) { calls.push({ command, args, resolve() { } }); return Promise.resolve(); }
+				return new Promise(resolve => { calls.push({ command, args, resolve }); });
+			}
+		}
+	};
+	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
+	try {
+		const { readProblemLanguages } = require('../src/extension');
+		for (const site of ['atcoder', 'codeforces']) {
+			const problem = { site, nativeId: 'fixture', url: 'https://example.org/fixture' };
+			const abort = new AbortController();
+			const reading = readProblemLanguages(problem, abort.signal);
+			const request = calls.at(-1)!;
+			assert.strictEqual(request.command, '_becoder.ojConnect.' + site + '.readLanguages');
+			assert.strictEqual(request.args[0], problem);
+			assert.match(String(request.args[1]), /^[a-f0-9-]{36}$/i);
+			const rejected = assert.rejects(reading, /cancelled/);
+			abort.abort(); await rejected;
+			assert.strictEqual(calls.at(-1)!.command, '_becoder.ojConnect.' + site + '.cancelLanguageRead');
+			assert.deepStrictEqual(calls.at(-1)!.args, [request.args[1]]);
+			request.resolve({ languages: [{ id: '23', label: 'C++23', family: 'cpp' }] }); await Promise.resolve();
+			const count = calls.length;
+			await assert.rejects(readProblemLanguages(problem, abort.signal), /cancelled/);
+			assert.strictEqual(calls.length, count, 'an already cancelled read cannot start a host request');
+			const ready = new AbortController(), completed = readProblemLanguages(problem, ready.signal);
+			const catalogue = { languages: [{ id: '23', label: 'C++23', family: 'cpp' }] };
+			calls.at(-1)!.resolve(catalogue); assert.deepStrictEqual(await completed, catalogue);
+			const after = calls.length; ready.abort();
+			assert.strictEqual(calls.length, after, 'completed reads remove their cancellation listener');
+			const invalid = readProblemLanguages(problem, new AbortController().signal);
+			calls.at(-1)!.resolve({ languages: [{ id: 'bad', label: 'Python', family: 'python' }] });
+			await assert.rejects(invalid, /invalid/);
+		}
+	} finally {
+		Module._load = original;
+		for (const key of Object.keys(require.cache)) { if (!loaded.has(key)) { delete require.cache[key]; } }
+		delete require.cache[modulePath];
+	}
+});
+
 test('shortcut sends with noncancelable status and preserves the manual verification fallback', async () => {
 	const Module = require('module'), original = Module._load;
 	const commands = new Map<string, () => Promise<void>>(), locations: number[] = [];

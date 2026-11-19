@@ -18,19 +18,24 @@ app.whenReady().then(async () => {
 		const { BrowserViewMainService } = require(path.join(audit, 'main.cjs'));
 		const { CodeforcesSessionClient, cfForm, cfList } = require(path.join(audit, 'client-fixtures.cjs'));
 		let cancelled = false, disposed = false, reconciles = 0;
-		const host = { codeforcesClients: new Map(), codeforcesRequests: new Map(), ojReads: new Map(),
-			windowsMainService: { getWindowById: id => id === 1 ? { openedWorkspace: { id: 'fixture' } } : undefined } };
-		for (const name of ['codeforcesClient','prepareCodeforcesTask','submitCodeforcesTask','cancelCodeforcesTask','readCodeforcesRecord','releaseCodeforcesRecord','reconcileCodeforcesAttempt','readOjProblem']) {
+		const host = {
+			codeforcesClients: new Map(), codeforcesRequests: new Map(), ojReads: new Map(), cancelledOjLanguageReads: new Set(),
+			windowsMainService: { getWindowById: id => id === 1 ? { openedWorkspace: { id: 'fixture' } } : undefined }
+		};
+		for (const name of ['codeforcesClient', 'prepareCodeforcesTask', 'submitCodeforcesTask', 'cancelCodeforcesTask', 'readCodeforcesRecord', 'releaseCodeforcesRecord', 'reconcileCodeforcesAttempt', 'readOjProblem', 'readOjLanguages', 'cancelOjLanguageRead']) {
 			host[name] = BrowserViewMainService.prototype[name];
 		}
 		const problem = { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
 		const payload = { source: 'int main(){}', languageId: '54', fileName: '4_a.cpp' };
 		const record = { problem, id: '22', url: 'https://codeforces.com/contest/4/submission/22' };
+		const languageOptions = [{ id: '89', label: 'GNU G++20 13.2 (64 bit, winlibs)', family: 'cpp' }];
+		let languageFailure, holdLanguages, languageReads = 0, languageSessions = 0;
 		const client = {
+			readLanguages: async (target, signal) => { languageReads++; assert.equal(target.url, problem.url); await holdLanguages?.(signal); signal.throwIfAborted(); if (languageFailure) { throw new Error(languageFailure); } return languageOptions; },
 			prepare: async (_, signal) => { signal.throwIfAborted(); return { ownerKey: 'tourist', languages: [], hasDraft: false }; },
 			submit: async (_, __, ___, ____, signal) => new Promise(resolve => { signal.addEventListener('abort', () => { cancelled = true; resolve({ kind: 'unconfirmed', problem, attemptId: 'once', message: 'uncertain' }); }); }),
 			reconcile: async (attemptId, signal) => { signal.throwIfAborted(); assert.equal(attemptId, 'once'); reconciles++; return { kind: 'record', record }; },
-			readRecord: async () => ({ ref: record, rawStatus: 'Accepted' }), releaseRecord: () => {}, dispose: () => { disposed = true; }
+			readRecord: async () => ({ ref: record, rawStatus: 'Accepted' }), releaseRecord: () => { }, dispose: () => { disposed = true; }
 		};
 		host.codeforcesClients.set('1:global', { windowId: 1, scope: 'global', session: { id: 'global', storageScope: 'global' }, client });
 		host.codeforcesClients.set('1:workspace:other', { windowId: 1, session: { id: 'workspace:other', storageScope: 'workspace' }, client });
@@ -46,16 +51,68 @@ app.whenReady().then(async () => {
 		await assert.rejects(host.reconcileCodeforcesAttempt('global', 2, 'once'), /owner/);
 		assert.equal(host.codeforcesRequests.size, 0);
 		let actual = 'https://codeforces.com/problemset/problem/4/A?locale=en', parsed = 0;
-		host._getBrowserView = () => ({ owner: { mainWindowId: 1 }, getWebContentsView: () => ({ webContents: { getURL: () => actual } }) });
+		const readEvents = new EventEmitter(), readContents = { getURL: () => actual, isDestroyed: () => false };
+		const readView = {
+			owner: { mainWindowId: 1 }, session: { id: 'global', storageScope: 'global' }, getWebContentsView: () => ({ webContents: readContents }),
+			onDidClose: listener => { readEvents.on('close', listener); return { dispose() { readEvents.removeListener('close', listener); } }; },
+			onDidNavigate: listener => { readEvents.on('navigate', listener); return { dispose() { readEvents.removeListener('navigate', listener); } }; }
+		};
+		host._getBrowserView = () => readView;
+		host.openCodeforcesSession = async (owner, scope) => { languageSessions++; assert.equal(owner, 1); assert.equal(scope, 'global'); return 'global'; };
 		host.parseProblem = async () => { parsed++; return { url: actual, json: '{"name":"Watermelon","tests":[{"input":"8","output":"YES"}]}' }; };
 		host._runOjRead = async (id, windowId, url, operation, input) => {
 			assert.equal(id, 'view'); assert.equal(windowId, 1); assert.equal(url, actual); assert.equal(operation, 'readCodeforcesProblem');
 			assert.equal(input.problem.nativeId, '4/A'); assert.equal(input.companion.tests[0].input, '8'); return { ref: problem, title: 'Watermelon' };
 		};
-		assert.equal((await host.readOjProblem('view', 1, problem)).title, 'Watermelon'); assert.equal(parsed, 1);
+		const statement = await host.readOjProblem('view', 1, problem);
+		assert.equal(statement.title, 'Watermelon'); assert.equal(parsed, 1);
+		assert.equal(statement.languages, undefined, 'the statement does not wait for compiler HTTP'); assert.equal(languageReads, 0);
+		const readSession = { id: 'global', storageScope: 'global' }; host.ojSession = () => readSession;
+		assert.deepEqual((await host.readOjLanguages(1, 'global', problem, 'catalogue-1')).languages, languageOptions);
 		actual = 'https://codeforces.com/group/private/contest/4/problem/A';
 		await assert.rejects(host.readOjProblem('view', 1, problem), /changed|route/); assert.equal(parsed, 1);
 		actual = problem.url; await assert.rejects(host.readOjProblem('view', 2, problem), /owner/); assert.equal(parsed, 1);
+		for (const [failure, expected] of [['offline', 'unavailable'], ['codeforces-login-required', 'login-required']]) {
+			languageFailure = failure;
+			const result = await host.readOjLanguages(1, 'global', problem, 'catalogue-failure');
+			assert.deepEqual(result.languages, []); assert.equal(result.languageError, expected);
+		}
+		languageFailure = 'codeforces-session-changed';
+		await assert.rejects(host.readOjLanguages(1, 'global', problem, 'catalogue-changed'), /session-changed/);
+		languageFailure = undefined;
+		let entered; const started = new Promise(resolve => { entered = resolve; });
+		holdLanguages = signal => new Promise((_, reject) => { entered(); signal.addEventListener('abort', () => reject(signal.reason), { once: true }); });
+		const rejected = assert.rejects(host.readOjLanguages(1, 'global', problem, 'cancel-read'), /cancel/);
+		await started; await host.cancelOjLanguageRead(1, 'cancel-read'); await rejected;
+		holdLanguages = undefined;
+		await host.cancelOjLanguageRead(1, 'early-cancel');
+		await assert.rejects(host.readOjLanguages(1, 'global', problem, 'early-cancel'), /cancel/);
+		assert.equal(host.ojReads.size, 0, 'catalogue cancellation does not leak requests');
+		const atcoder = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
+		const previousRead = host._runOjRead, catalogueCalls = { reads: languageReads, sessions: languageSessions };
+		actual = atcoder.url;
+		host._runOjRead = async (_id, _owner, expectedURL, operation, target) => { assert.equal(expectedURL, atcoder.url); assert.equal(operation, 'readAtCoderProblem'); assert.equal(target.nativeId, atcoder.nativeId); return { ref: atcoder, title: 'Product' }; };
+		assert.equal((await host.readOjProblem('view', 1, atcoder)).title, 'Product');
+		assert.deepEqual({ reads: languageReads, sessions: languageSessions }, catalogueCalls, 'AtCoder keeps its existing reader without creating a CF session or requesting a CF form');
+		host._runOjRead = previousRead; actual = problem.url;
+		const catalogueSession = session.fromPartition('oj-readonly-catalogue-fixture');
+		let atcoderMode = 'form';
+		const electronNet = require('electron').net, originalNativeRequest = electronNet.request;
+		electronNet.request = options => {
+			assert.equal(options.method, 'GET'); assert.equal(options.url, 'https://atcoder.jp/contests/abc086/submit?taskScreenName=abc086_a'); assert.equal(options.session, catalogueSession);
+			const request = new EventEmitter(); request.abort = () => { }; request.setHeader = () => { };
+			request.end = () => queueMicrotask(() => {
+				if (atcoderMode === 'login') { request.emit('redirect', 302, 'GET', 'https://atcoder.jp/login?continue=fixture'); return; }
+				const response = new EventEmitter(); response.statusCode = 200; request.emit('response', response);
+				response.emit('data', Buffer.from('<html><body><form action="/contests/abc086/submit" method="post"><input name="data.TaskScreenName" value="abc086_a"><select><option value="6001">C++23 (GCC 15.2)</option><option value="6002">C23 (GCC 14)</option><option value="9000">Python</option></select></form></body></html>')); response.emit('end');
+			}); return request;
+		};
+		const atcoderSession = { ...readSession, electronSession: catalogueSession }; host.ojSession = () => atcoderSession;
+		const atcoderOptions = await host.readOjLanguages(1, 'global', atcoder, 'atcoder-options');
+		assert.deepEqual(atcoderOptions.languages.map(option => option.id), ['6001', '6002'], 'real native GET parses compiler choices from the separate contest submit form');
+		atcoderMode = 'login';
+		assert.equal((await host.readOjLanguages(1, 'global', atcoder, 'atcoder-login')).languageError, 'login-required');
+		electronNet.request = originalNativeRequest; host.ojSession = () => readSession;
 		assert.equal(disposed, false);
 		let preparationCancelled = false;
 		host.ojReads.set('preparation', { windowId: 1, operation: 'prepareCodeforces', cancel() { preparationCancelled = true; } });
@@ -70,11 +127,13 @@ app.whenReady().then(async () => {
 		const watchedClient = new CodeforcesSessionClient({
 			fetch: async url => new Response(url.endsWith('/') ? '<div id="header"><div class="lang-chooser"><a href="/profile/fixture">fixture</a><a href="/logout">Logout</a></div></div>' : url.includes('/submit?') ? cfForm : cfList()),
 			getSigningCookie: () => new Promise(resolve => { finishSigning = resolve; signingStarted(); }),
-			post: async () => { posts++; return { status: 200 }; }, onSessionChange: () => ({ dispose() {} })
+			post: async () => { posts++; return { status: 200 }; }, onSessionChange: () => ({ dispose() { } })
 		});
 		const watcherHost = {
-			_getBrowserView: () => ({ owner: { mainWindowId: 1 }, session: { id: 'global' }, getWebContentsView: () => ({ webContents: { getURL: () => 'https://codeforces.com/', session: { cookies } } }),
-				onDidNavigate(listener) { navigate = listener; return { dispose() {} }; }, onDidClose: () => ({ dispose() {} }) }),
+			_getBrowserView: () => ({
+				owner: { mainWindowId: 1 }, session: { id: 'global' }, getWebContentsView: () => ({ webContents: { getURL: () => 'https://codeforces.com/', session: { cookies } } }),
+				onDidNavigate(listener) { navigate = listener; return { dispose() { } }; }, onDidClose: () => ({ dispose() { } })
+			}),
 			ojSessionWatchers: watchers, codeforcesClients: new Map([['1:global', { windowId: 1, session: { id: 'global' }, client: watchedClient }]]), invalidateCodeforcesSession: BrowserViewMainService.prototype.invalidateCodeforcesSession, _onDidChangeOjSession: { fire: event => sessionEvents.push(event) }
 		};
 		try {
@@ -106,14 +165,17 @@ app.whenReady().then(async () => {
 				? `<div id="header"><div class="lang-chooser"><a href="/profile/${owner}">${owner}</a><a href="/logout">Logout</a></div></div>`
 				: '<div id="header"><a href="/enter">Enter</a><a href="/register">Register</a></div>');
 		});
-		const browserSession = { id: 'global', storageScope: 'global', electronSession: {
-			cookies: native.cookies, fetch: (url, init) => native.fetch(url, { ...init, bypassCustomProtocolHandlers: false })
-		}, connectStorage() {} };
+		const browserSession = {
+			id: 'global', storageScope: 'global', electronSession: {
+				cookies: native.cookies, fetch: (url, init) => native.fetch(url, { ...init, bypassCustomProtocolHandlers: false })
+			}, connectStorage() { }
+		};
 		const nativeTraces = [];
 		const nativeEvents = [];
-		const nativeHost = { codeforcesClients: new Map(), windowsMainService: { getWindowById: id => [1, 2, 3].includes(id) ? { openedWorkspace: { id: 'fixture' } } : undefined },
+		const nativeHost = {
+			codeforcesClients: new Map(), windowsMainService: { getWindowById: id => [1, 2, 3].includes(id) ? { openedWorkspace: { id: 'fixture' } } : undefined },
 			logService: { info(...args) { nativeTraces.push(args); } },
-			instantiationService: { createInstance: () => browserSession }, environmentMainService: {}, applicationStorageMainService: {}, _ensureWindowCloseSubscription() {},
+			instantiationService: { createInstance: () => browserSession }, environmentMainService: {}, applicationStorageMainService: {}, _ensureWindowCloseSubscription() { },
 			_onDidChangeOjSession: { fire(event) { assert.equal(event.site, 'codeforces'); nativeEvents.push(event); identityChanges++; } }
 		};
 		for (const name of ['ojSession', 'openCodeforcesSession', 'codeforcesClient', 'readOjLogin', 'invalidateCodeforcesSession']) { nativeHost[name] = BrowserViewMainService.prototype[name]; }
@@ -139,7 +201,7 @@ app.whenReady().then(async () => {
 			assert.ok(nativeTraces.some(([, event, details]) => event === 'session-invalidated' && details.reason === 'identity-change'));
 			await nativeHost.openCodeforcesSession(2, 'global');
 			await nativeHost.readOjLogin(id, 2, 'codeforces');
-			const isolatedClient = new CodeforcesSessionClient({ fetch: async () => new Response(stallAccounts ? new ReadableStream({ start(controller) { pendingBodies.push(controller); } }) : '<div id="header"><a href="/enter">Enter</a><a href="/register">Register</a></div>'), getSigningCookie: async () => undefined, post: async () => { throw new Error('No source POST in login fixture'); }, onSessionChange: () => ({ dispose() {} }) });
+			const isolatedClient = new CodeforcesSessionClient({ fetch: async () => new Response(stallAccounts ? new ReadableStream({ start(controller) { pendingBodies.push(controller); } }) : '<div id="header"><a href="/enter">Enter</a><a href="/register">Register</a></div>'), getSigningCookie: async () => undefined, post: async () => { throw new Error('No source POST in login fixture'); }, onSessionChange: () => ({ dispose() { } }) });
 			nativeHost.codeforcesClients.set('3:workspace:fixture', { windowId: 3, session: { id: 'workspace:fixture', storageScope: 'workspace' }, client: isolatedClient });
 			nativeEvents.length = 0; owner = 'shared';
 			assert.equal((await nativeHost.readOjLogin(id, 1, 'codeforces')).label, 'shared', 'broadcast does not invalidate the successful source account read');

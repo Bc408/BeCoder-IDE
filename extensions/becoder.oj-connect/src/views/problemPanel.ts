@@ -5,10 +5,11 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { type ProblemDocument, type ProblemRef, type LanguageOption, type SiteId, validateProblem } from '../domain';
+import { type ProblemDocument, type ProblemRef, type LanguageOption, type LanguageCatalogue, type SiteId, validateProblem } from '../domain';
 import { Panel, labels } from './webview';
 import { SourceBinding } from '../sourceBinding';
-import type { OjPreferences } from '../preferences';
+import { defaultLanguage, type OjPreferences } from '../preferences';
+import { compilerCatalogue, resolveCompiler, symbolicCompiler } from '../compilerCatalogue';
 
 export interface ProblemActions {
 	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined;
@@ -16,25 +17,35 @@ export interface ProblemActions {
 	submit(source: vscode.TextDocument, document: ProblemDocument): Promise<void>;
 	importCph(sourceUri: string, document: ProblemDocument): Promise<void>;
 	openOriginal(url: string): Promise<void>;
+	loadLanguages?(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue>;
+}
+interface ProblemPanelEntry {
+	panel: Panel;
+	binding: SourceBinding<vscode.TextDocument>;
+	languageRead?: AbortController;
 }
 export class ProblemPanel implements vscode.Disposable {
-	private readonly panels = new Map<string, { panel: Panel; binding: SourceBinding<vscode.TextDocument> }>();
+	private readonly panels = new Map<string, ProblemPanelEntry>();
 	constructor(private readonly context: vscode.ExtensionContext, private readonly actions: ProblemActions, private readonly preferences?: OjPreferences) { }
 	async open(input: ProblemDocument, sourceUri: string, sourceDocument?: vscode.TextDocument): Promise<void> {
 		const document = validateProblem(input), key = sourceUri + '\n' + document.ref.url;
 		const source = sourceDocument ?? await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));
 		const binding = new SourceBinding(source);
 		const family = source.languageId === 'c' ? 'c' : 'cpp';
-		const languages = document.languages?.filter(option => option.family === family) ?? [];
-		const saved = this.actions.preferredLanguage(document.ref.site, family);
-		const languageId = languages.find(option => option.id === saved)?.id ?? (saved === undefined && !this.preferences?.hasLanguagePreference(document.ref.site, family) && document.ref.site !== 'atcoder' ? languages[0]?.id : undefined);
-		if (languageId && document.ref.site !== 'atcoder') { await this.updateLanguage(document.ref, languages, languageId); }
+		const usingCompilerCatalogue = !document.languages?.length && compilerCatalogue(document.ref.site).length > 0;
+		const languages = (usingCompilerCatalogue ? compilerCatalogue(document.ref.site) : document.languages ?? []).filter(option => option.family === family);
 		if (binding.uri !== sourceUri) { throw new Error(vscode.l10n.t('The original source is unavailable. Reopen the problem from the source editor.')); }
+		const languageId = this.catalogueSelection(document.ref, family, languages, usingCompilerCatalogue);
 		const existing = this.panels.get(key);
 		if (existing) {
 			let current = false;
 			try { existing.binding.assertCurrent(); current = existing.binding.source === source; } catch { /* Explicitly reopening binds the new source. */ }
-			if (current) { existing.panel.reveal(); return; }
+			if (current) {
+				this.cancelLanguageRead(existing);
+				existing.panel.update({ problem: { ...existing.panel.state.problem!, languages: document.languages, languageError: document.languageError }, languages, languageId, languagesLoading: false, usingCompilerCatalogue });
+				this.loadLanguages(key, existing);
+				existing.panel.reveal(); return;
+			}
 			existing.panel.dispose();
 		}
 		const listeners: vscode.Disposable[] = [];
@@ -45,7 +56,7 @@ export class ProblemPanel implements vscode.Disposable {
 			vscode.workspace.onDidDeleteFiles(event => { if (event.files.some(affects)) { binding.invalidate(); } }));
 		const available = document.bodies.map(body => body.locale);
 		const locale = document.ref.site === 'atcoder' ? this.preferences?.statementLocale(available) ?? available.find(value => value === 'en') ?? available[0] : document.bodies.find(body => body.locale.toLowerCase().startsWith(vscode.env.language.toLowerCase().split('-')[0]))?.locale ?? available[0];
-		const panel = new Panel(this.context, { kind: 'problem', labels: labels(), problem: document, languages, languageId, sourceName: path.basename(vscode.Uri.parse(sourceUri).fsPath), locale }, async value => {
+		const panel = new Panel(this.context, { kind: 'problem', labels: labels(), problem: document, languages, languageId, usingCompilerCatalogue, sourceName: path.basename(vscode.Uri.parse(sourceUri).fsPath), locale }, async value => {
 			switch (value.action) {
 				case 'selectLocale':
 					if (document.bodies.some(body => body.locale === value.locale)) {
@@ -58,8 +69,62 @@ export class ProblemPanel implements vscode.Disposable {
 				case 'importCph': binding.assertCurrent(); await this.actions.importCph(sourceUri, document); break;
 				case 'openOriginal': await this.actions.openOriginal(document.ref.url); break;
 			}
-		}, () => { listeners.splice(0).forEach(listener => listener.dispose()); this.panels.delete(key); });
-		this.panels.set(key, { panel, binding });
+		}, () => {
+			listeners.splice(0).forEach(listener => listener.dispose());
+			const entry = this.panels.get(key);
+			if (entry?.panel === panel) { this.cancelLanguageRead(entry); this.panels.delete(key); }
+		});
+		const entry = { panel, binding };
+		this.panels.set(key, entry);
+		this.loadLanguages(key, entry);
+	}
+	private cancelLanguageRead(entry: ProblemPanelEntry): void {
+		const request = entry.languageRead; entry.languageRead = undefined; request?.abort();
+	}
+	private loadLanguages(key: string, entry: ProblemPanelEntry, force = false): void {
+		const problem = entry.panel.state.problem!;
+		if (!this.actions.loadLanguages || (!force && problem.languages?.length) || (problem.ref.site !== 'atcoder' && problem.ref.site !== 'codeforces')) { return; }
+		const request = new AbortController(); entry.languageRead = request;
+		entry.panel.update({ languagesLoading: true });
+		const current = () => this.panels.get(key) === entry && entry.languageRead === request && !request.signal.aborted;
+		void (async () => {
+			let catalogue: LanguageCatalogue;
+			try { catalogue = await this.actions.loadLanguages!(problem.ref, request.signal); }
+			catch { catalogue = { languages: [], languageError: 'unavailable' }; }
+			if (!current()) { return; }
+			entry.languageRead = undefined;
+			const family = entry.binding.source.languageId === 'c' ? 'c' : 'cpp';
+			const usingCompilerCatalogue = !!catalogue.languageError && catalogue.languages.length === 0;
+			const languages = (usingCompilerCatalogue ? compilerCatalogue(problem.ref.site) : catalogue.languages).filter(option => option.family === family);
+			const languageId = this.catalogueSelection(problem.ref, family, languages, usingCompilerCatalogue);
+			entry.panel.update({ problem: { ...entry.panel.state.problem!, languages: catalogue.languages, languageError: catalogue.languageError }, languages, languageId, languagesLoading: false, usingCompilerCatalogue });
+		})();
+	}
+	private catalogueSelection(problem: ProblemRef, family: 'c' | 'cpp', options: readonly LanguageOption[], usingCompilerCatalogue: boolean): string | undefined {
+		const saved = this.actions.preferredLanguage(problem.site, family);
+		const resolved = usingCompilerCatalogue ? options.find(option => option.id === saved)?.id : resolveCompiler(problem.site, family, saved, options);
+		if (!usingCompilerCatalogue && saved && symbolicCompiler(problem.site, family, saved) && resolved) {
+			void Promise.resolve(this.actions.selectLanguage(problem.site, family, resolved)).catch(error => { console.warn('[OJ Connect] Could not store the verified compiler choice', error); });
+		}
+		return resolved ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.site, family) ? defaultLanguage(options, family)?.id : undefined);
+	}
+	refreshLanguages(site: SiteId): void {
+		for (const [key, entry] of this.panels) {
+			if (entry.panel.state.problem?.ref.site !== site) { continue; }
+			this.cancelLanguageRead(entry);
+			this.loadLanguages(key, entry, true);
+		}
+	}
+	updateLanguages(problem: ProblemRef, languages: readonly LanguageOption[]): void {
+		for (const entry of this.panels.values()) {
+			const { panel, binding } = entry;
+			if (panel.state.problem?.ref.url !== problem.url) { continue; }
+			this.cancelLanguageRead(entry);
+			const family = binding.source.languageId === 'c' ? 'c' : 'cpp';
+			const options = languages.filter(option => option.family === family);
+			const languageId = this.catalogueSelection(problem, family, options, false);
+			panel.update({ problem: { ...panel.state.problem, languages, languageError: undefined }, languages: options, languageId, languagesLoading: false, usingCompilerCatalogue: false });
+		}
 	}
 	async updateLanguage(problem: ProblemRef, languages: readonly LanguageOption[], languageId: string): Promise<void> {
 		const selected = languages.find(option => option.id === languageId);
@@ -74,8 +139,9 @@ export class ProblemPanel implements vscode.Disposable {
 	refreshPreferences(): void {
 		for (const { panel, binding } of this.panels.values()) {
 			const problem = panel.state.problem!;
-			const saved = this.actions.preferredLanguage(problem.ref.site, binding.source.languageId === 'c' ? 'c' : 'cpp');
-			const languageId = panel.state.languages?.find(option => option.id === saved)?.id;
+			const family = binding.source.languageId === 'c' ? 'c' : 'cpp';
+			const saved = this.actions.preferredLanguage(problem.ref.site, family);
+			const languageId = panel.state.languages?.find(option => option.id === saved)?.id ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.ref.site, family) ? defaultLanguage(panel.state.languages ?? [], family)?.id : undefined);
 			panel.update({ languageId, ...(problem.ref.site === 'atcoder' ? { locale: this.preferences?.statementLocale(problem.bodies.map(body => body.locale)) } : {}) });
 		}
 	}

@@ -8,7 +8,7 @@ import { codeforcesProblem } from './adapters/codeforces/task';
 import { atCoderProblem } from './adapters/atcoder/task';
 import { luoguProblem } from './adapters/luogu/task';
 import { nowcoderProblem } from './adapters/nowcoder/task';
-export type { SiteId, ISourceSnapshot, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, LanguageOption, SubmissionProgress, SubmissionOutcome, LoginSummary } from 'becoder-oj-connect';
+export type { SiteId, ISourceSnapshot, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, LanguageOption, LanguageCatalogue, SubmissionProgress, SubmissionOutcome, LoginSummary } from 'becoder-oj-connect';
 
 export function object(value: unknown): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) { throw new Error('oj-connect-invalid-data'); }
@@ -58,12 +58,25 @@ export function validateOutcome(raw: unknown): SubmissionOutcome {
 	if (value.kind === 'unconfirmed') { return { kind: 'unconfirmed', problem: validateProblemRef(value.problem), attemptId: text(value.attemptId, 200), message: text(value.message, 2000) }; }
 	throw new Error('oj-connect-invalid-receipt');
 }
+export function validateLanguageCatalogue(raw: unknown): import('becoder-oj-connect').LanguageCatalogue {
+	const value = object(raw);
+	if (value.languageError !== undefined && value.languageError !== 'unavailable' && value.languageError !== 'login-required') { throw new Error('oj-connect-invalid-language'); }
+	const languages = array(value.languages, 100).map(raw => {
+		const option = object(raw);
+		if (option.family !== 'c' && option.family !== 'cpp' || !/^\d+(?::o2)?$/.test(text(option.id, 200))) { throw new Error('oj-connect-invalid-language'); }
+		return { id: text(option.id, 200), label: text(option.label, 200), family: option.family as 'c' | 'cpp' };
+	});
+	if (new Set(languages.map(option => option.id)).size !== languages.length) { throw new Error('oj-connect-invalid-language'); }
+	return { languages, ...(value.languageError === undefined ? {} : { languageError: value.languageError }) };
+}
 export function validateProblem(raw: unknown): ProblemDocument {
 	bounded(raw);
 	const value = object(raw), ref = validateProblemRef(value.ref);
 	if (typeof value.interactive !== 'boolean') { throw new Error('oj-connect-invalid-problem'); }
+	if (value.languageError !== undefined && value.languageError !== 'unavailable' && value.languageError !== 'login-required') { throw new Error('oj-connect-invalid-language'); }
 	return {
 		ref, title: text(value.title, 2048), interactive: value.interactive,
+		...(value.languageError === undefined ? {} : { languageError: value.languageError }),
 		...(value.difficulty === undefined ? {} : { difficulty: metadata(value.difficulty) }),
 		...(value.tags === undefined ? {} : { tags: array(value.tags, 256).map(metadata) }),
 		...(value.languages === undefined ? {} : {

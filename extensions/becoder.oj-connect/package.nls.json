@@ -15,7 +15,7 @@
 	"accounts": "Login Status",
 	"luogu.cCompiler": "Luogu C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
 	"luogu.cppCompiler": "Luogu C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice. O2 variants end in :o2.",
-	"atcoder.cCompiler": "AtCoder C compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
+	"atcoder.cCompiler": "AtCoder C compiler choice. Choosing in the problem panel or submission picker saves the choice here for all projects. Offline choices are checked against the current site catalogue after sign-in. Leave empty for no preference. Unavailable versions require a new choice.",
 	"atcoder.cppCompiler": "AtCoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
 	"statementEnglish": "English",
 	"statementJapanese": "Japanese",

@@ -68,6 +68,37 @@ function completeDocument(root: Element): void {
 	const html = elements(root, node => node.tag === 'html'), body = elements(root, node => node.tag === 'body');
 	if (html.length !== 1 || body.length !== 1 || !html[0].closed || !body[0].closed) { throw new Error('codeforces-incomplete-document'); }
 }
+function compilerOptions(form: Element): LanguageOption[] {
+	const languageSelect = elements(form, node => node.tag === 'select' && node.attrs.name === 'programTypeId')[0];
+	const languages: LanguageOption[] = [];
+	for (const option of languageSelect ? elements(languageSelect, node => node.tag === 'option') : []) {
+		const label = plain(option), id = option.attrs.value;
+		const family = /(?:G\+\+|C\+\+|Clang\+\+)/i.test(label) ? 'cpp' : /\b(?:GNU GCC C|GNU C|Clang C|C\d)/i.test(label) ? 'c' : undefined;
+		if (family && /^\d{1,5}$/.test(id) && label.length <= 200 && !Object.hasOwn(option.attrs, 'disabled')) { languages.push({ id, label, family }); }
+	}
+	if (!languages.length || languages.length > 100 || new Set(languages.map(value => value.id)).size !== languages.length) { throw new Error('codeforces-language-unavailable'); }
+	return languages;
+}
+/** A compiler catalogue does not confer a send permit or require submit-token initialization. */
+export function parseCodeforcesLanguages(problem: ProblemRef, html: string): { ownerKey: string; languages: readonly LanguageOption[] } {
+	const { contest, index } = codeforcesProblemParts(problem), root = document(html), ownerKey = account(root);
+	if (!ownerKey) { throw new Error('codeforces-login-required'); }
+	completeDocument(root);
+	const sidebar = elements(root, node => node.attrs.id === 'sidebar')[0];
+	const contestTable = sidebar && elements(sidebar, node => node.tag === 'table' && elements(node, item => item.tag === 'a' && item.attrs.href === '/contest/' + contest).length > 0)[0];
+	if (!contestTable || !elements(contestTable, node => classes(node, 'contest-state-phase') && plain(node) === 'Finished').length || !elements(contestTable, node => classes(node, 'contest-state-regular') && plain(node) === 'Practice').length) { throw new Error('codeforces-practice-unavailable'); }
+	const forms = elements(root, node => node.tag === 'form' && classes(node, 'submit-form'));
+	if (forms.length !== 1 || !forms[0].closed) { throw new Error('codeforces-incomplete-form'); }
+	const form = forms[0], action = new URL(form.attrs.action ?? '', codeforcesOrigin + '/contest/' + contest + '/submit');
+	if (form.attrs.method?.toLowerCase() !== 'post' || action.origin !== codeforcesOrigin || action.pathname !== '/contest/' + contest + '/submit' || action.username || action.password || action.hash || [...action.searchParams.keys()].some(key => key !== 'csrf_token')) { throw new Error('codeforces-form-action'); }
+	const identities = elements(form, node => node.tag === 'input' && node.attrs.name === 'contestId');
+	const problemSelects = elements(form, node => node.tag === 'select' && node.attrs.name === 'submittedProblemIndex');
+	const languageSelects = elements(form, node => node.tag === 'select' && node.attrs.name === 'programTypeId');
+	if (identities.length !== 1 || identities[0].attrs.value !== contest || problemSelects.length !== 1 || !problemSelects[0].closed || languageSelects.length !== 1 || !languageSelects[0].closed || Object.hasOwn(languageSelects[0].attrs, 'disabled')) { throw new Error('codeforces-form-identity'); }
+	const indices = elements(problemSelects[0], node => node.tag === 'option'), selected = indices.filter(node => Object.hasOwn(node.attrs, 'selected'));
+	if (selected.length > 1 || (selected[0] ?? indices[0])?.attrs.value !== index) { throw new Error('codeforces-form-identity'); }
+	return { ownerKey, languages: compilerOptions(form) };
+}
 function submissionForm(problem: ProblemRef, root: Element): { form: Element; fields: URLSearchParams; csrf: string; action: URL } {
 	const { contest, index } = codeforcesProblemParts(problem);
 	const forms = elements(root, node => node.tag === 'form' && classes(node, 'submit-form'));
@@ -104,14 +135,7 @@ export async function parseCodeforcesForm(problem: ProblemRef, html: string): Pr
 	if (!contestTable || !elements(contestTable, node => classes(node, 'contest-state-phase') && plain(node) === 'Finished').length || !elements(contestTable, node => classes(node, 'contest-state-regular') && plain(node) === 'Practice').length) { throw new Error('codeforces-practice-unavailable'); }
 	const { form, fields, csrf, action } = submissionForm(problem, root);
 	if (fields.get('source')) { throw new Error('codeforces-form-identity'); }
-	const languageSelect = elements(form, node => node.tag === 'select' && node.attrs.name === 'programTypeId')[0];
-	const languages: LanguageOption[] = [];
-	for (const option of languageSelect ? elements(languageSelect, node => node.tag === 'option') : []) {
-		const label = plain(option), id = option.attrs.value;
-		const family = /(?:G\+\+|C\+\+|Clang\+\+)/i.test(label) ? 'cpp' : /\b(?:GNU GCC C|GNU C|Clang C|C\d)/i.test(label) ? 'c' : undefined;
-		if (family && /^\d{1,5}$/.test(id) && label.length <= 200 && !Object.hasOwn(option.attrs, 'disabled')) { languages.push({ id, label, family }); }
-	}
-	if (!languages.length || languages.length > 100 || new Set(languages.map(value => value.id)).size !== languages.length) { throw new Error('codeforces-language-unavailable'); }
+	const languages = compilerOptions(form);
 	const literals = new Map<string, string>(); let outputOnly: readonly string[] | undefined;
 	for (const script of elements(root, node => node.tag === 'script' && !node.attrs.src)) {
 		const source = content(script); if (!/window\._(?:ftaa|bfaa)|\boutputOnlyIndices\b/.test(source)) { continue; }

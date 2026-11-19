@@ -4,11 +4,31 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { codeforcesAccount, parseCodeforcesForm, parseCodeforcesList, parseCodeforcesRecord, sameCodeforcesCompiler } from '../../electron-main/codeforcesProtocol.js';
+import { codeforcesAccount, parseCodeforcesForm, parseCodeforcesLanguages, parseCodeforcesList, parseCodeforcesRecord, sameCodeforcesCompiler } from '../../electron-main/codeforcesProtocol.js';
 
 import { cfProblem, cfForm, cfHeader, cfList, cfRow } from './codeforcesFixtures.js';
 // eslint-disable-next-line local/code-ensure-no-disposables-leak-in-test -- Pure static parser tests allocate no disposables.
 suite('Codeforces static protocol', () => {
+	test('reads the real catalogue structure without requiring submit token initialization or task-type scripts', async () => {
+		// The saved 2192/A response includes fallback token assignments after its initial literals.
+		const fallback = cfForm.replace('</script>', `if (!window._ftaa) { window._ftaa = ''; window._ftaa = fallback; window._ftaa = initialize(); } if (!window._bfaa) { window._bfaa = initialize(); }</script>`);
+		const expected = [{ id: '89', label: 'GNU G++20 13.2 (64 bit, winlibs)', family: 'cpp' }, { id: '43', label: 'GNU GCC C11 5.1.0', family: 'c' }];
+		assert.deepStrictEqual(parseCodeforcesLanguages(cfProblem, fallback), { ownerKey: 'fixture', languages: expected });
+		await assert.rejects(parseCodeforcesForm(cfProblem, fallback), /nonliteral-token/, 'the sending parser must retain its strict token policy');
+		const catalogueOnly = fallback.replace(/<script>[\s\S]*?<\/script>/, '').replace(/<input name="csrf_token"[^>]*>/, '').replace('action="/contest/4/submit?csrf_token=fixture-csrf"', 'action="/contest/4/submit"');
+		assert.deepStrictEqual(parseCodeforcesLanguages(cfProblem, catalogueOnly).languages, expected);
+		await assert.rejects(parseCodeforcesForm(cfProblem, catalogueOnly), /form-action/, 'reading compiler names must not manufacture a send-ready form');
+	});
+	test('readonly catalogues still reject mismatched targets, incomplete pages, foreign forms and ambiguous language lists', () => {
+		for (const html of [
+			cfForm.replace('name="contestId" value="4"', 'name="contestId" value="5"'),
+			cfForm.replace('<option value="A" selected>', '<option value="B" selected>'),
+			cfForm.replace('</html>', ''), cfForm.replace('</form>', ''),
+			cfForm.replace('action="/contest/4/submit?', 'action="https://evil.invalid/contest/4/submit?'),
+			cfForm.replace('>Practice<', '>Virtual<'),
+			cfForm.replace('</select><textarea', '</select><select name="programTypeId"><option value="1">GNU G++20</option></select><textarea')
+		]) { assert.throws(() => parseCodeforcesLanguages(cfProblem, html)); }
+	});
 	test('reads dynamic form fields and literal AST without executing scripts', async () => {
 		const form = await parseCodeforcesForm(cfProblem, cfForm);
 		assert.strictEqual(form.ownerKey, 'fixture');

@@ -16,7 +16,7 @@ function fixture() {
 	let releases = 0, reveals = 0, cancels = 0;
 	const bridge: AtCoderHost = {
 		openTask: async url => ({ handle: 'opaque', url }),
-		inspectTask: async () => ({ languages: [{ id: '6017', label: 'C++23' }], hasDraft: false }),
+		inspectTask: async () => ({ languages: [{ id: '6017', label: 'C++17' }], hasDraft: false }),
 		sendAndConfirm: async (_page, payload) => { sent.push(payload); return { kind: 'record', record: { problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: _page.url }, id: '11', url: 'https://atcoder.jp/contests/abc086/submissions/11' } }; },
 		readProblem: async () => { throw new Error('unused'); }, readRecord: async () => { throw new Error('unused'); }, reconcile: async () => { throw new Error('unused'); }, loginSummary: async () => ({ site: 'atcoder', state: 'unknown' }),
 		cancel: async () => { cancels++; }, release: async () => { releases++; }
@@ -31,6 +31,21 @@ function fixture() {
 	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
 	return { controller: new SubmissionController(host, preferences), bridge, host, sent, releases: () => releases, reveals: () => reveals, cancels: () => cancels };
 }
+test('a first submission uses the same upward compiler default as the statement and preserves an explicit choice', async () => {
+	const f = fixture();
+	const catalogues: string[][] = [];
+	Object.assign(f.host, { onLanguages: (_problem: unknown, options: { id: string }[]) => { catalogues.push(options.map(option => option.id)); } });
+	f.bridge.inspectTask = async () => ({ languages: [{ id: '6017', label: 'C++17 (GCC 7)' }, { id: '6023', label: 'C++23 (GCC 15.2)' }], hasDraft: false });
+	f.host.chooseLanguage = async () => { throw new Error('A default compiler should already be selected.'); };
+	await f.controller.submit(snapshot);
+	assert.deepStrictEqual(catalogues, [['6017', '6023']], 'fresh options must reach open statements even when the picker is skipped');
+	assert.strictEqual(f.sent[0].languageId, '6023');
+	assert.strictEqual(f.controller.preferredLanguage('atcoder', 'cpp'), '6023');
+	await f.controller.selectLanguage('atcoder', 'cpp', '6017');
+	await f.controller.submit(snapshot);
+	assert.strictEqual(f.sent[1].languageId, '6017', 'an explicit older standard must not be replaced');
+});
+
 test('snapshot is fixed before asynchronous language choice and normalized without saving', async () => {
 	const f = fixture(), draft = { ...snapshot };
 	f.host.chooseLanguage = async () => { draft.source = 'later'; draft.version++; return '6017'; };
@@ -79,7 +94,7 @@ test('confirmed submission releases its page and busy state before the result pa
 	let choose!: (value: string) => void;
 	f.host.chooseLanguage = () => new Promise(resolve => { choose = resolve; });
 	// A different source family forces a fresh language choice to hold the next task.
-	f.bridge.inspectTask = async () => ({ languages: [{ id: '5001', label: 'C17' }], hasDraft: false });
+	f.bridge.inspectTask = async () => ({ languages: [{ id: '5001', label: 'C11' }], hasDraft: false });
 	const second = f.controller.submit({ ...snapshot, family: 'c', fileName: 'abc086_a.c' });
 	await new Promise(resolve => setImmediate(resolve));
 	open(); await first;

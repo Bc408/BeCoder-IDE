@@ -12,22 +12,35 @@ export interface NowcoderSessionPorts {
 	fetch(url: string, init: RequestInit): Promise<Response>;
 	synchronizeSession?(): Promise<void>;
 	onSessionChange(listener: () => void): { dispose(): void };
+	onIdentityChange?(): void;
 }
 const origin = 'https://ac.nowcoder.com';
 const accountURL = 'https://gw-c.nowcoder.com/api/sparta/user/info/global/pc';
+
+function cancellable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+	signal.throwIfAborted();
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(signal.reason);
+		signal.addEventListener('abort', abort, { once: true });
+		void pending.then(value => { signal.removeEventListener('abort', abort); resolve(value); }, error => { signal.removeEventListener('abort', abort); reject(error); });
+	});
+}
 
 /** Fixed ACM requests in the browser's Session; no page, remote execution, retries or fallback route. */
 export class NowcoderSessionClient {
 	private generation = 0;
 	private disposed = false;
 	private busy = false;
+	private owner: string | null | undefined;
+	private credentialRevision = 0;
+	private accountRead: Promise<{ owner: string | undefined; revision: number }> | undefined;
 	private readonly requests = new Set<AbortController>();
 	private readonly prepared = new Map<string, { page: NowcoderPage; ownerKey: string; generation: number; languages: Awaited<ReturnType<typeof nowcoderLanguages>> }>();
 	private readonly records = new Map<string, { ref: RecordRef; generation: number; source: string; language: string; owner: string; problemTitle: string }>();
 	private readonly reads = new Map<string, Set<AbortController>>();
 	private readonly listener: { dispose(): void };
-	constructor(private readonly ports: NowcoderSessionPorts) { this.listener = ports.onSessionChange(() => this.invalidate()); }
-	invalidate(): void { this.generation++; this.prepared.clear(); this.records.clear(); for (const controller of this.requests) { controller.abort(new Error('nowcoder-session-changed')); } }
+	constructor(private readonly ports: NowcoderSessionPorts) { this.listener = ports.onSessionChange(() => { void this.refreshIdentity().catch(() => undefined); }); }
+	invalidate(): void { this.generation++; this.owner = undefined; this.accountRead = undefined; this.prepared.clear(); this.records.clear(); for (const controller of this.requests) { controller.abort(new Error('nowcoder-session-changed')); } }
 	dispose(): void { this.disposed = true; this.invalidate(); this.listener.dispose(); }
 	private async text(url: string, init: RequestInit, dispatch?: () => void): Promise<string> {
 		if (this.disposed) { throw new Error('nowcoder-session-stopped'); }
@@ -48,15 +61,42 @@ export class NowcoderSessionClient {
 			} finally { void reader.cancel().catch(() => undefined); }
 			controller.signal.throwIfAborted();
 			return Buffer.concat(chunks).toString('utf8');
+		} catch (error) {
+			throw controller.signal.aborted ? controller.signal.reason : error;
 		} finally { clearTimeout(timer); this.requests.delete(controller); outer?.removeEventListener('abort', abort); }
 	}
-	private async account(signal: AbortSignal): Promise<string | undefined> {
-		const value = nowcoderObject(JSON.parse(await this.text(accountURL, { signal, cache: 'no-store' })));
-		if (value.code === 999) { return undefined; }
-		const id = value.code === 0 ? nowcoderObject(value.data).userId : undefined;
-		if ((typeof id !== 'number' || !Number.isSafeInteger(id)) && typeof id !== 'string' || !/^[1-9]\d*$/.test(String(id))) { throw new Error('nowcoder-account-unknown'); }
-		return String(id);
+	private async readAccount(signal: AbortSignal): Promise<{ owner: string | undefined; revision: number }> {
+		const epoch = this.generation;
+		for (let attempt = 0; attempt < 2; attempt++) {
+			const revision = this.credentialRevision;
+			const value = nowcoderObject(JSON.parse(await this.text(accountURL, { signal, cache: 'no-store' })));
+			const id = value.code === 0 ? nowcoderObject(value.data).userId : undefined;
+			if (value.code !== 999 && ((typeof id !== 'number' || !Number.isSafeInteger(id)) && typeof id !== 'string' || !/^[1-9]\d*$/.test(String(id)))) { throw new Error('nowcoder-account-unknown'); }
+			signal.throwIfAborted(); if (epoch !== this.generation || this.disposed) { throw new Error('nowcoder-session-changed'); }
+			if (revision !== this.credentialRevision) { continue; }
+			const owner = value.code === 999 ? undefined : String(id), next = owner ?? null;
+			if (this.owner !== undefined && this.owner !== next) {
+				this.invalidate(); this.owner = next; this.ports.onIdentityChange?.();
+			} else { this.owner = next; }
+			return { owner, revision };
+		}
+		throw new Error('nowcoder-account-unstable');
 	}
+	private async account(signal: AbortSignal): Promise<string | undefined> {
+		signal.throwIfAborted();
+		if (!this.accountRead) {
+			const epoch = this.generation;
+			const pending = Promise.resolve().then(() => {
+				if (epoch !== this.generation || this.disposed) { throw new Error('nowcoder-session-changed'); }
+				return this.readAccount(new AbortController().signal);
+			}); this.accountRead = pending;
+			void pending.finally(() => { if (this.accountRead === pending) { this.accountRead = undefined; } }).catch(() => undefined);
+		}
+		const result = await cancellable(this.accountRead, signal);
+		if (result.revision !== this.credentialRevision) { throw new Error('nowcoder-account-unstable'); }
+		return result.owner;
+	}
+	async refreshIdentity(): Promise<void> { this.credentialRevision++; await this.account(new AbortController().signal); }
 	async login(signal: AbortSignal): Promise<LoginSummary> {
 		const owner = await this.account(signal);
 		return owner ? { site: 'nowcoder', state: 'signed-in', label: owner, profileUrl: 'https://ac.nowcoder.com/acm/contest/profile/' + owner } : { site: 'nowcoder', state: 'signed-out' };
@@ -64,11 +104,25 @@ export class NowcoderSessionClient {
 	private async page(problem: ProblemRef, signal: AbortSignal): Promise<NowcoderPage> {
 		assertNowcoderProblem(problem); return parseNowcoderPage(problem, await this.text(problem.url, { signal }));
 	}
-	async readProblem(problem: ProblemRef, signal: AbortSignal) { return (await this.page(problem, signal)).document; }
+	async readProblem(problem: ProblemRef, signal: AbortSignal) {
+		const epoch = this.generation, page = await this.page(problem, signal);
+		const assertCurrent = () => { signal.throwIfAborted(); if (epoch !== this.generation || this.disposed) { throw new Error('nowcoder-session-changed'); } };
+		assertCurrent();
+		try {
+			if (!page.languageURL) { throw new Error('nowcoder-language-config-missing'); }
+			const languages = await nowcoderLanguages(await this.text(page.languageURL, { signal }));
+			assertCurrent();
+			return { ...page.document, languages };
+		} catch {
+			assertCurrent();
+			return { ...page.document, languageError: 'unavailable' as const };
+		}
+	}
 	async prepare(problem: ProblemRef, signal: AbortSignal) {
 		assertNowcoderProblem(problem); const epoch = this.generation;
 		const [page, ownerKey] = await Promise.all([this.page(problem, signal), this.account(signal)]);
 		if (!ownerKey) { throw new Error('nowcoder-login-required'); }
+		if (!page.languageURL) { throw new Error('nowcoder-language-config-missing'); }
 		const languages = await nowcoderLanguages(await this.text(page.languageURL, { signal }));
 		signal.throwIfAborted(); if (epoch !== this.generation || this.disposed) { throw new Error('nowcoder-session-changed'); }
 		this.prepared.set(problem.url, { page, ownerKey, generation: epoch, languages });
@@ -86,8 +140,9 @@ export class NowcoderSessionClient {
 			this.busy = true;
 			try {
 				await this.ports.synchronizeSession?.();
+				const owner = await this.account(signal);
 				signal.throwIfAborted();
-				if (prepared.generation !== this.generation || this.disposed) { throw new Error('nowcoder-session-changed'); }
+				if (prepared.generation !== this.generation || this.disposed || owner !== prepared.ownerKey) { throw new Error('nowcoder-session-changed'); }
 				const { page } = prepared;
 				const body = new URLSearchParams({ questionId: page.questionId, tagId: page.tagId, subTagId: page.subTagId, doneQuestionId: page.doneQuestionId, content: payload.source, language: language.id, languageName: language.label });
 				const value = nowcoderObject(JSON.parse(await this.text(origin + '/nccommon/submit_cd', { method: 'POST', signal, headers: { Origin: origin, Referer: problem.url, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: body.toString() }, () => { dispatched = true; })));
@@ -117,6 +172,8 @@ export class NowcoderSessionClient {
 		signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) { abort(); }
 		let reads = this.reads.get(record.url); if (!reads) { reads = new Set(); this.reads.set(record.url, reads); } reads.add(controller);
 		try {
+			const owner = await this.account(controller.signal);
+			if (epoch !== this.generation || owner !== accepted.owner) { throw new Error('nowcoder-session-changed'); }
 			const subTagId = record.problem.nativeId.startsWith('contest/') ? '1' : '0';
 			const raw = JSON.parse(await this.text(origin + '/nccommon/status?' + new URLSearchParams({ submissionId: record.id, tagId: '4', subTagId }), { signal: controller.signal }));
 			if (epoch !== this.generation) { throw new Error('nowcoder-session-changed'); }

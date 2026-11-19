@@ -108,7 +108,7 @@
 					"type": "string",
 					"default": "",
 					"scope": "application",
-					"pattern": "^\\d*$",
+					"pattern": "^(?:\\d*|catalogue:atcoder-c23-gcc)$",
 					"description": "%atcoder.cCompiler%"
 				},
 				"becoder.ojConnect.atcoder.cppCompiler": {

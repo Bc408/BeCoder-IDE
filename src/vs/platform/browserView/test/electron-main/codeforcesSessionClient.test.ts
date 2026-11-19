@@ -38,6 +38,66 @@ suite('Codeforces Session ownership and confirmation', () => {
 		}); clients.push(client);
 		return { client, traces, posts: () => posted, reads: () => sourceReads, result: (value: Record<string, unknown>) => { protocol = value; }, owner: (value: string) => { owner = value; }, form: (value: string) => { formHtml = value; }, list: (value: string, prior = '') => { after = value; before = prior; }, contest: (value: string) => { contestRows = value; }, source: (value: string) => { recordSource = value; }, receipt: (code: number, url = location, body = '') => { status = code; location = url; responseBody = body; }, changed: () => changed(), hold: (callback: (url: string) => Promise<void>) => { onGet = callback; }, challenge: (value: boolean) => { challenge = value; }, loseReceipt: () => { lostReceipt = true; }, failRead: (value: boolean) => { readFailure = value; }, pages: (value: string) => { nextPage = value; }, page: (page: number, html: string) => { listPages.set(page, html); } };
 	}
+	test('reads only current C/C++ form options without preparing a submission or reading account history', async () => {
+		const f = fixture(), requests: string[] = [];
+		f.hold(async url => { requests.push(url); });
+		assert.deepStrictEqual(await f.client.readLanguages(cfProblem, signal()), [
+			{ id: '89', label: 'GNU G++20 13.2 (64 bit, winlibs)', family: 'cpp' },
+			{ id: '43', label: 'GNU GCC C11 5.1.0', family: 'c' }
+		]);
+		assert.deepStrictEqual(requests, ['https://codeforces.com/contest/4/submit?problemIndex=A']);
+		assert.strictEqual(f.posts(), 0); assert.strictEqual(f.reads(), 0);
+		assert.deepStrictEqual(await f.client.submit(cfProblem, payload, 'fixture', 'catalog-is-readonly', signal()), { kind: 'not-sent', reason: 'codeforces-session-changed' });
+		assert.strictEqual(f.posts(), 0, 'reading the catalogue must not create a source-send permit');
+	});
+	test('readonly language options reject cancellation, invalidation and changed account generations', async () => {
+		for (const cause of ['caller', 'session', 'dispose', 'identity'] as const) {
+			const f = fixture(), controller = new AbortController();
+			await f.client.readLanguages(cfProblem, signal());
+			if (cause === 'identity') {
+				f.form(cfForm.replaceAll('/profile/fixture', '/profile/other').replace('fixture</a>', 'other</a>'));
+				await assert.rejects(f.client.readLanguages(cfProblem, signal()), /codeforces-session-changed/);
+			} else {
+				let entered!: () => void, release!: () => void;
+				const started = new Promise<void>(resolve => { entered = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+				f.hold(async () => { entered(); await held; });
+				const rejected = assert.rejects(f.client.readLanguages(cfProblem, controller.signal));
+				await started;
+				if (cause === 'caller') { controller.abort(); }
+				else if (cause === 'session') { f.changed(); }
+				else { f.client.dispose(); }
+				await rejected; release();
+			}
+			assert.strictEqual(f.posts(), 0);
+		}
+	});
+	test('readonly language options report actual login and unavailable form failures without inventing options', async () => {
+		const f = fixture();
+		f.form('<html><body><div id="header"><a href="/enter">Enter</a><a href="/register">Register</a></div></body></html>');
+		await assert.rejects(f.client.readLanguages(cfProblem, signal()), /codeforces-login-required/);
+		f.form('<title>Just a moment...</title>');
+		await assert.rejects(f.client.readLanguages(cfProblem, signal()));
+		assert.strictEqual(f.posts(), 0);
+	});
+	test('readonly catalogues tolerate normal fallback token scripts without creating a submission permit', async () => {
+		const f = fixture();
+		f.form(cfForm.replace('</script>', `if (!window._ftaa) { window._ftaa = initialize(); } if (!window._bfaa) { window._bfaa = fallback; }</script>`));
+		assert.strictEqual((await f.client.readLanguages(cfProblem, signal())).length, 2);
+		assert.strictEqual((await f.client.submit(cfProblem, payload, 'fixture', 'fallback-readonly', signal())).kind, 'not-sent');
+		assert.strictEqual(f.posts(), 0);
+	});
+	test('native failures expose only fixed safe diagnostics instead of account URLs or raw error messages', async () => {
+		for (const [message, failureClass] of [
+			['net::ERR_CONNECTION_RESET at https://private.invalid/?secret=value', 'net::ERR_CONNECTION_RESET'],
+			['Redirect was cancelled for https://private.invalid/?secret=value', 'redirect-cancelled'],
+			['private account and error body', 'request-failed']
+		]) {
+			const f = fixture(); f.hold(async () => { throw new Error(message); });
+			await assert.rejects(f.client.readLanguages(cfProblem, signal()));
+			assert.strictEqual(f.traces.find(value => value.event === 'operation-failed')?.details.failureClass, failureClass);
+			assert.doesNotMatch(JSON.stringify(f.traces), /private|secret|https:\/\//);
+		}
+	});
 	const pendingRow = cfRow('21').replace('<td>Accepted</td>', '<td waiting="true">Running on test 1</td>').replace('15 ms', '0 ms').replace('256 KB', '0 KB');
 	const terminalRow = cfRow('21').replace('15 ms', '937 ms').replace('256 KB', '16 KB');
 	test('retains testcase peak memory through cached and fresh record reads without resending', async () => {

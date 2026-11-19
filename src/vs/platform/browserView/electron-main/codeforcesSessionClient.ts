@@ -5,7 +5,7 @@
 
 // eslint-disable-next-line local/code-import-patterns -- Internal bundled extension DTOs.
 import type { ProblemRef, ICodeforcesSourcePayload, SubmissionOutcome, RecordRef, RecordSnapshot, LoginSummary } from 'becoder-oj-connect';
-import { codeforcesAccount, codeforcesOrigin, codeforcesProblemParts, codeforcesRecord, codeforcesObject, codeforcesResources, parseCodeforcesForm, parseCodeforcesList, parseCodeforcesRecord, isCodeforcesDuplicateRejection, sameCodeforcesCompiler, type CodeforcesForm, type CodeforcesList } from './codeforcesProtocol.js';
+import { codeforcesAccount, codeforcesOrigin, codeforcesProblemParts, codeforcesRecord, codeforcesObject, codeforcesResources, parseCodeforcesForm, parseCodeforcesLanguages, parseCodeforcesList, parseCodeforcesRecord, isCodeforcesDuplicateRejection, sameCodeforcesCompiler, type CodeforcesForm, type CodeforcesList } from './codeforcesProtocol.js';
 import type { CodeforcesPost } from './codeforcesTransport.js';
 import { randomBytes } from 'crypto';
 
@@ -23,6 +23,14 @@ interface Attempt { problem: ProblemRef; owner: string; source: string; language
 interface Accepted { ref: RecordRef; attempt: Attempt; csrf: string; initial?: RecordSnapshot; metadata: Pick<RecordSnapshot, 'language' | 'problemTitle' | 'submittedAt'>; released: boolean }
 type RequestPhase = 'account' | 'submit-form' | 'submission-list' | 'submission-source' | 'source-post';
 function normalize(source: string): string { return source.replace(/\r\n/g, '\n'); }
+function nativeFailureClass(error: unknown, fallback = 'request-failed'): string {
+	for (let depth = 0; error instanceof Error && depth < 2; depth++, error = error.cause) {
+		const net = /\bnet::ERR_[A-Z0-9_]{1,64}\b/.exec(error.message)?.[0];
+		if (net) { return net; }
+		if (error.message.includes('Redirect was cancelled')) { return 'redirect-cancelled'; }
+	}
+	return fallback;
+}
 function cancellable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 	signal.throwIfAborted();
 	return new Promise((resolve, reject) => {
@@ -86,7 +94,7 @@ export class CodeforcesSessionClient {
 		} catch (error) {
 			const failure = controller.signal.aborted ? controller.signal.reason : error;
 			const reason = failure instanceof Error && /^codeforces-[a-z-]+$/.test(failure.message) ? failure.message : 'codeforces-request-failed';
-			this.trace('operation-failed', { phase, requestId, elapsedMs: Date.now() - started, reason }); throw failure;
+			this.trace('operation-failed', { phase, requestId, elapsedMs: Date.now() - started, reason, failureClass: nativeFailureClass(failure) }); throw failure;
 		}
 		finally { clearTimeout(timer); signal.removeEventListener('abort', abort); this.requests.delete(controller); }
 	}
@@ -98,6 +106,7 @@ export class CodeforcesSessionClient {
 			if (!response.body) { throw new Error('codeforces-empty-response'); }
 			const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
 			try { for (; ;) { inner.throwIfAborted(); const part = await reader.read(); if (part.done) { break; } size += part.value.byteLength; if (size > 4 * 1024 * 1024) { throw new Error('codeforces-response-too-large'); } chunks.push(part.value); } }
+			catch (error) { this.trace('response-read-failed', { phase, failureClass: nativeFailureClass(error, 'response-body-read') }); throw error; }
 			finally { void reader.cancel().catch(() => undefined); }
 			inner.throwIfAborted(); return Buffer.concat(chunks).toString('utf8');
 		});
@@ -116,6 +125,14 @@ export class CodeforcesSessionClient {
 		const { contest } = codeforcesProblemParts(problem);
 		try { return parseCodeforcesList(problem, await this.text('submission-list', '/contest/' + contest + '/my' + (page > 1 ? '/page/' + page : ''), signal), page); }
 		catch (error) { if (error instanceof Error && error.message === 'codeforces-login-required') { this.observe(undefined); } throw error; }
+	}
+	async readLanguages(problem: ProblemRef, signal: AbortSignal, read?: (signal: AbortSignal) => Promise<string>): Promise<CodeforcesForm['languages']> {
+		const { contest, index } = codeforcesProblemParts(problem), epoch = this.generation;
+		const html = read ? await this.operation('submit-form', signal, read) : await this.text('submit-form', '/contest/' + contest + '/submit?problemIndex=' + index, signal);
+		this.valid(epoch, signal);
+		const form = parseCodeforcesLanguages(problem, html);
+		this.valid(epoch, signal); this.observe(form.ownerKey); this.valid(epoch, signal);
+		return form.languages;
 	}
 	async prepare(problem: ProblemRef, signal: AbortSignal): Promise<{ ownerKey: string; languages: CodeforcesForm['languages']; hasDraft: false }> {
 		const { contest, index } = codeforcesProblemParts(problem), epoch = this.generation;

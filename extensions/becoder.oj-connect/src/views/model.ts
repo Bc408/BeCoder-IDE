@@ -16,6 +16,8 @@ export interface PanelState {
 	tracking?: boolean;
 	canRetry?: boolean;
 	languages?: readonly LanguageOption[];
+	languagesLoading?: boolean;
+	usingCompilerCatalogue?: boolean;
 	languageId?: string;
 }
 export type PanelAction = { action: 'submit' | 'importCph' | 'openOriginal' | 'viewSource' | 'continueQuery' | 'ready' } | { action: 'selectLocale'; locale: string } | { action: 'selectLanguage'; languageId: string } | { action: 'renderContent'; content: string; format: 'markdown' | 'html' };

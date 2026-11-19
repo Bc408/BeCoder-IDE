@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { loginContent } from '../src/views/loginContent.ts';
 const require = createRequire(import.meta.url);
+const { defaultLanguage } = require('../out/preferences.js');
+const { compilerCatalogue } = require('../out/compilerCatalogue.js');
 const { renderMarkdownTree, renderHtmlTree } = require('../out/markdown.js');
 const output = path.resolve(process.env.BECODER_OJ_CONNECT_RENDER_AUDIT ?? '../../tmp/oj-connect-audit/shared-workflow/render');
 await mkdir(output, { recursive: true });
@@ -33,6 +35,7 @@ labels.status_Judging = '正在评测';
 labels.status_Compiling = '正在编译';
 labels.officialSource = '官网记录源码';
 labels.sentSource = '本次发送的源码，尚未从官网核对';
+Object.assign(labels, { chooseLanguage: '请选择编译器', languagesLoading: '正在读取编译器…', compilerCatalogue: '已采证目录，登录后校验', languagesUnavailable: '编译器选项暂不可用', languagesLoginRequired: '请登录后读取编译器选项' });
 const server = createServer(async (req, res) => {
 	try {
 		if (req.url === '/accounts') {
@@ -179,6 +182,64 @@ try {
 	}
 	await page.route('https://example.org/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><rect width="100" height="30" fill="#507cab"/></svg>' }));
 	await page.route('https://www.nowcoder.com/equation?**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="24"><text y="18">a+b</text></svg>' }));
+	for (const [site, ref, cppLabel, cLabel] of [
+		['luogu', { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, 'C++20 (GCC) (O2)', 'C17 (GCC) (O2)'],
+		['atcoder', { site: 'atcoder', nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' }, 'C++23 (GCC 15.2.0)', 'C23 (GCC 14.2.0)'],
+		['codeforces', cfProblem, 'GNU G++23 14.2 (64 bit, msys2)', 'GNU GCC C17 7.3.0'],
+		['nowcoder', { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }, 'C++(g++ 13)', 'C(gcc 10)']
+	]) {
+		for (const family of ['cpp', 'c']) {
+			const languages = [{ id: 'cpp', label: cppLabel, family: 'cpp' }, { id: 'c', label: cLabel, family: 'c' }].filter(option => option.family === family);
+			const selected = defaultLanguage(languages, family);
+			state = { kind: 'problem', labels, sourceName: 'solution.' + family, languages, languageId: selected.id, problem: { ref, title: 'Compiler selection', limits: [], bodies: [{ locale: 'en', sections: [{ format: 'html', content: '<p>Statement</p>' }] }], samples: [], interactive: false } };
+			for (const width of [420, 700]) {
+				await page.setViewportSize({ width, height: 500 }); await page.goto(url); await page.locator('article').waitFor();
+				await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
+				const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+				assert.equal(await compiler.inputValue(), selected.id);
+				assert.equal(await compiler.locator('option:checked').textContent(), selected.label);
+				assert.equal(await compiler.getAttribute('title'), selected.label, 'the complete official label remains available in a narrow pane');
+				assert.equal(await compiler.locator('option').count(), 1, 'only the bound source language family is shown');
+				await page.screenshot({ path: path.join(output, `${site}-compiler-${family}-${width}.png`) });
+			}
+		}
+	}
+	for (const site of ['atcoder', 'codeforces']) {
+		state.problem.ref = site === 'codeforces' ? cfProblem : { site, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
+		state.languages = []; state.languageId = undefined; state.languagesLoading = true;
+		await page.goto(url); await page.locator('article').waitFor();
+		const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+		assert.equal(await compiler.isDisabled(), true);
+		assert.equal(await compiler.locator('option:checked').textContent(), labels.languagesLoading);
+		await page.screenshot({ path: path.join(output, `${site}-compiler-loading.png`) });
+		state.languagesLoading = false;
+	}
+	for (const site of ['atcoder', 'codeforces']) {
+		for (const family of ['c', 'cpp']) {
+			state.problem.ref = site === 'codeforces' ? cfProblem : { site, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
+			state.languages = compilerCatalogue(site).filter(option => option.family === family);
+			state.languageId = defaultLanguage(state.languages, family)?.id; state.usingCompilerCatalogue = true;
+			for (const loading of [true, false]) {
+				state.languagesLoading = loading; state.problem.languageError = loading ? undefined : 'login-required';
+				await page.goto(url); await page.locator('article').waitFor();
+				const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+				assert.equal(await compiler.isDisabled(), false, 'captured compilers stay selectable while loading or signed out');
+				assert.ok((await compiler.getAttribute('title')).includes(labels.compilerCatalogue), 'the tooltip identifies captured options and the later validation');
+				assert.equal(await page.getByText(labels.compilerCatalogue, { exact: true }).count(), 0, 'catalogue provenance stays in the tooltip');
+				const selected = state.languages.at(-1);
+				await compiler.selectOption(selected.id);
+				await page.waitForFunction(id => window.__messages.some(message => message.data?.action === 'selectLanguage' && message.data.languageId === id), selected.id);
+				await page.screenshot({ path: path.join(output, `${site}-compiler-catalogue-${family}-${loading ? 'loading' : 'signed-out'}.png`) });
+			}
+		}
+	}
+	state.usingCompilerCatalogue = false;
+	for (const [languageError, expected] of [['unavailable', labels.languagesUnavailable], ['login-required', labels.languagesLoginRequired]]) {
+		state.problem.languageError = languageError; state.languages = []; state.languageId = undefined;
+		await page.goto(url); await page.locator('article').waitFor();
+		const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+		assert.equal(await compiler.isDisabled(), true); assert.equal(await compiler.locator('option:checked').textContent(), expected);
+	}
 	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
 		const ref = { site, nativeId: site === 'luogu' ? 'B2005' : site === 'atcoder' ? 'abc484/abc484_c' : site === 'codeforces' ? '2121/H' : 'problem/18204', url: site === 'codeforces' ? 'https://codeforces.com/contest/2121/problem/H' : 'https://example.org/problem' };
 		state = { kind: 'problem', labels, sourceName: 'solution.cpp', languages: [{ id: 'cpp', label: 'C++23 (GCC 15.2.0) (O2)', family: 'cpp' }], languageId: 'cpp', problem: { ref, title: site === 'luogu' ? '入门测试题目' : 'A+B Problem', limits: [{ label: 'Time Limit', value: '1.00s' }, { label: 'Memory Limit', value: '128.00MiB' }], bodies: [{ locale: 'en', sections: [{ heading: '题目描述', format: 'markdown', content: '求两个整数的和。' }] }], samples: [] } };
@@ -349,7 +410,7 @@ try {
 		if (site === 'atcoder') {
 			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.languageId = undefined; window.__OJ_STATE__ = next; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
 			await page.getByRole('combobox', { name: '语言', exact: true }).locator('option[value=""]').waitFor({ state: 'attached' });
-			assert.equal(await page.getByRole('combobox', { name: '语言', exact: true }).inputValue(), '', 'no compiler is silently selected on the first statement');
+			assert.equal(await page.getByRole('combobox', { name: '语言', exact: true }).inputValue(), '', 'an unavailable explicit preference is represented by an empty selection');
 		}
 		await page.getByRole('combobox', { name: '语言', exact: true }).selectOption('two');
 		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLanguage', languageId: 'two' });

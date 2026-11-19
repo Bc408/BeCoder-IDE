@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const { buildSync } = require('../extensions/becoder.oj-connect/node_modules/esbuild');
 const output = path.resolve('tmp/oj-connect-audit/codeforces-native');
 mkdirSync(output, { recursive: true });
-const inputs = ['electron-main/codeforcesProtocol', 'electron-main/codeforcesTransport', 'electron-main/codeforcesSessionClient', 'common/codeforcesBridge'];
+const inputs = ['electron-main/codeforcesProtocol', 'electron-main/codeforcesTransport', 'electron-main/ojLanguageTransport', 'electron-main/codeforcesSessionClient', 'common/codeforcesBridge'];
 const tests = inputs.filter(input => (!process.argv.includes('--unit-only') || input.startsWith('electron-main/')) && existsSync('src/vs/platform/browserView/test/' + input + '.test.ts')).map(input => {
 	const outfile = path.join(output, path.basename(input) + '.test.cjs');
 	buildSync({ entryPoints: ['src/vs/platform/browserView/test/' + input + '.test.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile }); return outfile;

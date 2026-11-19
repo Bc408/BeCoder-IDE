@@ -167,7 +167,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		};
 		if (browsers.onDidChangeBrowserViews) { this._register(browsers.onDidChangeBrowserViews(watchBrowsers)); }
 		watchBrowsers();
-		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false, waitForLoad = true): Promise<BrowserEditorInput> => {
+		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false, waitForLoad = true, problemRead = false): Promise<BrowserEditorInput> => {
 			const epoch = lifecycleEpoch;
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			if (scope !== undefined && await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
@@ -182,6 +182,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			const preferred = siteViews.get(origin);
 			if (candidates.length > 1 && !candidates.includes(preferred!)) { throw new Error('oj-connect-browser-ambiguous'); }
 			let input = candidates.includes(preferred!) ? preferred : candidates[0];
+			const created = !input;
 			if (!input) {
 				assertLifecycle(epoch);
 				signal?.throwIfAborted();
@@ -197,6 +198,10 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 					signal?.throwIfAborted();
 					await Promise.race([input.resolve(), new Promise<never>((_resolve, reject) => { abort = () => reject(signal?.reason); signal?.addEventListener('abort', abort, { once: true }); })]);
 				} finally { if (abort) { signal?.removeEventListener('abort', abort); } }
+				if (problemRead && created && input.model && ownedInputs.has(input) && !editors.editors.includes(input)) {
+					await service.waitForOjProblemDocument(input.model.id, owner, url);
+					assertLifecycle(epoch); signal?.throwIfAborted();
+				}
 				const started = Date.now();
 				while (Date.now() - started < 20000) {
 					assertLifecycle(epoch);
@@ -246,7 +251,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			else if (site === 'luogu') { assertLuoguProblem(problem); }
 			else { const task = atCoderTask(problem.url); if (!task || problem.nativeId !== task.contestId + '/' + task.taskId) { throw new Error('oj-connect-problem-route'); } }
 			if (site === 'luogu') { return service.readOjProblem(await luoguSessionId(), owner, problem); }
-			const input = site === 'codeforces' ? await openPage(problem.url, undefined, await browsers.resolveStorageScope(), true) : await openPage(problem.url);
+			const input = await openPage(problem.url, undefined, await browsers.resolveStorageScope(), false, true, true);
 			if (!input.model) { throw new Error('oj-connect-page-not-ready'); }
 			const page = { viewId: input.model.id };
 			try { return await service.readOjProblem(input.model.id, owner, problem); }
@@ -540,6 +545,19 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'codeforces')));
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'loginSummary', () => loginSummary('codeforces')));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'atcoder')));
+		for (const site of ['atcoder', 'codeforces'] as const) {
+			const languagePrefix = '_becoder.ojConnect.' + site + '.';
+			this._register(CommandsRegistry.registerCommand(languagePrefix + 'cancelLanguageRead', (_accessor, requestId: string) => service.cancelOjLanguageRead(owner, requestId)));
+			this._register(CommandsRegistry.registerCommand(languagePrefix + 'readLanguages', async (_accessor, problem: ProblemRef, requestId: string) => {
+				if (problem?.site !== site || !active()) { throw new Error('oj-connect-problem-route'); }
+				const epoch = lifecycleEpoch, scope = await browsers.resolveStorageScope();
+				assertLifecycle(epoch);
+				const result = await service.readOjLanguages(owner, scope, problem, requestId);
+				assertLifecycle(epoch);
+				if (await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
+				return result;
+			}));
+		}
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.loginSummary', () => loginSummary('atcoder')));
 		const prefix = '_becoder.ojConnect.atcoder.';
 		this._register(CommandsRegistry.registerCommand(prefix + 'openTask', (_accessor, url: string, uri: string) => this.bridge.openTask(url, uri)));

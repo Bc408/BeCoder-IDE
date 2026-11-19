@@ -57,7 +57,7 @@ export default defineConfig(
 		},
 		plugins: {
 			'local': pluginLocal,
-			'header': fixupPluginRules(/** @type {any} */ (pluginHeader)),
+			'header': fixupPluginRules(/** @type {any} */(pluginHeader)),
 		},
 		rules: {
 			'constructor-super': 'warn',
@@ -307,9 +307,12 @@ export default defineConfig(
 			'scripts/test-{atcoder-shortcut,luogu-session-host,oj-connect}.cjs',
 			'scripts/test-luogu-session.cts',
 			'scripts/test-nowcoder{.mts,-session.cts}',
+			'scripts/test-oj-problem-ready.cts',
 			'scripts/test-codeforces{.mts,-host.cts}',
 			'src/vs/platform/browserView/electron-main/codeforces{Protocol,SessionClient,Transport}.ts',
 			'src/vs/platform/browserView/test/electron-main/codeforces*.ts',
+			'src/vs/platform/browserView/electron-main/ojLanguageTransport.ts',
+			'src/vs/platform/browserView/test/electron-main/ojLanguageTransport.test.ts',
 			'src/vs/platform/browserView/electron-main/nowcoder{Protocol,SessionClient}.ts',
 			'src/vs/platform/browserView/test/electron-main/nowcoder{Protocol,SessionClient}.test.ts',
 			'src/vs/platform/browserView/common/luoguProtocol.ts',

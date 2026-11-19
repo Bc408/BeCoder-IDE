@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost } from './browserHost';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
@@ -22,7 +23,28 @@ import { cphSamples } from './cphHost';
 import { OperationError } from './operationError';
 import { userError } from './messages';
 import { OjPreferences } from './preferences';
-import type { ProblemRef, ProblemDocument, RecordRef, SubmissionOutcome, ISourceSnapshot } from './domain';
+import { validateLanguageCatalogue, type LanguageCatalogue, type ProblemRef, type ProblemDocument, type RecordRef, type SubmissionOutcome, type ISourceSnapshot } from './domain';
+
+export async function readProblemLanguages(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue> {
+	if (signal.aborted) { throw new Error('oj-connect-operation-cancelled'); }
+	if (problem.site !== 'atcoder' && problem.site !== 'codeforces') { return { languages: [], languageError: 'unavailable' }; }
+	const command = '_becoder.ojConnect.' + problem.site;
+	const requestId = randomUUID();
+	let abort!: () => void;
+	try {
+		return await new Promise<LanguageCatalogue>((resolve, reject) => {
+			abort = () => {
+				void vscode.commands.executeCommand(command + '.cancelLanguageRead', requestId).then(undefined, () => undefined);
+				reject(new Error('oj-connect-operation-cancelled'));
+			};
+			signal.addEventListener('abort', abort, { once: true });
+			void vscode.commands.executeCommand(command + '.readLanguages', problem, requestId).then(raw => {
+				if (signal.aborted) { return; }
+				try { resolve(validateLanguageCatalogue(raw)); } catch (error) { reject(error); }
+			}, reject);
+		});
+	} finally { signal.removeEventListener('abort', abort); }
+}
 
 let controller: SubmissionController | undefined;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -46,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute)), new CodeforcesAdapter(new CommandCodeforcesHost(execute))];
 	const directories = () => readDirectories(vscode.workspace.getConfiguration('becoder.ojConnect').get('directories'));
 	const original = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
-	const login = new LoginView(context, adapters, execute, original);
+	const login = new LoginView(context, adapters, execute, original, site => problems?.refreshLanguages(site));
 	context.subscriptions.push(login, vscode.window.registerWebviewViewProvider('becoder.ojConnect.accounts', login));
 	const records = new RecordPanel(context, adapters, original, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
 	const columns = new Map<string, vscode.ViewColumn>();
@@ -66,6 +88,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	};
 	controller = new SubmissionController({
 		adapters, directories, requestProblem,
+		onLanguages: (problem, options) => problems.updateLanguages(problem, options),
 		chooseLanguage: async (options, fileName, site, problem) => {
 			const selected = await vscode.window.showQuickPick(options, { title: vscode.l10n.t('Submit {0} to {1}', fileName, site) });
 			if (selected) { await problems.updateLanguage(problem, options, selected.id); }
@@ -124,6 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 	};
 	const problems = new ProblemPanel(context, {
+		loadLanguages: readProblemLanguages,
 		preferredLanguage: (site, family) => controller!.preferredLanguage(site, family),
 		selectLanguage: (site, family, languageId) => controller!.selectLanguage(site, family, languageId),
 		submit: async (source, document) => submitDocument(source, document.ref),

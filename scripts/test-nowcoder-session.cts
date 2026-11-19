@@ -19,27 +19,35 @@ app.whenReady().then(async () => {
 		const native = session.fromPartition('nowcoder-native-fixture');
 		const problem = { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' };
 		const payload = { source: 'int main(){}\n', fileName: '18204.cpp', languageId: '2' };
-		let posts = 0, code = 0, uid = 123;
+		let posts = 0, code = 0, uid = 123, pageCookie = '';
 		native.protocol.handle('https', async request => {
 			const url = new URL(request.url);
 			if (url.hostname === 'gw-c.nowcoder.com') { return Response.json({ code: 0, data: { userId: uid } }); }
 			if (url.hostname === 'static.nowcoder.com') { return new Response(`({1:function(){var g=[{id:'2',lang:'C++',suffix:'cpp'}],x=[];window.location.host.includes('ac.nowcoder.com')&&(x=['2'],g[0].lang='C++23');}})`); }
-			if (url.pathname === '/acm/problem/18204') { return new Response(`<script>window.pageInfo={questionId:'235780',problemId:'18204',tagId:'4',codeJudgeType:'0',subTagId:'0',doneQuestionId:'18204'};</script><script src="//static.nowcoder.com/acm/nowcoder/2.0.120/javascripts-acm/lib/env.js"></script><div class="terminal-topic-title">A+B</div><div class="subject-describe">Sum.</div>`); }
+			if (url.pathname === '/acm/problem/18204') {
+				if (pageCookie) { await native.cookies.set({ url: 'https://ac.nowcoder.com', domain: '.nowcoder.com', name: pageCookie, value: 'fixture-rotated', path: '/' }); pageCookie = ''; }
+				return new Response(`<script>window.pageInfo={questionId:'235780',problemId:'18204',tagId:'4',codeJudgeType:'0',subTagId:'0',doneQuestionId:'18204'};</script><script src="//static.nowcoder.com/acm/nowcoder/2.0.120/javascripts-acm/lib/env.js"></script><div class="terminal-topic-title">A+B</div><div class="subject-describe">Sum.</div>`);
+			}
 			if (url.pathname === '/nccommon/submit_cd') { posts++; assert.equal(request.method, 'POST'); assert.equal((await request.formData()).get('content'), payload.source); return Response.json(code ? { code, msg: 'verification' } : { code: 0, data: { submissionId: 12345 } }); }
 			if (url.pathname === '/nccommon/status') { return Response.json({ code: 0, id: 12345, status: 5 }); }
 			throw new Error('Unexpected fixed route');
 		});
-		const browserSession = { id: 'global', electronSession: { cookies: native.cookies, fetch: (url, init) => native.fetch(url, { ...init, bypassCustomProtocolHandlers: false }) }, connectStorage() {} };
+		const browserSession = { id: 'global', electronSession: { cookies: native.cookies, fetch: (url, init) => native.fetch(url, { ...init, bypassCustomProtocolHandlers: false }) }, connectStorage() { } };
 		host = {
 			windowsMainService: { getWindowById: id => id === 1 || id === 2 ? { id, openedWorkspace: { id: 'fixture' } } : undefined },
-			instantiationService: { createInstance: () => browserSession }, environmentMainService: {}, applicationStorageMainService: {}, _ensureWindowCloseSubscription() {},
-			nowcoderClients: new Map(), nowcoderRequests: new Map(), nowcoderAttempts: new Map(), ojReads: new Map(), _onDidChangeOjSession: { fire() {} }
+			instantiationService: { createInstance: () => browserSession }, environmentMainService: {}, applicationStorageMainService: {}, _ensureWindowCloseSubscription() { },
+			nowcoderClients: new Map(), nowcoderRequests: new Map(), nowcoderAttempts: new Map(), ojReads: new Map(), _onDidChangeOjSession: { fire() { } }
 		};
 		for (const name of ['ojSession', 'openNowcoderSession', 'nowcoderClient', 'readOjLogin', 'prepareNowcoderTask', 'submitNowcoderTask', 'readNowcoderRecord', 'releaseNowcoderRecord']) { host[name] = BrowserViewMainService.prototype[name]; }
 		const setToken = value => native.cookies.set({ url: 'https://ac.nowcoder.com', domain: '.nowcoder.com', name: 't', value, path: '/' });
 		await setToken('fixture');
 		const id = await host.openNowcoderSession(1, 'global');
 		assert.equal((await host.readOjLogin(id, 1, 'nowcoder')).state, 'signed-in');
+		const client = host.nowcoderClient(id, 1);
+		for (const cookie of ['NOWCODERUID', 't']) {
+			pageCookie = cookie;
+			assert.equal((await client.readProblem(problem, new AbortController().signal)).title, 'A+B', 'first UID setup and same-account token rotation must retain the first statement read');
+		}
 		await assert.rejects(host.readOjLogin(id, 2, 'nowcoder'), /owner/);
 		await assert.rejects(host.openNowcoderSession(99, 'global'), /owner/);
 		await assert.rejects(host.openNowcoderSession(1, 'ephemeral'), /persistent/);

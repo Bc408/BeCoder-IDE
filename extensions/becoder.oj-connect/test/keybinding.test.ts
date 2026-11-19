@@ -30,3 +30,17 @@ test('account view belongs to a valid independent activity bar container', () =>
 	assert.deepStrictEqual(Object.keys(manifest.contributes.views), [container.id]);
 	assert.deepStrictEqual(manifest.contributes.views[container.id].map((view: { id: string }) => view.id), ['becoder.ojConnect.accounts']);
 });
+
+test('compiler settings allow only the shipped symbolic preselection in its owning site and family', () => {
+	const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
+	const properties = manifest.contributes.configuration.properties;
+	for (const site of ['luogu', 'atcoder', 'codeforces', 'nowcoder']) {
+		for (const family of ['c', 'cpp']) {
+			const pattern = new RegExp(properties['becoder.ojConnect.' + site + '.' + family + 'Compiler'].pattern);
+			assert.strictEqual(pattern.test('catalogue:atcoder-c23-gcc'), site === 'atcoder' && family === 'c');
+			assert.strictEqual(pattern.test('catalogue:atcoder-guessed'), false);
+			assert.strictEqual(pattern.test('6017'), true);
+			assert.strictEqual(pattern.test(''), true);
+		}
+	}
+});

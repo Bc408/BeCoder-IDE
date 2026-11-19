@@ -162,3 +162,21 @@ test('registered accounts are clickable before their first login check completes
 		} finally { dom.window.close(); }
 	} finally { login?.dispose(); Module._load = original; }
 });
+
+test('only a current transition to signed-in refreshes the matching compiler panels', async () => {
+	const Module = require('module'), original = Module._load;
+	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? { l10n: { t: (value: string) => value } } : original.call(this, id, ...args); };
+	let login: import('../src/views/loginView').LoginView | undefined;
+	try {
+		const { LoginView } = require('../src/views/loginView');
+		const sites: string[] = [];
+		let state = 'signed-out';
+		const adapters = [{ site: 'atcoder', loginSummary: async () => ({ site: 'atcoder', state }) }] as unknown as OjAdapter[];
+		login = new LoginView({}, adapters, async () => undefined, async () => undefined, (site: string) => { sites.push(site); });
+		await login!.refresh(); assert.deepStrictEqual(sites, []);
+		state = 'signed-in'; await login!.refresh(); assert.deepStrictEqual(sites, ['atcoder']);
+		await login!.refresh(); assert.deepStrictEqual(sites, ['atcoder'], 'unchanged account refreshes do not restart catalogue requests');
+		state = 'signed-out'; await login!.refresh();
+		state = 'signed-in'; await login!.refresh(); assert.deepStrictEqual(sites, ['atcoder', 'atcoder']);
+	} finally { login?.dispose(); Module._load = original; }
+});

@@ -13,10 +13,11 @@ export function labels(): Record<string, string> {
 	return {
 		rendering: vscode.l10n.t('Rendering the statement…'), renderFailed: vscode.l10n.t('Could not render the statement.'), submit: vscode.l10n.t('Submit'), submitCode: vscode.l10n.t('Submit Code'), importCph: vscode.l10n.t('Send to CPH'),
 		continueQuery: vscode.l10n.t('Continue Querying'), record: vscode.l10n.t('Submission'),
+		compilerCatalogue: vscode.l10n.t('Verified catalogue; checked again after sign-in'),
 		tracking: vscode.l10n.t('Reading the current submission result…'), language: vscode.l10n.t('Language'),
 		interactive: vscode.l10n.t('Interactive problem'), samples: vscode.l10n.t('Samples'), input: vscode.l10n.t('Input'), output: vscode.l10n.t('Output'),
 		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Select and copy the sample'), score: vscode.l10n.t('Score'),
-		chooseLanguage: vscode.l10n.t('Choose language when submitting'), statementLanguage: vscode.l10n.t('Statement language'), problem: vscode.l10n.t('Problem'), verdict: vscode.l10n.t('Verdict'), resources: vscode.l10n.t('Time / Memory'),
+		chooseLanguage: vscode.l10n.t('Choose a compiler'), languagesLoading: vscode.l10n.t('Loading compiler options…'), languagesUnavailable: vscode.l10n.t('Compiler options unavailable'), languagesLoginRequired: vscode.l10n.t('Sign in to load compiler options'), statementLanguage: vscode.l10n.t('Statement language'), problem: vscode.l10n.t('Problem'), verdict: vscode.l10n.t('Verdict'), resources: vscode.l10n.t('Time / Memory'),
 		'Time Limit': vscode.l10n.t('Time Limit'), 'Memory Limit': vscode.l10n.t('Memory Limit'),
 		difficulty: vscode.l10n.t('Problem Difficulty'), tags: vscode.l10n.t('Problem Tags'),
 		testCases: vscode.l10n.t('Test Cases'), passedTests: vscode.l10n.t('Passed tests'),

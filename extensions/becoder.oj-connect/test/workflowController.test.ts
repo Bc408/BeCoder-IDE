@@ -21,7 +21,7 @@ function fixture() {
 	const make = (site: 'luogu' | 'atcoder', resolve: (input: string) => ProblemRef | undefined): OjAdapter => ({
 		site, resolve, fileName: () => 'P1001.cpp', readProblem: async () => { throw new Error('unused'); }, loginSummary: async () => ({ site, state: 'unknown' }),
 		prepare: async problem => ({
-			languages: [{ id: site === 'luogu' ? '28:o2' : '6017', label: 'C++', family: 'cpp' }, { id: site === 'luogu' ? '2' : '6016', label: 'C', family: 'c' }], hasDraft: false,
+			languages: [{ id: site === 'luogu' ? '28:o2' : '6017', label: 'C++17', family: 'cpp' }, { id: site === 'luogu' ? '2' : '6016', label: 'C11', family: 'c' }], hasDraft: false,
 			send: async input => { sent.push({ site, snapshot: input.snapshot, languageId: input.languageId }); return { kind: 'record', record: { problem, id: '11', url: site === 'luogu' ? 'https://www.luogu.com.cn/record/11' : 'https://atcoder.jp/contests/abc086/submissions/11' } }; },
 			cancel: async () => { cancelled++; }, dispose: async () => { released++; }
 		}),
@@ -61,10 +61,10 @@ test('AtCoder compiler choices persist across controllers and an expired choice 
 	const source = { ...snapshot, uri: 'file:///C:/cpp/atcoder/abc086_a.cpp', fileName: 'abc086_a.cpp' };
 	await new SubmissionController(f.host, preferences).submit(source);
 	await new SubmissionController(f.host, preferences).submit(source);
-	assert.strictEqual(f.selected(), 1);
+	assert.strictEqual(f.selected(), 0, 'the first available default is reused without a picker');
 	compiler = '7017';
 	await new SubmissionController(f.host, preferences).submit(source);
-	assert.strictEqual(f.selected(), 2);
+	assert.strictEqual(f.selected(), 1, 'an expired saved choice still requires an explicit replacement');
 	assert.deepStrictEqual(f.sent.map(value => value.languageId), ['6017', '6017', '7017']);
 });
 
@@ -75,6 +75,28 @@ test('the statement language selector and keyboard submission use the same prefe
 	assert.strictEqual(f.selected(), 0);
 	assert.strictEqual(f.sent[0].languageId, '28:o2');
 	assert.strictEqual(f.controller.preferredLanguage('luogu', 'cpp'), '28:o2');
+});
+
+test('an offline symbolic compiler resolves only against a fresh exact official label before sending', async () => {
+	const f = fixture(), prepare = f.atcoder.prepare;
+	const values = new Map<string, unknown>([['atcoder.cCompiler', 'catalogue:atcoder-c23-gcc']]);
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });
+	f.atcoder.prepare = async (...args) => ({ ...await prepare(...args), languages: [{ id: '6123', label: 'C23 (GCC 14.2.0)', family: 'c' }] });
+	const input = { ...snapshot, uri: 'file:///C:/cpp/atcoder/abc086_a.c', fileName: 'abc086_a.c', family: 'c' as const };
+	await new SubmissionController(f.host, preferences).submit(input);
+	assert.strictEqual(f.selected(), 0, 'an exact current official match preserves the prior explicit choice');
+	assert.strictEqual(f.sent[0].languageId, '6123');
+	assert.strictEqual(preferences.language('atcoder', 'c'), '6123', 'only the current numeric website ID is persisted after validation');
+	values.set('atcoder.cCompiler', 'catalogue:atcoder-c23-gcc');
+	f.atcoder.prepare = async (...args) => ({ ...await prepare(...args), languages: [{ id: '7123', label: 'C23 (GCC 15.0.0)', family: 'c' }] });
+	let choices = 0;
+	f.host.chooseLanguage = async () => { choices++; return undefined; };
+	await new SubmissionController(f.host, preferences).submit(input);
+	assert.strictEqual(choices, 1, 'a changed compiler requires an explicit replacement instead of an approximate label match');
+	assert.strictEqual(f.sent.length, 1);
+	f.host.chooseLanguage = async () => 'catalogue:atcoder-c23-gcc';
+	await assert.rejects(new SubmissionController(f.host, preferences).submit(input), /no longer available/);
+	assert.strictEqual(f.sent.length, 1, 'a symbolic selection never reaches the sending host');
 });
 test('late preparation after cancellation is cancelled and disposed without sending', async () => {
 	const f = fixture();

@@ -9,6 +9,23 @@ import { type ProblemRef, type ProblemDocument, type RecordRef, type RecordSnaps
 import type { CodeforcesHost } from './adapters/codeforces/adapter';
 import type { NowcoderHost } from './adapters/nowcoder/adapter';
 import type { LuoguHost } from './adapters/luogu/adapter';
+import { randomUUID } from 'crypto';
+
+async function readStatement(execute: (command: string, ...args: unknown[]) => Promise<unknown>, problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument> {
+	signal?.throwIfAborted();
+	const command = '_becoder.ojConnect.' + problem.site, requestId = randomUUID();
+	let abort: (() => void) | undefined;
+	try {
+		const raw = await new Promise<unknown>((resolve, reject) => {
+			abort = () => { void execute(command + '.cancelStatementRead', requestId).catch(() => undefined); reject(new Error('oj-statement-cancelled')); };
+			signal?.addEventListener('abort', abort, { once: true });
+			if (signal?.aborted) { abort(); return; }
+			void execute(command + '.readProblem', problem, requestId).then(resolve, reject);
+		});
+		signal?.throwIfAborted();
+		const value = validateProblem(raw); if (value.ref.url !== problem.url) { invalid(); } return value;
+	} finally { if (abort) { signal?.removeEventListener('abort', abort); } }
+}
 
 type RecordValue = Record<string, unknown>;
 function object(value: unknown): RecordValue {
@@ -113,11 +130,9 @@ export class CommandCodeforcesHost implements CodeforcesHost {
 		return { handle: value.handle, languages, hasDraft: value.hasDraft };
 	}
 	async send(handle: string, payload: ICodeforcesSourcePayload): Promise<SubmissionOutcome> { const outcome = validateOutcome(await this.call('send', handle, payload)); this.outcome(outcome); return outcome; }
-	async readProblem(problem: ProblemRef): Promise<ProblemDocument> {
+	async readProblem(problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument> {
 		if (problem.site !== 'codeforces') { invalid(); }
-		const value = validateProblem(await this.call('readProblem', problem));
-		if (value.ref.url !== problem.url) { invalid(); }
-		return value;
+		return readStatement(this.execute, problem, signal);
 	}
 	async readRecord(input: RecordRef): Promise<RecordSnapshot> {
 		const record = validateRecordRef(input);
@@ -167,10 +182,8 @@ export class CommandBrowserHost implements AtCoderHost {
 		if (value.ref.url !== record.url || value.ref.problem.url !== record.problem.url) { throw new Error('oj-connect-invalid-record'); }
 		return value;
 	}
-	async readProblem(problem: ProblemRef): Promise<ProblemDocument> {
-		const value = validateProblem(await this.call('readProblem', problem));
-		if (value.ref.url !== problem.url) { invalid(); }
-		return value;
+	async readProblem(problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument> {
+		return readStatement(this.execute, problem, signal);
 	}
 	async loginSummary(): Promise<LoginSummary> {
 		return loginSummary(await this.call('loginSummary'), 'atcoder');

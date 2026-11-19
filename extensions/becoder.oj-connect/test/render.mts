@@ -14,6 +14,12 @@ const require = createRequire(import.meta.url);
 const { defaultLanguage } = require('../out/preferences.js');
 const { compilerCatalogue } = require('../out/compilerCatalogue.js');
 const { renderMarkdownTree, renderHtmlTree } = require('../out/markdown.js');
+// Exercise the current Webview link bridge with trusted Chromium clicks, without invoking an OS opener.
+const preSource = (await readFile('../../src/vs/workbench/contrib/webview/browser/pre/index.html', 'utf8')).replace(/\r\n/g, '\n');
+const clickStart = preSource.indexOf('const handleInnerClick = (event) => {');
+const clickEnd = preSource.indexOf('\n\t\t};', clickStart);
+assert.ok(clickStart >= 0 && clickEnd > clickStart, 'locate the actual Webview click handler');
+const linkBridge = `const hostMessaging={postMessage:(type,data)=>window.__defaultLinkOpens.push({type,...data})};${preSource.slice(clickStart, clickEnd + '\n\t\t};'.length)}window.addEventListener('click',handleInnerClick);`;
 const output = path.resolve(process.env.BECODER_OJ_CONNECT_RENDER_AUDIT ?? '../../tmp/oj-connect-audit/shared-workflow/render');
 await mkdir(output, { recursive: true });
 // Match the shipped extension's CommonJS package boundary, outside the root ESM package.
@@ -23,19 +29,20 @@ const serviceProbe = path.join(output, 'markdown-service.cjs');
 await build({ entryPoints: ['src/markdownService.ts'], bundle: true, platform: 'node', format: 'cjs', target: 'node24', external: ['./markdown'], outfile: serviceProbe });
 await cp('out/markdown.js', path.join(output, 'markdown.js'));
 assert.ok(JSON.stringify(await require(serviceProbe).default.renderTree('$a+b$')).includes('katex'));
-const labels = { testCases: '测试点信息', submittedAt: '提交时间', codeLength: '代码长度', source: '源代码', viewSource: '在 BeCoder 中查看', compileSucceeded: '编译成功', compileFailed: '编译失败', submit: '提交', importCph: '导入 CPH', samples: '样例', input: '输入', output: '输出', copy: '复制', copied: '已复制', language: '语言', continueQuery: '继续查询', record: '记录详情', score: '评测分数', owner: '用户', compiler: '编译信息', problem: '所属题目', verdict: '评测状态', resources: '用时/内存', statementLanguage: '题面语言', chooseLanguage: '提交时选择语言', tracking: '正在读取本次评测结果' };
+const translations = JSON.parse(await readFile('l10n/bundle.l10n.zh-cn.json', 'utf8'));
+const localizedLabels = (locale) => {
+	const Module = require('module'), original = Module._load, modulePath = require.resolve('../out/views/webview.js');
+	delete require.cache[modulePath];
+	Module._load = function (id, ...args) { return id === 'vscode' ? { l10n: { t: value => locale === 'zh-cn' ? translations[value] ?? value : value } } : original.call(this, id, ...args); };
+	try { return require(modulePath).labels(); } finally { Module._load = original; delete require.cache[modulePath]; }
+};
+const labels = localizedLabels('zh-cn'), englishLabels = localizedLabels('en');
 let state;
-Object.assign(labels, { importCph: '传送至 CPH', difficulty: '题目难度', tags: '题目标签', 'Time Limit': '时间限制', 'Memory Limit': '内存限制', samples: '输入输出样例', copyFailed: '请选择并复制内容' });
 Object.assign(labels, { status_AC: '答案正确', status_WA: '答案错误', status_CE: '编译错误', status_WJ: '等待评测', status_WR: '等待重新评测' });
 labels.status_QLE = '超过询问次数限制';
 labels.passedTests = '通过测试点';
-labels.compileUnavailable = '无法读取该记录的编译输出。';
-labels.sampleExplanation = '样例说明';
 labels.status_Judging = '正在评测';
 labels.status_Compiling = '正在编译';
-labels.officialSource = '官网记录源码';
-labels.sentSource = '本次发送的源码，尚未从官网核对';
-Object.assign(labels, { chooseLanguage: '请选择编译器', languagesLoading: '正在读取编译器…', compilerCatalogue: '已采证目录，登录后校验', languagesUnavailable: '编译器选项暂不可用', languagesLoginRequired: '请登录后读取编译器选项' });
 const server = createServer(async (req, res) => {
 	try {
 		if (req.url === '/accounts') {
@@ -49,7 +56,7 @@ const server = createServer(async (req, res) => {
 			res.end(await readFile(path.resolve('resources', req.url.slice(1))));
 		} else if (req.url === '/') {
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
-			res.end(`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-fixture' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src https:; connect-src 'self'; worker-src blob:;"><link rel="stylesheet" href="/katex.min.css"><link rel="stylesheet" href="/webview.css"></head><body><main id="app"></main><script nonce="fixture">window.__OJ_STATE__=${JSON.stringify(state).replace(/</g, '\\u003c')};window.__messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>{window.__messages.push(m);if(m.uuid && m.data.action==='renderContent'){window.__renderContent(m.data.content,m.data.format).then(data=>window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid,data}})));return;}if(m.uuid){if(m.data.action==='selectLanguage')window.__OJ_STATE__.languageId=m.data.languageId;setTimeout(()=>{window.dispatchEvent(new MessageEvent('message',{data:{type:'state',state:window.__OJ_STATE__}}));window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid}}));},0);}}});</script><script nonce="fixture" src="/webview.js"></script></body></html>`);
+			res.end(`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-fixture' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src https:; connect-src 'self'; worker-src blob:;"><link rel="stylesheet" href="/katex.min.css"><link rel="stylesheet" href="/webview.css"></head><body><main id="app"></main><script nonce="fixture">window.__OJ_STATE__=${JSON.stringify(state).replace(/</g, '\\u003c')};window.__messages=[];window.__defaultLinkOpens=[];${linkBridge}window.acquireVsCodeApi=()=>({postMessage:m=>{window.__messages.push(m);if(m.uuid && m.data.action==='renderContent'){window.__renderContent(m.data.content,m.data.format).then(data=>window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid,data}})));return;}if(m.uuid){if(m.data.action==='selectLanguage')window.__OJ_STATE__.languageId=m.data.languageId;setTimeout(()=>{window.dispatchEvent(new MessageEvent('message',{data:{type:'state',state:window.__OJ_STATE__}}));window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid}}));},0);}}});</script><script nonce="fixture" src="/webview.js"></script></body></html>`);
 		} else {
 			const filename = req.url.slice(1);
 			if (!/^(webview\.(js|css)|syntax-worker\.js|onig\.wasm|grammars\/[a-f0-9]+\.json|katex\.min\.css|fonts\/[a-zA-Z0-9_.-]+)$/.test(filename)) { res.writeHead(404).end(); return; }
@@ -63,11 +70,102 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch({ headless: true });
 try {
 	const page = await browser.newPage();
+	await page.route('https://**/*', route => route.abort());
 	await page.exposeFunction('__renderContent', (content, format) => format === 'markdown' ? renderMarkdownTree(content) : renderHtmlTree(content, state.problem.ref.url));
 	await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { if (window.__failCopy) { throw new Error('clipboard unavailable'); } window.__copied = text; } } }); });
+	await page.addInitScript(() => {
+		const scrollIntoView = Element.prototype.scrollIntoView;
+		Element.prototype.scrollIntoView = function (...args) { window.__scrolledTarget = this.id; return scrollIntoView.apply(this, args); };
+	});
 	const errors = []; page.on('pageerror', error => errors.push(error.message));
+	const expectInternalLink = async (link, target, options) => {
+		await page.evaluate(() => { window.__messages = []; window.__defaultLinkOpens = []; });
+		if (options === 'keyboard') { await link.focus(); await page.keyboard.press('Enter'); }
+		else { await link.click(options); }
+		assert.deepEqual(await page.evaluate(() => window.__defaultLinkOpens), [], 'OJ links never reach the default external opener bridge');
+		assert.deepEqual(await page.evaluate(() => window.__messages.filter(value => value.data?.action !== 'renderContent').map(value => value.data)), [{ action: 'openLink', url: target }], 'one user action dispatches one internal navigation');
+		assert.equal(page.url(), url, 'navigation stays delegated to the host');
+	};
+	for (const problem of [
+		{ site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' },
+		{ site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' },
+		{ site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' },
+		{ site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }
+	]) {
+		state = { kind: 'problem', sourceName: 'a.cpp', labels, problem: { ref: problem, title: 'Navigation', bodies: [{ locale: 'en', sections: [{ format: 'html', content: '<a href="https://example.org/reference"><span>Nested reference</span></a>' }, { format: 'markdown', content: '<iframe src="https://example.org/embedded"></iframe>' }] }], limits: [], samples: [], interactive: false } };
+		await page.goto(url); await page.getByRole('link', { name: 'Nested reference' }).waitFor();
+		const title = page.locator('h1 a');
+		for (const options of [undefined, { modifiers: ['Control'] }, { modifiers: ['Meta'] }, 'keyboard']) { await expectInternalLink(title, problem.url, options); }
+		await expectInternalLink(page.getByRole('link', { name: 'Nested reference' }).locator('span'), 'https://example.org/reference');
+		await expectInternalLink(page.locator('a[href="https://example.org/embedded"]'), 'https://example.org/embedded');
+		await page.evaluate(() => {
+			window.__messages = []; window.__defaultLinkOpens = [];
+			const invalid = document.createElement('a'); invalid.href = 'command:workbench.action.openSettings'; invalid.textContent = 'Invalid navigation'; document.getElementById('app').append(invalid);
+		});
+		await page.getByRole('link', { name: 'Invalid navigation', exact: true }).click();
+		assert.deepEqual(await page.evaluate(() => [window.__messages, window.__defaultLinkOpens]), [[], []], 'invalid links are blocked without creating a pending host request');
+		await page.evaluate(() => { window.__messages = []; window.__defaultLinkOpens = []; });
+		await title.click({ button: 'middle' });
+		assert.deepEqual(await page.evaluate(() => [window.__messages, window.__defaultLinkOpens]), [[], []], 'middle click keeps the existing no-navigation behavior');
+		await title.click({ button: 'right' });
+		assert.deepEqual(await page.evaluate(() => [window.__messages, window.__defaultLinkOpens]), [[], []], 'opening a context menu does not navigate');
+		const record = { problem, id: '55', url: problem.site === 'luogu' ? 'https://www.luogu.com.cn/record/55' : problem.site === 'atcoder' ? 'https://atcoder.jp/contests/abc086/submissions/55' : problem.site === 'codeforces' ? 'https://codeforces.com/contest/4/submission/55' : 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=55' };
+		state = { kind: 'record', sourceName: 'a.cpp', labels, record, tracking: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', sourceVerification: 'matched', source: 'int main(){}', compileSucceeded: false, compileMessage: 'diagnostic\n'.repeat(80) } };
+		await page.goto(url); await page.locator('.record-info').waitFor();
+		await expectInternalLink(page.locator('h1 a'), record.url);
+		await expectInternalLink(page.locator('.problemNameWithDifficulty'), problem.url);
+		await page.setViewportSize({ width: 700, height: 240 });
+		await page.locator('.record-info').evaluate(element => { element.style.marginTop = '400px'; });
+		const source = page.getByRole('link', { name: labels.viewSource });
+		await source.scrollIntoViewIfNeeded();
+		const position = await page.evaluate(() => scrollY);
+		assert.ok(position > 0, 'source link fixture starts below the top');
+		await page.evaluate(() => { window.__messages = []; window.__defaultLinkOpens = []; });
+		await source.click();
+		assert.equal(await page.evaluate(() => scrollY), position, 'viewing source does not add a scroll-to-top action');
+		assert.deepEqual(await page.evaluate(() => window.__messages.map(value => value.data)), [{ action: 'viewSource' }]);
+		assert.deepEqual(await page.evaluate(() => window.__defaultLinkOpens), []);
+		await page.setViewportSize({ width: 700, height: 700 });
+	}
 	const cfProblem = { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
 	const cfRecord = { problem: cfProblem, id: '55', url: 'https://codeforces.com/contest/4/submission/55' };
+	for (const text of [labels, englishLabels]) {
+		assert.equal(text.copyFailed, text === labels ? '复制失败，请选择文本后手动复制。' : 'Copy failed. Select the text and copy it manually.');
+		for (const record of [
+			{ problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, id: '55', url: 'https://www.luogu.com.cn/record/55' },
+			{ problem: { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' }, id: '55', url: 'https://atcoder.jp/contests/abc086/submissions/55' },
+			cfRecord,
+			{ problem: { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }, id: '55', url: 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=55' }
+		]) {
+			state = { kind: 'record', labels: text, sourceName: 'solution.cpp', record, tracking: false, canRetry: true, message: 'Read failed' };
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict').textContent(), text.resultUnavailable, 'a stopped initial read never claims it is still running');
+			assert.equal(await page.locator('.spinner').count(), 0);
+			assert.equal(await page.getByRole('button', { name: text.continueQuery, exact: true }).count(), 1);
+			await page.screenshot({ path: path.join(output, record.problem.site + '-stopped-initial-' + (text === labels ? 'zh' : 'en') + '.png'), fullPage: true });
+			state = { ...state, tracking: true, canRetry: false, message: undefined };
+			await page.goto(url); await page.locator('.record-verdict .spinner').waitFor();
+			assert.equal(await page.locator('.record-verdict').textContent(), text.tracking);
+			state = { ...state, tracking: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', compileSucceeded: false, sourceVerification: 'unavailable' } };
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict').textContent(), 'Compile Error');
+			assert.equal(await page.getByText(text.compileUnavailable, { exact: true }).count(), 1, 'all sites explain explicitly missing failed compilation output');
+			await page.screenshot({ path: path.join(output, record.problem.site + '-missing-compiler-' + (text === labels ? 'zh' : 'en') + '.png'), fullPage: true });
+			assert.equal(await page.locator('h1').textContent(), (record.problem.site === 'luogu' ? 'R' : '#') + '55 ' + (text === labels ? '记录详情' : 'Submission Details'));
+			for (const compileSucceeded of [true, undefined]) {
+				state.snapshot = { ...state.snapshot, rawStatus: 'Unknown', compileSucceeded };
+				await page.goto(url); await page.locator('.record-verdict').waitFor();
+				assert.equal(await page.getByText(text.compileUnavailable, { exact: true }).count(), 0, 'missing compile status is not fabricated as a failed compilation');
+			}
+			state.snapshot = { ...state.snapshot, rawStatus: 'CE', compileSucceeded: false, compileMessage: '<literal compiler diagnostic>\n  ^\n' };
+			await page.goto(url); await page.locator('pre').waitFor();
+			assert.equal(await page.locator('pre code').textContent(), state.snapshot.compileMessage);
+			await page.evaluate(() => { window.__failCopy = true; });
+			await page.locator('pre').hover(); await page.locator('pre').getByRole('button', { name: text.copy, exact: true }).click();
+			assert.equal(await page.getByRole('alert').textContent(), text.copyFailed);
+			await page.screenshot({ path: path.join(output, record.problem.site + '-recovery-copy-' + (text === labels ? 'zh' : 'en') + '.png'), fullPage: true });
+		}
+	}
 	for (const [phase, rawStatus, name, color] of [
 		['queued', 'In queue', 'Waiting', 'rgb(52, 152, 219)'],
 		['judging', 'Running on test 18', 'Judging', 'rgb(52, 152, 219)'],
@@ -195,7 +293,7 @@ try {
 			for (const width of [420, 700]) {
 				await page.setViewportSize({ width, height: 500 }); await page.goto(url); await page.locator('article').waitFor();
 				await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
-				const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+				const compiler = page.getByRole('combobox', { name: labels.submissionLanguage, exact: true });
 				assert.equal(await compiler.inputValue(), selected.id);
 				assert.equal(await compiler.locator('option:checked').textContent(), selected.label);
 				assert.equal(await compiler.getAttribute('title'), selected.label, 'the complete official label remains available in a narrow pane');
@@ -208,7 +306,7 @@ try {
 		state.problem.ref = site === 'codeforces' ? cfProblem : { site, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
 		state.languages = []; state.languageId = undefined; state.languagesLoading = true;
 		await page.goto(url); await page.locator('article').waitFor();
-		const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+		const compiler = page.getByRole('combobox', { name: labels.submissionLanguage, exact: true });
 		assert.equal(await compiler.isDisabled(), true);
 		assert.equal(await compiler.locator('option:checked').textContent(), labels.languagesLoading);
 		await page.screenshot({ path: path.join(output, `${site}-compiler-loading.png`) });
@@ -222,7 +320,7 @@ try {
 			for (const loading of [true, false]) {
 				state.languagesLoading = loading; state.problem.languageError = loading ? undefined : 'login-required';
 				await page.goto(url); await page.locator('article').waitFor();
-				const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+				const compiler = page.getByRole('combobox', { name: labels.submissionLanguage, exact: true });
 				assert.equal(await compiler.isDisabled(), false, 'captured compilers stay selectable while loading or signed out');
 				assert.ok((await compiler.getAttribute('title')).includes(labels.compilerCatalogue), 'the tooltip identifies captured options and the later validation');
 				assert.equal(await page.getByText(labels.compilerCatalogue, { exact: true }).count(), 0, 'catalogue provenance stays in the tooltip');
@@ -237,7 +335,7 @@ try {
 	for (const [languageError, expected] of [['unavailable', labels.languagesUnavailable], ['login-required', labels.languagesLoginRequired]]) {
 		state.problem.languageError = languageError; state.languages = []; state.languageId = undefined;
 		await page.goto(url); await page.locator('article').waitFor();
-		const compiler = page.getByRole('combobox', { name: labels.language, exact: true });
+		const compiler = page.getByRole('combobox', { name: labels.submissionLanguage, exact: true });
 		assert.equal(await compiler.isDisabled(), true); assert.equal(await compiler.locator('option:checked').textContent(), expected);
 	}
 	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
@@ -306,8 +404,10 @@ try {
 		await page.goto(url); await page.locator('article').first().waitFor(); await page.locator('article pre').first().waitFor();
 		if (site === 'atcoder') {
 			await page.locator('.section-target').waitFor();
+			await page.evaluate(() => { window.__scrolledTarget = undefined; window.__messages = []; window.__defaultLinkOpens = []; });
 			await page.getByRole('link', { name: 'Cross-section notes', exact: true }).click();
-			assert.equal(await page.evaluate(() => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.className), 'section-target', 'real page hashes find targets across HTML sections');
+			assert.equal(await page.evaluate(() => document.getElementById(window.__scrolledTarget)?.className), 'section-target', 'the actual Webview fragment bridge scrolls to the target across HTML sections');
+			assert.deepEqual(await page.evaluate(() => [window.__messages, window.__defaultLinkOpens]), [[], []], 'fragment navigation stays within the statement');
 		}
 		if (site === 'luogu') {
 			assert.equal(await page.locator('.hostile-overlay').evaluate(element => getComputedStyle(element).position), 'static', 'author styles cannot cover application controls');
@@ -409,10 +509,10 @@ try {
 		} else { assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0); }
 		if (site === 'atcoder') {
 			await page.evaluate(() => { const next = structuredClone(window.__OJ_STATE__); next.languageId = undefined; window.__OJ_STATE__ = next; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: next } })); });
-			await page.getByRole('combobox', { name: '语言', exact: true }).locator('option[value=""]').waitFor({ state: 'attached' });
-			assert.equal(await page.getByRole('combobox', { name: '语言', exact: true }).inputValue(), '', 'an unavailable explicit preference is represented by an empty selection');
+			await page.getByRole('combobox', { name: labels.submissionLanguage, exact: true }).locator('option[value=""]').waitFor({ state: 'attached' });
+			assert.equal(await page.getByRole('combobox', { name: labels.submissionLanguage, exact: true }).inputValue(), '', 'an unavailable explicit preference is represented by an empty selection');
 		}
-		await page.getByRole('combobox', { name: '语言', exact: true }).selectOption('two');
+		await page.getByRole('combobox', { name: labels.submissionLanguage, exact: true }).selectOption('two');
 		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLanguage', languageId: 'two' });
 		await page.getByRole('button', { name: /提交.*\.cpp/ }).click();
 		assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'submit' });
@@ -601,7 +701,7 @@ try {
 		assert.ok(await page.locator('header h1').evaluate(element => element.getBoundingClientRect().height < 150), 'long limits must not squeeze the title into a vertical column');
 		const cph = page.getByRole('button', { name: labels.importCph });
 		assert.ok(await cph.evaluate(element => element.getBoundingClientRect().height < 45), 'CPH label remains on one line');
-		assert.ok(await page.getByRole('combobox', { name: labels.language, exact: true }).evaluate(element => element.getBoundingClientRect().width > 100), 'compiler selector must stay readable');
+		assert.ok(await page.getByRole('combobox', { name: labels.submissionLanguage, exact: true }).evaluate(element => element.getBoundingClientRect().width > 100), 'compiler selector must stay readable');
 		assert.ok((await page.locator('body').textContent()).includes('样例说明'));
 		assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0);
 		assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

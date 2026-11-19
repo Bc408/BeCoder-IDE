@@ -62,6 +62,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 	const sending = new Promise<void>(resolve => { entered = resolve; });
 	const cancelled: unknown[][] = [];
 	const warnings: string[] = [];
+	const errors: string[] = [];
 	const status = { text: '', tooltip: '', command: '', show: () => { shown = true; }, dispose: () => { disposed = true; } };
 	const disposable = () => ({ dispose() { } });
 	let configurationChanged!: (event: { affectsConfiguration: (section: string) => boolean }) => void;
@@ -85,7 +86,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 			createStatusBarItem: () => status,
 			showWarningMessage: async (message: string) => { warnings.push(message); },
 			showInformationMessage: async () => undefined,
-			showErrorMessage: async (message: string) => { throw new Error(message); },
+			showErrorMessage: async (message: string) => { errors.push(message); },
 			activeTextEditor: { document: source, viewColumn: 1 }, registerWebviewViewProvider: (_id: string, provider: typeof login) => { login = provider; return disposable(); },
 			showQuickPick: async (options: unknown[]) => options[0],
 			withProgress: async (options: { location: number }, operation: (progress: unknown, token: unknown) => Promise<void>) => {
@@ -145,6 +146,16 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 		assert.strictEqual(disposed, true);
 		await commands.get('becoder.ojConnect.continueQuery')!();
 		assert.strictEqual(warnings.length, 1, 'a rejected attempt must not install a pending receipt');
+		assert.deepStrictEqual(errors, []);
+		const active = mock.window.activeTextEditor;
+		Object.assign(mock.window, { activeTextEditor: undefined });
+		await commands.get('becoder.ojConnect.showProblem')!();
+		assert.deepStrictEqual(errors.splice(0), ['OJ Connect: Focus the C/C++ source editor.']);
+		Object.assign(mock.window, { activeTextEditor: active });
+		source.uri.fsPath = 'C:/practice/lanqiao/1.cpp';
+		source.uri.toString = () => 'file:///C:/practice/lanqiao/1.cpp';
+		await commands.get('becoder.ojConnect.showProblem')!();
+		assert.deepStrictEqual(errors, ['OJ Connect: The lanqiao adapter is not available yet.']);
 		await extension.deactivate();
 	} finally { Module._load = original; }
 });
@@ -157,7 +168,10 @@ test('native failures retain the specific cause for submission diagnosis', () =>
 		const { userError } = require('../src/messages');
 		assert.match(userError('oj-connect-operation-timeout'), /oj-connect-operation-timeout/);
 		assert.match(userError('oj-connect-page-changed'), /oj-connect-page-changed/);
-		assert.strictEqual(userError('atcoder-login-required'), 'Sign in to AtCoder from the OJ Connect sidebar, then submit again.');
+		assert.match(userError('oj-statement-timeout'), /website operation stopped.*oj-statement-timeout/);
+		assert.strictEqual(userError('atcoder-login-required'), 'Sign in to AtCoder from the OJ Connect sidebar.');
+		assert.strictEqual(userError('codeforces-login-required'), 'Sign in to Codeforces from the OJ Connect sidebar.');
+		assert.strictEqual(userError('nowcoder-login-required'), 'Sign in to Nowcoder from the OJ Connect sidebar.');
 		assert.strictEqual(userError('atcoder-browser-verification-required'), 'AtCoder requires manual verification. Submit in the built-in browser and complete verification manually.');
 		assert.match(userError('codeforces-login-required'), /Sign in to Codeforces/);
 		assert.match(userError('codeforces-browser-verification-required'), /browser.*verification/);

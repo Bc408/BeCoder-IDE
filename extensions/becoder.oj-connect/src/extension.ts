@@ -67,10 +67,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute)), new CodeforcesAdapter(new CommandCodeforcesHost(execute))];
 	const directories = () => readDirectories(vscode.workspace.getConfiguration('becoder.ojConnect').get('directories'));
-	const original = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
-	const login = new LoginView(context, adapters, execute, original, site => problems?.refreshLanguages(site));
+	const openInBrowser = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
+	const login = new LoginView(context, adapters, execute, openInBrowser, site => problems?.refreshLanguages(site));
 	context.subscriptions.push(login, vscode.window.registerWebviewViewProvider('becoder.ojConnect.accounts', login));
-	const records = new RecordPanel(context, adapters, original, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
+	const records = new RecordPanel(context, adapters, openInBrowser, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
 	const columns = new Map<string, vscode.ViewColumn>();
 	const revealSource = async (sourceUri: string) => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));
@@ -152,7 +152,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		selectLanguage: (site, family, languageId) => controller!.selectLanguage(site, family, languageId),
 		submit: async (source, document) => submitDocument(source, document.ref),
 		importCph: async (sourceUri, document) => { await vscode.commands.executeCommand('_becoder.cph.importSamplesForSource', { sourceUri, problem: cphSamples(document) }); },
-		openOriginal: original
+		openLink: openInBrowser
 	}, preferences);
 	const importer = new ImportController(adapters, {
 		folders: () => (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === 'file').map(folder => folder.uri.fsPath), directories,
@@ -173,14 +173,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			await vscode.window.showErrorMessage(vscode.l10n.t('OJ Connect: {0}', userError(error)));
 		}
 	};
-	const currentDocument = () => { const document = vscode.window.activeTextEditor?.document; if (!document) { throw new Error(vscode.l10n.t('Focus the C/C++ source editor before submitting.')); } return document; };
+	const currentDocument = () => { const document = vscode.window.activeTextEditor?.document; if (!document) { throw new Error(vscode.l10n.t('Focus the C/C++ source editor.')); } return document; };
 	context.subscriptions.push(
 		vscode.commands.registerCommand('becoder.ojConnect.submit', guard(async () => submitDocument(currentDocument()))),
 		vscode.commands.registerCommand('becoder.ojConnect.showProblem', guard(async () => {
 			const source = currentDocument(), input = snapshot(source), column = vscode.window.activeTextEditor?.viewColumn;
 			if (column) { columns.set(input.uri, column); }
 			const resolution = resolveProblem(source.uri.fsPath, directories(), adapters);
-			if (resolution.kind === 'unsupported') { throw new Error(vscode.l10n.t('The {0} adapter is not available yet. No code was submitted.', resolution.site)); }
+			if (resolution.kind === 'unsupported') { throw new Error(vscode.l10n.t('The {0} adapter is not available yet.', resolution.site)); }
 			const ref = resolution.kind === 'problem' ? resolution.problem : await requestProblem(input.fileName, resolution.site);
 			if (!ref) { return; }
 			const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, new AbortController().signal);

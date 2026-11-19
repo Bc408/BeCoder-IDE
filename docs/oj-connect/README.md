@@ -2,6 +2,8 @@
 
 [文档目录](../README.md) · [技术架构](architecture.md) · [产品方向](../../VISION.md)
 
+2026-11-19 题面性能工作：已完成[分段基线](statement-performance-2026-11-19.md)与[单文档取文优化](statement-optimization-2026-11-19.md)，两站首次实测中位数分别减少约 73%／72%。临时诊断已撤下；CF 同题重开增加官网读取成本、样本限制、最终构建与负责人验收单列。
+
 确认日期：2026-11-12。负责人已确认本文的主要使用流程与扩展／宿主职责划分。本文记录目标要求；当前实现状态单列，不能将要求表当作已交付功能清单。
 
 ## 产品定位
@@ -71,6 +73,8 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 ## 当前实现状态
 
+2026-11-19 本轮负责人明确确认：洛谷、AtCoder、Codeforces、牛客已各自达成核心能力闭环。维护源码基线为 OJ_connect / 4e886464。新一轮[维护审查与分阶段方案](review-2026-11-19-maintenance.md)已落盘，第一、二阶段随后分别获准实施：当前源码统一 OJ 页面内置导航、清理 47 条旧翻译，并修复结果读取恢复文案、停止状态、缺失编译日志说明及题面重读与动作数据一致性。第三阶段完成[正式隔离诊断](statement-performance-2026-11-19.md)后，已实施单文档取文并撤下诊断，两站首次中位数改善超过 70%，CF 重开增加官网读取成本。源码／渲染检查、18 次只读对照、最终 stage 和负责人验收分别见[优化结果](statement-optimization-2026-11-19.md)。下列历史“候选／待验收”按各自日期理解，不覆盖本次四站闭环确认或替代新构建验收。
+
 2026-11-18 CF 赛后练习候选已按[批准设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)与[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)加入第四个适配器、登录摘要、共同题面／评测和同源码 CPH 入口。仅支持官网普通公开比赛赛后练习；核对官方 Finished／Practice 与题型字面量，拒绝 output-only、Gym、进行中、虚拟、group、私有／团队和镜像入口。身份 `4/A` 对应 `codeforces/4_a.cpp`，真实后缀保留，直接父目录优先，通用下划线文件名不跨站自动猜测；CF 的 C／C++ 编译器偏好按本站设置分别保存，目录来自当次官方表单。
 
 CF 准备、单次原生 POST、正式回执核对及结果查询共用当前窗口和存储范围的持久 Session，不创建或导航提交页，不预热。只有账号、题目、编译器及官网回读源码唯一匹配的新记录才确认；受理不明只查询。共同记录页保留原站进度和真实测试点，缺失的分数、代码长度、终态资源省略，CF 不显示用户字段。[隔离协议采证](codeforces-protocol-evidence.md)与实际产品运行分别记录。下列带日期记录保留当轮站点范围与验证事实。
@@ -117,6 +121,8 @@ CF 准备、单次原生 POST、正式回执核对及结果查询共用当前窗
 
 ## 开发文档与证据
 
+- [题面首屏性能设计](../superpowers/specs/2026-11-19-oj-connect-statement-performance-design.md)与[诊断实施计划](../superpowers/plans/2026-11-19-oj-connect-statement-performance.md)：真实基线、失败及隔离纠正见[诊断结果](statement-performance-2026-11-19.md)；后续按[具体取文设计](../superpowers/specs/2026-11-19-oj-connect-statement-acquisition-design.md)实施，效果与最终边界见[优化结果](statement-optimization-2026-11-19.md)。
+- [2026-11-19 四站维护审查与分阶段方案](review-2026-11-19-maintenance.md)：原始问题、文案矩阵和性能建议；末尾分别记录第一、二阶段实施、失败尝试、检查及未构建／未网站验收边界。
 - [CF 赛后练习接入设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)、[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)与[协议采证](codeforces-protocol-evidence.md)：2026-11-18 负责人已确认设计并批准实施，当前四站候选已加入 CF 适配；四次隔离实交证明协议样本可行，不替代本轮产品运行、最终构建或负责人验收。
 - [牛客 ACM 协议证据](nowcoder-protocol-evidence.md)、[接入设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)与[实施计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)：负责人已选官网 ACM 链路，2026-11-17 候选实现见[实施记录](nowcoder-implementation-2026-11-17.md)；剩余边界、真实证据与检查／验收分别记录。
 - [分支发布前审查](publish-review-2026-11-16.md)：本轮缺陷修复、去冗余、计划语义、许可和验证边界；不代表已经提交或推送。

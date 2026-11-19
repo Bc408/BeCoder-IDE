@@ -24,6 +24,11 @@ PDF/UVa support is pending, not claimed. `companion/entry.ts` dispatches parsers
 against the current page and returns JSON only. The esbuild development dependency
 bundles this at build time; it is not installed or run by end users.
 
+2026-11-19: the fixed `parseCodeforcesHtml` entry also accepts one original official
+contest-problem HTML document for OJ Connect's offline local parser. It reuses the
+unchanged Codeforces parser and sample normalization. The current-page dispatcher,
+match patterns, ordinary Import to CPH, and other problem parsers remain unchanged.
+
 No HTTP receiver, external Companion integration, automatic submission,
 telemetry or remote messaging is part of this component.
 

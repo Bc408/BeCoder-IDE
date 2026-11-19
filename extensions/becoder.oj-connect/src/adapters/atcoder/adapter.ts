@@ -11,7 +11,7 @@ import { atCoderProblem } from './task';
 export interface AtCoderHost extends Pick<IAtCoderBridge, 'openTask' | 'inspectTask' | 'cancel' | 'release'> {
 	cancelPreparation?(): Promise<void>;
 	sendAndConfirm(page: IAtCoderPageRef, payload: IAtCoderSourcePayload): Promise<SubmissionOutcome>;
-	readProblem(problem: ProblemRef): Promise<ProblemDocument>;
+	readProblem(problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument>;
 	loginSummary(): Promise<LoginSummary>;
 	readRecord(record: RecordRef): Promise<RecordSnapshot>;
 	cancelRecord?(record: RecordRef): Promise<void>;
@@ -31,7 +31,7 @@ export class AtCoderAdapter implements OjAdapter {
 	private problem(problem: ProblemRef): void {
 		if (validateProblemRef(problem).site !== this.site) { throw new Error('AtCoder received a different site.'); }
 	}
-	async readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument> { signal.throwIfAborted(); this.problem(problem); return this.host.readProblem(problem); }
+	async readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument> { signal.throwIfAborted(); this.problem(problem); const document = await this.host.readProblem(problem, signal); signal.throwIfAborted(); return document; }
 	async loginSummary(signal: AbortSignal): Promise<LoginSummary> { signal.throwIfAborted(); return this.host.loginSummary(); }
 	async readRecord(record: RecordRef, signal: AbortSignal): Promise<RecordSnapshot> {
 		signal.throwIfAborted(); this.problem(record.problem); validateRecordRef(record);

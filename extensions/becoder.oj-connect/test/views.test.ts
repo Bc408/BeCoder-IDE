@@ -296,14 +296,15 @@ test('a reconstructed webview receives the latest host state after ready', async
 	const posted: unknown[] = []; let calls = 0;
 	let location = 'auto';
 	const columns: number[] = [];
+	const nativePanels: { title: string }[] = [];
 	const mock = {
 		l10n: { t: (value: string) => value }, ViewColumn: { Beside: -2, Active: -1, One: 1, Two: 2, Three: 3 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') },
 		workspace: { getConfiguration: () => ({ get: () => location }) }, window: {
 			activeTextEditor: { viewColumn: 1 }, tabGroups: { all: [{ viewColumn: 1 }, { viewColumn: 3 }] },
-			createWebviewPanel: (_type: string, _title: string, options: { viewColumn: number }) => {
-				columns.push(options.viewColumn); return {
+			createWebviewPanel: (_type: string, title: string, options: { viewColumn: number }) => {
+				const panel = { title,
 					webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: unknown) => { posted.push(structuredClone(value)); }, onDidReceiveMessage: (listener: typeof receive) => { receive = listener; return { dispose() { } }; } }, onDidDispose: () => ({ dispose() { } }), dispose() { }
-				};
+				}; columns.push(options.viewColumn); nativePanels.push(panel); return panel;
 			}
 		}
 	};
@@ -325,7 +326,153 @@ test('a reconstructed webview receives the latest host state after ready', async
 			new Panel({ extensionUri: 'extension' }, { kind: 'record', labels: {}, record: { id: '22' } }, async () => undefined, () => undefined).dispose();
 		}
 		assert.deepStrictEqual(columns, [3, -1, -2, 1, 2, 3, 3], 'only new panels follow the configured location; auto reuses the nearest right group');
+		assert.strictEqual(nativePanels[0].title, '#22', 'record updates keep the official record tab identity');
+		const statement = new Panel({ extensionUri: 'extension' }, { kind: 'problem', labels: {}, sourceName: 'a.cpp', problem: { title: 'Old' } }, async () => undefined, () => undefined);
+		statement.update({ problem: { title: 'New' } });
+		assert.strictEqual(nativePanels.at(-1)!.title, 'New', 'a refreshed statement updates its editor tab title');
+		statement.dispose();
 	} finally { Module._load = original; }
+});
+
+test('panel navigation only accepts a bounded HTTPS link without credentials or extra actions', () => {
+	const url = 'https://example.org/reference?language=cpp#details';
+	assert.deepStrictEqual(panelMessage({ action: 'openLink', url }), { action: 'openLink', url });
+	for (const url of ['http://example.org/', 'file:///C:/private.cpp', 'command:workbench.action.openSettings', 'javascript:alert(1)', '//example.org/', '#details', 'https://user:secret@example.org/', 'https://example.org/\nother', 'https://example.org/' + 'x'.repeat(8192)]) {
+		assert.strictEqual(panelMessage({ action: 'openLink', url }), undefined, url);
+	}
+	assert.strictEqual(panelMessage({ action: 'openLink', url, external: true }), undefined);
+	assert.strictEqual(panelMessage({ action: 'openLink', url: 1 }), undefined);
+	assert.strictEqual(panelMessage({ action: 'openOriginal' }), undefined, 'the replaced navigation action must not remain as a second route');
+});
+
+test('reopening a statement replaces content and action data while retaining source and compiler boundaries', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-refresh-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const file = path.join(root, 'a.cpp'); fs.writeFileSync(file, 'int main() {}');
+	const uri = pathToFileURL(file).href;
+	const source = { uri: { fsPath: file, toString: () => uri }, languageId: 'cpp', isClosed: false };
+	const Module = require('module'), original = Module._load;
+	const modulePath = require.resolve('../src/views/problemPanel'); delete require.cache[modulePath];
+	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void> }[] = [];
+	const reads: { signal: AbortSignal; resolve: (value: unknown) => void }[] = [];
+	const actions: { source: unknown; problem: unknown }[] = [];
+	const values = new Map<string, unknown>([['atcoder.statementLanguage', 'ja']]);
+	let finishSetting: (() => void) | undefined, deferSetting = false;
+	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { if (deferSetting) { await new Promise<void>(resolve => { finishSetting = resolve; }); } values.set(key, value); } });
+	const event = () => ({ dispose() { } });
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { env: { language: 'zh-cn' }, Uri: { parse: (value: string) => ({ fsPath: fileURLToPath(value) }) }, workspace: { onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event } }; }
+		if (id === './webview') {
+			return { labels: () => ({}), Panel: class {
+				constructor(_context: unknown, readonly state: PanelState, action: (value: PanelAction) => Promise<void>, private close: () => void) { captures.push({ state, action }); }
+				update(value: Partial<PanelState>) { Object.assign(this.state, value); } reveal() { } dispose() { this.close(); }
+			} };
+		}
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { ProblemPanel } = require('../src/views/problemPanel');
+		const panels = new ProblemPanel({}, {
+			preferredLanguage: () => undefined, selectLanguage: async () => { if (deferSetting) { await new Promise<void>(resolve => { finishSetting = resolve; }); } },
+			loadLanguages: (_problem: unknown, signal: AbortSignal) => new Promise(resolve => reads.push({ signal, resolve })),
+			submit: async (source: unknown, problem: unknown) => { actions.push({ source, problem }); },
+			importCph: async (source: unknown, problem: unknown) => { actions.push({ source, problem }); }
+		}, preferences);
+		const ref = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
+		const old = { ref, title: 'Old', bodies: [{ locale: 'en', sections: [{ format: 'html', content: '<p>Old statement</p>' }] }], samples: [{ input: 'old\n', output: 'old\n' }], limits: [], interactive: true, difficulty: { label: 'Old difficulty' }, tags: [{ label: 'Old tag' }] };
+		await panels.open(old, uri, source);
+		const capture = captures[0];
+		assert.strictEqual(capture.state.locale, 'en');
+		const fresh = { ref, title: 'New', bodies: ['en', 'ja'].map(locale => ({ locale, sections: [{ format: 'html', content: '<p>New ' + locale + '</p>' }] })), samples: [{ input: '  new\n\n', output: 'answer\n' }], limits: [{ label: 'Time Limit', value: '2.00s' }], interactive: false };
+		await panels.open(fresh, uri, source);
+		assert.strictEqual(captures.length, 1);
+		assert.deepStrictEqual(capture.state.problem, fresh, 'all fields are replaced, including removal of old optional metadata');
+		assert.strictEqual(capture.state.locale, 'ja', 'a previously missing saved locale returns when available');
+		assert.strictEqual(reads[0].signal.aborted, true);
+		reads[0].resolve({ languages: [{ id: '17', label: 'C++17', family: 'cpp' }] }); await new Promise(resolve => setImmediate(resolve));
+		assert.strictEqual(capture.state.problem!.title, 'New');
+		assert.notStrictEqual(capture.state.languages?.[0]?.id, '17');
+		reads[1].resolve({ languages: [{ id: '23', label: 'C++23', family: 'cpp' }] }); await new Promise(resolve => setImmediate(resolve));
+		assert.strictEqual(capture.state.problem!.title, 'New');
+		assert.deepStrictEqual(capture.state.problem!.samples, fresh.samples);
+		await capture.action({ action: 'submit' }); await capture.action({ action: 'importCph' });
+		assert.strictEqual(actions[0].source, source);
+		assert.strictEqual(actions[1].source, uri);
+		for (const action of actions) { assert.strictEqual(action.problem, capture.state.problem, 'actions use the same current document as the view'); }
+		deferSetting = true;
+		const selecting = capture.action({ action: 'selectLocale', locale: 'ja' });
+		await panels.open({ ...fresh, title: 'English only', bodies: [fresh.bodies[0]], languages: [{ id: '26', label: 'C++26', family: 'cpp' }] }, uri, source);
+		finishSetting!(); await selecting;
+		assert.strictEqual(capture.state.locale, 'en', 'late preference completion cannot restore a removed locale');
+		deferSetting = false;
+		await panels.open({ ...fresh, title: 'Empty', bodies: [], languages: [{ id: '26', label: 'C++26', family: 'cpp' }] }, uri, source);
+		assert.strictEqual(capture.state.locale, undefined);
+		await panels.open({ ...fresh, languages: [{ id: '23', label: 'C++23', family: 'cpp' }] }, uri, source);
+		deferSetting = true;
+		const language = capture.action({ action: 'selectLanguage', languageId: '23' });
+		await panels.open({ ...fresh, languages: [{ id: '26', label: 'C++26', family: 'cpp' }] }, uri, source);
+		finishSetting!(); await language;
+		assert.deepStrictEqual(capture.state.languages?.map(option => option.id), ['26'], 'late language selection cannot restore the prior catalogue');
+		assert.strictEqual(capture.state.languageId, '26');
+		panels.dispose();
+		deferSetting = false;
+		const local = { ...fresh, ref: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, languages: [{ id: '26', label: 'C++26', family: 'cpp' }], bodies: ['en', 'zh-CN'].map(locale => ({ locale, sections: [] })) };
+		await panels.open(local, uri, source);
+		const other = captures.at(-1)!;
+		assert.strictEqual(other.state.locale, 'zh-CN');
+		await other.action({ action: 'selectLocale', locale: 'en' });
+		await panels.open({ ...local, title: 'Changed' }, uri, source);
+		assert.strictEqual(other.state.locale, 'en', 'other sites preserve a still-available explicit selection');
+		await panels.open({ ...local, bodies: [local.bodies[1]] }, uri, source);
+		assert.strictEqual(other.state.locale, 'zh-CN', 'removed locale falls back to an available interface language');
+		await panels.open(local, uri, source);
+		await other.action({ action: 'selectLocale', locale: 'en' });
+		assert.strictEqual(other.state.locale, 'en', 'newly returned locales are accepted by the current action context');
+		panels.dispose();
+	} finally { Module._load = original; delete require.cache[modulePath]; }
+});
+
+test('record read failures keep the original ID and direct recovery to querying rather than submitting', async () => {
+	const Module = require('module'), original = Module._load;
+	const modulePath = require.resolve('../src/views/recordPanel'); delete require.cache[modulePath];
+	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void> }[] = [];
+	let stoppedReading: (() => void) | undefined;
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { l10n: { t: (value: string, ...args: string[]) => value.replace('{0}', args[0]) } }; }
+		if (id === './webview') { return { labels: () => ({}), Panel: class {
+			constructor(_context: unknown, readonly state: PanelState, action: (value: PanelAction) => Promise<void>, private close: () => void) { captures.push({ state, action }); }
+			update(value: Partial<PanelState>) { Object.assign(this.state, value); if (value.tracking === false) { stoppedReading?.(); } } dispose() { this.close(); }
+		} }; }
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { RecordPanel } = require('../src/views/recordPanel');
+		const ref: RecordRef = { problem: { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' }, id: '55', url: 'https://codeforces.com/contest/4/submission/55' };
+		let reads = 0;
+		const panels = new RecordPanel({}, [{ site: 'codeforces', readRecord: async (record: RecordRef) => { assert.deepStrictEqual(record, ref); if (++reads === 1) { throw new Error('codeforces-login-required'); } return { ref, phase: 'finished', rawStatus: 'Accepted', sourceVerification: 'matched' }; } }], async () => undefined, async () => undefined);
+		await panels.open(ref); await new Promise(resolve => setImmediate(resolve));
+		const capture = captures[0];
+		assert.strictEqual(capture.state.tracking, false);
+		assert.strictEqual(capture.state.canRetry, true);
+		assert.strictEqual(capture.state.snapshot, undefined);
+		assert.match(capture.state.message!, /Sign in to Codeforces/);
+		assert.match(capture.state.message!, /Continue querying this record/);
+		assert.doesNotMatch(capture.state.message!, /submit again|resubmit/i);
+		await capture.action({ action: 'continueQuery' });
+		assert.strictEqual(reads, 2); assert.strictEqual(capture.state.snapshot!.rawStatus, 'Accepted');
+		panels.dispose();
+		let attempts = 0;
+		const finished = new Promise<void>(resolve => { stoppedReading = resolve; });
+		const stopped = new RecordPanel({}, [{ site: 'codeforces', readRecord: async () => { if (++attempts > 1) { throw new Error('codeforces-session-changed'); } return { ref, phase: 'judging', rawStatus: 'Running on test 2', sourceVerification: 'matched' }; } }], async () => undefined, async () => undefined);
+		await stopped.open(ref);
+		await finished;
+		const last = captures.at(-1)!;
+		assert.strictEqual(last.state.snapshot!.rawStatus, 'Running on test 2');
+		assert.strictEqual(last.state.tracking, false);
+		assert.match(last.state.message!, /session changed/);
+		assert.doesNotMatch(last.state.message!, /Sign in|submit again/);
+		stopped.dispose();
+	} finally { Module._load = original; delete require.cache[modulePath]; }
 });
 
 

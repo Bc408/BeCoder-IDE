@@ -167,7 +167,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		};
 		if (browsers.onDidChangeBrowserViews) { this._register(browsers.onDidChangeBrowserViews(watchBrowsers)); }
 		watchBrowsers();
-		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false, waitForLoad = true, problemRead = false): Promise<BrowserEditorInput> => {
+		const openPage = async (url: string, signal?: AbortSignal, scope?: BrowserViewStorageScope, taskOwned = false, waitForLoad = true): Promise<BrowserEditorInput> => {
 			const epoch = lifecycleEpoch;
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			if (scope !== undefined && await browsers.resolveStorageScope() !== scope) { throw new Error('oj-connect-session-scope-changed'); }
@@ -182,7 +182,6 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			const preferred = siteViews.get(origin);
 			if (candidates.length > 1 && !candidates.includes(preferred!)) { throw new Error('oj-connect-browser-ambiguous'); }
 			let input = candidates.includes(preferred!) ? preferred : candidates[0];
-			const created = !input;
 			if (!input) {
 				assertLifecycle(epoch);
 				signal?.throwIfAborted();
@@ -198,10 +197,6 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 					signal?.throwIfAborted();
 					await Promise.race([input.resolve(), new Promise<never>((_resolve, reject) => { abort = () => reject(signal?.reason); signal?.addEventListener('abort', abort, { once: true }); })]);
 				} finally { if (abort) { signal?.removeEventListener('abort', abort); } }
-				if (problemRead && created && input.model && ownedInputs.has(input) && !editors.editors.includes(input)) {
-					await service.waitForOjProblemDocument(input.model.id, owner, url);
-					assertLifecycle(epoch); signal?.throwIfAborted();
-				}
 				const started = Date.now();
 				while (Date.now() - started < 20000) {
 					assertLifecycle(epoch);
@@ -244,18 +239,19 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (event.windowId === owner) { void _commands.executeCommand('_becoder.ojConnect.luogu.cancelCaptcha', event.requestId).catch(() => undefined); }
 		}));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.luogu.getCaptcha', (_accessor, requestId: string) => service.getLuoguCaptcha(owner, requestId)));
-		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces') => {
+		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces', rawRequestId?: string) => {
 			if (problem?.site !== site) { throw new Error('oj-connect-problem-route'); }
 			if (site === 'nowcoder') { assertNowcoderProblem(problem); return service.readOjProblem(await nowcoderSessionId(), owner, problem); }
 			if (site === 'codeforces') { assertCodeforcesProblem(problem); }
 			else if (site === 'luogu') { assertLuoguProblem(problem); }
 			else { const task = atCoderTask(problem.url); if (!task || problem.nativeId !== task.contestId + '/' + task.taskId) { throw new Error('oj-connect-problem-route'); } }
 			if (site === 'luogu') { return service.readOjProblem(await luoguSessionId(), owner, problem); }
-			const input = await openPage(problem.url, undefined, await browsers.resolveStorageScope(), false, true, true);
-			if (!input.model) { throw new Error('oj-connect-page-not-ready'); }
-			const page = { viewId: input.model.id };
-			try { return await service.readOjProblem(input.model.id, owner, problem); }
-			finally { release(page); }
+			const epoch = lifecycleEpoch, scope = await browsers.resolveStorageScope(); assertLifecycle(epoch);
+			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
+			const requestId = rawRequestId ?? generateUuid();
+			const document = await service.readOjStatement(owner, scope, problem, requestId);
+			const currentScope = await browsers.resolveStorageScope(); assertLifecycle(epoch); if (!active() || currentScope !== scope) { throw new Error('oj-connect-session-scope-changed'); }
+			return document;
 		};
 		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary> => {
 			if (site === 'codeforces') { return service.readOjLogin(await codeforcesSessionId(), owner, site); }
@@ -542,9 +538,11 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'release', (_accessor, handle: string) => this.codeforcesBridge.release(handle)));
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readRecord', (_accessor, record: RecordRef) => this.codeforcesBridge.readRecord(record)));
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'reconcile', (_accessor, attemptId: string) => this.codeforcesBridge.reconcile(attemptId)));
-		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'codeforces')));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'readProblem', (_accessor, problem: ProblemRef, requestId?: string) => readProblem(problem, 'codeforces', requestId)));
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'loginSummary', () => loginSummary('codeforces')));
-		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef) => readProblem(problem, 'atcoder')));
+		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef, requestId?: string) => readProblem(problem, 'atcoder', requestId)));
+		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.cancelStatementRead', (_accessor, requestId: string) => service.cancelOjStatementRead(owner, requestId)));
+		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancelStatementRead', (_accessor, requestId: string) => service.cancelOjStatementRead(owner, requestId)));
 		for (const site of ['atcoder', 'codeforces'] as const) {
 			const languagePrefix = '_becoder.ojConnect.' + site + '.';
 			this._register(CommandsRegistry.registerCommand(languagePrefix + 'cancelLanguageRead', (_accessor, requestId: string) => service.cancelOjLanguageRead(owner, requestId)));

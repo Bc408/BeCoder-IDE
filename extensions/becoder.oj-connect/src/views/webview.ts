@@ -12,11 +12,11 @@ import { userError } from '../messages';
 export function labels(): Record<string, string> {
 	return {
 		rendering: vscode.l10n.t('Rendering the statement…'), renderFailed: vscode.l10n.t('Could not render the statement.'), submit: vscode.l10n.t('Submit'), submitCode: vscode.l10n.t('Submit Code'), importCph: vscode.l10n.t('Send to CPH'),
-		continueQuery: vscode.l10n.t('Continue Querying'), record: vscode.l10n.t('Submission'),
+		continueQuery: vscode.l10n.t('Continue Querying'), record: vscode.l10n.t('Submission Details'),
 		compilerCatalogue: vscode.l10n.t('Verified catalogue; checked again after sign-in'),
-		tracking: vscode.l10n.t('Reading the current submission result…'), language: vscode.l10n.t('Language'),
+		tracking: vscode.l10n.t('Reading the current submission result…'), resultUnavailable: vscode.l10n.t('No submission result has been read yet.'), language: vscode.l10n.t('Language'), submissionLanguage: vscode.l10n.t('Submission language'),
 		interactive: vscode.l10n.t('Interactive problem'), samples: vscode.l10n.t('Samples'), input: vscode.l10n.t('Input'), output: vscode.l10n.t('Output'),
-		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Select and copy the sample'), score: vscode.l10n.t('Score'),
+		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Copy failed. Select the text and copy it manually.'), score: vscode.l10n.t('Score'),
 		chooseLanguage: vscode.l10n.t('Choose a compiler'), languagesLoading: vscode.l10n.t('Loading compiler options…'), languagesUnavailable: vscode.l10n.t('Compiler options unavailable'), languagesLoginRequired: vscode.l10n.t('Sign in to load compiler options'), statementLanguage: vscode.l10n.t('Statement language'), problem: vscode.l10n.t('Problem'), verdict: vscode.l10n.t('Verdict'), resources: vscode.l10n.t('Time / Memory'),
 		'Time Limit': vscode.l10n.t('Time Limit'), 'Memory Limit': vscode.l10n.t('Memory Limit'),
 		difficulty: vscode.l10n.t('Problem Difficulty'), tags: vscode.l10n.t('Problem Tags'),
@@ -26,7 +26,7 @@ export function labels(): Record<string, string> {
 		officialSource: vscode.l10n.t('Source from the official record'), sentSource: vscode.l10n.t('Source sent in this submission; not yet checked against the official record'),
 		compileSucceeded: vscode.l10n.t('Compilation succeeded'), compileFailed: vscode.l10n.t('Compilation failed'),
 		compileUnavailable: vscode.l10n.t('Compiler output is unavailable for this record.'),
-		owner: vscode.l10n.t('User'), compiler: vscode.l10n.t('Compiler Output'),
+		owner: vscode.l10n.t('User'), compiler: vscode.l10n.t('Compilation Details'),
 		'verification_mismatch': vscode.l10n.t('The record source differs from the submitted source.'),
 	};
 }
@@ -57,7 +57,12 @@ export class Panel implements vscode.Disposable {
 			});
 		}), this.panel.onDidDispose(() => { this.closed = true; onClose(); this.subscriptions.splice(0).forEach(value => value.dispose()); }));
 	}
-	update(value: Partial<PanelState>): void { if (!this.closed) { Object.assign(this.state, value); void this.panel.webview.postMessage({ type: 'state', state: this.state }); } }
+	update(value: Partial<PanelState>): void {
+		if (this.closed) { return; }
+		Object.assign(this.state, value);
+		if (this.state.kind === 'problem' && value.problem) { this.panel.title = value.problem.title; }
+		void this.panel.webview.postMessage({ type: 'state', state: this.state });
+	}
 	reveal(): void { if (!this.closed) { this.panel.reveal(undefined, false); } }
 	dispose(): void { this.panel.dispose(); }
 }

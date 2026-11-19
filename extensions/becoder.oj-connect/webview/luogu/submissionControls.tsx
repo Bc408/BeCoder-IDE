@@ -35,7 +35,7 @@ export default function SubmissionControls({ state }: { state: PanelState }) {
 		<VSCodeButton onClick={submitCurrentDocument} appearance={'primary'} disabled={submitting} className={'problem-action'} aria-label={state.sourceName ? state.labels.submit + ' ' + state.sourceName : state.labels.submitCode} title={state.sourceName ? state.labels.submit + ' ' + state.sourceName : state.labels.submitCode}>
 			<SubmitIcon />
 		</VSCodeButton>
-		<VSCodeDropdown ariaLabelledby={state.labels.language} value={state.languageId ?? ''}
+		<VSCodeDropdown ariaLabelledby={state.labels.submissionLanguage} value={state.languageId ?? ''}
 			title={compilerTitle}
 			disabled={submitting || languages.length === 0}
 			onChange={event => { void send({ action: 'selectLanguage', languageId: event.target.value }).catch(() => undefined); }}>

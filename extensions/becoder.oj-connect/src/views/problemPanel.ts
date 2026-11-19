@@ -16,7 +16,7 @@ export interface ProblemActions {
 	selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): void | Promise<void>;
 	submit(source: vscode.TextDocument, document: ProblemDocument): Promise<void>;
 	importCph(sourceUri: string, document: ProblemDocument): Promise<void>;
-	openOriginal(url: string): Promise<void>;
+	openLink(url: string): Promise<void>;
 	loadLanguages?(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue>;
 }
 interface ProblemPanelEntry {
@@ -42,7 +42,7 @@ export class ProblemPanel implements vscode.Disposable {
 			try { existing.binding.assertCurrent(); current = existing.binding.source === source; } catch { /* Explicitly reopening binds the new source. */ }
 			if (current) {
 				this.cancelLanguageRead(existing);
-				existing.panel.update({ problem: { ...existing.panel.state.problem!, languages: document.languages, languageError: document.languageError }, languages, languageId, languagesLoading: false, usingCompilerCatalogue });
+				existing.panel.update({ problem: document, locale: this.statementLocale(document, existing.panel.state.locale), languages, languageId, languagesLoading: false, usingCompilerCatalogue });
 				this.loadLanguages(key, existing);
 				existing.panel.reveal(); return;
 			}
@@ -54,20 +54,20 @@ export class ProblemPanel implements vscode.Disposable {
 			vscode.workspace.onDidSaveTextDocument(value => { if (value === source) { try { binding.refreshAfterSave(value); } catch { binding.invalidate(); } } }),
 			vscode.workspace.onDidRenameFiles(event => { if (event.files.some(file => affects(file.oldUri))) { binding.invalidate(); } }),
 			vscode.workspace.onDidDeleteFiles(event => { if (event.files.some(affects)) { binding.invalidate(); } }));
-		const available = document.bodies.map(body => body.locale);
-		const locale = document.ref.site === 'atcoder' ? this.preferences?.statementLocale(available) ?? available.find(value => value === 'en') ?? available[0] : document.bodies.find(body => body.locale.toLowerCase().startsWith(vscode.env.language.toLowerCase().split('-')[0]))?.locale ?? available[0];
+		const locale = this.statementLocale(document);
 		const panel = new Panel(this.context, { kind: 'problem', labels: labels(), problem: document, languages, languageId, usingCompilerCatalogue, sourceName: path.basename(vscode.Uri.parse(sourceUri).fsPath), locale }, async value => {
+			const document = panel.state.problem!;
 			switch (value.action) {
 				case 'selectLocale':
 					if (document.bodies.some(body => body.locale === value.locale)) {
 						if (document.ref.site === 'atcoder') { await this.preferences?.selectStatementLocale(value.locale); }
-						panel.update({ locale: value.locale });
+						if (panel.state.problem!.bodies.some(body => body.locale === value.locale)) { panel.update({ locale: value.locale }); }
 					}
 					break;
 				case 'selectLanguage': await this.updateLanguage(document.ref, panel.state.languages ?? [], value.languageId); break;
 				case 'submit': binding.assertCurrent(); await this.actions.submit(source, document); break;
 				case 'importCph': binding.assertCurrent(); await this.actions.importCph(sourceUri, document); break;
-				case 'openOriginal': await this.actions.openOriginal(document.ref.url); break;
+				case 'openLink': await this.actions.openLink(value.url); break;
 			}
 		}, () => {
 			listeners.splice(0).forEach(listener => listener.dispose());
@@ -77,6 +77,11 @@ export class ProblemPanel implements vscode.Disposable {
 		const entry = { panel, binding };
 		this.panels.set(key, entry);
 		this.loadLanguages(key, entry);
+	}
+	private statementLocale(document: ProblemDocument, current?: string): string | undefined {
+		const available = document.bodies.map(body => body.locale);
+		if (document.ref.site === 'atcoder') { return this.preferences?.statementLocale(available) ?? available.find(value => value === 'en') ?? available[0]; }
+		return current && available.includes(current) ? current : available.find(locale => locale.toLowerCase().startsWith(vscode.env.language.toLowerCase().split('-')[0])) ?? available[0];
 	}
 	private cancelLanguageRead(entry: ProblemPanelEntry): void {
 		const request = entry.languageRead; entry.languageRead = undefined; request?.abort();
@@ -129,8 +134,11 @@ export class ProblemPanel implements vscode.Disposable {
 	async updateLanguage(problem: ProblemRef, languages: readonly LanguageOption[], languageId: string): Promise<void> {
 		const selected = languages.find(option => option.id === languageId);
 		if (!selected) { return; }
+		const panels = [...this.panels].map(([key, entry]) => ({ key, entry, document: entry.panel.state.problem, languages: entry.panel.state.languages }));
 		await this.actions.selectLanguage(problem.site, selected.family, languageId);
-		for (const { panel, binding } of this.panels.values()) {
+		for (const current of panels) {
+			const { panel, binding } = current.entry;
+			if (this.panels.get(current.key) !== current.entry || panel.state.problem !== current.document || panel.state.languages !== current.languages) { continue; }
 			if (panel.state.problem?.ref.site !== problem.site || binding.source.languageId !== selected.family) { continue; }
 			const options = panel.state.problem.ref.url === problem.url ? languages : panel.state.languages ?? [];
 			if (options.some(option => option.id === languageId)) { panel.update({ languages: options, languageId }); }

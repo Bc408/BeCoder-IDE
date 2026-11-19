@@ -14,7 +14,7 @@ export interface CodeforcesHost {
 	send(handle: string, payload: ICodeforcesSourcePayload): Promise<SubmissionOutcome>;
 	cancel(handle: string): Promise<void>;
 	release(handle: string): Promise<void>;
-	readProblem(problem: ProblemRef): Promise<ProblemDocument>;
+	readProblem(problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument>;
 	loginSummary(): Promise<LoginSummary>;
 	readRecord(record: RecordRef): Promise<RecordSnapshot>;
 	cancelRecord?(record: RecordRef): Promise<void>;
@@ -27,7 +27,7 @@ export class CodeforcesAdapter implements OjAdapter {
 	resolve(input: string): ProblemRef | undefined { return codeforcesProblem(input); }
 	private problem(problem: ProblemRef): void { if (validateProblemRef(problem).site !== 'codeforces') { throw new Error('Codeforces received a different site.'); } }
 	fileName(problem: ProblemRef): string { this.problem(problem); return problem.nativeId.replace('/', '_').toLowerCase() + '.cpp'; }
-	async readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument> { signal.throwIfAborted(); this.problem(problem); return this.host.readProblem(problem); }
+	async readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument> { signal.throwIfAborted(); this.problem(problem); const document = await this.host.readProblem(problem, signal); signal.throwIfAborted(); return document; }
 	async loginSummary(signal: AbortSignal): Promise<LoginSummary> { signal.throwIfAborted(); return this.host.loginSummary(); }
 	async readRecord(record: RecordRef, signal: AbortSignal): Promise<RecordSnapshot> {
 		signal.throwIfAborted(); this.problem(record.problem); validateRecordRef(record);

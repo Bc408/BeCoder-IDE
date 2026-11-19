@@ -28,7 +28,8 @@ import { checkAtCoderSourceResponse, parseAtCoderRecordHTML, decodeAtCoderHTML, 
 import { atCoderFormScript, atCoderTask, atCoderSubmitURL, IAtCoderSourcePayload, IAtCoderTaskForm } from '../common/atcoderWorkflow.js';
 import { runAtCoderTransaction, reconcileAtCoderTransaction, type AtCoderAttempt } from './atcoderTransaction.js';
 import { assertLuoguProblem } from '../common/luoguBridge.js';
-import { runOjScript, type OjScriptTask } from './ojScriptTask.js';
+import { createOjStatementRead, assertOjStatementTarget } from './ojStatementTransport.js';
+import { parseOjStatement } from './ojStatementParser.js';
 import { createHash } from 'crypto';
 import { createRequire } from 'module';
 import { NowcoderSessionClient } from './nowcoderSessionClient.js';
@@ -68,7 +69,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly atCoderAccountReads = new Map<string, { windowId: number; controller: AbortController; result: Promise<LoginSummary> }>();
 	private readonly atCoderAccounts = new Map<string, { windowIds: Set<number>; identity?: string }>();
 	private readonly ojReads = new Map<string, { windowId: number; operation?: string; cancel(): void }>();
-	private readonly ojProblemDocuments = new WeakMap<Electron.WebContents, string>();
+	private readonly cancelledOjStatementReads = new Set<string>();
 	private readonly atCoderRecords = new Map<string, { windowId: number; snapshot: RecordSnapshot; initial: boolean }>();
 	private readonly atCoderRecordRequests = new Map<string, { controller: AbortController; done: Promise<void> }>();
 	private readonly atCoderAttempts = new Map<string, { context: AtCoderAttempt; session: BrowserSession; windowId: number; timer: ReturnType<typeof setTimeout> }>();
@@ -314,41 +315,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		return browserProblem(url);
 	}
 
-	async waitForOjProblemDocument(id: string, windowId: number, expectedURL: string): Promise<void> {
-		const view = this._getBrowserView(id), target = new URL(expectedURL), started = Date.now();
-		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
-		if (view.session.storageScope === BrowserViewStorageScope.Ephemeral) { throw new Error('OJ Connect requires a persistent browser session.'); }
-		if (target.username || target.password || target.hash || target.search || !(atCoderTask(expectedURL) || target.origin === 'https://codeforces.com' && /^\/contest\/[1-9]\d*\/problem\/[A-Z][A-Z0-9]*$/.test(target.pathname))) { throw new Error('oj-connect-problem-route'); }
-		const contents = view.getWebContentsView().webContents, requestId = generateUuid();
-		await new Promise<void>((resolve, reject) => {
-			let finished = false;
-			const timer = setTimeout(() => finish(new Error('oj-connect-page-not-ready')), 20000);
-			const finish = (error?: Error) => {
-				if (finished) { return; } finished = true;
-				if (timer) { clearTimeout(timer); }
-				contents.removeListener('dom-ready', ready); contents.removeListener('did-stop-loading', check); contents.removeListener('did-start-navigation', navigating);
-				closed.dispose(); this.ojReads.delete(requestId);
-				if (error) { reject(error); } else { resolve(); }
-			};
-			const check = () => {
-				if (contents.isDestroyed()) { finish(new Error('oj-connect-page-changed')); return; }
-				const actual = contents.getURL();
-				if (actual && actual !== 'about:blank' && actual !== expectedURL) { finish(new Error('oj-connect-page-changed')); return; }
-				if (actual === expectedURL && !contents.isLoading()) { finish(); return; }
-				if (actual === expectedURL && this.ojProblemDocuments.get(contents) === expectedURL && !view.getState().visible) { contents.stop(); }
-			};
-			const ready = () => { if (!contents.isDestroyed()) { this.ojProblemDocuments.set(contents, contents.getURL()); } check(); };
-			const navigating = (details: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
-				if (details.isMainFrame && !details.isSameDocument && (details.url !== expectedURL || contents.getURL() && contents.getURL() !== 'about:blank')) { finish(new Error('oj-connect-page-changed')); }
-			};
-			const closed = view.onDidClose(() => finish(new Error('oj-connect-page-changed')));
-			contents.on('dom-ready', ready); contents.on('did-stop-loading', check); contents.on('did-start-navigation', navigating);
-			this.ojReads.set(requestId, { windowId, operation: 'readOjProblemDocument', cancel: () => finish(new Error('oj-connect-stopped')) });
-			check();
-		});
-		this.logService?.info('[OJ Connect problem]', { site: target.hostname === 'atcoder.jp' ? 'atcoder' : 'codeforces', phase: 'document-ready', elapsedMs: Date.now() - started });
-	}
-
 	async parseProblem(id: string, windowId: number): Promise<{ url: string; json: string }> {
 		const view = this._getBrowserView(id);
 		if (view.owner.mainWindowId !== windowId) {
@@ -385,44 +351,6 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		}
 	}
 
-	/** Fixed owned script resources only. No operation name or script is exposed through the service API. */
-	private async _runOjRead(id: string, windowId: number, expectedURL: string, operation: 'readAtCoderProblem' | 'readCodeforcesProblem', input: unknown, timeoutMs = 10000, requestId = generateUuid(), task: OjScriptTask = { controller: new AbortController(), dispatched: false }): Promise<unknown> {
-		const view = this._getBrowserView(id);
-		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
-		const contents = view.getWebContentsView().webContents;
-		const canonical = (value: string) => { const url = new URL(value); url.hash = ''; return url.href; };
-		const available = () => !contents.isDestroyed() && !contents.isLoading() && canonical(contents.getURL()) === canonical(expectedURL);
-		if (!available()) { throw new Error('oj-connect-page-changed'); }
-		const origin = new URL(expectedURL).origin;
-		if (operation === 'readCodeforcesProblem' ? origin !== 'https://codeforces.com' : origin !== 'https://www.luogu.com.cn' && origin !== 'https://atcoder.jp') { throw new Error('oj-connect-origin'); }
-		let changed = false;
-		const stop = () => { changed = true; task.controller.abort(new Error('oj-connect-page-changed')); };
-		const watcher = combinedDisposable(view.onDidClose(stop), view.onDidNavigate(stop));
-		this.ojReads.set(requestId, { windowId, operation, cancel: stop });
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		try {
-			const result = await runOjScript(task, async () => {
-				const script = await fs.readFile(join(this.environmentMainService.appRoot, 'extensions', 'becoder.oj-connect', 'dist', 'site-scripts.js'), 'utf8');
-				if (changed || !available()) { throw new Error('oj-connect-page-changed'); }
-				return script;
-			}, script => {
-				const code = `if (!globalThis.BeCoderOj) { ${script} }\nBeCoderOj.${operation}(${JSON.stringify(input)},${JSON.stringify(requestId)})`;
-				timer = setTimeout(() => task.controller.abort(new Error('oj-connect-operation-timeout')), timeoutMs);
-				return contents.executeJavaScriptInIsolatedWorld(1006, [{ code }]);
-			});
-			if (changed || !available()) { throw new Error('oj-connect-page-changed'); }
-			if (new TextEncoder().encode(JSON.stringify(result)).length > 8 * 1024 * 1024) { throw new Error('oj-connect-response-too-large'); }
-			return result;
-		} finally {
-			this.ojReads.delete(requestId);
-			if (timer) { clearTimeout(timer); } watcher.dispose();
-			if (task.dispatched && !contents.isDestroyed()) {
-				const cancel = 'cancelOjRead';
-				await contents.executeJavaScriptInIsolatedWorld(1006, [{ code: `globalThis.BeCoderOj?.${cancel}(${JSON.stringify(requestId)})` }]).catch(() => undefined);
-			}
-		}
-	}
-
 	async cancelOjOperations(windowId: number): Promise<void> {
 		for (const request of this.codeforcesRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
 		for (const [key, entry] of this.codeforcesClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.codeforcesClients.delete(key); } }
@@ -448,36 +376,26 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
-		const started = Date.now();
-		if (problem.site === 'codeforces') {
-			assertCodeforcesProblem(problem);
-			const view = this._getBrowserView(id);
-			if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
-			const actualURL = view.getWebContentsView().webContents.getURL(), url = new URL(actualURL);
-			const contest = /^\/contest\/([1-9]\d*)\/problem\/([A-Z][A-Z0-9]*)\/?$/.exec(url.pathname);
-			const problemset = /^\/problemset\/problem\/([1-9]\d*)\/([A-Z][A-Z0-9]*)\/?$/.exec(url.pathname);
-			const identity = contest ?? problemset;
-			if (url.origin !== 'https://codeforces.com' || url.username || url.password || !identity || identity[1] + '/' + identity[2] !== problem.nativeId || [...url.searchParams.keys()].some(key => key !== 'locale')) { throw new Error('oj-connect-page-changed'); }
-			const parsed = await this.parseProblem(id, windowId);
-			if (parsed.url !== actualURL) { throw new Error('oj-connect-page-changed'); }
-			const document = await this._runOjRead(id, windowId, actualURL, 'readCodeforcesProblem', { problem, companion: JSON.parse(parsed.json) }) as ProblemDocument;
-			this.logService?.info('[OJ Connect problem]', { site: 'codeforces', phase: 'statement-read', elapsedMs: Date.now() - started });
-			return document;
-		}
 		if (problem.site === 'nowcoder') { return this.nowcoderClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
-		if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
-		const actualURL = this._getBrowserView(id).getWebContentsView().webContents.getURL();
+		assertOjStatementTarget(problem);
+		const view = this._getBrowserView(id);
+		if (view.owner.mainWindowId !== windowId) { throw new Error('oj-connect-owner'); }
+		const actual = view.getWebContentsView().webContents.getURL();
 		if (problem.site === 'atcoder') {
-			const current = atCoderTask(actualURL);
-			if (!current || current.contestId + '/' + current.taskId !== problem.nativeId) { throw new Error('oj-connect-page-changed'); }
+			const task = atCoderTask(actual); if (!task || task.contestId + '/' + task.taskId !== problem.nativeId) { throw new Error('oj-connect-page-changed'); }
+		} else {
+			const url = new URL(actual), match = /^\/(?:contest\/([1-9]\d*)\/problem\/([A-Z][A-Z0-9]*)|problemset\/problem\/([1-9]\d*)\/([A-Z][A-Z0-9]*))\/?$/.exec(url.pathname);
+			if (url.origin !== 'https://codeforces.com' || url.username || url.password || !match || (match[1] ?? match[3]) + '/' + (match[2] ?? match[4]) !== problem.nativeId || [...url.searchParams.keys()].some(key => key !== 'locale')) { throw new Error('oj-connect-page-changed'); }
 		}
-		// Canonical problem identity and the exact document being observed are separate.
-		const document = await this._runOjRead(id, windowId, actualURL, 'readAtCoderProblem', problem) as ProblemDocument;
-		this.logService?.info('[OJ Connect problem]', { site: 'atcoder', phase: 'statement-read', elapsedMs: Date.now() - started });
-		return document;
+		const requestId = generateUuid(), cancel = () => { void this.cancelOjStatementRead(windowId, requestId); };
+		const watchers = combinedDisposable(view.onDidClose(cancel), view.onDidNavigate(cancel));
+		try {
+			return await this.readStatementDocument(view.session, windowId, problem, requestId, () => {
+				if (this._getBrowserView(id) !== view || view.owner.mainWindowId !== windowId || view.getWebContentsView().webContents.getURL() !== actual) { throw new Error('oj-connect-page-changed'); }
+			});
+		} finally { watchers.dispose(); }
 	}
-
 
 	async cancelOjLanguageRead(windowId: number, requestId: string): Promise<void> {
 		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-language-request-id'); }
@@ -485,6 +403,39 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		const request = this.ojReads.get(key);
 		if (request) { request.cancel(); }
 		else { this.cancelledOjLanguageReads.add(key); if (this.cancelledOjLanguageReads.size > 128) { this.cancelledOjLanguageReads.delete(this.cancelledOjLanguageReads.values().next().value!); } }
+	}
+	async cancelOjStatementRead(windowId: number, requestId: string): Promise<void> {
+		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-statement-request-id'); }
+		const key = 'statement:' + windowId + ':' + requestId, request = this.ojReads.get(key);
+		if (request) { request.cancel(); }
+		else { this.cancelledOjStatementReads.add(key); if (this.cancelledOjStatementReads.size > 128) { this.cancelledOjStatementReads.delete(this.cancelledOjStatementReads.values().next().value!); } }
+	}
+	async readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<ProblemDocument> {
+		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-statement-request-id'); }
+		assertOjStatementTarget(problem);
+		if (this.cancelledOjStatementReads.delete('statement:' + windowId + ':' + requestId)) { throw new Error('oj-statement-cancelled'); }
+		const session = this.ojSession(windowId, scope);
+		return this.readStatementDocument(session, windowId, problem, requestId, () => {
+			if (this.ojSession(windowId, scope) !== session) { throw new Error('oj-connect-session-scope-changed'); }
+		});
+	}
+	private async readStatementDocument(session: BrowserSession, windowId: number, problem: ProblemRef, requestId: string, assertCurrent: () => void): Promise<ProblemDocument> {
+		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-statement-request-id'); }
+		assertOjStatementTarget(problem);
+		const key = 'statement:' + windowId + ':' + requestId;
+		if (this.cancelledOjStatementReads.delete(key)) { throw new Error('oj-statement-cancelled'); }
+		if (this.ojReads.has(key)) { throw new Error('oj-statement-request-busy'); }
+		const controller = new AbortController();
+		const current = () => { controller.signal.throwIfAborted(); assertCurrent(); };
+		this.ojReads.set(key, { windowId, operation: 'readStatement', cancel: () => controller.abort(new Error('oj-statement-cancelled')) });
+		try {
+			current();
+			const html = await createOjStatementRead(session.electronSession)(problem, controller.signal); current();
+			const oj = await fs.readFile(join(this.environmentMainService.appRoot, 'extensions/becoder.oj-connect/dist/site-scripts.js'), 'utf8'); current();
+			const companion = problem.site === 'codeforces' ? await fs.readFile(join(this.environmentMainService.appRoot, 'extensions/becoder.cph/dist/problem-parser.js'), 'utf8') : undefined; current();
+			const document = await parseOjStatement(problem, html, { oj, companion }, controller.signal); current();
+			return document;
+		} finally { this.ojReads.delete(key); }
 	}
 	async readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue> {
 		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-language-request-id'); }
@@ -1184,15 +1135,10 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			options
 		);
 		this.browserViews.set(id, view);
-		const contents = view.getWebContentsView().webContents;
-		const documentReady = () => this.ojProblemDocuments.set(contents, contents.getURL());
-		const documentNavigating = (details: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => { if (details.isMainFrame && !details.isSameDocument) { this.ojProblemDocuments.delete(contents); } };
-		contents.on('dom-ready', documentReady); contents.on('did-start-navigation', documentNavigating);
 		if (windowConfiguration?.appearance) {
 			view.setAppearance(windowConfiguration.appearance);
 		}
 		Event.once(view.onDidClose)(() => {
-			contents.removeListener('dom-ready', documentReady); contents.removeListener('did-start-navigation', documentNavigating); this.ojProblemDocuments.delete(contents);
 			this.browserViews.deleteAndDispose(id);
 		});
 

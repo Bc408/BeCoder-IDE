@@ -38,3 +38,13 @@ export async function parseCurrentProblem(): Promise<string> {
   if (json.length>8*1024*1024) { throw new Error('Problem exceeds the import limit.'); }
   return json;
 }
+
+/** Fixed raw-document entry for OJ Connect; ordinary browser import remains unchanged. */
+export async function parseCodeforcesHtml(url: string, html: string): Promise<string> {
+  const target = new URL(url);
+  if (target.origin !== 'https://codeforces.com' || target.username || target.password || target.search || target.hash || !/^\/contest\/[1-9]\d*\/problem\/[A-Z][A-Z0-9]*$/.test(target.pathname) || html.length > 8 * 1024 * 1024) { throw new Error('Invalid official Codeforces problem document.'); }
+  const problem = await new CodeforcesProblemParser().parse(url, html);
+  const json = JSON.stringify(problem);
+  if (json.length > 8 * 1024 * 1024) { throw new Error('Problem exceeds the import limit.'); }
+  return json;
+}

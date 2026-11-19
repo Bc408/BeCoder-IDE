@@ -527,8 +527,9 @@ export interface IBrowserViewService {
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
 
 	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
+	readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<ProblemDocument>;
+	cancelOjStatementRead(windowId: number, requestId: string): Promise<void>;
 	/** Only for a newly created hidden OJ reader: retain its DOM and stop remaining subresources. */
-	waitForOjProblemDocument(id: string, windowId: number, expectedURL: string): Promise<void>;
 	readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue>;
 	cancelOjLanguageRead(windowId: number, requestId: string): Promise<void>;
 	cancelOjOperations(windowId: number): Promise<void>;

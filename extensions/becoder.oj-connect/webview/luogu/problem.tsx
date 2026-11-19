@@ -70,7 +70,7 @@ export default function Problem({ state }: { state: PanelState }) {
 	return <>
 		<header>
 			<div>
-				<h1><a href={data.ref.url} onClick={event => { event.preventDefault(); void send({ action: 'openOriginal' }).catch(() => undefined); }}>{problemId}</a>{' '}{data.title.startsWith(problemId + ' ') ? data.title.slice(problemId.length + 1) : data.title}</h1>
+				<h1><a href={data.ref.url}>{problemId}</a>{' '}{data.title.startsWith(problemId + ' ') ? data.title.slice(problemId.length + 1) : data.title}</h1>
 				<div>
 					{languagesList.length > 1 && <VSCodeDropdown ariaLabelledby={state.labels.statementLanguage} value={choosedLanguage}
 						onChange={event => { void send({ action: 'selectLocale', locale: event.target.value }).catch(() => undefined); }}>

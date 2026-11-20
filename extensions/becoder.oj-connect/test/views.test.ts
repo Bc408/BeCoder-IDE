@@ -106,6 +106,50 @@ test('webview state cannot terminate its script and actions cannot inject a sour
 	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'x'.repeat(8 * 1024 * 1024 + 1) }), undefined);
 });
 
+test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore closed or settled updates', async () => {
+	const Module = require('module'), original = Module._load;
+	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void>; close(): void }[] = [];
+	const modulePath = require.resolve('../src/views/recordPanel'); delete require.cache[modulePath];
+	Module._load = function (id: string, ...args: unknown[]) {
+		if (id === 'vscode') { return { l10n: { t: (value: string) => value } }; }
+		if (id === './webview') { return { labels: () => ({}), Panel: class {
+			constructor(_context: unknown, readonly state: PanelState, action: (value: PanelAction) => Promise<void>, private close: () => void) { captures.push({ state, action, close }); }
+			update(value: Partial<PanelState>) { Object.assign(this.state, value); } reveal() { } dispose() { this.close(); }
+		} }; }
+		return original.call(this, id, ...args);
+	};
+	try {
+		const { RecordPanel } = require('../src/views/recordPanel');
+		const problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+		const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+		let reads = 0, queries = 0, releases = 0;
+		const panels = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => { reads++; return { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' }; } }], async () => { }, async () => { releases++; }, (outcome: { attemptId: string }, _source: string, adopt: (record: RecordRef) => void) => async () => {
+			assert.strictEqual(outcome.attemptId, 'attempt'); queries++; adopt(record);
+		});
+		const initial = { problem, phase: 'preparing' as const, codeLength: '12 B' };
+		const first = panels.beginEvaluation(initial, '');
+		assert.strictEqual(captures.length, 1); assert.strictEqual(reads, 0);
+		assert.strictEqual(captures[0].state.record, undefined); assert.strictEqual(captures[0].state.snapshot, undefined);
+		first.update({ ...initial, phase: 'judging', language: 'C++（g++17）' });
+		assert.strictEqual(first.finish({ kind: 'record', record }), false, 'the preview owns presentation and suppresses later generic reopening'); await panels.open(record);
+		await new Promise(resolve => setImmediate(resolve));
+		assert.strictEqual(captures.length, 1, 'formal confirmation reuses the same page');
+		assert.strictEqual(captures[0].state.submission, undefined);
+		assert.strictEqual((captures[0].state as PanelState).snapshot?.rawStatus, 'AC');
+		first.update({ ...initial, phase: 'sending' }); assert.strictEqual(captures[0].state.submission, undefined);
+		captures[0].close(); assert.strictEqual(releases, 1);
+		const second = panels.beginEvaluation(initial, ''), closed = captures.at(-1)!;
+		closed.close(); second.update({ ...initial, phase: 'judging' }); second.finish({ kind: 'record', record });
+		assert.strictEqual(closed.state.record, undefined); assert.strictEqual(closed.state.submission?.phase, 'preparing');
+		const third = panels.beginEvaluation(initial, ''), pending = captures.at(-1)!;
+		third.finish({ kind: 'unconfirmed', problem, attemptId: 'attempt', message: 'pending' });
+		assert.strictEqual(pending.state.tracking, false); assert.strictEqual(pending.state.canRetry, true);
+		await pending.action({ action: 'continueQuery' }); await new Promise(resolve => setImmediate(resolve));
+		assert.strictEqual(queries, 1); assert.strictEqual(pending.state.snapshot?.rawStatus, 'AC');
+		assert.strictEqual(captures.length, 3); panels.dispose();
+	} finally { Module._load = original; delete require.cache[modulePath]; }
+});
+
 test('AtCoder statement displays a default compiler without storing it and restores explicit locale', async t => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-locale-'));
 	t.after(() => fs.rmSync(root, { recursive: true, force: true }));

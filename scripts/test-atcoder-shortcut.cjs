@@ -31,8 +31,9 @@ app.whenReady().then(async () => {
 		let emptyHistory = false, pollInterval = 750;
 		let posts = 0, detailReads = 0, historyReads = 0, captcha = false, ambiguous = false, mismatch = false, wrongResponse = false, rawVerdict = 'AC', japanese = false, sourceVisible = true;
 		const partition = session.fromPartition('shortcut-fetch-fixture');
+		await partition.setProxy({ proxyRules: 'http://127.0.0.1:9', proxyBypassRules: '<-loopback>' });
 		const scope = 'global';
-		const browserSession = { id: 'fixture-session', storageScope: scope, electronSession: partition };
+		const browserSession = { id: 'fixture-session', storageScope: scope, electronSession: { cookies: partition.cookies, fetch: (url, init) => partition.fetch(url, { ...init, bypassCustomProtocolHandlers: false }) } };
 		const row = id => `<tr><td><a href="/contests/abc086/tasks/abc086_a">A</a></td><td><a href="/users/test_user">user</a></td><td><a href="/contests/abc086/submissions/me?f.Language=6017">C++23</a></td><td><a href="/contests/abc086/submissions/${id}">Detail</a></td></tr>`;
 		partition.protocol.handle('https', async request => {
 			const url = new URL(request.url);

@@ -1,4 +1,6 @@
 {
+	"lanqiao.cCompiler": "蓝桥 C 编译器标识。留空时使用本站当前 C 选项；保存的选项失效时需重新选择。",
+	"lanqiao.cppCompiler": "蓝桥 C++ 编译器标识。留空时使用已确认的本站 C++17 选项；保存的选项失效时需重新选择。",
 	"displayName": "OJ Connect",
 	"description": "在 BeCoder 中阅读题目、导入样例并向洛谷、AtCoder、Codeforces 和牛客提交代码。",
 	"submit": "提交当前代码",

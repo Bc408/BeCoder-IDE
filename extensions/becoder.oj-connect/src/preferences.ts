@@ -8,7 +8,8 @@ import type { LanguageOption } from './domain';
 import { symbolicCompiler } from './compilerCatalogue';
 
 /** Select from the current catalogue; labels and language IDs always remain site-owned. */
-export function defaultLanguage(options: readonly LanguageOption[], family: 'c' | 'cpp'): LanguageOption | undefined {
+export function defaultLanguage(options: readonly LanguageOption[], family: 'c' | 'cpp', site?: SiteId): LanguageOption | undefined {
+	if (site === 'lanqiao') { return options.find(option => option.family === family && option.id === family); }
 	const minimum = family === 'cpp' ? 2020 : 2017;
 	const candidates = options.filter(option => option.family === family).map(option => {
 		const label = option.label;
@@ -46,7 +47,7 @@ interface PreferenceStore {
 }
 
 function validLanguage(site: SiteId, family: 'c' | 'cpp', value: unknown): value is string {
-	return typeof value === 'string' && (!!symbolicCompiler(site, family, value) || (site === 'atcoder' || site === 'nowcoder' || site === 'codeforces' ? /^\d+$/.test(value) : site === 'luogu' && /^\d+(?::o2)?$/.test(value)));
+	return typeof value === 'string' && (!!symbolicCompiler(site, family, value) || (site === 'lanqiao' ? value === family : site === 'atcoder' || site === 'nowcoder' || site === 'codeforces' ? /^\d+$/.test(value) : site === 'luogu' && /^\d+(?::o2)?$/.test(value)));
 }
 
 /** Personal settings are the sole authority; available compilers remain site-owned. */

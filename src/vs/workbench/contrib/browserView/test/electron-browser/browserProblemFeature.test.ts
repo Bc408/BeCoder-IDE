@@ -39,7 +39,7 @@ function fixture(store: Pick<DisposableStore, 'add'>) {
 				if (name === 'openNowcoderSession') { return 'nowcoder-session'; }
 				if (name === 'readOjProblem') {
 					const ref = await resolve(model.url) as { site: string };
-					if (ref.site !== 'atcoder' && args[0] !== ref.site + '-session') { throw new Error('oj-connect-owner'); }
+					if ((ref.site === 'luogu' || ref.site === 'nowcoder') ? args[0] !== ref.site + '-session' : args[0] !== model.id) { throw new Error('oj-connect-owner'); }
 					return { ref };
 				}
 				if (name === 'parseProblem') { return parse(); }
@@ -64,7 +64,8 @@ suite('Browser problem actions', () => {
 	for (const [site, url, session] of [
 		['luogu', 'https://www.luogu.com.cn/problem/P1001', 'luogu-session'],
 		['nowcoder', 'https://ac.nowcoder.com/acm/problem/18204', 'nowcoder-session'],
-		['atcoder', taskUrl, 'browser-fixture']
+		['atcoder', taskUrl, 'browser-fixture'],
+		['lanqiao', 'https://www.lanqiao.cn/problems/254/learning/', 'browser-fixture']
 	]) {
 		test(`${site} Get Problem reads through its owned session and imports the document`, async () => {
 			const f = fixture(store); await f.settled();
@@ -72,6 +73,7 @@ suite('Browser problem actions', () => {
 			await f.contribution.run('get');
 			assert.deepStrictEqual(f.errors, []);
 			assert.strictEqual(f.serviceCalls.find(call => call.name === 'readOjProblem')?.args[0], session);
+			if (site === 'lanqiao') { assert.deepStrictEqual(f.serviceCalls.find(call => call.name === 'readOjProblem')?.args[3], { family: 'cpp' }); }
 			assert.strictEqual(f.commands[0]?.id, '_becoder.ojConnect.importFromBrowser');
 		});
 	}

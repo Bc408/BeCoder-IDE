@@ -15,6 +15,7 @@ export function labels(): Record<string, string> {
 		continueQuery: vscode.l10n.t('Continue Querying'), record: vscode.l10n.t('Submission Details'),
 		compilerCatalogue: vscode.l10n.t('Verified catalogue; checked again after sign-in'),
 		tracking: vscode.l10n.t('Reading the current submission result…'), resultUnavailable: vscode.l10n.t('No submission result has been read yet.'), language: vscode.l10n.t('Language'), submissionLanguage: vscode.l10n.t('Submission language'),
+		preparing: vscode.l10n.t('Preparing submission…'), submitting: vscode.l10n.t('Submitting code…'), confirming: vscode.l10n.t('Confirming the official record…'), waitingTests: vscode.l10n.t('Waiting for test case results…'),
 		interactive: vscode.l10n.t('Interactive problem'), samples: vscode.l10n.t('Samples'), input: vscode.l10n.t('Input'), output: vscode.l10n.t('Output'),
 		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Copy failed. Select the text and copy it manually.'), score: vscode.l10n.t('Score'),
 		chooseLanguage: vscode.l10n.t('Choose a compiler'), languagesLoading: vscode.l10n.t('Loading compiler options…'), languagesUnavailable: vscode.l10n.t('Compiler options unavailable'), languagesLoginRequired: vscode.l10n.t('Sign in to load compiler options'), statementLanguage: vscode.l10n.t('Statement language'), problem: vscode.l10n.t('Problem'), verdict: vscode.l10n.t('Verdict'), resources: vscode.l10n.t('Time / Memory'),
@@ -42,7 +43,7 @@ export class Panel implements vscode.Disposable {
 		const location = vscode.workspace.getConfiguration('becoder.ojConnect').get<string>('panelLocation');
 		const columns: Record<string, vscode.ViewColumn> = { active: vscode.ViewColumn.Active, beside: vscode.ViewColumn.Beside, one: vscode.ViewColumn.One, two: vscode.ViewColumn.Two, three: vscode.ViewColumn.Three };
 		const viewColumn = location && Object.hasOwn(columns, location) ? columns[location] : side ?? vscode.ViewColumn.Beside;
-		this.panel = vscode.window.createWebviewPanel('becoder.ojConnect.' + state.kind, state.kind === 'problem' ? state.problem!.title : '#' + state.record!.id, { viewColumn, preserveFocus: false }, { enableScripts: true, localResourceRoots: [resources] });
+		this.panel = vscode.window.createWebviewPanel('becoder.ojConnect.' + state.kind, state.kind === 'problem' ? state.problem!.title : state.record ? '#' + state.record.id : state.sourceName, { viewColumn, preserveFocus: false }, { enableScripts: true, localResourceRoots: [resources] });
 		const webview = this.panel.webview, nonce = randomBytes(20).toString('hex');
 		const resource = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(resources, name));
 		webview.html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; connect-src ${webview.cspSource}; worker-src blob:;"><link rel="stylesheet" href="${resource('katex.min.css')}"><link rel="stylesheet" href="${resource('webview.css')}"></head><body><main id="app"></main><script nonce="${nonce}">window.__OJ_STATE__=${safeState(state)};</script><script nonce="${nonce}" src="${resource('webview.js')}"></script></body></html>`;
@@ -61,6 +62,7 @@ export class Panel implements vscode.Disposable {
 		if (this.closed) { return; }
 		Object.assign(this.state, value);
 		if (this.state.kind === 'problem' && value.problem) { this.panel.title = value.problem.title; }
+		if (this.state.kind === 'record' && value.record) { this.panel.title = '#' + value.record.id; }
 		void this.panel.webview.postMessage({ type: 'state', state: this.state });
 	}
 	reveal(): void { if (!this.closed) { this.panel.reveal(undefined, false); } }

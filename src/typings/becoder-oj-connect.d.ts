@@ -8,6 +8,12 @@ declare module 'becoder-oj-connect' {
 	export type SiteId = 'luogu' | 'codeforces' | 'atcoder' | 'lanqiao' | 'nowcoder';
 	export interface ISourceSnapshot { uri: string; fileName: string; version: number; family: 'c' | 'cpp'; source: string }
 	export interface ProblemRef { readonly site: SiteId; readonly nativeId: string; readonly url: string }
+	export interface ProblemReadOptions { readonly family: 'c' | 'cpp' }
+	export interface ILanqiaoPrepared { readonly handle: string; readonly languages: readonly LanguageOption[]; readonly hasDraft: boolean }
+	export interface ILanqiaoSourcePayload { readonly source: string; readonly fileName: string; readonly languageId: string }
+	/** Memory-only milestones of an active send; never a verified record or a send capability. */
+	export interface ILanqiaoProgress { readonly phase: 'sending' | 'judging' | 'confirming'; readonly groups?: RecordSnapshot['groups'] }
+	export interface SubmissionEvaluation { readonly phase: 'preparing' | ILanqiaoProgress['phase']; readonly problem: ProblemRef; readonly language?: string; readonly codeLength: string; readonly groups?: RecordSnapshot['groups'] }
 	export interface Section { readonly heading?: string; readonly format: 'markdown' | 'html'; readonly content: string; readonly kind?: 'notes' | 'sample-explanation'; readonly sampleIndex?: number }
 	export interface ProblemDocument {
 		readonly ref: ProblemRef; readonly title: string;
@@ -34,7 +40,7 @@ declare module 'becoder-oj-connect' {
 		readonly sourceVerification: 'matched' | 'mismatch' | 'unavailable' | 'not-checked';
 		readonly pollAfterMs?: number;
 	}
-	export interface SubmissionProgress { readonly phase: 'preparing' | 'interaction' | 'sending' | 'confirming'; readonly message: string }
+	export interface SubmissionProgress { readonly phase: 'preparing' | 'interaction' | 'sending' | 'confirming'; readonly message: string; readonly evaluation?: SubmissionEvaluation }
 	export type SubmissionOutcome = { readonly kind: 'record'; readonly record: RecordRef }
 		| { readonly kind: 'not-sent'; readonly reason: string }
 		| { readonly kind: 'rejected'; readonly reason: string }

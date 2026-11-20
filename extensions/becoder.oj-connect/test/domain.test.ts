@@ -5,10 +5,19 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { validateProblem, validateRecord, validateProblemRef, validateOutcome } from '../src/domain';
+import { validateProblem, validateRecord, validateProblemRef, validateOutcome, validateLanqiaoProgress } from '../src/domain';
 import { cphSamples } from '../src/cphHost';
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('Lanqiao progress accepts only bounded local milestones and projected cells', () => {
+	assert.strictEqual(validateLanqiaoProgress(undefined), undefined);
+	assert.deepStrictEqual(validateLanqiaoProgress({ phase: 'judging', source: 'private', record: 'not-verified' }), { phase: 'judging' });
+	const groups = [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }];
+	assert.deepStrictEqual(validateLanqiaoProgress({ phase: 'confirming', groups }), { phase: 'confirming', groups });
+	assert.throws(() => validateLanqiaoProgress({ phase: 'AC' }));
+	assert.throws(() => validateLanqiaoProgress({ phase: 'judging', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '', '', 'hidden output']] }] }));
+	assert.throws(() => validateLanqiaoProgress({ phase: 'judging', groups: [{ name: 'Test Cases', rows: [['0', 'AC', '', '']] }] }));
+});
 test('compiler catalogue failure preserves a readable problem and only accepts fixed error categories', () => {
 	const input = { ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false };
 	for (const languageError of ['unavailable', 'login-required']) {

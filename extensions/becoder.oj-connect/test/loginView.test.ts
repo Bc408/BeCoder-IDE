@@ -50,7 +50,10 @@ test('account actions route supported states to their fixed native site commands
 		['atcoder', 'signed-in', 'https://atcoder.jp/users/test_user'],
 		['nowcoder', 'signed-out', '_becoder.ojConnect.nowcoder.login'],
 		['nowcoder', 'unknown', '_becoder.ojConnect.nowcoder.login'],
-		['nowcoder', 'signed-in', 'https://ac.nowcoder.com/acm/contest/profile/123']
+		['nowcoder', 'signed-in', 'https://ac.nowcoder.com/acm/contest/profile/123'],
+		['lanqiao', 'signed-out', '_becoder.ojConnect.lanqiao.login'],
+		['lanqiao', 'unknown', '_becoder.ojConnect.lanqiao.login'],
+		['lanqiao', 'signed-in', '_becoder.ojConnect.lanqiao.login']
 	] as const) {
 		const events: string[] = [];
 		assert.strictEqual(await openAccount({ site, state, profileUrl: command.startsWith('https:') ? command : undefined }, async command => { events.push(command); }, async () => { events.push('refresh'); }, async url => { events.push(url); }), true);
@@ -58,10 +61,9 @@ test('account actions route supported states to their fixed native site commands
 	}
 });
 
-test('unsupported sites and unavailable rows have no account action', async () => {
+test('unavailable rows have no account action', async () => {
 	for (const site of ['luogu', 'atcoder', 'codeforces', 'nowcoder', 'lanqiao'] as const) {
-		for (const state of ['signed-in', 'signed-out', 'unknown', 'unavailable'] as const) {
-			if ((site === 'luogu' || site === 'atcoder' || site === 'nowcoder' || site === 'codeforces') && state !== 'unavailable') { continue; }
+		for (const state of ['unavailable'] as const) {
 			const events: string[] = [];
 			assert.strictEqual(await openAccount({ site, state }, async command => { events.push(command); }, async () => { events.push('refresh'); }, async url => { events.push(url); }), false);
 			assert.deepStrictEqual(events, []);

@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- BeCoder's internal type-only extension bridge contract.
-import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
+import type { IAtCoderPageRef, IAtCoderSourcePayload, RecordRef, RecordSnapshot, ProblemRef, ProblemReadOptions, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, ILanqiaoSourcePayload, LoginSummary, SubmissionOutcome } from 'becoder-oj-connect';
+import { LanqiaoBridgeController, assertLanqiaoProblem } from '../../../../../platform/browserView/common/lanqiaoBridge.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { timeout } from '../../../../../base/common/async.js';
@@ -31,6 +32,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 	private luoguBridge: LuoguBridgeController;
 	private nowcoderBridge: NowcoderBridgeController;
 	private codeforcesBridge: CodeforcesBridgeController;
+	private lanqiaoBridge: LanqiaoBridgeController;
 	constructor(
 		@IEditorService editors: IEditorService,
 		@IBrowserViewWorkbenchService browsers: IBrowserViewWorkbenchService,
@@ -77,6 +79,13 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			return outcome;
 		};
 		const codeforcesSessions = new Map<string, string>();
+		const lanqiaoSessions = new Map<string, string>();
+		let lanqiaoEpoch = 0;
+		const rememberLanqiao = (outcome: SubmissionOutcome, sessionId: string) => {
+			if (outcome.kind === 'record') { lanqiaoSessions.set(outcome.record.url, sessionId); }
+			else if (outcome.kind === 'unconfirmed') { lanqiaoSessions.set(outcome.attemptId, sessionId); }
+			return outcome;
+		};
 		const rememberCodeforces = (outcome: SubmissionOutcome, sessionId: string) => {
 			if (outcome.kind === 'record') { codeforcesSessions.set(outcome.record.url, sessionId); }
 			else if (outcome.kind === 'unconfirmed') { codeforcesSessions.set(outcome.attemptId, sessionId); }
@@ -230,6 +239,10 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			return service.openCodeforcesSession(owner, await browsers.resolveStorageScope());
 		};
+		const lanqiaoSessionId = async () => {
+			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
+			return service.openLanqiaoSession(owner, await browsers.resolveStorageScope());
+		};
 		this._register(service.onDidRequireLuoguCaptcha(event => {
 			if (event.windowId !== owner || !active()) { return; }
 			void _commands.executeCommand<string | undefined>('_becoder.ojConnect.luogu.askCaptcha', event.image, event.requestId)
@@ -239,21 +252,23 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			if (event.windowId === owner) { void _commands.executeCommand('_becoder.ojConnect.luogu.cancelCaptcha', event.requestId).catch(() => undefined); }
 		}));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.luogu.getCaptcha', (_accessor, requestId: string) => service.getLuoguCaptcha(owner, requestId)));
-		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces', rawRequestId?: string) => {
+		const readProblem = async (problem: ProblemRef, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao', rawRequestId?: string, options?: ProblemReadOptions) => {
 			if (problem?.site !== site) { throw new Error('oj-connect-problem-route'); }
 			if (site === 'nowcoder') { assertNowcoderProblem(problem); return service.readOjProblem(await nowcoderSessionId(), owner, problem); }
-			if (site === 'codeforces') { assertCodeforcesProblem(problem); }
+			if (site === 'lanqiao') { assertLanqiaoProblem(problem); if (!options || !['c', 'cpp'].includes(options.family)) { throw new Error('lanqiao-source-family'); } }
+			else if (site === 'codeforces') { assertCodeforcesProblem(problem); }
 			else if (site === 'luogu') { assertLuoguProblem(problem); }
 			else { const task = atCoderTask(problem.url); if (!task || problem.nativeId !== task.contestId + '/' + task.taskId) { throw new Error('oj-connect-problem-route'); } }
 			if (site === 'luogu') { return service.readOjProblem(await luoguSessionId(), owner, problem); }
 			const epoch = lifecycleEpoch, scope = await browsers.resolveStorageScope(); assertLifecycle(epoch);
 			if (!active()) { throw new Error('oj-connect-extension-unavailable'); }
 			const requestId = rawRequestId ?? generateUuid();
-			const document = await service.readOjStatement(owner, scope, problem, requestId);
+			const document = await service.readOjStatement(owner, scope, problem, requestId, options);
 			const currentScope = await browsers.resolveStorageScope(); assertLifecycle(epoch); if (!active() || currentScope !== scope) { throw new Error('oj-connect-session-scope-changed'); }
 			return document;
 		};
-		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary> => {
+		const loginSummary = async (site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao'): Promise<LoginSummary> => {
+			if (site === 'lanqiao') { return service.readOjLogin(await lanqiaoSessionId(), owner, site); }
 			if (site === 'codeforces') { return service.readOjLogin(await codeforcesSessionId(), owner, site); }
 			if (site === 'nowcoder') { return service.readOjLogin(await nowcoderSessionId(), owner, site); }
 			if (site === 'luogu') { return service.readOjLogin(await luoguSessionId(), owner, site); }
@@ -438,12 +453,57 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 				return outcome;
 			}
 		});
+		const createLanqiaoBridge = () => new LanqiaoBridgeController({
+			newHandle: generateUuid,
+			isCurrent: page => active() && page.generation === lanqiaoEpoch,
+			open: async problem => {
+				const preparation = preparationEpoch, epoch = lifecycleEpoch, context = lanqiaoEpoch, id = await lanqiaoSessionId();
+				const form = await service.prepareLanqiaoTask(id, owner, problem);
+				assertLifecycle(epoch);
+				if (preparation !== preparationEpoch || context !== lanqiaoEpoch || !active() || await lanqiaoSessionId() !== id) { await service.releaseLanqiaoPreparation(id, owner, form.ownerKey).catch(() => undefined); throw new Error('oj-connect-session-scope-changed'); }
+				return { viewId: id, url: 'https://www.lanqiao.cn/', generation: context, ownerKey: form.ownerKey, languages: form.languages };
+			},
+			send: async (page, problem, payload, requestId, signal) => {
+				const epoch = lifecycleEpoch;
+				if (await lanqiaoSessionId() !== page.viewId) { throw new Error('oj-connect-session-scope-changed'); }
+				signal.throwIfAborted(); assertLifecycle(epoch);
+				if (page.generation !== lanqiaoEpoch) { throw new Error('oj-connect-session-scope-changed'); }
+				const outcome = await service.submitLanqiaoTask(page.viewId, owner, problem, payload, page.ownerKey, requestId);
+				assertLifecycle(epoch); if (page.generation !== lanqiaoEpoch || await lanqiaoSessionId() !== page.viewId) { throw new Error('oj-connect-session-scope-changed'); } assertLifecycle(epoch); return rememberLanqiao(outcome, page.viewId);
+			},
+			cancel: (page, requestId) => service.cancelLanqiaoTask(page.viewId, owner, requestId),
+			readProgress: async (page, requestId) => {
+				const epoch = lifecycleEpoch;
+				if (page.generation !== lanqiaoEpoch || await lanqiaoSessionId() !== page.viewId) { return undefined; }
+				assertLifecycle(epoch);
+				const value = await service.readLanqiaoProgress(page.viewId, owner, requestId);
+				assertLifecycle(epoch);
+				return page.generation === lanqiaoEpoch && await lanqiaoSessionId() === page.viewId ? value : undefined;
+			},
+			release: page => { void service.releaseLanqiaoPreparation(page.viewId, owner, page.ownerKey).catch(() => undefined); },
+			readRecord: async record => {
+				const epoch = lifecycleEpoch, context = lanqiaoEpoch, id = lanqiaoSessions.get(record.url), signal = recordLifetime(record);
+				if (id === undefined || await lanqiaoSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				await recordCancellations.get(record.url); assertRecord(epoch, signal);
+				const snapshot = await service.readLanqiaoRecord(id, owner, record); assertRecord(epoch, signal); if (context !== lanqiaoEpoch || await lanqiaoSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); } assertRecord(epoch, signal); return snapshot;
+			},
+			reconcile: async attemptId => {
+				const epoch = lifecycleEpoch, context = lanqiaoEpoch, id = lanqiaoSessions.get(attemptId);
+				if (id === undefined || await lanqiaoSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				assertLifecycle(epoch); const outcome = await service.reconcileLanqiaoAttempt(id, owner, attemptId); assertLifecycle(epoch); if (context !== lanqiaoEpoch || await lanqiaoSessionId() !== id) { throw new Error('oj-connect-session-scope-changed'); }
+				rememberLanqiao(outcome, id); if (outcome.kind !== 'unconfirmed') { lanqiaoSessions.delete(attemptId); } return outcome;
+			}
+		});
+		this.lanqiaoBridge = createLanqiaoBridge();
+		const resetLanqiao = () => { lanqiaoEpoch++; const previous = this.lanqiaoBridge; lanqiaoSessions.clear(); this.lanqiaoBridge = createLanqiaoBridge(); void previous.dispose(); };
+		if (browsers.onDidChangeStorageScope) { this._register(browsers.onDidChangeStorageScope(() => { void service.cancelLanqiaoOperations(owner).catch(() => undefined); resetLanqiao(); })); }
+		this._register(toDisposable(() => { lanqiaoSessions.clear(); void this.lanqiaoBridge.dispose(); }));
 		this.codeforcesBridge = createCodeforcesBridge();
 		this.luoguBridge = createLuoguBridge();
 		this.nowcoderBridge = createNowcoderBridge();
 		this.bridge = createBridge();
 		const closeBackground = () => { for (const input of ownedInputs) { if (!editors.editors.includes(input)) { input.dispose(); } } ownedInputs.clear(); };
-		const reset = () => { lifecycleEpoch++; preparationEpoch++; stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); codeforcesSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge, nowcoder = this.nowcoderBridge, codeforces = this.codeforcesBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); this.nowcoderBridge = createNowcoderBridge(); this.codeforcesBridge = createCodeforcesBridge(); void codeforces.dispose(); void nowcoder.dispose(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
+		const reset = () => { lifecycleEpoch++; preparationEpoch++; resetLanqiao(); stopRecords(); recordScopes.clear(); luoguSessions.clear(); nowcoderSessions.clear(); codeforcesSessions.clear(); attemptScopes.clear(); finishedRecords.clear(); busyViews.clear(); const previous = this.bridge, luogu = this.luoguBridge, nowcoder = this.nowcoderBridge, codeforces = this.codeforcesBridge; this.bridge = createBridge(); this.luoguBridge = createLuoguBridge(); this.nowcoderBridge = createNowcoderBridge(); this.codeforcesBridge = createCodeforcesBridge(); void codeforces.dispose(); void nowcoder.dispose(); void previous.dispose(); void luogu.dispose(); void service.cancelOjOperations(owner).catch(() => undefined); closeBackground(); };
 		this._register(extensions.onWillStop(reset));
 		this._register(extensions.onDidChangeExtensions(event => { if (event.removed.some(item => item.identifier.value.toLowerCase() === 'becoder.oj-connect')) { reset(); } }));
 		this._register(extensions.onDidChangeExtensionsStatus(ids => {
@@ -489,8 +549,34 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 			return pending.finally(() => { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } });
 		};
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseCodeforcesRecord(record)));
+		const lanqiaoPrefix = '_becoder.ojConnect.lanqiao.';
+		const releaseLanqiaoRecord = async (record: RecordRef) => {
+			stopRecord(record); const id = lanqiaoSessions.get(record.url); if (id === undefined) { return; }
+			const previous = recordCancellations.get(record.url);
+			const pending = (async () => { await previous; await service.releaseLanqiaoRecord(id, owner, record); })();
+			recordCancellations.set(record.url, pending);
+			try { await pending; } finally { if (recordCancellations.get(record.url) === pending) { recordCancellations.delete(record.url); } }
+		};
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'cancelRecord', (_accessor, record: RecordRef) => releaseLanqiaoRecord(record)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'prepare', (_accessor, problem: ProblemRef, uri: string) => this.lanqiaoBridge.prepare(problem, uri)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'send', (_accessor, handle: string, payload: ILanqiaoSourcePayload) => this.lanqiaoBridge.send(handle, payload)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'readProgress', (_accessor, handle: string) => this.lanqiaoBridge.readProgress(handle)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'cancel', (_accessor, handle: string) => this.lanqiaoBridge.cancel(handle)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'release', (_accessor, handle: string) => this.lanqiaoBridge.release(handle)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'readRecord', (_accessor, record: RecordRef) => this.lanqiaoBridge.readRecord(record)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'reconcile', (_accessor, id: string) => this.lanqiaoBridge.reconcile(id)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'cancelPreparation', cancelPreparation));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'readProblem', (_accessor, problem: ProblemRef, requestId: string, options: ProblemReadOptions) => readProblem(problem, 'lanqiao', requestId, options)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'cancelStatementRead', (_accessor, id: string) => service.cancelOjStatementRead(owner, id)));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'loginSummary', () => loginSummary('lanqiao')));
+		this._register(CommandsRegistry.registerCommand(lanqiaoPrefix + 'login', async () => {
+			await lanqiaoSessionId();
+			const input = await openPage('https://passport.lanqiao.cn/login/', undefined, await browsers.resolveStorageScope(), false, false);
+			try { await reveal(input); } finally { release({ viewId: input.model!.id }); }
+		}));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.releaseRecord', async (_accessor, record: RecordRef) => {
-			if (record?.problem.site === 'luogu') { await releaseLuoguRecord(record); }
+			if (record?.problem.site === 'lanqiao') { await releaseLanqiaoRecord(record); }
+			else if (record?.problem.site === 'luogu') { await releaseLuoguRecord(record); }
 			else if (record?.problem.site === 'nowcoder') { await releaseNowcoderRecord(record); }
 			else if (record?.problem.site === 'codeforces') { await releaseCodeforcesRecord(record); }
 			else if (record) {
@@ -543,7 +629,7 @@ export class BrowserOjConnectContribution extends Disposable implements IWorkben
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.readProblem', (_accessor, problem: ProblemRef, requestId?: string) => readProblem(problem, 'atcoder', requestId)));
 		this._register(CommandsRegistry.registerCommand('_becoder.ojConnect.atcoder.cancelStatementRead', (_accessor, requestId: string) => service.cancelOjStatementRead(owner, requestId)));
 		this._register(CommandsRegistry.registerCommand(codeforcesPrefix + 'cancelStatementRead', (_accessor, requestId: string) => service.cancelOjStatementRead(owner, requestId)));
-		for (const site of ['atcoder', 'codeforces'] as const) {
+		for (const site of ['atcoder', 'codeforces', 'lanqiao'] as const) {
 			const languagePrefix = '_becoder.ojConnect.' + site + '.';
 			this._register(CommandsRegistry.registerCommand(languagePrefix + 'cancelLanguageRead', (_accessor, requestId: string) => service.cancelOjLanguageRead(owner, requestId)));
 			this._register(CommandsRegistry.registerCommand(languagePrefix + 'readLanguages', async (_accessor, problem: ProblemRef, requestId: string) => {

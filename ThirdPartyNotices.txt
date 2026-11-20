@@ -8,7 +8,7 @@ For a Chinese license and source index, see licenses/README.md.
 
 Acorn 8.16.0
 https://github.com/acornjs/acorn
-Production JavaScript parser for native Nowcoder ACM literal metadata.
+Production JavaScript parser for native Nowcoder ACM, Codeforces and Lanqiao literal metadata.
 No downloaded website script is executed.
 
 MIT License

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs shared with the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, ProblemReadOptions, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, ILanqiaoSourcePayload, ILanqiaoProgress, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
 import { Event } from '../../../base/common/event.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { localize } from '../../../nls.js';
@@ -369,7 +369,17 @@ export interface IBrowserViewService {
 	readAtCoderLogin(windowId: number, scope: BrowserViewStorageScope): Promise<LoginSummary>;
 	getLuoguCaptcha(windowId: number, requestId: string): Promise<string>;
 	answerLuoguCaptcha(windowId: number, requestId: string, answer: string | undefined): Promise<void>;
-	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' }>;
+	readonly onDidChangeOjSession: Event<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao' }>;
+	openLanqiaoSession(windowId: number, scope: BrowserViewStorageScope): Promise<string>;
+	cancelLanqiaoOperations(windowId: number): Promise<void>;
+	prepareLanqiaoTask(id: string, windowId: number, problem: ProblemRef): Promise<{ ownerKey: string; hasDraft: boolean; languages: readonly LanguageOption[] }>;
+	submitLanqiaoTask(id: string, windowId: number, problem: ProblemRef, payload: ILanqiaoSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome>;
+	readLanqiaoProgress(id: string, windowId: number, requestId: string): Promise<ILanqiaoProgress | undefined>;
+	cancelLanqiaoTask(id: string, windowId: number, requestId: string): Promise<void>;
+	releaseLanqiaoPreparation(id: string, windowId: number, ownerKey: string): Promise<void>;
+	readLanqiaoRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot>;
+	releaseLanqiaoRecord(id: string, windowId: number, record: RecordRef): Promise<void>;
+	reconcileLanqiaoAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome>;
 	watchOjSession(id: string, windowId: number): Promise<void>;
 	updateLuoguSession(id: string, windowId: number, operation: 'invalidateLuoguSession' | 'releaseLuoguRecord', record?: RecordRef): Promise<void>;
 
@@ -526,15 +536,15 @@ export interface IBrowserViewService {
 	/** Rendered content of an already loaded view; does not navigate or fetch. */
 	readCurrentPage(id: string, windowId: number, expectedURL: string): Promise<string>;
 
-	readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument>;
-	readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<ProblemDocument>;
+	readOjProblem(id: string, windowId: number, problem: ProblemRef, options?: ProblemReadOptions): Promise<ProblemDocument>;
+	readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string, options?: ProblemReadOptions): Promise<ProblemDocument>;
 	cancelOjStatementRead(windowId: number, requestId: string): Promise<void>;
 	/** Only for a newly created hidden OJ reader: retain its DOM and stop remaining subresources. */
 	readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue>;
 	cancelOjLanguageRead(windowId: number, requestId: string): Promise<void>;
 	cancelOjOperations(windowId: number): Promise<void>;
 	cancelOjPreparations(windowId: number): Promise<void>;
-	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary>;
+	readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao'): Promise<LoginSummary>;
 	prepareLuoguTask(id: string, windowId: number, problem: ProblemRef): Promise<{ languages: readonly LanguageOption[]; hasDraft: boolean; ownerKey: string }>;
 	submitLuoguTask(id: string, windowId: number, problem: ProblemRef, payload: ILuoguSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome>;
 	cancelLuoguTask(id: string, windowId: number, requestId: string): Promise<void>;

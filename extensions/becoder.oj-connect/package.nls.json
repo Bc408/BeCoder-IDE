@@ -1,4 +1,6 @@
 {
+	"lanqiao.cCompiler": "Lanqiao C compiler token. Empty uses the current official C choice; unavailable saved choices require selecting again.",
+	"lanqiao.cppCompiler": "Lanqiao C++ compiler token. Empty uses the official C++17 choice for Lanqiao; unavailable saved choices require selecting again.",
 	"displayName": "OJ Connect",
 	"description": "Read problems, import samples and submit code to Luogu, AtCoder, Codeforces and Nowcoder in BeCoder.",
 	"submit": "Submit Current Code",

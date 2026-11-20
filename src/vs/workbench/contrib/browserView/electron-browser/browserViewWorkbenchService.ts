@@ -62,6 +62,8 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 
 	private readonly _onDidChangeBrowserViews = this._register(new Emitter<void>());
 	readonly onDidChangeBrowserViews: Event<void> = this._onDidChangeBrowserViews.event;
+	private readonly _onDidChangeStorageScope = this._register(new Emitter<void>());
+	readonly onDidChangeStorageScope: Event<void> = this._onDidChangeStorageScope.event;
 
 	constructor(
 		@IMainProcessService mainProcessService: IMainProcessService,
@@ -80,6 +82,14 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
 		this._browserViewService = ProxyChannel.toService<IBrowserViewService>(channel);
 		this._mainWindowId = mainWindow.vscodeWindowId;
+		const invalidateStorageContext = () => {
+			// Dispatch invalidation before notifying consumers; no old Lanqiao report may follow.
+			void this._browserViewService.cancelLanqiaoOperations(this._mainWindowId).catch(() => undefined);
+			this._onDidChangeStorageScope.fire();
+		};
+		this._register(this.workspaceTrustManagementService.onDidChangeTrust(invalidateStorageContext));
+		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(invalidateStorageContext));
+		this._register(this.configurationService.onDidChangeConfiguration(event => { if (event.affectsConfiguration('workbench.browser.dataStorage')) { invalidateStorageContext(); } }));
 
 		// Send the full per-window configuration as a single unit, and resend it
 		// whenever any of its inputs change.

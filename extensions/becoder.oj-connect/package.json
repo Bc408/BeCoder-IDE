@@ -168,6 +168,20 @@
 					"pattern": "^\\d*$",
 					"description": "%codeforces.cppCompiler%"
 				},
+				"becoder.ojConnect.lanqiao.cCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^(?:c)?$",
+					"description": "%lanqiao.cCompiler%"
+				},
+				"becoder.ojConnect.lanqiao.cppCompiler": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"pattern": "^(?:cpp)?$",
+					"description": "%lanqiao.cppCompiler%"
+				},
 				"becoder.ojConnect.nowcoder.cCompiler": {
 					"type": "string",
 					"default": "",

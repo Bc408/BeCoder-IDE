@@ -158,6 +158,7 @@ function scoreColor(score: number): string {
 
 // Cropped from record/app.tsx: information rows, subtasks and original testcase cards/hover details.
 export default function Record({ state }: { state: PanelState }) {
+	if (state.submission && !state.record) { return <PendingSubmission state={state} />; }
 	const record = state.record!, snapshot = state.snapshot, labels = state.labels;
 	const problemName = record.problem.site === 'nowcoder' ? record.problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : record.problem.nativeId;
 	const pending = !!state.tracking && (!snapshot || snapshot.phase === 'queued' || snapshot.phase === 'judging');
@@ -198,6 +199,23 @@ export default function Record({ state }: { state: PanelState }) {
 			</div></div>
 		</>}
 		{(snapshot?.compileMessage || snapshot?.compileSucceeded !== undefined) && <><hr /><div><h2>{labels.compiler}</h2>{snapshot.compileSucceeded !== undefined && <p>{snapshot.compileSucceeded ? labels.compileSucceeded : labels.compileFailed}</p>}{snapshot.compileMessage ? <CopyablePre><code>{snapshot.compileMessage}</code></CopyablePre> : snapshot.compileSucceeded === false && <p>{labels.compileUnavailable}</p>}</div></>}
+	</>;
+}
+function PendingSubmission({ state }: { state: PanelState }) {
+	const submission = state.submission!, labels = state.labels;
+	const status = !state.tracking ? labels.resultUnavailable : submission.phase === 'preparing' ? labels.preparing : submission.phase === 'sending' ? labels.submitting : submission.phase === 'confirming' ? labels.confirming : 'Judging';
+	return <>
+		<h1>{labels.record}</h1>
+		<div className={'record-info'}>
+			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={submission.problem.url}>{submission.problem.nativeId}</a></div>
+			<div><span>{labels.verdict}</span><span className={'record-verdict'} style={{ color: RecordStatus[1].color, fontWeight: 'bold' }}>{state.tracking && <Spinner size={16} label={status} />}{status}</span></div>
+			{submission.language !== undefined && <div><span>{labels.language}</span><span>{submission.language}</span></div>}
+			<div><span>{labels.codeLength}</span><span>{resourceText(submission.codeLength)}</span></div>
+		</div>
+		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
+		<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2>
+			{submission.groups?.length ? <div>{submission.groups.map((group, index) => <div key={index}><div className={'testcase-grid'}>{group.rows.map((row, index) => <TestCase key={index} site={submission.problem.site} animate={!!state.tracking}>{row}</TestCase>)}</div></div>)}</div> : state.tracking && <p className={'record-verdict'}><Spinner label={labels.waitingTests} />{labels.waitingTests}</p>}
+		</div>
 	</>;
 }
 function TestCase({ children: data, animate, site }: { children: readonly string[]; animate: boolean; site: SiteId }) {

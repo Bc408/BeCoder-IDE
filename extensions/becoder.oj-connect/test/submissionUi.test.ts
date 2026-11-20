@@ -75,6 +75,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 		l10n: { t: (value: string, ...args: string[]) => value.replace('{0}', args[0]) }, ProgressLocation: { Window: 10, Notification: 15 },
 		commands: {
 			registerCommand: (id: string, fn: () => Promise<void>) => { commands.set(id, fn); return disposable(); }, executeCommand: async (id: string, ...args: unknown[]) => {
+				if (id === '_becoder.ojConnect.lanqiao.readProblem') { assert.deepStrictEqual(args[2], { family: 'cpp' }); throw new Error('lanqiao-login-required'); }
 				if (id.endsWith('.prepare')) { return { handle: 'prepared', languages: [{ id: '27', family: 'cpp', label: 'C++' }], ownerKey: '123', hasDraft: false }; }
 				if (id.endsWith('.send')) { entered(); return new Promise(resolve => { finish = resolve; }); }
 				if (id.endsWith('.cancel')) { cancelled.push(args); finish({ kind: 'not-sent', reason: 'Verification cancelled.' }); }
@@ -155,7 +156,7 @@ test('shortcut sends with noncancelable status and preserves the manual verifica
 		source.uri.fsPath = 'C:/practice/lanqiao/1.cpp';
 		source.uri.toString = () => 'file:///C:/practice/lanqiao/1.cpp';
 		await commands.get('becoder.ojConnect.showProblem')!();
-		assert.deepStrictEqual(errors, ['OJ Connect: The lanqiao adapter is not available yet.']);
+		assert.deepStrictEqual(errors, ['OJ Connect: Sign in to Lanqiao from the OJ Connect sidebar.']);
 		await extension.deactivate();
 	} finally { Module._load = original; }
 });

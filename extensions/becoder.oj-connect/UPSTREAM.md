@@ -72,6 +72,10 @@ uiToolkit、复制组件、请求通信、Time 的核心已经来自上游；不
 
 使用已采证的官网 `/nccommon/submit_cd` 与 `/nccommon/status`，并复用本扩展现有控制器和洛谷组件。未复制牛客 VSIX 或网站 bundle 代码。官网 JavaScript 只作为运行时数据来源，不能因官方 VSIX 是 MIT 就推断网站源码许可。原生主进程显式依赖 Acorn 8.16.0（MIT），仅提取语法树字面量，拒绝动态表达式；不执行远程代码、不随包分发采证脚本或网站 bundle。其许可见根 ThirdPartyNotices.txt 与 licenses/MIT-Acorn.txt。
 
+## 蓝桥公开练习原生协议（2026-11-20）
+
+本站适配、固定 Session 请求和单次 source/report 编排由 BeCoder 实现，官网静态资源仅用于核实和提取当前目录字面量。复用已有 Acorn 8.16.0（MIT），不执行官网脚本，不分发官网 bundle、研究脚本、账号或研究 profile，没有新增生产依赖。共同界面继续使用上述洛谷来源组件；图标来源不变。协议与当前实现证据见根 docs/oj-connect/lanqiao-runtime-contract.md 及 lanqiao-implementation-2026-11-20.md。
+
 ## 平台标识（2026-11-17）
 
 resources/atcoder.png、lanqiao.png 保留各平台官网 favicon，仅转换为 PNG；nowcoder.png 使用牛客官网的 500×500 分享标识。luogu.svg 使用洛谷官网的小标识，保留原路径与三色，仅收紧画布留白。codeforces.svg 采用 Simple Icons 的 CC0-1.0 矢量路径，将三柱拆分并恢复原 favicon 的黄／蓝／红配色，完整许可见 ThirdPartyNotices.txt。上述素材只用于标识站点；名称、图形及商标权归各自平台所有，不将其宣称为本项目原创或适用本项目源码 GPL 授权；不表示平台为 BeCoder 背书。

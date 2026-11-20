@@ -3,7 +3,7 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ProblemDocument, RecordRef, RecordSnapshot, LanguageOption } from '../domain';
+import type { ProblemDocument, RecordRef, RecordSnapshot, LanguageOption, SubmissionEvaluation } from '../domain';
 export interface PanelState {
 	kind: 'problem' | 'record';
 	labels: Record<string, string>;
@@ -11,6 +11,7 @@ export interface PanelState {
 	problem?: ProblemDocument;
 	record?: RecordRef;
 	snapshot?: RecordSnapshot;
+	submission?: SubmissionEvaluation;
 	locale?: string;
 	message?: string;
 	tracking?: boolean;

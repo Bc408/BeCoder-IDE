@@ -6,7 +6,8 @@
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
-import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost } from './browserHost';
+import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost, CommandLanqiaoHost } from './browserHost';
+import { LanqiaoAdapter } from './adapters/lanqiao/adapter';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
 import { CodeforcesAdapter } from './adapters/codeforces/adapter';
 import { NowcoderAdapter } from './adapters/nowcoder/adapter';
@@ -27,7 +28,7 @@ import { validateLanguageCatalogue, type LanguageCatalogue, type ProblemRef, typ
 
 export async function readProblemLanguages(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue> {
 	if (signal.aborted) { throw new Error('oj-connect-operation-cancelled'); }
-	if (problem.site !== 'atcoder' && problem.site !== 'codeforces') { return { languages: [], languageError: 'unavailable' }; }
+	if (problem.site !== 'atcoder' && problem.site !== 'codeforces' && problem.site !== 'lanqiao') { return { languages: [], languageError: 'unavailable' }; }
 	const command = '_becoder.ojConnect.' + problem.site;
 	const requestId = randomUUID();
 	let abort!: () => void;
@@ -40,7 +41,7 @@ export async function readProblemLanguages(problem: ProblemRef, signal: AbortSig
 			signal.addEventListener('abort', abort, { once: true });
 			void vscode.commands.executeCommand(command + '.readLanguages', problem, requestId).then(raw => {
 				if (signal.aborted) { return; }
-				try { resolve(validateLanguageCatalogue(raw)); } catch (error) { reject(error); }
+				try { resolve(validateLanguageCatalogue(raw, problem.site)); } catch (error) { reject(error); }
 			}, reject);
 		});
 	} finally { signal.removeEventListener('abort', abort); }
@@ -65,12 +66,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.askCaptcha', (image: string, requestId: string) => captcha.ask(image, requestId)),
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.cancelCaptcha', (requestId: string) => captcha.cancel(requestId))
 	);
-	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute)), new CodeforcesAdapter(new CommandCodeforcesHost(execute))];
+	const adapters = [new LuoguAdapter(new CommandLuoguHost(execute)), new AtCoderAdapter(new CommandBrowserHost(execute)), new NowcoderAdapter(new CommandNowcoderHost(execute)), new CodeforcesAdapter(new CommandCodeforcesHost(execute)), new LanqiaoAdapter(new CommandLanqiaoHost(execute))];
 	const directories = () => readDirectories(vscode.workspace.getConfiguration('becoder.ojConnect').get('directories'));
 	const openInBrowser = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
 	const login = new LoginView(context, adapters, execute, openInBrowser, site => problems?.refreshLanguages(site));
 	context.subscriptions.push(login, vscode.window.registerWebviewViewProvider('becoder.ojConnect.accounts', login));
-	const records = new RecordPanel(context, adapters, openInBrowser, async record => { await execute('_becoder.ojConnect.releaseRecord', record); });
+	const records = new RecordPanel(context, adapters, openInBrowser, async record => { await execute('_becoder.ojConnect.releaseRecord', record); }, (outcome, sourceUri, onRecord, isOpen) => {
+		const value: Pending = { outcome, sourceUri, onRecord, isOpen }; pending = value;
+		return () => continueQuery(value);
+	});
 	const columns = new Map<string, vscode.ViewColumn>();
 	const revealSource = async (sourceUri: string) => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));
@@ -83,7 +87,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
 		const candidates = adapters.filter(adapter => !site || adapter.site === site);
 		const resolve = (value: string) => { const found = candidates.map(adapter => adapter.resolve(value)).filter((item): item is ProblemRef => !!item); return found.length === 1 ? found[0] : undefined; };
-		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder/Codeforces/Nowcoder URL.') });
+		const value = await vscode.window.showInputBox({ prompt: vscode.l10n.t('Problem number or official URL for {0}{1}', fileName, site ? ' (' + site + ')' : ''), validateInput: value => resolve(value) ? undefined : vscode.l10n.t('Enter a matching problem number or an official Luogu/AtCoder/Codeforces/Nowcoder/Lanqiao URL.') });
 		return value === undefined ? undefined : resolve(value);
 	};
 	controller = new SubmissionController({
@@ -104,19 +108,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			try {
 				status.text = '$(sync~spin) ' + vscode.l10n.t('OJ Connect: submitting {0}', fileName);
 				status.show();
-				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Submitting code.') : value.message; });
+				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Submitting code.') : value.evaluation ? vscode.l10n.t('Reading the current submission result…') : value.message; });
 			} finally { status.dispose(); }
-		}, openRecord
+		}, openRecord, beginEvaluation: (value, sourceUri) => records.beginEvaluation(value, sourceUri)
 	}, preferences);
 	const snapshot = (document: vscode.TextDocument): ISourceSnapshot => {
 		if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file' || !['c', 'cpp'].includes(document.languageId)) { throw new Error(vscode.l10n.t('Focus a C/C++ source in a trusted local workspace.')); }
 		return { uri: document.uri.toString(), fileName: path.basename(document.uri.fsPath), version: document.version, family: document.languageId as 'c' | 'cpp', source: document.getText() };
 	};
-	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; resolved?: boolean };
+	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; resolved?: boolean; onRecord?: (record: RecordRef) => void; isOpen?: () => boolean };
 	let pending: Pending | undefined;
 	const continueQuery = async (value = pending): Promise<void> => {
 		if (!value || value.resolved) { return; }
 		if (value.query) { return value.query; }
+		// A query begun from a visible preview stays owned by it, even if closed while awaiting.
+		// A fresh explicit query after closure keeps the original command's open-record behavior.
+		const onRecord = value.isOpen?.() ? value.onRecord : undefined;
 		value.query = (async () => {
 			try {
 				const adapter = adapters.find(item => item.site === value.outcome.problem.site)!;
@@ -124,7 +131,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (outcome.kind === 'record') {
 					value.resolved = true;
 					if (pending === value) { pending = undefined; }
-					await openRecord(outcome.record, value.sourceUri);
+					if (onRecord) { onRecord(outcome.record); }
+					else { await openRecord(outcome.record, value.sourceUri); }
 				} else { await vscode.window.showWarningMessage(vscode.l10n.t('The submission is still unconfirmed. Open its official record in the same browser and continue querying. No code was resent.')); }
 			} finally { value.query = undefined; }
 		})();
@@ -141,7 +149,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 		else if (outcome?.kind === 'rejected') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
 		else if (outcome?.kind === 'unconfirmed') {
-			const value: Pending = { outcome, sourceUri: input.uri }; pending = value;
+			const value: Pending = pending?.outcome.attemptId === outcome.attemptId && pending.outcome.problem.url === outcome.problem.url ? pending : { outcome, sourceUri: input.uri }; pending = value;
 			const query = vscode.l10n.t('Continue Querying');
 			if (await vscode.window.showWarningMessage(vscode.l10n.t('Submission receipt unconfirmed: {0}. Continue querying instead of submitting again.', userError(outcome.message)), query) === query) { await continueQuery(value); }
 		}
@@ -183,7 +191,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (resolution.kind === 'unsupported') { throw new Error(vscode.l10n.t('The {0} adapter is not available yet.', resolution.site)); }
 			const ref = resolution.kind === 'problem' ? resolution.problem : await requestProblem(input.fileName, resolution.site);
 			if (!ref) { return; }
-			const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, new AbortController().signal);
+			const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, new AbortController().signal, { family: input.family });
 			await revealSource(input.uri); await problems.open(document, input.uri, source);
 		})),
 		vscode.commands.registerCommand('_becoder.ojConnect.importTarget', (url: string) => typeof url === 'string' ? browserImportTarget(url, directories, adapters) : undefined),

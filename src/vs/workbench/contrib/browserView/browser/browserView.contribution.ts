@@ -16,6 +16,7 @@ class WebBrowserViewWorkbenchService implements IBrowserViewWorkbenchService {
 	async resolveStorageScope(): Promise<BrowserViewStorageScope> { return BrowserViewStorageScope.Ephemeral; }
 
 	readonly onDidChangeBrowserViews = Event.None;
+	readonly onDidChangeStorageScope = Event.None;
 
 	private readonly _known = new Map<string, BrowserEditorInput>();
 

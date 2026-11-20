@@ -3,7 +3,7 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ISourceSnapshot, ProblemRef, ProblemDocument, LanguageOption, SubmissionProgress, SubmissionOutcome, LoginSummary, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
+import type { ISourceSnapshot, ProblemRef, ProblemDocument, ProblemReadOptions, LanguageOption, SubmissionProgress, SubmissionOutcome, LoginSummary, RecordRef, RecordSnapshot } from 'becoder-oj-connect';
 
 export interface SubmissionSession {
 	readonly languages: readonly LanguageOption[];
@@ -14,10 +14,10 @@ export interface SubmissionSession {
 }
 
 export interface OjAdapter {
-	readonly site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces';
+	readonly site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao';
 	resolve(input: string): ProblemRef | undefined;
 	fileName(problem: ProblemRef): string;
-	readProblem(problem: ProblemRef, signal: AbortSignal): Promise<ProblemDocument>;
+	readProblem(problem: ProblemRef, signal: AbortSignal, options?: ProblemReadOptions): Promise<ProblemDocument>;
 	loginSummary(signal: AbortSignal): Promise<LoginSummary>;
 	prepare(problem: ProblemRef, sourceUri: string, progress: (value: SubmissionProgress) => void, signal: AbortSignal): Promise<SubmissionSession>;
 	readRecord(record: RecordRef, signal: AbortSignal): Promise<RecordSnapshot>;

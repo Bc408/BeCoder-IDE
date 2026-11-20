@@ -2,16 +2,17 @@
  *  Copyright (c) 2026 BeCoder contributors.
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ICodeforcesPrepared, ICodeforcesSourcePayload, IAtCoderPageRef, IAtCoderSourcePayload, IAtCoderTaskForm, ILuoguPrepared, ILuoguSourcePayload, INowcoderPrepared, INowcoderSourcePayload } from 'becoder-oj-connect';
+import type { ICodeforcesPrepared, ICodeforcesSourcePayload, IAtCoderPageRef, IAtCoderSourcePayload, IAtCoderTaskForm, ILuoguPrepared, ILuoguSourcePayload, INowcoderPrepared, INowcoderSourcePayload, ILanqiaoPrepared, ILanqiaoSourcePayload, ProblemReadOptions } from 'becoder-oj-connect';
 import { officialTaskURL } from './adapters/atcoder/task';
 import type { AtCoderHost } from './adapters/atcoder/adapter';
-import { type ProblemRef, type ProblemDocument, type RecordRef, type RecordSnapshot, type LoginSummary, type SubmissionOutcome, validateProblem, validateRecord, validateOutcome, validateRecordRef } from './domain';
+import { type ProblemRef, type ProblemDocument, type RecordRef, type RecordSnapshot, type LoginSummary, type SubmissionOutcome, validateProblem, validateRecord, validateOutcome, validateRecordRef, validateLanguageCatalogue, validateLanqiaoProgress } from './domain';
+import type { LanqiaoHost } from './adapters/lanqiao/adapter';
 import type { CodeforcesHost } from './adapters/codeforces/adapter';
 import type { NowcoderHost } from './adapters/nowcoder/adapter';
 import type { LuoguHost } from './adapters/luogu/adapter';
 import { randomUUID } from 'crypto';
 
-async function readStatement(execute: (command: string, ...args: unknown[]) => Promise<unknown>, problem: ProblemRef, signal?: AbortSignal): Promise<ProblemDocument> {
+async function readStatement(execute: (command: string, ...args: unknown[]) => Promise<unknown>, problem: ProblemRef, signal?: AbortSignal, options?: ProblemReadOptions): Promise<ProblemDocument> {
 	signal?.throwIfAborted();
 	const command = '_becoder.ojConnect.' + problem.site, requestId = randomUUID();
 	let abort: (() => void) | undefined;
@@ -20,7 +21,7 @@ async function readStatement(execute: (command: string, ...args: unknown[]) => P
 			abort = () => { void execute(command + '.cancelStatementRead', requestId).catch(() => undefined); reject(new Error('oj-statement-cancelled')); };
 			signal?.addEventListener('abort', abort, { once: true });
 			if (signal?.aborted) { abort(); return; }
-			void execute(command + '.readProblem', problem, requestId).then(resolve, reject);
+			void execute(command + '.readProblem', problem, requestId, ...(options ? [options] : [])).then(resolve, reject);
 		});
 		signal?.throwIfAborted();
 		const value = validateProblem(raw); if (value.ref.url !== problem.url) { invalid(); } return value;
@@ -33,7 +34,7 @@ function object(value: unknown): RecordValue {
 	return value as RecordValue;
 }
 
-function loginSummary(raw: unknown, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): LoginSummary {
+function loginSummary(raw: unknown, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao'): LoginSummary {
 	const value = object(raw);
 	if (value.site !== site || !['signed-in', 'signed-out', 'unknown', 'unavailable'].includes(String(value.state)) || (value.label !== undefined && (typeof value.label !== 'string' || value.label.length > 512)) || (value.profileUrl !== undefined && (typeof value.profileUrl !== 'string' || value.profileUrl.length > 512))) { invalid(); }
 	return { site, state: value.state as LoginSummary['state'], label: value.label as string | undefined, profileUrl: value.profileUrl as string | undefined };
@@ -145,6 +146,33 @@ export class CommandCodeforcesHost implements CodeforcesHost {
 		return loginSummary(await this.call('loginSummary'), 'codeforces');
 	}
 	async reconcile(attemptId: string): Promise<SubmissionOutcome> { const outcome = validateOutcome(await this.call('reconcile', attemptId)); this.outcome(outcome); return outcome; }
+	async cancel(handle: string): Promise<void> { await this.call('cancel', handle); }
+	async cancelRecord(record: RecordRef): Promise<void> { await this.call('cancelRecord', record); }
+	async release(handle: string): Promise<void> { await this.call('release', handle); }
+}
+export class CommandLanqiaoHost implements LanqiaoHost {
+	constructor(private readonly execute: (command: string, ...args: unknown[]) => Promise<unknown>) { }
+	private call(operation: string, ...args: unknown[]): Promise<unknown> { return this.execute('_becoder.ojConnect.lanqiao.' + operation, ...args); }
+	async cancelPreparation(): Promise<void> { await this.call('cancelPreparation'); }
+	async prepare(problem: ProblemRef, sourceUri: string): Promise<ILanqiaoPrepared> {
+		const value = object(await this.call('prepare', problem, sourceUri));
+		if (typeof value.handle !== 'string' || !value.handle || value.handle.length > 200 || value.hasDraft !== false) { invalid(); }
+		return { handle: value.handle, hasDraft: false, languages: validateLanguageCatalogue({ languages: value.languages }, 'lanqiao').languages };
+	}
+	private outcome(raw: unknown): SubmissionOutcome {
+		const value = validateOutcome(raw);
+		if (value.kind === 'record' && value.record.problem.site !== 'lanqiao' || value.kind === 'unconfirmed' && value.problem.site !== 'lanqiao') { invalid(); }
+		return value;
+	}
+	async send(handle: string, payload: ILanqiaoSourcePayload): Promise<SubmissionOutcome> { return this.outcome(await this.call('send', handle, payload)); }
+	async readProgress(handle: string) { return validateLanqiaoProgress(await this.call('readProgress', handle)); }
+	async readProblem(problem: ProblemRef, signal: AbortSignal, options: ProblemReadOptions): Promise<ProblemDocument> { if (problem.site !== 'lanqiao') { invalid(); } return readStatement(this.execute, problem, signal, options); }
+	async readRecord(input: RecordRef): Promise<RecordSnapshot> {
+		const record = validateRecordRef(input); if (record.problem.site !== 'lanqiao') { invalid(); }
+		const value = validateRecord(await this.call('readRecord', record)); if (value.ref.url !== record.url) { invalid(); } return value;
+	}
+	async loginSummary(): Promise<LoginSummary> { return loginSummary(await this.call('loginSummary'), 'lanqiao'); }
+	async reconcile(attemptId: string): Promise<SubmissionOutcome> { return this.outcome(await this.call('reconcile', attemptId)); }
 	async cancel(handle: string): Promise<void> { await this.call('cancel', handle); }
 	async cancelRecord(record: RecordRef): Promise<void> { await this.call('cancelRecord', record); }
 	async release(handle: string): Promise<void> { await this.call('release', handle); }

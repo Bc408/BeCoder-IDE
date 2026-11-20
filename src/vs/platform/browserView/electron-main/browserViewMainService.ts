@@ -37,12 +37,15 @@ import { assertNowcoderProblem } from '../common/nowcoderBridge.js';
 import { CodeforcesSessionClient } from './codeforcesSessionClient.js';
 import { createCodeforcesPost } from './codeforcesTransport.js';
 import { createOjLanguageRead } from './ojLanguageTransport.js';
+import { LanqiaoSessionClient } from './lanqiaoSessionClient.js';
+import { createLanqiaoTransport } from './lanqiaoTransport.js';
+import { assertLanqiaoProblem } from './lanqiaoProtocol.js';
 import { assertCodeforcesProblem } from '../common/codeforcesBridge.js';
 import { LuoguSessionClient } from './luoguSessionClient.js';
 import { fetchLuoguDirect } from './luoguSessionTransport.js';
 import { ILogService } from '../../log/common/log.js';
 // eslint-disable-next-line local/code-import-patterns -- Internal type-only DTOs for the bundled OJ extension.
-import type { SubmissionOutcome, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload } from 'becoder-oj-connect';
+import type { SubmissionOutcome, ProblemRef, ProblemDocument, ProblemReadOptions, RecordRef, RecordSnapshot, LoginSummary, LanguageOption, LanguageCatalogue, ILuoguSourcePayload, INowcoderSourcePayload, ICodeforcesSourcePayload, ILanqiaoSourcePayload } from 'becoder-oj-connect';
 
 export const IBrowserViewMainService = createDecorator<IBrowserViewMainService>('browserViewMainService');
 
@@ -75,6 +78,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly atCoderAttempts = new Map<string, { context: AtCoderAttempt; session: BrowserSession; windowId: number; timer: ReturnType<typeof setTimeout> }>();
 	private readonly luoguRequests = new Map<string, { requestId: string; windowId: number; controller: AbortController; cancel(): Promise<void> }>();
 	private readonly nowcoderClients = new Map<string, { windowId: number; client: NowcoderSessionClient }>();
+	private readonly lanqiaoClients = new Map<string, { windowId: number; session: BrowserSession; client: LanqiaoSessionClient }>();
+	private readonly lanqiaoRequests = new Map<number, { id: string; requestId: string; controller: AbortController }>();
 	private readonly nowcoderRequests = new Map<string, { windowId: number; requestId: string; controller: AbortController }>();
 	private readonly nowcoderAttempts = new Map<string, { sessionId: string; windowId: number; outcome: SubmissionOutcome; expires: number }>();
 	private readonly codeforcesClients = new Map<string, { windowId: number; session: BrowserSession; client: CodeforcesSessionClient }>();
@@ -86,7 +91,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	private readonly _onDidCancelLuoguCaptcha = this._register(new Emitter<{ windowId: number; requestId: string }>());
 	readonly onDidCancelLuoguCaptcha = this._onDidCancelLuoguCaptcha.event;
 	private readonly ojSessionWatchers = this._register(new DisposableMap<string>());
-	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' }>());
+	private readonly _onDidChangeOjSession = this._register(new Emitter<{ windowId: number; site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao' }>());
 	readonly onDidChangeOjSession = this._onDidChangeOjSession.event;
 	private readonly luoguAttempts = new Map<string, { problem: ProblemRef; viewId: string; windowId: number; ownerKey: string; sourceHash: string; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
@@ -110,6 +115,7 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
+		this._register(toDisposable(() => { for (const { client } of this.lanqiaoClients.values()) { client.dispose(); } this.lanqiaoClients.clear(); }));
 		this._register(toDisposable(() => { for (const request of this.codeforcesRequests.values()) { request.controller.abort(); } for (const { client } of this.codeforcesClients.values()) { client.dispose(); } this.codeforcesRequests.clear(); this.codeforcesClients.clear(); }));
 		this._register(toDisposable(() => { for (const request of this.atCoderRecordRequests.values()) { request.controller.abort(); } this.atCoderRecords.clear(); }));
 		this._register(toDisposable(() => { for (const request of this.atCoderRequests.values()) { request.abort(); } for (const request of this.atCoderAccountReads.values()) { request.controller.abort(); } this.atCoderAccounts.clear(); for (const request of this.luoguRequests.values()) { request.controller.abort(); } for (const { client } of this.luoguClients.values()) { client.dispose(); } this.luoguClients.clear(); for (const { client } of this.nowcoderClients.values()) { client.dispose(); } this.nowcoderClients.clear(); for (const request of this.nowcoderRequests.values()) { request.controller.abort(); } }));
@@ -352,6 +358,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjOperations(windowId: number): Promise<void> {
+		this.lanqiaoRequests.get(windowId)?.controller.abort();
+		for (const [key, entry] of this.lanqiaoClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.lanqiaoClients.delete(key); } }
 		for (const request of this.codeforcesRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
 		for (const [key, entry] of this.codeforcesClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.codeforcesClients.delete(key); } }
 		for (const request of this.nowcoderRequests.values()) { if (request.windowId === windowId) { request.controller.abort(); } }
@@ -372,10 +380,23 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 
 	async cancelOjPreparations(windowId: number): Promise<void> {
-		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder' || request.operation === 'prepareNowcoder' || request.operation === 'prepareCodeforces')) { request.cancel(); } }
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId && (request.operation === 'prepareLuogu' || request.operation === 'prepareAtCoder' || request.operation === 'prepareNowcoder' || request.operation === 'prepareCodeforces' || request.operation === 'prepareLanqiao')) { request.cancel(); } }
 	}
 
-	async readOjProblem(id: string, windowId: number, problem: ProblemRef): Promise<ProblemDocument> {
+	async readOjProblem(id: string, windowId: number, problem: ProblemRef, options?: ProblemReadOptions): Promise<ProblemDocument> {
+		if (problem.site === 'lanqiao') {
+			assertLanqiaoProblem(problem);
+			const view = this._getBrowserView(id), actual = view.getWebContentsView().webContents.getURL();
+			if (view.owner.mainWindowId !== windowId || (await this.resolveBrowserProblem(actual))?.url !== problem.url) { throw new Error('oj-connect-page-changed'); }
+			const client = this.ensureLanqiaoClient(view.session, windowId), controller = new AbortController();
+			const watchers = combinedDisposable(view.onDidClose(() => controller.abort()), view.onDidNavigate(() => controller.abort()));
+			try {
+				const result = await client.readProblem(problem, options ?? { family: 'cpp' }, controller.signal);
+				controller.signal.throwIfAborted();
+				if (this._getBrowserView(id) !== view || view.getWebContentsView().webContents.getURL() !== actual) { throw new Error('oj-connect-page-changed'); }
+				return result;
+			} finally { watchers.dispose(); if (view.session.storageScope === BrowserViewStorageScope.Ephemeral) { client.dispose(); const key = windowId + ':' + view.session.id; if (this.lanqiaoClients.get(key)?.client === client) { this.lanqiaoClients.delete(key); } } }
+		}
 		if (problem.site === 'nowcoder') { return this.nowcoderClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		if (problem.site === 'luogu') { assertLuoguProblem(problem); return this.luoguClient(id, windowId).readProblem(problem, new AbortController().signal); }
 		assertOjStatementTarget(problem);
@@ -410,8 +431,19 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		if (request) { request.cancel(); }
 		else { this.cancelledOjStatementReads.add(key); if (this.cancelledOjStatementReads.size > 128) { this.cancelledOjStatementReads.delete(this.cancelledOjStatementReads.values().next().value!); } }
 	}
-	async readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<ProblemDocument> {
+	async readOjStatement(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string, options?: ProblemReadOptions): Promise<ProblemDocument> {
 		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-statement-request-id'); }
+		if (problem.site === 'lanqiao') {
+			const session = this.ojSession(windowId, scope), key = 'statement:' + windowId + ':' + requestId;
+			if (this.cancelledOjStatementReads.delete(key)) { throw new Error('oj-statement-cancelled'); }
+			if (this.ojReads.has(key)) { throw new Error('oj-statement-request-busy'); }
+			const controller = new AbortController(), entry = { windowId, operation: 'readStatement', cancel: () => controller.abort() };
+			this.ojReads.set(key, entry);
+			try {
+				const result = await this.ensureLanqiaoClient(session, windowId).readProblem(problem, options ?? { family: 'cpp' }, controller.signal);
+				controller.signal.throwIfAborted(); if (this.ojSession(windowId, scope) !== session) { throw new Error('oj-connect-session-scope-changed'); } return result;
+			} finally { if (this.ojReads.get(key) === entry) { this.ojReads.delete(key); } }
+		}
 		assertOjStatementTarget(problem);
 		if (this.cancelledOjStatementReads.delete('statement:' + windowId + ':' + requestId)) { throw new Error('oj-statement-cancelled'); }
 		const session = this.ojSession(windowId, scope);
@@ -439,6 +471,16 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	}
 	async readOjLanguages(windowId: number, scope: BrowserViewStorageScope, problem: ProblemRef, requestId: string): Promise<LanguageCatalogue> {
 		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('oj-language-request-id'); }
+		if (problem.site === 'lanqiao') {
+			assertLanqiaoProblem(problem); const session = this.ojSession(windowId, scope), key = 'language:' + windowId + ':' + requestId;
+			if (this.cancelledOjLanguageReads.delete(key)) { throw new Error('oj-language-cancelled'); }
+			if (this.ojReads.has(key)) { throw new Error('oj-language-request-busy'); }
+			const controller = new AbortController(), entry = { windowId, operation: 'readLanguages:lanqiao:' + session.id, cancel: () => controller.abort() };
+			this.ojReads.set(key, entry);
+			try { const languages = await this.ensureLanqiaoClient(session, windowId).readLanguages(problem, controller.signal); controller.signal.throwIfAborted(); if (this.ojSession(windowId, scope) !== session) { throw new Error('oj-connect-session-scope-changed'); } return { languages }; }
+			catch { controller.signal.throwIfAborted(); if (this.ojSession(windowId, scope) !== session) { throw new Error('oj-connect-session-scope-changed'); } return { languages: [], languageError: 'unavailable' }; }
+			finally { if (this.ojReads.get(key) === entry) { this.ojReads.delete(key); } }
+		}
 		if (problem.site === 'codeforces') { assertCodeforcesProblem(problem); }
 		else if (problem.site !== 'atcoder' || !atCoderTask(problem.url) || problem.nativeId !== atCoderTask(problem.url)!.contestId + '/' + atCoderTask(problem.url)!.taskId) { throw new Error('oj-connect-problem-route'); }
 		const key = 'language:' + windowId + ':' + requestId;
@@ -624,6 +666,67 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 	async releaseCodeforcesRecord(id: string, windowId: number, record: RecordRef): Promise<void> { this.codeforcesClient(id, windowId).releaseRecord(record); }
 	async reconcileCodeforcesAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome> { return this.codeforcesClient(id, windowId).reconcile(attemptId, new AbortController().signal); }
 
+	async openLanqiaoSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
+		const session = this.ojSession(windowId, scope); this.ensureLanqiaoClient(session, windowId); return session.id;
+	}
+	async cancelLanqiaoOperations(windowId: number): Promise<void> {
+		this.lanqiaoRequests.get(windowId)?.controller.abort(new Error('lanqiao-session-changed'));
+		for (const [key, entry] of this.lanqiaoClients) { if (entry.windowId === windowId) { entry.client.dispose(); this.lanqiaoClients.delete(key); } }
+		for (const request of this.ojReads.values()) { if (request.windowId === windowId && request.operation?.includes('Lanqiao')) { request.cancel(); } }
+	}
+	private ensureLanqiaoClient(session: BrowserSession, windowId: number): LanqiaoSessionClient {
+		if (!this.windowsMainService.getWindowById(windowId)) { throw new Error('oj-connect-owner'); }
+		const key = windowId + ':' + session.id;
+		let entry = this.lanqiaoClients.get(key);
+		if (!entry) {
+			const client = new LanqiaoSessionClient({
+				transport: createLanqiaoTransport(session.electronSession),
+				assertCurrent: () => {
+					const window = this.windowsMainService.getWindowById(windowId);
+					if (!window || this.lanqiaoClients.get(key)?.client !== client || session.storageScope === BrowserViewStorageScope.Workspace && session.id !== 'workspace:' + window.openedWorkspace?.id) { throw new Error('lanqiao-session-owner'); }
+				},
+				onIdentityChange: () => { if (this.lanqiaoClients.get(key)?.client === client) { this._onDidChangeOjSession.fire({ windowId, site: 'lanqiao' }); } },
+				onSessionChange: listener => {
+					const changed = (_event: Electron.Event, cookie: Electron.Cookie, cause: string, removed: boolean) => {
+						if (cookie.name === 'lqtoken' && ['lanqiao.cn', 'www.lanqiao.cn', 'passport.lanqiao.cn'].includes(cookie.domain?.replace(/^\./, '') ?? '') && !(removed && cause === 'overwrite')) { listener(); }
+					};
+					session.electronSession.cookies.on('changed', changed);
+					return toDisposable(() => session.electronSession.cookies.removeListener('changed', changed));
+				}
+			});
+			entry = { windowId, session, client }; this.lanqiaoClients.set(key, entry);
+		}
+		if (entry.session !== session) { throw new Error('lanqiao-session-owner'); }
+		return entry.client;
+	}
+	private lanqiaoClient(id: string, windowId: number): LanqiaoSessionClient {
+		const entry = this.lanqiaoClients.get(windowId + ':' + id), window = this.windowsMainService.getWindowById(windowId);
+		if (!entry || !window || entry.session.storageScope === BrowserViewStorageScope.Ephemeral || entry.session.storageScope === BrowserViewStorageScope.Workspace && entry.session.id !== 'workspace:' + window.openedWorkspace?.id) { throw new Error('lanqiao-session-owner'); }
+		return entry.client;
+	}
+	async prepareLanqiaoTask(id: string, windowId: number, problem: ProblemRef) {
+		assertLanqiaoProblem(problem); const controller = new AbortController(), key = generateUuid();
+		this.ojReads.set(key, { windowId, operation: 'prepareLanqiao', cancel: () => controller.abort() });
+		try { return await this.lanqiaoClient(id, windowId).prepare(problem, controller.signal); }
+		finally { this.ojReads.delete(key); }
+	}
+	async submitLanqiaoTask(id: string, windowId: number, problem: ProblemRef, payload: ILanqiaoSourcePayload, ownerKey: string, requestId: string): Promise<SubmissionOutcome> {
+		const client = this.lanqiaoClient(id, windowId); assertLanqiaoProblem(problem);
+		if (this.lanqiaoRequests.has(windowId) || typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(requestId)) { throw new Error('lanqiao-submission-busy'); }
+		const pending = { id, requestId, controller: new AbortController() }; this.lanqiaoRequests.set(windowId, pending);
+		try { return await client.send(problem, payload, ownerKey, requestId, pending.controller.signal); }
+		finally { if (this.lanqiaoRequests.get(windowId) === pending) { this.lanqiaoRequests.delete(windowId); } }
+	}
+	async cancelLanqiaoTask(id: string, windowId: number, requestId: string): Promise<void> { this.lanqiaoClient(id, windowId); const pending = this.lanqiaoRequests.get(windowId); if (pending?.id === id && pending.requestId === requestId) { pending.controller.abort(); } }
+	async readLanqiaoProgress(id: string, windowId: number, requestId: string) {
+		const client = this.lanqiaoClient(id, windowId), pending = this.lanqiaoRequests.get(windowId);
+		return pending?.id === id && pending.requestId === requestId && !pending.controller.signal.aborted ? client.readProgress(requestId) : undefined;
+	}
+	async releaseLanqiaoPreparation(id: string, windowId: number, ownerKey: string): Promise<void> { this.lanqiaoClient(id, windowId).releasePreparation(ownerKey); }
+	async readLanqiaoRecord(id: string, windowId: number, record: RecordRef): Promise<RecordSnapshot> { return this.lanqiaoClient(id, windowId).readRecord(record, new AbortController().signal); }
+	async releaseLanqiaoRecord(id: string, windowId: number, record: RecordRef): Promise<void> { this.lanqiaoClient(id, windowId).releaseRecord(record); }
+	async reconcileLanqiaoAttempt(id: string, windowId: number, attemptId: string): Promise<SubmissionOutcome> { return this.lanqiaoClient(id, windowId).reconcile(attemptId, new AbortController().signal); }
+
 	async openNowcoderSession(windowId: number, scope: BrowserViewStorageScope): Promise<string> {
 		const session = this.ojSession(windowId, scope), key = windowId + ':' + session.id;
 		if (!this.nowcoderClients.has(key)) {
@@ -784,7 +887,8 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 		else if (operation === 'releaseLuoguRecord' && record) { assertLuoguProblem(record.problem); client.releaseRecord(record); }
 		else { throw new Error('oj-connect-operation'); }
 	}
-	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces'): Promise<LoginSummary> {
+	async readOjLogin(id: string, windowId: number, site: 'luogu' | 'atcoder' | 'nowcoder' | 'codeforces' | 'lanqiao'): Promise<LoginSummary> {
+		if (site === 'lanqiao') { return this.lanqiaoClient(id, windowId).loginSummary(new AbortController().signal); }
 		if (site === 'codeforces') { return this.codeforcesClient(id, windowId).login(new AbortController().signal); }
 		if (site === 'nowcoder') { return this.nowcoderClient(id, windowId).login(new AbortController().signal); }
 		if (site === 'luogu') { return this.luoguClient(id, windowId).login(new AbortController().signal); }

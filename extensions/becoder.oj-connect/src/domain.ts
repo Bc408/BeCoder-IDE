@@ -3,12 +3,35 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, SubmissionOutcome } from 'becoder-oj-connect';
+import type { ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, SubmissionOutcome, SiteId, ILanqiaoProgress } from 'becoder-oj-connect';
 import { codeforcesProblem } from './adapters/codeforces/task';
 import { atCoderProblem } from './adapters/atcoder/task';
 import { luoguProblem } from './adapters/luogu/task';
 import { nowcoderProblem } from './adapters/nowcoder/task';
-export type { SiteId, ISourceSnapshot, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, LanguageOption, LanguageCatalogue, SubmissionProgress, SubmissionOutcome, LoginSummary } from 'becoder-oj-connect';
+import { lanqiaoProblem } from './adapters/lanqiao/task';
+export type { SiteId, ISourceSnapshot, ProblemRef, ProblemDocument, RecordRef, RecordSnapshot, Section, LanguageOption, LanguageCatalogue, SubmissionProgress, SubmissionEvaluation, SubmissionOutcome, LoginSummary } from 'becoder-oj-connect';
+
+export function validateLanqiaoProgress(raw: unknown): ILanqiaoProgress | undefined {
+	if (raw === undefined) { return undefined; }
+	const value = object(raw);
+	if (!['sending', 'judging', 'confirming'].includes(String(value.phase))) { throw new Error('oj-connect-invalid-data'); }
+	return {
+		phase: value.phase as ILanqiaoProgress['phase'],
+		...(value.groups === undefined ? {} : {
+			groups: array(value.groups, 1).map(rawGroup => {
+				const group = object(rawGroup);
+				if (group.name !== 'Test Cases') { throw new Error('oj-connect-invalid-data'); }
+				return {
+					name: 'Test Cases', rows: array(group.rows, 1024).map(rawRow => {
+						const row = array(rawRow, 4);
+						if (row.length !== 4 || !/^[1-9]\d{0,3}$/.test(String(row[0]))) { throw new Error('oj-connect-invalid-data'); }
+						return row.map(cell => text(cell, 200, true));
+					})
+				};
+			})
+		})
+	};
+}
 
 export function object(value: unknown): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) { throw new Error('oj-connect-invalid-data'); }
@@ -36,14 +59,14 @@ function metadata(raw: unknown): { label: string; color?: string } {
 export function validateProblemRef(raw: unknown): ProblemRef {
 	const value = object(raw);
 	const url = text(value.url);
-	const parsed = value.site === 'codeforces' ? codeforcesProblem(url) : value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : value.site === 'nowcoder' ? nowcoderProblem(url) : undefined;
+	const parsed = value.site === 'codeforces' ? codeforcesProblem(url) : value.site === 'atcoder' ? atCoderProblem(url) : value.site === 'luogu' ? luoguProblem(url) : value.site === 'nowcoder' ? nowcoderProblem(url) : value.site === 'lanqiao' ? lanqiaoProblem(url) : undefined;
 	if (!parsed || parsed.url !== url || parsed.nativeId !== value.nativeId) { throw new Error('oj-connect-invalid-problem'); }
 	return parsed;
 }
 export function validateRecordRef(raw: unknown): RecordRef {
 	const value = object(raw), problem = validateProblemRef(value.problem), id = text(value.id, 100), url = text(value.url);
-	if (!/^[1-9]\d*$/.test(id)) { throw new Error('oj-connect-invalid-record'); }
-	const expected = problem.site === 'luogu' ? 'https://www.luogu.com.cn/record/' + id
+	if (!(problem.site === 'lanqiao' ? /^[0-9a-f]{24}$/ : /^[1-9]\d*$/).test(id)) { throw new Error('oj-connect-invalid-record'); }
+	const expected = problem.site === 'lanqiao' ? 'https://www.lanqiao.cn/problems/' + problem.nativeId + '/submissions/' + id + '/' : problem.site === 'luogu' ? 'https://www.luogu.com.cn/record/' + id
 		: problem.site === 'nowcoder' ? 'https://ac.nowcoder.com/acm/contest/view-submission?submissionId=' + id
 			: problem.site === 'codeforces' ? 'https://codeforces.com/contest/' + problem.nativeId.split('/')[0] + '/submission/' + id
 				: 'https://atcoder.jp/contests/' + problem.nativeId.split('/')[0] + '/submissions/' + id;
@@ -58,12 +81,12 @@ export function validateOutcome(raw: unknown): SubmissionOutcome {
 	if (value.kind === 'unconfirmed') { return { kind: 'unconfirmed', problem: validateProblemRef(value.problem), attemptId: text(value.attemptId, 200), message: text(value.message, 2000) }; }
 	throw new Error('oj-connect-invalid-receipt');
 }
-export function validateLanguageCatalogue(raw: unknown): import('becoder-oj-connect').LanguageCatalogue {
+export function validateLanguageCatalogue(raw: unknown, site: SiteId): import('becoder-oj-connect').LanguageCatalogue {
 	const value = object(raw);
 	if (value.languageError !== undefined && value.languageError !== 'unavailable' && value.languageError !== 'login-required') { throw new Error('oj-connect-invalid-language'); }
 	const languages = array(value.languages, 100).map(raw => {
 		const option = object(raw);
-		if (option.family !== 'c' && option.family !== 'cpp' || !/^\d+(?::o2)?$/.test(text(option.id, 200))) { throw new Error('oj-connect-invalid-language'); }
+		if (option.family !== 'c' && option.family !== 'cpp' || !(site === 'lanqiao' ? option.id === option.family : /^\d+(?::o2)?$/.test(text(option.id, 200)))) { throw new Error('oj-connect-invalid-language'); }
 		return { id: text(option.id, 200), label: text(option.label, 200), family: option.family as 'c' | 'cpp' };
 	});
 	if (new Set(languages.map(option => option.id)).size !== languages.length) { throw new Error('oj-connect-invalid-language'); }
@@ -79,13 +102,7 @@ export function validateProblem(raw: unknown): ProblemDocument {
 		...(value.languageError === undefined ? {} : { languageError: value.languageError }),
 		...(value.difficulty === undefined ? {} : { difficulty: metadata(value.difficulty) }),
 		...(value.tags === undefined ? {} : { tags: array(value.tags, 256).map(metadata) }),
-		...(value.languages === undefined ? {} : {
-			languages: array(value.languages, 100).map(raw => {
-				const option = object(raw);
-				if (option.family !== 'c' && option.family !== 'cpp') { throw new Error('oj-connect-invalid-language'); }
-				return { id: text(option.id, 200), label: text(option.label, 200), family: option.family };
-			})
-		}),
+		...(value.languages === undefined ? {} : { languages: validateLanguageCatalogue({ languages: value.languages }, ref.site).languages }),
 		bodies: array(value.bodies, 32).map(rawBody => {
 			const body = object(rawBody);
 			return {

@@ -132,7 +132,7 @@ export class BrowserProblemContribution extends BrowserEditorContribution {
 					? await this.service.openLuoguSession(mainWindow.vscodeWindowId, model.storageScope)
 					: problem.site === 'nowcoder' ? await this.service.openNowcoderSession(mainWindow.vscodeWindowId, model.storageScope) : model.id;
 				check();
-				const document = await this.service.readOjProblem(sessionId, mainWindow.vscodeWindowId, problem);
+				const document = await this.service.readOjProblem(sessionId, mainWindow.vscodeWindowId, problem, ...(problem.site === 'lanqiao' ? [{ family: 'cpp' as const }] : []));
 				check();
 				importCommand = 'ojConnect';
 				await this.commands.executeCommand('_becoder.ojConnect.importFromBrowser', document, requestId);

@@ -88,7 +88,7 @@ export class ProblemPanel implements vscode.Disposable {
 	}
 	private loadLanguages(key: string, entry: ProblemPanelEntry, force = false): void {
 		const problem = entry.panel.state.problem!;
-		if (!this.actions.loadLanguages || (!force && problem.languages?.length) || (problem.ref.site !== 'atcoder' && problem.ref.site !== 'codeforces')) { return; }
+		if (!this.actions.loadLanguages || (!force && problem.languages?.length) || (problem.ref.site !== 'atcoder' && problem.ref.site !== 'codeforces' && problem.ref.site !== 'lanqiao')) { return; }
 		const request = new AbortController(); entry.languageRead = request;
 		entry.panel.update({ languagesLoading: true });
 		const current = () => this.panels.get(key) === entry && entry.languageRead === request && !request.signal.aborted;
@@ -111,7 +111,7 @@ export class ProblemPanel implements vscode.Disposable {
 		if (!usingCompilerCatalogue && saved && symbolicCompiler(problem.site, family, saved) && resolved) {
 			void Promise.resolve(this.actions.selectLanguage(problem.site, family, resolved)).catch(error => { console.warn('[OJ Connect] Could not store the verified compiler choice', error); });
 		}
-		return resolved ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.site, family) ? defaultLanguage(options, family)?.id : undefined);
+		return resolved ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.site, family) ? defaultLanguage(options, family, problem.site)?.id : undefined);
 	}
 	refreshLanguages(site: SiteId): void {
 		for (const [key, entry] of this.panels) {
@@ -149,7 +149,7 @@ export class ProblemPanel implements vscode.Disposable {
 			const problem = panel.state.problem!;
 			const family = binding.source.languageId === 'c' ? 'c' : 'cpp';
 			const saved = this.actions.preferredLanguage(problem.ref.site, family);
-			const languageId = panel.state.languages?.find(option => option.id === saved)?.id ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.ref.site, family) ? defaultLanguage(panel.state.languages ?? [], family)?.id : undefined);
+			const languageId = panel.state.languages?.find(option => option.id === saved)?.id ?? (saved === undefined && !this.preferences?.hasLanguagePreference(problem.ref.site, family) ? defaultLanguage(panel.state.languages ?? [], family, problem.ref.site)?.id : undefined);
 			panel.update({ languageId, ...(problem.ref.site === 'atcoder' ? { locale: this.preferences?.statementLocale(problem.bodies.map(body => body.locale)) } : {}) });
 		}
 	}

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { fileURLToPath } from 'url';
-import { type ISourceSnapshot, type ProblemRef, type LanguageOption, type SubmissionProgress, type SubmissionOutcome, type RecordRef, validateProblemRef, validateRecordRef } from './domain';
+import { type ISourceSnapshot, type ProblemRef, type LanguageOption, type SubmissionProgress, type SubmissionEvaluation, type SubmissionOutcome, type RecordRef, validateProblemRef, validateRecordRef } from './domain';
 import type { OjAdapter, SubmissionSession } from './adapters/adapter';
 import { resolveProblem } from './problemResolver';
 import type { SiteDirectories, SiteId } from './settings';
@@ -21,6 +21,8 @@ export interface SubmissionHost {
 	confirmDraft(fileName: string): Promise<boolean>;
 	runWithProgress<T>(fileName: string, operation: (progress: (value: SubmissionProgress) => void) => Promise<T>): Promise<T>;
 	openRecord(record: RecordRef, sourceUri: string): Promise<void>;
+	/** Returning false from finish means the preview owns presentation; do not reopen it later. */
+	beginEvaluation?(value: SubmissionEvaluation, sourceUri: string): { update(value: SubmissionEvaluation): void; finish(outcome?: SubmissionOutcome): boolean | void };
 }
 interface Request { controller: AbortController; session?: SubmissionSession; cancellation?: Promise<void>; cleanup?: Promise<void> }
 
@@ -38,6 +40,7 @@ export class SubmissionController {
 		const filePath = fileURLToPath(snapshot.uri);
 		const request: Request = { controller: new AbortController() };
 		const signal = request.controller.signal;
+		let evaluation: ReturnType<NonNullable<SubmissionHost['beginEvaluation']>> | undefined;
 		this.active = request;
 		try {
 			const resolution = explicitProblem ? { kind: 'problem' as const, problem: validateProblemRef(explicitProblem) } : resolveProblem(filePath, this.host.directories(), this.host.adapters);
@@ -49,6 +52,10 @@ export class SubmissionController {
 			const adapter = this.host.adapters.find(candidate => candidate.site === problem.site);
 			if (!adapter) { throw new OperationError('prepare', 'not-sent', 'This site is not available: ' + problem.site); }
 			return await this.host.runWithProgress(snapshot.fileName, async progress => {
+				if (problem.site === 'lanqiao') {
+					try { evaluation = this.host.beginEvaluation?.({ problem, phase: 'preparing', codeLength: new TextEncoder().encode(snapshot.source).length + ' B' }, snapshot.uri); }
+					catch { /* Submission remains available if its preview cannot open. */ }
+				}
 				request.session = await adapter.prepare(problem, snapshot.uri, progress, signal);
 				signal.throwIfAborted();
 				const session = request.session;
@@ -58,7 +65,7 @@ export class SubmissionController {
 				if (!options.length) { throw new OperationError('prepare', 'not-sent', 'No matching language is currently available.'); }
 				const saved = this.preferredLanguage(adapter.site, snapshot.family);
 				let languageId = resolveCompiler(adapter.site, snapshot.family, saved, options);
-				if (saved === undefined && !this.preferences.hasLanguagePreference(adapter.site, snapshot.family)) { languageId = defaultLanguage(options, snapshot.family)?.id; }
+				if (saved === undefined && !this.preferences.hasLanguagePreference(adapter.site, snapshot.family)) { languageId = defaultLanguage(options, snapshot.family, adapter.site)?.id; }
 				if (!options.some(option => option.id === languageId)) { languageId = await this.host.chooseLanguage(options, snapshot.fileName, adapter.site, problem); }
 				signal.throwIfAborted();
 				if (!languageId) { return undefined; }
@@ -69,7 +76,19 @@ export class SubmissionController {
 				if (this.preferredLanguage(adapter.site, snapshot.family) !== languageId) { await this.selectLanguage(adapter.site, snapshot.family, languageId); }
 				signal.throwIfAborted();
 				let outcome: SubmissionOutcome;
-				try { outcome = await session.send({ snapshot, languageId, replaceDraft }, progress, signal); }
+				let revealRecord = true;
+				try {
+					outcome = await session.send({ snapshot, languageId, replaceDraft }, value => {
+						progress(value);
+						if (signal.aborted || this.disposed || !value.evaluation || value.evaluation.problem.url !== problem.url || value.evaluation.problem.site !== problem.site || value.evaluation.problem.nativeId !== problem.nativeId) { return; }
+						try {
+							if (evaluation) { evaluation.update(value.evaluation); }
+							else { evaluation = this.host.beginEvaluation?.(value.evaluation, snapshot.uri); }
+						} catch { /* A preview failure cannot interrupt an already dispatched submission. */ }
+					}, signal);
+					try { revealRecord = evaluation?.finish(outcome) !== false; } catch { /* The formal receipt remains authoritative if its preview closed. */ }
+					evaluation = undefined;
+				}
 				catch (error) {
 					if (error instanceof OperationError) { throw error; }
 					throw new OperationError('send', 'unconfirmed', error instanceof Error ? error.message : String(error));
@@ -83,7 +102,7 @@ export class SubmissionController {
 					// A confirmed receipt no longer needs the sending page or submission lock.
 					await this.releaseSession(request);
 					if (this.active === request) { this.active = undefined; }
-					if (this.disposed) { return outcome; }
+					if (this.disposed || !revealRecord) { return outcome; }
 					try { await this.host.openRecord(record, snapshot.uri); }
 					catch (error) { throw new OperationError('track', 'record', error instanceof Error ? error.message : String(error), record); }
 				} else if (outcome.kind === 'unconfirmed') {
@@ -96,6 +115,7 @@ export class SubmissionController {
 			if (signal.aborted || this.disposed) { return undefined; }
 			throw error;
 		} finally {
+			try { evaluation?.finish(); } catch { /* Cleanup must still release the one-use sending session. */ }
 			try {
 				if (request.session) {
 					if (signal.aborted) { await this.cancelSession(request).catch(() => undefined); }

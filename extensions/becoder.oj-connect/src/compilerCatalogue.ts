@@ -8,6 +8,12 @@ import type { LanguageOption, SiteId } from './domain';
 // Captured official labels, not a claim that these compilers are still available for a submission.
 // Codeforces: captured submission form; AtCoder C++: verified submission, C23: captured official rules.
 const catalogues: Partial<Record<SiteId, readonly LanguageOption[]>> = {
+	lanqiao: [
+		// allow-any-unicode-next-line
+		{ id: 'cpp', label: 'C++（g++17）', family: 'cpp' },
+		// allow-any-unicode-next-line
+		{ id: 'c', label: 'C（gcc8.3.0）', family: 'c' }
+	],
 	codeforces: [
 		{ id: '43', label: 'GNU GCC C11 5.1.0', family: 'c' },
 		{ id: '54', label: 'GNU G++17 7.3.0', family: 'cpp' },

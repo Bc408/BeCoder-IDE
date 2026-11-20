@@ -284,11 +284,12 @@ try {
 		['luogu', { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, 'C++20 (GCC) (O2)', 'C17 (GCC) (O2)'],
 		['atcoder', { site: 'atcoder', nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' }, 'C++23 (GCC 15.2.0)', 'C23 (GCC 14.2.0)'],
 		['codeforces', cfProblem, 'GNU G++23 14.2 (64 bit, msys2)', 'GNU GCC C17 7.3.0'],
-		['nowcoder', { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }, 'C++(g++ 13)', 'C(gcc 10)']
+		['nowcoder', { site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' }, 'C++(g++ 13)', 'C(gcc 10)'],
+		['lanqiao', { site: 'lanqiao', nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' }, 'C++（g++17）', 'C（gcc8.3.0）']
 	]) {
 		for (const family of ['cpp', 'c']) {
 			const languages = [{ id: 'cpp', label: cppLabel, family: 'cpp' }, { id: 'c', label: cLabel, family: 'c' }].filter(option => option.family === family);
-			const selected = defaultLanguage(languages, family);
+			const selected = defaultLanguage(languages, family, site);
 			state = { kind: 'problem', labels, sourceName: 'solution.' + family, languages, languageId: selected.id, problem: { ref, title: 'Compiler selection', limits: [], bodies: [{ locale: 'en', sections: [{ format: 'html', content: '<p>Statement</p>' }] }], samples: [], interactive: false } };
 			for (const width of [420, 700]) {
 				await page.setViewportSize({ width, height: 500 }); await page.goto(url); await page.locator('article').waitFor();
@@ -312,11 +313,11 @@ try {
 		await page.screenshot({ path: path.join(output, `${site}-compiler-loading.png`) });
 		state.languagesLoading = false;
 	}
-	for (const site of ['atcoder', 'codeforces']) {
+	for (const site of ['atcoder', 'codeforces', 'lanqiao']) {
 		for (const family of ['c', 'cpp']) {
-			state.problem.ref = site === 'codeforces' ? cfProblem : { site, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
+			state.problem.ref = site === 'lanqiao' ? { site, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' } : site === 'codeforces' ? cfProblem : { site, nativeId: 'abc484/abc484_c', url: 'https://atcoder.jp/contests/abc484/tasks/abc484_c' };
 			state.languages = compilerCatalogue(site).filter(option => option.family === family);
-			state.languageId = defaultLanguage(state.languages, family)?.id; state.usingCompilerCatalogue = true;
+			state.languageId = defaultLanguage(state.languages, family, site)?.id; state.usingCompilerCatalogue = true;
 			for (const loading of [true, false]) {
 				state.languagesLoading = loading; state.problem.languageError = loading ? undefined : 'login-required';
 				await page.goto(url); await page.locator('article').waitFor();
@@ -737,6 +738,48 @@ try {
 	assert.equal(await page.getByText(labels.codeLength, { exact: true }).count(), 0, 'unavailable official length remains omitted');
 	assert.equal(await page.getByText(labels.owner, { exact: true }).count(), 0, 'Nowcoder hides the account field');
 	await page.screenshot({ path: path.join(output, 'nowcoder-record.png'), fullPage: true });
+	const lanqiaoProblem = { site: 'lanqiao', nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const lanqiaoRecord = { problem: lanqiaoProblem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+	state = { kind: 'record', labels, sourceName: '254.cpp', tracking: true, submission: { problem: lanqiaoProblem, phase: 'preparing', codeLength: '171 B' }, message: '正式提交记录尚未确认。' };
+	await page.setViewportSize({ width: 520, height: 650 }); await page.goto(url); await page.locator('.record-verdict').first().waitFor();
+	await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
+	const updateLanqiao = async () => { await page.evaluate(value => window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: value } })), state); };
+	for (const phase of ['preparing', 'sending', 'judging', 'confirming']) {
+		state.submission = { ...state.submission, phase, ...(phase !== 'preparing' ? { language: 'C++（g++17）' } : {}) };
+		await updateLanqiao();
+		const expected = phase === 'judging' ? 'Judging' : labels[phase === 'sending' ? 'submitting' : phase];
+		await page.waitForFunction(text => document.querySelector('.record-verdict')?.textContent === text, expected);
+		assert.equal(await page.locator('.testcase').count(), 0, 'no execution point count means no invented numbered cards');
+		assert.equal(await page.locator('.spinner').count(), 2, 'phase and test results use the shared waiting indicator');
+		assert.equal(await page.locator('h1 a').count(), 0, 'pending execution is not a verified record link');
+		assert.equal(await page.getByRole('link', { name: labels.viewSource }).count(), 0, 'pending source is not presented as official source');
+		await page.screenshot({ path: path.join(output, 'lanqiao-pending-' + phase + '.png'), fullPage: true });
+	}
+	state.submission = { ...state.submission, groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'Judging', '', '']] }] };
+	await updateLanqiao(); await page.locator('.testcase').first().waitFor();
+	assert.equal(await page.locator('.testcase .spinner').count(), 1, 'only a real projected running row spins');
+	await page.screenshot({ path: path.join(output, 'lanqiao-pending-report.png'), fullPage: true });
+	state = { kind: 'record', labels, sourceName: '254.cpp', record: lanqiaoRecord, tracking: false, snapshot: { ref: lanqiaoRecord, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'AC', '1 ms', '1 kb']] }] } };
+	await updateLanqiao(); await page.locator('h1 a').waitFor();
+	assert.equal(await page.locator('.spinner').count(), 0, 'final result stops the same page animation');
+	assert.equal(await page.locator('.testcase').count(), 2);
+	await page.screenshot({ path: path.join(output, 'lanqiao-progress-finished.png'), fullPage: true });
+	for (const [name, snapshot] of [
+		['accepted', { phase: 'finished', rawStatus: 'AC', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }], time: '0 ms', memory: '0 kb' }],
+		['summary-only', { phase: 'finished', rawStatus: 'AC', testCaseSummary: { passed: 5, total: 5 } }],
+		['unknown', { phase: 'unknown', rawStatus: 'NEW LANQIAO STATUS' }],
+		['compile-missing', { phase: 'finished', rawStatus: 'CE', compileSucceeded: false }]
+	]) {
+		state = { kind: 'record', labels, sourceName: '254.cpp', record: lanqiaoRecord, tracking: false, snapshot: { ref: lanqiaoRecord, language: 'C++（g++17）', source: 'int main(){}\n', sourceVerification: 'matched', ...snapshot } };
+		await page.setViewportSize({ width: 520, height: 650 }); await page.goto(url); await page.locator('.record-verdict').waitFor();
+		await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
+		assert.equal(await page.getByText(labels.score, { exact: true }).count(), 0, 'Lanqiao has no fabricated score');
+		assert.equal(await page.locator('.testcase').count(), name === 'accepted' ? 1 : 0);
+		assert.equal(await page.locator('.spinner').count(), 0);
+		assert.ok((await page.locator('body').textContent()).includes('C++（g++17）'));
+		if (name === 'accepted') { assert.equal(await page.locator('.testcase > div:nth-child(2)').textContent(), 'Accepted'); await page.locator('.testcase').hover(); }
+		await page.screenshot({ path: path.join(output, 'lanqiao-' + name + '.png'), fullPage: true });
+	}
 	await page.goto(url + 'accounts');
 	assert.deepEqual(await page.evaluate(() => window.__messages.splice(0)), [{ ready: true }]);
 	await page.evaluate(() => { const style = document.createElement('style'); style.nonce = 'fixture'; style.textContent = 'body { background:#1e1e1e;--vscode-foreground:#ddd;--vscode-font-size:13px;--vscode-font-family:Segoe UI,sans-serif;--vscode-textLink-foreground:#4daafc;--vscode-descriptionForeground:#aaa;--vscode-disabledForeground:#777; }'; document.head.append(style); });
@@ -756,5 +799,5 @@ try {
 	assert.equal(await page.locator('[data-site="atcoder"] .status').textContent(), '已登录 · fixture-user');
 	for (const width of [240, 320, 500]) { await page.setViewportSize({ width, height: 300 }); await page.screenshot({ path: path.join(output, 'accounts-' + width + '.png') }); }
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ passed: true, sites: 4, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
+	console.log(JSON.stringify({ passed: true, sites: 5, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

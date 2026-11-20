@@ -1,4 +1,9 @@
 {
+	"Sign in to Lanqiao from the OJ Connect sidebar.": "请从 OJ Connect 侧栏登录蓝桥。",
+	"Only accessible public Lanqiao C/C++ standard input/output practice problems are supported.": "仅支持当前账号可访问的蓝桥公开 C/C++ 标准输入输出编程练习。",
+	"The Lanqiao submission is unconfirmed. Continue querying this attempt; no code or report will be sent again.": "蓝桥提交回执尚未确认。可继续查询本次尝试；不会再次发送代码或报告请求。",
+	"The current Lanqiao compiler catalogue could not be verified. Refresh the problem and choose an available compiler before submitting.": "无法核验蓝桥当前编译器目录。请刷新题目并在提交前选择可用编译器。",
+	"Enter a matching problem number or an official Luogu/AtCoder/Codeforces/Nowcoder/Lanqiao URL.": "请输入匹配的题号，或洛谷、AtCoder、Codeforces、牛客、蓝桥的官方题目地址。",
 	"Codeforces rejected this submission because you have already submitted exactly the same code for this problem. No new submission was created. View the earlier submission or choose another problem.": "CF 已拒绝本次提交：该题已提交过完全相同的代码，本次未生成新记录。请查看原提交，或选择其他题目。",
 	"Passed tests": "通过测试点",
 	"Replace Webpage Draft": "替换网页草稿",
@@ -130,5 +135,12 @@
 	"The Codeforces request timed out. Check the connection and try the action again.": "Codeforces 请求超时。请检查网络连接后重试对应操作。",
 	"The Codeforces login session changed. Refresh its account status, then try the action again.": "Codeforces 登录会话已变化。请刷新账号状态后重试对应操作。",
 	"The Codeforces connection stopped. Reopen OJ Connect and try the action again.": "Codeforces 连接已停止。请重新打开 OJ Connect 后重试对应操作。",
-	"The Codeforces operation was cancelled. Try the action again.": "Codeforces 操作已取消。请重试对应操作。"
+	"The Codeforces operation was cancelled. Try the action again.": "Codeforces 操作已取消。请重试对应操作。",
+	"Preparing submission…": "正在准备提交…",
+	"Submitting code…": "正在提交代码…",
+	"Confirming the official record…": "正在确认正式记录…",
+	"Waiting for test case results…": "正在等待测试点结果…",
+	"The official submission record has not been confirmed yet.": "正式提交记录尚未确认。",
+	"The submission receipt is still unconfirmed. Continue querying; no code will be resent.": "提交回执尚未确认。可继续查询，不会再次发送代码。",
+	"No confirmed submission result is available.": "尚无已确认的提交结果。"
 }

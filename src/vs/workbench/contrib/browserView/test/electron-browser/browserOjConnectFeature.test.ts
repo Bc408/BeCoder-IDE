@@ -102,6 +102,62 @@ function atCoderFixture(loading = false) {
 	};
 }
 
+function lanqiaoFixture() {
+	const problem = { site: 'lanqiao', nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const id = '6aff1ff717e87398a15a4abf', record = { problem, id, url: 'https://www.lanqiao.cn/problems/254/submissions/' + id + '/' };
+	const scopeChanged = new Emitter<void>(), stopped = new Emitter<void>();
+	let scope = BrowserViewStorageScope.Global, sends = 0, cancelled = 0;
+	let finish!: (value: unknown) => void;
+	let holdRead: (() => Promise<void>) | undefined;
+	const main = {
+		getChannel: () => ({
+			listen: () => Event.None, call: async (name: string, args: unknown[]) => {
+				if (name === 'openLanqiaoSession') { return String(args[1]); }
+				if (name === 'prepareLanqiaoTask') { return { ownerKey: 'owner-key', hasDraft: false, languages: [{ id: 'cpp', family: 'cpp', label: 'C++（g++17）' }] }; }
+				if (name === 'submitLanqiaoTask') { sends++; return new Promise(resolve => { finish = resolve; }); }
+				if (name === 'cancelLanqiaoOperations') { cancelled++; finish?.({ kind: 'unconfirmed', problem, attemptId: 'invalidated', message: 'stopped' }); }
+				if (name === 'readLanqiaoRecord') { await holdRead?.(); return { ref: record, rawStatus: 'AC', phase: 'finished', sourceVerification: 'matched' }; }
+				return undefined;
+			}
+		})
+	};
+	const browsers = { getKnownBrowserViews: () => new Map(), resolveStorageScope: async () => scope, onDidChangeStorageScope: scopeChanged.event };
+	const extensions = { getExtensionsStatus: () => ({ 'becoder.oj-connect': { activationStarted: true } }), onWillStop: stopped.event, onDidChangeExtensions: Event.None, onDidChangeExtensionsStatus: Event.None };
+	const contribution = new BrowserOjConnectContribution({ editors: [] } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[0], browsers as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[1], { executeCommand: async () => undefined } as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[2], main as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[3], extensions as unknown as ConstructorParameters<typeof BrowserOjConnectContribution>[4]);
+	const execute = async (suffix: string, ...args: unknown[]): Promise<any> => CommandsRegistry.getCommand('_becoder.ojConnect.lanqiao.' + suffix)!.handler(undefined!, ...args);
+	return { problem, record, execute, get sends() { return sends; }, get cancelled() { return cancelled; }, finish: (value: unknown) => finish(value), setScope: (value: BrowserViewStorageScope) => { scope = value; scopeChanged.fire(); }, holdRead: (value: () => Promise<void>) => { holdRead = value; }, dispose: () => { contribution.dispose(); scopeChanged.dispose(); stopped.dispose(); } };
+}
+
+suite('Lanqiao storage-scope lifecycle', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+	test('changing storage scope cancels an active native transaction and suppresses its late receipt', async () => {
+		const f = lanqiaoFixture();
+		try {
+			const form = await f.execute('prepare', f.problem, 'file:///lanqiao/254.cpp');
+			const sending = f.execute('send', form.handle, { source: 'int main(){}', fileName: '254.cpp', languageId: 'cpp' });
+			for (let i = 0; i < 10; i++) { await Promise.resolve(); }
+			assert.strictEqual(f.sends, 1);
+			const rejected = assert.rejects(sending);
+			f.setScope(BrowserViewStorageScope.Workspace);
+			assert.strictEqual(f.cancelled, 1);
+			f.finish({ kind: 'record', record: f.record }); await rejected;
+		} finally { f.dispose(); }
+	});
+	test('scope changes while reading cannot deliver a previous-session record', async () => {
+		const f = lanqiaoFixture();
+		try {
+			const form = await f.execute('prepare', f.problem, 'file:///lanqiao/254.cpp');
+			const sending = f.execute('send', form.handle, { source: 'int main(){}', fileName: '254.cpp', languageId: 'cpp' });
+			for (let i = 0; i < 10; i++) { await Promise.resolve(); }
+			f.finish({ kind: 'record', record: f.record }); await sending;
+			const read = new DeferredPromise<void>(); f.holdRead(() => read.p);
+			const pending = f.execute('readRecord', f.record), rejected = assert.rejects(pending);
+			for (let i = 0; i < 10; i++) { await Promise.resolve(); }
+			f.setScope(BrowserViewStorageScope.Workspace); read.complete(); await rejected;
+		} finally { f.dispose(); }
+	});
+});
+
 function codeforcesFixture() {
 	const problem = { site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' };
 	const record = { problem, id: '55', url: 'https://codeforces.com/contest/4/submission/55' };

@@ -58,6 +58,10 @@ app.whenReady().then(async () => {
 			onDidNavigate: listener => { readEvents.on('navigate', listener); return { dispose() { readEvents.removeListener('navigate', listener); } }; }
 		};
 		host._getBrowserView = () => readView;
+		host.readStatementDocument = async (boundSession, windowId, target, _requestId, current) => {
+			assert.equal(boundSession, readView.session); assert.equal(windowId, 1); current();
+			parsed++; return { ref: target, title: target.site === 'atcoder' ? 'Product' : 'Watermelon' };
+		};
 		host.openCodeforcesSession = async (owner, scope) => { languageSessions++; assert.equal(owner, 1); assert.equal(scope, 'global'); return 'global'; };
 		host.parseProblem = async () => { parsed++; return { url: actual, json: '{"name":"Watermelon","tests":[{"input":"8","output":"YES"}]}' }; };
 		host._runOjRead = async (id, windowId, url, operation, input) => {
@@ -118,7 +122,7 @@ app.whenReady().then(async () => {
 		host.ojReads.set('preparation', { windowId: 1, operation: 'prepareCodeforces', cancel() { preparationCancelled = true; } });
 		await BrowserViewMainService.prototype.cancelOjPreparations.call(host, 2); assert.equal(preparationCancelled, false);
 		await BrowserViewMainService.prototype.cancelOjPreparations.call(host, 1); assert.equal(preparationCancelled, true);
-		for (const name of ['nowcoderRequests', 'nowcoderClients', 'nowcoderAttempts', 'atCoderAccounts', 'atCoderAccountReads', 'luoguRequests', 'luoguClients', 'atCoderRequests', 'atCoderRecords', 'atCoderAttempts', 'luoguAttempts']) { host[name] = new Map(); }
+		for (const name of ['lanqiaoRequests', 'lanqiaoClients', 'nowcoderRequests', 'nowcoderClients', 'nowcoderAttempts', 'atCoderAccounts', 'atCoderAccountReads', 'luoguRequests', 'luoguClients', 'atCoderRequests', 'atCoderRecords', 'atCoderAttempts', 'luoguAttempts']) { host[name] = new Map(); }
 		await BrowserViewMainService.prototype.cancelOjOperations.call(host, 1);
 		assert.equal(disposed, true); assert.equal(host.codeforcesClients.size, 0);
 		await assert.rejects(host.prepareCodeforcesTask('global', 1, problem), /owner/);
@@ -215,7 +219,7 @@ app.whenReady().then(async () => {
 			assert.equal((await pendingPeer).state, 'unknown', 'account navigation invalidates peer reads from the previous identity');
 			for (const body of pendingBodies) { try { body.enqueue(new TextEncoder().encode('<div id="header"><a href="/enter">Enter</a><a href="/register">Register</a></div>')); body.close(); } catch { /* An invalidated response may already have been cancelled. */ } }
 			assert.equal((await pendingIsolated).state, 'signed-out', 'another Session account read is not cancelled');
-			for (const name of ['codeforcesRequests', 'nowcoderRequests', 'nowcoderClients', 'nowcoderAttempts', 'atCoderAccounts', 'atCoderAccountReads', 'luoguRequests', 'luoguClients', 'ojReads', 'atCoderRequests', 'atCoderRecords', 'atCoderAttempts', 'luoguAttempts']) { nativeHost[name] = new Map(); }
+			for (const name of ['lanqiaoRequests', 'lanqiaoClients', 'codeforcesRequests', 'nowcoderRequests', 'nowcoderClients', 'nowcoderAttempts', 'atCoderAccounts', 'atCoderAccountReads', 'luoguRequests', 'luoguClients', 'ojReads', 'atCoderRequests', 'atCoderRecords', 'atCoderAttempts', 'luoguAttempts']) { nativeHost[name] = new Map(); }
 			await BrowserViewMainService.prototype.cancelOjOperations.call(nativeHost, 2);
 			nativeEvents.length = 0; nativeHost.invalidateCodeforcesSession('global', 1);
 			assert.deepEqual(nativeEvents, [{ windowId: 1, site: 'codeforces' }], 'a closed window is not notified');

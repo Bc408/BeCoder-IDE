@@ -7,11 +7,24 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { defaultLanguage, OjPreferences } from '../src/preferences';
 import type { LanguageOption } from '../src/domain';
+import { compilerCatalogue } from '../src/compilerCatalogue';
 
 function store() {
 	const values = new Map<string, unknown>();
 	return { values, get: <T>(key: string) => values.get(key) as T | undefined, update: async (key: string, value: unknown) => { if (value === undefined) { values.delete(key); } else { values.set(key, value); } } };
 }
+
+test('Lanqiao approved older compiler exception uses only this site and the matching source family', async () => {
+	const settings = store(), preferences = new OjPreferences(settings);
+	await preferences.selectLanguage('lanqiao', 'cpp', 'cpp');
+	await preferences.selectLanguage('lanqiao', 'c', 'c');
+	assert.strictEqual(preferences.language('lanqiao', 'cpp'), 'cpp');
+	assert.strictEqual(preferences.language('lanqiao', 'c'), 'c');
+	await assert.rejects(preferences.selectLanguage('lanqiao', 'c', 'cpp'));
+	await assert.rejects(preferences.selectLanguage('codeforces', 'cpp', 'cpp'));
+	assert.deepStrictEqual(compilerCatalogue('lanqiao').map(value => value.id), ['cpp', 'c']);
+	assert.strictEqual(Reflect.apply(defaultLanguage, undefined, [[{ id: 'cpp', family: 'cpp', label: 'C++17' }], 'cpp', 'lanqiao'])?.id, 'cpp');
+});
 
 test('compiler defaults prefer GNU, O2 and msys2 while moving upwards from C++20 and C17', () => {
 	const cpp = (id: string, label: string): LanguageOption => ({ id, label, family: 'cpp' });

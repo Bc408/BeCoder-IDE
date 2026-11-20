@@ -52,6 +52,47 @@ test('both adapters share fixed source snapshot and remember languages separatel
 	assert.deepStrictEqual(g.sent.map(value => value.languageId), ['28:o2', '6017', '28:o2']);
 });
 
+test('Lanqiao opens a pending view before preparation and upgrades only after a formal receipt', async () => {
+	const f = fixture(), problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+	const events: string[] = [];
+	let finish!: () => void, started!: () => void;
+	const entered = new Promise<void>(resolve => { started = resolve; });
+	f.host.beginEvaluation = value => {
+		events.push(value.phase);
+		assert.strictEqual(value.language, undefined, 'preparation does not invent a selected compiler');
+		return { update: next => { events.push(next.phase); }, finish: outcome => { events.push(outcome?.kind ?? 'stopped'); } };
+	};
+	const adapter: OjAdapter = { ...f.luogu, site: 'lanqiao', resolve: () => problem, prepare: async () => {
+		assert.deepStrictEqual(events, ['preparing']);
+		return { languages: [{ id: 'cpp', label: 'C++（g++17）', family: 'cpp' }], hasDraft: false,
+			send: async (_input, progress) => {
+				progress({ phase: 'confirming', message: 'pending', evaluation: { problem, phase: 'judging', codeLength: '1 B' } });
+				started(); await new Promise<void>(resolve => { finish = resolve; });
+				return { kind: 'record', record };
+			}, cancel: async () => { }, dispose: async () => { events.push('released'); }
+		};
+	} };
+	Object.assign(f.host, { adapters: [adapter] });
+	const submitting = f.controller.submit({ ...snapshot, uri: 'file:///C:/cpp/lanqiao/254.cpp', fileName: '254.cpp' }, problem);
+	await entered;
+	assert.deepStrictEqual(events, ['preparing', 'judging']);
+	assert.deepStrictEqual(f.records, []);
+	finish(); await submitting;
+	assert.deepStrictEqual(events, ['preparing', 'judging', 'record', 'released']);
+	assert.deepStrictEqual(f.records, [record]);
+});
+
+test('a closed submission preview suppresses reopening on a late formal receipt', async () => {
+	const f = fixture(), problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+	f.host.beginEvaluation = () => ({ update() { }, finish: () => false });
+	const adapter: OjAdapter = { ...f.luogu, site: 'lanqiao', prepare: async () => ({ languages: [{ id: 'cpp', label: 'C++（g++17）', family: 'cpp' }], hasDraft: false, send: async () => ({ kind: 'record', record }), cancel: async () => { }, dispose: async () => { } }) };
+	Object.assign(f.host, { adapters: [adapter] });
+	assert.strictEqual((await f.controller.submit({ ...snapshot, uri: 'file:///C:/cpp/lanqiao/254.cpp', fileName: '254.cpp' }, problem))?.kind, 'record');
+	assert.deepStrictEqual(f.records, [], 'closing a preview does not cancel delivery but does suppress a late reopen');
+});
+
 test('AtCoder compiler choices persist across controllers and an expired choice asks again', async () => {
 	const values = new Map<string, unknown>();
 	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });

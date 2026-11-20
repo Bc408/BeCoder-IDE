@@ -147,6 +147,8 @@ export const IBrowserViewWorkbenchService = createDecorator<IBrowserViewWorkbenc
  */
 export interface IBrowserViewWorkbenchService {
 	resolveStorageScope(): Promise<BrowserViewStorageScope>;
+	/** Invalidates operations bound to the previous browser storage/trust context. */
+	readonly onDidChangeStorageScope: Event<void>;
 	readonly _serviceBrand: undefined;
 
 	/**

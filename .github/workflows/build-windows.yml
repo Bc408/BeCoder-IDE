@@ -98,3 +98,11 @@ jobs:
           path: .build/win32-x64/becoder-setup/BeCoderSetup-x64-*.exe
           if-no-files-found: error
           retention-days: 14
+      - name: Upload failed Setup verification logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: BeCoder-Setup-verification-logs
+          path: C:/BeCoderSetupVerification/**
+          if-no-files-found: ignore
+          retention-days: 7

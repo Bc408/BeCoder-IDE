@@ -531,3 +531,5 @@ if (-not (Get-ChildItem -LiteralPath $verificationBaseRoot -Force | Select-Objec
 }
 
 Write-Host "Verified BeCoder Setup at $SetupPath"
+# Registry searches accept exit code 1 for no matches; report successful verification explicitly.
+exit 0

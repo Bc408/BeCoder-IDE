@@ -41,6 +41,11 @@ interface IExtensionManifest {
 const repositoryRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 const extensionsRoot = path.join(repositoryRoot, 'extensions');
 
+test('root dependency installation includes the independently built OJ Connect project', async () => {
+	const { dirs } = await import('../../npm/dirs.ts');
+	assert.ok(dirs.includes('extensions/becoder.oj-connect'), 'Root postinstall must install OJ Connect build dependencies on a clean checkout');
+});
+
 test('OJ Connect is an independently built, localized built-in with a native browser bridge', () => {
 	const extensionRoot = path.join(extensionsRoot, 'becoder.oj-connect');
 	const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));

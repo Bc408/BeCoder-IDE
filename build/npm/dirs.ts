@@ -23,6 +23,7 @@ export const dirs = [
 	'extensions',
 	'extensions/becoder.beacon',
 	'extensions/becoder.cph',
+	'extensions/becoder.oj-connect',
 	'extensions/aadityanarayan.code-snap',
 	'extensions/danielpinto8zz6.c-cpp-compile-run',
 	'extensions/ipynb',

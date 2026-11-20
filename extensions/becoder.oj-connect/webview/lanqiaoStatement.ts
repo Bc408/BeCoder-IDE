@@ -6,7 +6,7 @@
 import type { Element, Nodes, Root } from 'hast';
 
 // allow-any-unicode-next-line
-const sectionNames = new Set(['题目背景', '题目描述', '输入描述', '输入格式', '输出描述', '输出格式', '说明/提示', '说明', '提示', '备注', '样例说明', '数据范围']);
+const sectionNames = new Set(['题目背景', '题目描述', '问题描述', '输入描述', '输入格式', '输出描述', '输出格式', '说明/提示', '说明', '提示', '备注', '样例说明', '数据范围', '评测用例规模与约定']);
 
 function headingAnchor(node: Nodes): boolean {
 	return node.type === 'element' && node.tagName === 'a' && Array.isArray(node.properties.className) && node.properties.className.includes('heading-anchor') && node.properties.ariaHidden === 'true' && node.properties.tabIndex === -1;

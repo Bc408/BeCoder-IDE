@@ -52,7 +52,7 @@ export class Panel implements vscode.Disposable {
 			const value = panelMessage(request ? request.data : raw); if (!value || this.closed) { return; }
 			if (value.action === 'ready') { this.update({}); return; }
 			const respond = (error?: string, data?: unknown) => { if (request && !this.closed) { void webview.postMessage({ uuid: request.uuid, data, error }); } };
-			const operation = value.action === 'renderContent' ? value.format === 'markdown' ? markdownService.renderTree(value.content) : markdownService.renderHtmlTree(value.content, this.state.problem?.ref.url ?? 'https://invalid.invalid/') : action(value);
+			const operation = value.action === 'renderContent' ? value.format === 'markdown' ? markdownService.renderTree(value.content, this.state.problem?.ref.site === 'lanqiao') : markdownService.renderHtmlTree(value.content, this.state.problem?.ref.url ?? 'https://invalid.invalid/') : action(value);
 			void operation.then(data => respond(undefined, data), error => {
 				const message = userError(error); void vscode.window.showErrorMessage(vscode.l10n.t('OJ Connect: {0}', message)); respond(message);
 			});

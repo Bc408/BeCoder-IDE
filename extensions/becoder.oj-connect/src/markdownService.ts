@@ -20,7 +20,7 @@ type Renderer = Pick<
 >;
 
 type Content = Root;
-type Format = 'tree' | 'html-tree';
+type Format = 'tree' | 'lanqiao-tree' | 'html-tree';
 
 /** One lazy parser with bounded content caching and in-flight request sharing. */
 export class MarkdownService {
@@ -37,8 +37,8 @@ export class MarkdownService {
 		private readonly maxBytes = 8 * 1024 * 1024
 	) { }
 
-	renderTree(markdown: string): Promise<Root> {
-		return this.renderCached(markdown, 'tree') as Promise<Root>;
+	renderTree(markdown: string, lanqiao = false): Promise<Root> {
+		return this.renderCached(markdown, lanqiao ? 'lanqiao-tree' : 'tree') as Promise<Root>;
 	}
 
 	renderHtmlTree(html: string, baseURL: string): Promise<Root> {
@@ -67,7 +67,7 @@ export class MarkdownService {
 		});
 		const task = this.renderer
 			.then(renderer => {
-				return format === 'tree' ? renderer.renderMarkdownTree(markdown) : renderer.renderHtmlTree(markdown, baseURL);
+				return format === 'html-tree' ? renderer.renderHtmlTree(markdown, baseURL) : renderer.renderMarkdownTree(markdown, format === 'lanqiao-tree');
 			})
 			.then(content => {
 				if (generation === this.generation) { this.remember(key, content); }

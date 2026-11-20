@@ -71,7 +71,7 @@ const browser = await chromium.launch({ headless: true });
 try {
 	const page = await browser.newPage();
 	await page.route('https://**/*', route => route.abort());
-	await page.exposeFunction('__renderContent', (content, format) => format === 'markdown' ? renderMarkdownTree(content) : renderHtmlTree(content, state.problem.ref.url));
+	await page.exposeFunction('__renderContent', (content, format) => format === 'markdown' ? renderMarkdownTree(content, state.problem.ref.site === 'lanqiao') : renderHtmlTree(content, state.problem.ref.url));
 	await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { if (window.__failCopy) { throw new Error('clipboard unavailable'); } window.__copied = text; } } }); });
 	await page.addInitScript(() => {
 		const scrollIntoView = Element.prototype.scrollIntoView;
@@ -775,6 +775,23 @@ try {
 		}
 		assert.deepEqual(typography[1], typography[0], 'Lanqiao main headings share Luogu size, weight, margins and left edge');
 	}
+	// Heading/percentage excerpts read from official2128/2109; these are not complete problem fixtures.
+	for (const nativeId of ['2128', '2109']) {
+		const title = nativeId === '2128' ? '重新排序' : '统计子矩阵';
+		const excerpt = title + '\n\n### 问题描述\n\n' + (nativeId === '2128' ? String.raw`给定一个数组 $A$ 和一些查询 $L_i, R_i$。` : String.raw`给定一个 $N \times M$ 的矩阵 $A$。`) + '\n\n### 输入格式\n\n输入。\n\n### 输出格式\n\n输出。\n\n### 评测用例规模与约定\n\n' + (nativeId === '2128' ? String.raw`对于 $30 \\%$ 的评测用例， $n, m \leq 50$;` : String.raw`对于 $70 \\%$ 的数据, $N, M \leq 100$.`);
+		for (const width of [320, 520, 1000]) {
+			state = { kind: 'problem', labels, sourceName: nativeId + '.cpp', languageId: 'cpp', languages: [{ id: 'cpp', family: 'cpp', label: 'C++（g++17）' }], problem: { ref: { ...lanqiaoProblem, nativeId }, title, interactive: false, limits: [], bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: excerpt }] }], samples: [] } };
+			await page.setViewportSize({ width, height: 760 }); await page.goto(url);
+			await page.locator('.problemContent .katex').first().waitFor();
+			await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
+			assert.deepEqual(await page.locator('.problemContent h2').allTextContents(), ['问题描述', '输入格式', '输出格式', '评测用例规模与约定']);
+			assert.equal(await page.locator('.problemContent .heading-anchor').count(), 0);
+			assert.equal(await page.locator('.problemContent .newline').count(), 0, 'a percentage does not force a KaTeX line break');
+			assert.ok((await page.locator('.problemContent .katex-html').allTextContents()).some(value => value.includes(nativeId === '2128' ? '30%' : '70%')), 'percent signs remain visible');
+			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+			await page.screenshot({ path: path.join(output, `lanqiao-${nativeId}-headings-percent-${width}.png`), fullPage: true });
+		}
+	}
 	for (const [locale, localLabels] of [['zh-cn', labels], ['en', englishLabels]]) {
 		for (const width of [320, 480, 520, 700]) {
 			state = { kind: 'problem', labels: localLabels, sourceName: '254.cpp', languageId: 'cpp', languages: [{ id: 'cpp', family: 'cpp', label: 'C++（g++17）' }], problem: { ref: lanqiaoProblem, title: 'A+B Problem', interactive: false, limits: [{ label: 'Time Limit', value: '1 s' }, { label: 'Memory Limit', value: '256 MB' }], difficulty: { label: '中 LV.8', color: '#faac2b' }, tags: [{ label: '基础' }, { label: 'C++' }], bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: 'Compute the sum.' }] }], samples: [] } };
@@ -885,7 +902,8 @@ try {
 		}
 	}
 	for (const [name, snapshot] of [
-		['accepted', { phase: 'finished', rawStatus: 'AC', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }], time: '0 ms', memory: '0 kb' }],
+		['accepted', { phase: 'finished', rawStatus: 'AC', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }], testCaseSummary: { passed: 1, total: 1 }, time: '0 ms', memory: '0 kb' }],
+		['wrong-answer', { phase: 'finished', rawStatus: 'WA', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '22 ms', '1112 kb'], ['2', 'Unknown', '9 ms', '2764 kb']] }], testCaseSummary: { passed: 1, total: 2 } }],
 		['summary-only', { phase: 'finished', rawStatus: 'AC', testCaseSummary: { passed: 5, total: 5 } }],
 		['unknown', { phase: 'unknown', rawStatus: 'NEW LANQIAO STATUS' }],
 		['compile-missing', { phase: 'finished', rawStatus: 'CE', compileSucceeded: false }]
@@ -894,7 +912,9 @@ try {
 		await page.setViewportSize({ width: 520, height: 650 }); await page.goto(url); await page.locator('.record-verdict').waitFor();
 		await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 		assert.equal(await page.getByText(labels.score, { exact: true }).count(), 0, 'Lanqiao has no fabricated score');
-		assert.equal(await page.locator('.testcase').count(), name === 'accepted' ? 1 : 0);
+		assert.equal(await page.locator('.testcase').count(), name === 'accepted' ? 1 : name === 'wrong-answer' ? 2 : 0);
+		assert.equal(await page.locator('.testCaseData p').count(), 0, 'Lanqiao does not repeat a passed-test count below the testcase heading');
+		assert.equal(await page.locator('.testCaseData').count(), name === 'accepted' || name === 'wrong-answer' ? 1 : 0, 'omitting a count-only report leaves no empty testcase section');
 		assert.equal(await page.locator('.spinner').count(), 0);
 		assert.ok((await page.locator('body').textContent()).includes('C++（g++17）'));
 		if (name === 'accepted') { assert.equal(await page.locator('.testcase > div:nth-child(2)').textContent(), 'Accepted'); await page.locator('.testcase').hover(); }

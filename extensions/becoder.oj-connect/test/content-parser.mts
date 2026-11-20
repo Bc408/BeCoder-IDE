@@ -98,6 +98,36 @@ assert.equal(elements(labeledCode, 'code').length, 1);
 assert.equal(elements(labeledCode, 'a').filter(node => text(node) === '输出描述').length, 1);
 const sectionTitle = lanqiaoStatement(renderer.renderMarkdownTree('### 题目描述\n\n正文。\n\n### 输入描述\n\n输入。'), '题目描述');
 assert.deepEqual(elements(sectionTitle, 'h2').map(text), ['题目描述', '输入描述'], 'a real main section is not removed when the problem happens to have the same name');
+// Main heading names and overescaped percentages observed in official2128/2109 on2026-11-20.
+const observedHeadings = renderer.renderMarkdownTree('### 问题描述\n\n正文。\n\n#### 问题描述\n\n真实子标题。\n\n### 输入格式\n\n输入。\n\n### 输出格式\n\n输出。\n\n### 评测用例规模与约定\n\n约定。');
+const normalizedHeadings = lanqiaoStatement(observedHeadings);
+assert.deepEqual(elements(normalizedHeadings, 'h2').map(text), ['问题描述', '输入格式', '输出格式', '评测用例规模与约定']);
+assert.ok(elements(normalizedHeadings, 'h2').every(node => !elements(node, 'a').some(anchor => hasClass(anchor, 'heading-anchor'))));
+assert.deepEqual(elements(normalizedHeadings, 'h4'), elements(observedHeadings, 'h4'), 'an actual same-name subheading keeps its level and anchor');
+
+const observedPercentage = String.raw`对于 $30 \\%$ 的评测用例， $n, m \leq 50$;`;
+const percentageTree = renderer.renderMarkdownTree(observedPercentage, true);
+assert.equal(text(elements(percentageTree, 'annotation')[0]), String.raw`30 \%`, 'Lanqiao numeric percentages use one TeX escape');
+assert.ok(elements(percentageTree, 'span').some(node => hasClass(node, 'katex-html') && text(node).includes('30%')), 'the visible percentage retains its percent sign');
+assert.equal(descendants(percentageTree, node => node.type === 'element' && hasClass(node, 'newline')).length, 0, 'an escaped percent must not become a TeX line break');
+assert.equal(text(elements(renderer.renderMarkdownTree(observedPercentage), 'annotation')[0]), String.raw`30 \\%`, 'other sites keep their existing TeX policy');
+const multiplePercentages = '中文 😀\r\n\r\n' + observedPercentage + '\r\n\r\n' + String.raw`对于 $70 \\%$ 的数据。` + '\r\n\r\n' + String.raw`比例 $99.5 \\%$。`;
+assert.deepEqual(elements(renderer.renderMarkdownTree(multiplePercentages, true), 'annotation').map(text), [String.raw`30 \%`, String.raw`n, m \leq 50`, String.raw`70 \%`, String.raw`99.5 \%`], 'raw UTF-16 offsets remain correct for multiple formulas, CRLF, Chinese and emoji');
+const protectedPercentages = [
+	'`' + String.raw`$30 \\%$` + '`',
+	'```text\n' + observedPercentage + '\n```',
+	'    ' + observedPercentage,
+	String.raw`$30 \%$`,
+	String.raw`$30 \\% + x$`,
+	String.raw`$30 \\\%$`,
+	String.raw`$30 \\\\%$`,
+	String.raw`$a \\ b$`,
+	String.raw`<code>$30 \\%$</code>`,
+	'<div>\n' + observedPercentage + '\n</div>'
+];
+for (const source of protectedPercentages) {
+	assert.deepEqual(renderer.renderMarkdownTree(source, true), renderer.renderMarkdownTree(source), 'code, HTML, correct escapes and complex formulas stay unchanged');
+}
 console.log('Lanqiao statement layout normalization regressions passed');
 
 await build({ entryPoints: [path.join(root, 'extensions/becoder.shared/browser/content/dom.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'dom.cjs'), nodePaths });
@@ -147,7 +177,7 @@ assert.equal(text(elements(equations, 'code')[0]), '<img src="https://www.nowcod
 await build({ entryPoints: [path.join(root, 'extensions/becoder.oj-connect/src/markdownService.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['./markdown'], outfile: path.join(output, 'service.cjs') });
 const { MarkdownService } = require(path.join(output, 'service.cjs'));
 let renderCalls = 0;
-const service = new MarkdownService(async () => ({ ...renderer, renderMarkdownTree: (value: string) => { renderCalls++; return renderer.renderMarkdownTree(value); } }), 2);
+const service = new MarkdownService(async () => ({ ...renderer, renderMarkdownTree: (value: string, lanqiao?: boolean) => { renderCalls++; return renderer.renderMarkdownTree(value, lanqiao); } }), 2);
 const [firstTree, pendingTree] = await Promise.all([service.renderTree('same source'), service.renderTree('same source')]);
 assert.equal(firstTree, pendingTree, 'in-flight tree requests share one parse');
 assert.equal(await service.renderTree('same source'), firstTree, 'completed tree requests share the bounded cache');
@@ -163,6 +193,13 @@ const htmlAtCoder = await service.renderHtmlTree('<img src="/x.png">', 'https://
 const htmlOther = await service.renderHtmlTree('<img src="/x.png">', 'https://example.org/task');
 assert.equal(elements(htmlAtCoder, 'img')[0].properties.src, 'https://atcoder.jp/x.png');
 assert.equal(elements(htmlOther, 'img')[0].properties.src, 'https://example.org/x.png', 'the base URL is part of the cache identity');
+const percentageService = new MarkdownService(async () => renderer);
+const ordinaryPercentage = await percentageService.renderTree(observedPercentage);
+const lanqiaoPercentage = await percentageService.renderTree(observedPercentage, true);
+assert.equal(text(elements(ordinaryPercentage, 'annotation')[0]), String.raw`30 \\%`);
+assert.equal(text(elements(lanqiaoPercentage, 'annotation')[0]), String.raw`30 \%`, 'the Lanqiao render cache does not reuse the ordinary-site tree');
+assert.strictEqual(await percentageService.renderTree(observedPercentage), ordinaryPercentage);
+assert.strictEqual(await percentageService.renderTree(observedPercentage, true), lanqiaoPercentage);
 console.log('Shared content cache regressions passed');
 
 // Shared parser contracts also run in a browser bundle; no DOM APIs are required here.

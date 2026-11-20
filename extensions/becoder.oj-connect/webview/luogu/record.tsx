@@ -149,6 +149,7 @@ export default function Record({ state }: { state: PanelState }) {
 	// The submitted metadata and real report stay local to this view while official fields take over.
 	const language = snapshot?.language ?? submission?.language, codeLength = snapshot?.codeLength ?? submission?.codeLength;
 	const reportedGroups = snapshot?.groups ?? submission?.groups;
+	const summary = problem.site === 'lanqiao' ? undefined : snapshot?.testCaseSummary;
 	const total = progress && Number(progress[1]) <= Number(progress[2]) && Number(progress[2]) <= 1024 ? Number(progress[2]) : 0;
 	// These are waiting positions from the site's reported total, not testcase names or verdicts.
 	let groups = reportedGroups?.length ? reportedGroups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
@@ -173,9 +174,9 @@ export default function Record({ state }: { state: PanelState }) {
 		</div>
 		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
 		{snapshot?.sourceVerification === 'mismatch' && <p className={'notice'}>{labels.verification_mismatch}</p>}
-		{(!!groups.length || !!snapshot?.testCaseSummary) && <>
+		{(!!groups.length || !!summary) && <>
 			<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2>
-				{snapshot?.testCaseSummary && <p><span>{labels.passedTests}</span>{' '}{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</p>}
+				{summary && <p><span>{labels.passedTests}</span>{' '}{summary.passed} / {summary.total}</p>}
 			<div>
 				{groups.map((subtask, index) => <div key={index}>{!(groups.length === 1 && subtask.name === 'Test Cases') && <h3>{subtask.name}</h3>}<div className={'testcase-grid'}>
 					{subtask.rows.map((testcase, index) => <TestCase key={index} site={problem.site} animate={pending}>{testcase}</TestCase>)}

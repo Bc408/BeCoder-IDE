@@ -11,7 +11,7 @@ BeCoder 主产品的公开许可标识是 **GPL-3.0-or-later**，完整条款见
 - [MIT-VSCode.txt](MIT-VSCode.txt)：Code - OSS 的 Microsoft MIT 许可。保留源文件中的 Microsoft 版权和 MIT 声明。
 - [MIT-Electron.txt](MIT-Electron.txt)：Electron 的 MIT 许可；Electron 随附的 Chromium 等依赖声明仍属于运行时发行文件。
 
-- [MIT-Acorn.txt](MIT-Acorn.txt)：Acorn 8.16.0 的 MIT 许可；牛客原生宿主只解析官网脚本中的静态字面量，不执行脚本。
+- [MIT-Acorn.txt](MIT-Acorn.txt)：Acorn 8.16.0 的 MIT 许可；牛客、Codeforces 和蓝桥原生宿主只解析官网脚本中的静态字面量，不执行脚本。
 
 ## BeCoder 组件与扩展
 
@@ -20,7 +20,7 @@ BeCoder 主产品的公开许可标识是 **GPL-3.0-or-later**，完整条款见
 | BeCoder 主产品 | GPL-3.0-or-later；继承的 Code - OSS 部分保留 MIT 声明 | [根 LICENSE](../LICENSE)、[Code - OSS MIT](MIT-VSCode.txt) |
 | Runner（基于 C/C++ Compile Run） | GPL v3；扩展清单为 `GPL-3.0`，组件清单按 `GPL-3.0-only` 记录 | [LICENSE](../extensions/danielpinto8zz6.c-cpp-compile-run/LICENSE)、[上游仓库](https://github.com/danielpinto8zz6/c-cpp-compile-run) |
 | BeCoder CPH | CPH 派生代码为 GPL-3.0-or-later；Competitive Companion 解析器、React 等保留 MIT；Codicons 字体为 CC-BY-4.0 | [LICENSE](../extensions/becoder.cph/LICENSE)、[UPSTREAM.md](../extensions/becoder.cph/UPSTREAM.md)、[第三方声明](../extensions/becoder.cph/ThirdPartyNotices.txt)、[解析器 MIT](../extensions/becoder.cph/companion/LICENSE) |
-| OJ Connect | 自有集成为 GPL-3.0-or-later；洛谷组件、共享 Markdown 渲染器和 Microsoft helper 为 MIT；Lucide 标题锚点为 ISC；其他依赖保留各自许可 | [LICENSE](../extensions/becoder.oj-connect/LICENSE)、[UPSTREAM.md](../extensions/becoder.oj-connect/UPSTREAM.md)、[第三方声明](../extensions/becoder.oj-connect/ThirdPartyNotices.txt) |
+| OJ Connect | 自有集成为 GPL-3.0-or-later；洛谷组件、共享 Markdown 渲染器和 Microsoft helper 为 MIT；Lucide 标题锚点为 ISC；Font Awesome 纸飞机为 CC-BY-4.0；Simple Icons Codeforces 图形为 CC0-1.0；官网站点标识的来源、用途与商标说明另见 UPSTREAM，不将其套用源码许可证 | [LICENSE](../extensions/becoder.oj-connect/LICENSE)、[UPSTREAM.md](../extensions/becoder.oj-connect/UPSTREAM.md)、[第三方声明](../extensions/becoder.oj-connect/ThirdPartyNotices.txt) |
 | Beacon | 自有代码为 MIT；适配的 AI Elements、Captain Who 代码和样式为 Apache-2.0；LobeHub 服务图标为 MIT；依赖与语法资源各自保留许可 | [LICENSE](../extensions/becoder.beacon/LICENSE)、[UPSTREAM.md](../extensions/becoder.beacon/UPSTREAM.md)、[AI Elements](../extensions/becoder.beacon/licenses/ai-elements.txt)、[Captain Who](../extensions/becoder.beacon/licenses/captain-who.txt)、[LobeHub](../extensions/becoder.beacon/licenses/lobe-icons.txt) |
 | BeCoder NoteBook | 自有扩展为 GPL-3.0-or-later；复用的 Microsoft Notebook ANSI 工具为 MIT | [LICENSE](../extensions/becoder.notebook/LICENSE)、[Microsoft MIT](MIT-VSCode.txt)、[ANSI 源码](../extensions/notebook-renderers/src/ansi.ts) |
 | Setup 扩展 | MIT | [LICENSE](../extensions/becoder.setup/LICENSE) |

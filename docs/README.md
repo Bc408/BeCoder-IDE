@@ -7,10 +7,11 @@
 | 文档 | 内容 |
 | --- | --- |
 | [使用指南](getting-started.md) | 安装、题目导入、编译与运行、布局、数据和卸载 |
+| [OJ Connect](../extensions/becoder.oj-connect/README.md) | 五站看题、编译器选择、主动提交、评测与同源码 CPH |
 | [Beacon](../extensions/becoder.beacon/README.md) | 服务商、模型、对话、文件档位与联网 |
 | [NoteBook](../extensions/becoder.notebook/README.md) | 笔记、源码关联、input 单元与执行 |
 | [Runner 编译配置](../extensions/danielpinto8zz6.c-cpp-compile-run/docs/COMPILER_SETUP.md) | 内置工具链、语言标准、参数和 gch |
-| [题目解析覆盖](../extensions/becoder.cph/test/fixtures/OJ-SOURCES.md) | 支持站点、样例证据与解析限制 |
+| [CPH 题目解析覆盖](../extensions/becoder.cph/test/fixtures/OJ-SOURCES.md) | 样例导入站点、解析证据与限制；不代表交题范围 |
 | [PDF 阅读器](../extensions/mathematic.vscode-pdf/README.md) | 阅读功能与只读边界 |
 
 ## 开发与维护
@@ -20,6 +21,7 @@
 - [OJ 接入技术可行性审查](oj-connect-feasibility.md)：候选路线、源码接点、证据范围和真实账号验证缺口；不代表已实现。
 - [AtCoder MVP 过程与验收](oj-connect-basic-flow.md)：早期核心侧增量、失败修正与真实旅程证据，按各节时点阅读。
 - [发行与安装维护](distribution.md)：安装模式、数据所有权与打包约束。
+- [2.1.0 交付与验收](oj-connect/release-2.1.0-regression.md)：源码、stage、包与 Setup 检查已通过，负责人已确认本次 Setup 验收通过；正式 Release 尚未发布。[执行审查](oj-connect/release-2.1.0-review.md)、[性能复核](oj-connect/release-2.1.0-performance.md)及[原检查规划](superpowers/plans/2026-11-20-v2.1.0-release-readiness.md)保留各层证据。
 - [产品方向](../VISION.md)：目的与模块职责。
 - [仓库工作规则](../AGENTS.md)：开发授权、验证与交付边界。
 - [许可与来源](../licenses/README.md)：主产品、内置组件与对应源码。

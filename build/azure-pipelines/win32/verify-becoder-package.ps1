@@ -16,6 +16,7 @@ $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
 
 $requiredFiles = @(
 	'BeCoder.exe',
+	'LICENSES.chromium.html',
 	'data\.becoder-data-root',
 	'data\.becoder-open-hello-coder',
 	'coding\helloCoder.cpp',
@@ -24,8 +25,10 @@ $requiredFiles = @(
 	'data\toolchains\ucrt64\bin\gcc.exe',
 	'data\toolchains\clangd\clangd_22.1.6\bin\clangd.exe',
 	'resources\app\ThirdPartyNotices.txt',
+	'resources\app\LICENSE',
 	'resources\app\licenses\MIT-VSCode.txt',
 	'resources\app\licenses\MIT-Electron.txt',
+	'resources\app\licenses\MIT-Acorn.txt',
 	'resources\app\package.json',
 	'resources\app\product.json',
 	'resources\app\extensions\aadityanarayan.code-snap\package.json',
@@ -89,10 +92,17 @@ $requiredFiles = @(
 	'resources\app\extensions\becoder.oj-connect\dist\site-scripts.js',
 	'resources\app\extensions\becoder.oj-connect\dist\webview.js',
 	'resources\app\extensions\becoder.oj-connect\dist\webview.css',
+	'resources\app\extensions\becoder.oj-connect\dist\syntax-worker.js',
+	'resources\app\extensions\becoder.oj-connect\dist\onig.wasm',
 	'resources\app\extensions\becoder.oj-connect\dist\katex.min.css',
 	'resources\app\extensions\becoder.oj-connect\dist\fonts\KaTeX_Main-Regular.woff2',
 	'resources\app\extensions\becoder.oj-connect\dist\dependencies.json',
 	'resources\app\extensions\becoder.oj-connect\resources\oj-connect.svg',
+	'resources\app\extensions\becoder.oj-connect\resources\atcoder.png',
+	'resources\app\extensions\becoder.oj-connect\resources\codeforces.svg',
+	'resources\app\extensions\becoder.oj-connect\resources\lanqiao.png',
+	'resources\app\extensions\becoder.oj-connect\resources\luogu.svg',
+	'resources\app\extensions\becoder.oj-connect\resources\nowcoder.png',
 	'resources\app\extensions\becoder.oj-connect\LICENSE',
 	'resources\app\extensions\becoder.oj-connect\ThirdPartyNotices.txt',
 	'resources\app\extensions\becoder.oj-connect\UPSTREAM.md',
@@ -165,6 +175,11 @@ foreach ($relativePath in @('conpty_console_list.node', 'conpty\conpty.dll', 'co
 }
 
 $sevenZipVerifier = Join-Path $repositoryRoot 'build\lib\sevenZip.ts'
+$releasePayloadVerifier = Join-Path $PSScriptRoot 'verify-becoder-release-payload.ts'
+& node $releasePayloadVerifier $PackagePath
+if ($LASTEXITCODE -ne 0) {
+	throw 'The release payload contains runtime data or mismatched OJ assets/dependencies.'
+}
 $sevenZipSource = Join-Path $repositoryRoot 'node_modules\7zip-bin'
 & node $sevenZipVerifier (Join-Path $PackagePath 'resources\app\node_modules.asar') $sevenZipSource
 if ($LASTEXITCODE -ne 0) {
@@ -857,7 +872,8 @@ $expectedComponentIds = @(
 	'vscode.mermaid-markdown-features',
 	'ms-ceintl.vscode-language-pack-zh-hans',
 	'clangd-windows',
-	'becoder-ucrt64'
+	'becoder-ucrt64',
+	'acorn'
 )
 if ((@($componentInventory.components.id) -join ',') -ne ($expectedComponentIds -join ',')) {
 	throw 'The bundled component inventory does not contain the exact approved component set.'
@@ -888,6 +904,10 @@ $ucrt64Component = @($componentInventory.components) | Where-Object { $_.id -eq 
 $languagePackComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'ms-ceintl.vscode-language-pack-zh-hans' }
 $mermaidComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'vscode.mermaid-markdown-features' }
 $pdfViewerComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'mathematic.vscode-pdf' }
+$acornComponent = @($componentInventory.components) | Where-Object { $_.id -eq 'acorn' }
+if ($acornComponent.version -ne '8.16.0' -or $acornComponent.spdxIdentifier -ne 'MIT' -or $acornComponent.licensePath -ne 'licenses/MIT-Acorn.txt' -or $packageManifest.dependencies.acorn -ne '8.16.0') {
+	throw 'The bundled component inventory does not preserve the production Acorn dependency and license.'
+}
 if ($clangdComponent.sha256 -ne $expectedClangdHash -or $ucrt64Component.sha256 -ne $expectedCompilerHash) {
 	throw 'The bundled component inventory does not pin the audited source toolchain archives.'
 }
@@ -899,8 +919,8 @@ if ($electronComponent.version -ne '43.7.3' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne 'c7b7076b6a0270dc3f9ab618cab5047d527d28bd73255fc8dfe0ff0c5eaa63d6' -or
-	$languagePackComponent.packagedContentSha256 -ne 'd44a0f0524da6cd09a466b3c22cf376a2e96432cabfb1969c859aca79bbe8dea') {
+	$languagePackComponent.contentSha256 -ne '8e39f8c1d6a4b3b3c76a95120b6cab0d2d5e88fa0ee5c2e60302ee99c9792391' -or
+	$languagePackComponent.packagedContentSha256 -ne '9689fec9673a50827297c423b9a6cf826fe07109f819d1efc09c3d4b640779cd') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

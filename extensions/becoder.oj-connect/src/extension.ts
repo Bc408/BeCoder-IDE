@@ -82,7 +82,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		return document;
 	};
 	const openRecord = async (record: RecordRef, sourceUri: string) => {
-		await revealSource(sourceUri); await records.open(record, sourceUri);
+		// The official receipt remains useful when its original local source was removed.
+		await revealSource(sourceUri).catch(() => undefined);
+		await records.open(record, sourceUri);
 	};
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
 		const candidates = adapters.filter(adapter => !site || adapter.site === site);
@@ -116,7 +118,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file' || !['c', 'cpp'].includes(document.languageId)) { throw new Error(vscode.l10n.t('Focus a C/C++ source in a trusted local workspace.')); }
 		return { uri: document.uri.toString(), fileName: path.basename(document.uri.fsPath), version: document.version, family: document.languageId as 'c' | 'cpp', source: document.getText() };
 	};
-	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; resolved?: boolean; onRecord?: (record: RecordRef) => void; isOpen?: () => boolean };
+	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; record?: RecordRef; resolved?: boolean; onRecord?: (record: RecordRef) => void; isOpen?: () => boolean };
 	let pending: Pending | undefined;
 	const continueQuery = async (value = pending): Promise<void> => {
 		if (!value || value.resolved) { return; }
@@ -127,12 +129,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		value.query = (async () => {
 			try {
 				const adapter = adapters.find(item => item.site === value.outcome.problem.site)!;
-				const outcome = await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
+				const outcome = value.record ? { kind: 'record' as const, record: value.record } : await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
 				if (outcome.kind === 'record') {
-					value.resolved = true;
-					if (pending === value) { pending = undefined; }
+					value.record = outcome.record;
 					if (onRecord) { onRecord(outcome.record); }
 					else { await openRecord(outcome.record, value.sourceUri); }
+					value.resolved = true;
+					if (pending === value) { pending = undefined; }
 				} else { await vscode.window.showWarningMessage(vscode.l10n.t('The submission is still unconfirmed. Open its official record in the same browser and continue querying. No code was resent.')); }
 			} finally { value.query = undefined; }
 		})();
@@ -182,17 +185,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 	};
 	const currentDocument = () => { const document = vscode.window.activeTextEditor?.document; if (!document) { throw new Error(vscode.l10n.t('Focus the C/C++ source editor.')); } return document; };
+	const problemReads = new Map<string, AbortController>();
+	context.subscriptions.push({ dispose: () => { for (const read of problemReads.values()) { read.abort(); } problemReads.clear(); } });
 	context.subscriptions.push(
 		vscode.commands.registerCommand('becoder.ojConnect.submit', guard(async () => submitDocument(currentDocument()))),
 		vscode.commands.registerCommand('becoder.ojConnect.showProblem', guard(async () => {
 			const source = currentDocument(), input = snapshot(source), column = vscode.window.activeTextEditor?.viewColumn;
 			if (column) { columns.set(input.uri, column); }
-			const resolution = resolveProblem(source.uri.fsPath, directories(), adapters);
-			if (resolution.kind === 'unsupported') { throw new Error(vscode.l10n.t('The {0} adapter is not available yet.', resolution.site)); }
-			const ref = resolution.kind === 'problem' ? resolution.problem : await requestProblem(input.fileName, resolution.site);
-			if (!ref) { return; }
-			const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, new AbortController().signal, { family: input.family });
-			await revealSource(input.uri); await problems.open(document, input.uri, source);
+			problemReads.get(input.uri)?.abort();
+			const read = new AbortController(); problemReads.set(input.uri, read);
+			try {
+				const resolution = resolveProblem(source.uri.fsPath, directories(), adapters);
+				if (resolution.kind === 'unsupported') { throw new Error(vscode.l10n.t('The {0} adapter is not available yet.', resolution.site)); }
+				const ref = resolution.kind === 'problem' ? resolution.problem : await requestProblem(input.fileName, resolution.site);
+				if (!ref || read.signal.aborted) { return; }
+				const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, read.signal, { family: input.family });
+				if (read.signal.aborted) { return; }
+				await revealSource(input.uri);
+				if (!read.signal.aborted) { await problems.open(document, input.uri, source); }
+			} catch (error) { if (!read.signal.aborted) { throw error; } }
+			finally { if (problemReads.get(input.uri) === read) { problemReads.delete(input.uri); } }
 		})),
 		vscode.commands.registerCommand('_becoder.ojConnect.importTarget', (url: string) => typeof url === 'string' ? browserImportTarget(url, directories, adapters) : undefined),
 		vscode.commands.registerCommand('_becoder.ojConnect.cancelBrowserImport', (requestId: string) => importer.cancel(requestId)),

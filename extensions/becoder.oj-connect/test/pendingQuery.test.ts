@@ -5,7 +5,7 @@
 
 import assert from 'assert';
 import { test, type TestContext } from 'node:test';
-import type { RecordRef, SubmissionOutcome } from '../src/domain';
+import type { ProblemDocument, RecordRef, SubmissionOutcome } from '../src/domain';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void, reject!: (error: Error) => void;
@@ -19,9 +19,10 @@ async function fixture(t: TestContext, lanqiao = false) {
 	const notices: ReturnType<typeof deferred<string | undefined>>[] = [];
 	const queries: { attemptId: string; result: ReturnType<typeof deferred<SubmissionOutcome>> }[] = [];
 	const opened: { record: RecordRef; sourceUri: string }[] = [];
+	const reads: ReturnType<typeof deferred<ProblemDocument>>[] = [], shown: ProblemDocument[] = [];
 	const problem = lanqiao ? { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' } : { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
 	const previews: { closed: boolean; adopted: RecordRef[] }[] = [];
-	let attempts = 0;
+	let attempts = 0, missingSource = false, failRecordOpen = false;
 	const disposable = () => ({ dispose() { } });
 	const sourcePath = lanqiao ? 'C:/practice/lanqiao/254.cpp' : 'C:/practice/luogu/P1001.cpp';
 	const source = { uri: { scheme: 'file', fsPath: sourcePath, toString: () => 'file:///' + sourcePath }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
@@ -35,11 +36,12 @@ async function fixture(t: TestContext, lanqiao = false) {
 				if (id.endsWith('.prepare')) { return { handle: 'prepared', languages: [{ id: lanqiao ? 'cpp' : '27', family: 'cpp', label: lanqiao ? 'C++（g++17）' : 'C++' }], hasDraft: false }; }
 				if (id.endsWith('.send')) { return { kind: 'unconfirmed', problem, attemptId: 'attempt-' + ++attempts, message: 'Connection lost' }; }
 				if (id.endsWith('.reconcile')) { const result = deferred<SubmissionOutcome>(); queries.push({ attemptId: String(args[0]), result }); return result.promise; }
+				if (id.endsWith('.readProblem')) { const result = deferred<ProblemDocument>(); reads.push(result); return result.promise; }
 				if (id.endsWith('.loginSummary')) { return { site: id.includes('.luogu.') ? 'luogu' : 'atcoder', state: 'unknown' }; }
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), onDidGrantWorkspaceTrust: () => ({ dispose() { } }), openTextDocument: async () => source },
+		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), onDidGrantWorkspaceTrust: () => ({ dispose() { } }), openTextDocument: async () => { if (missingSource) { throw new Error('source-removed'); } return source; } },
 		window: {
 			activeTextEditor: { document: source, viewColumn: 1 },
 			registerWebviewViewProvider: disposable,
@@ -54,7 +56,8 @@ async function fixture(t: TestContext, lanqiao = false) {
 		if (id === 'vscode') { return vscode; }
 		if (id === './views/recordPanel') { return { RecordPanel: class {
 			constructor(_context: unknown, _adapters: unknown, _link: unknown, _release: unknown, private queryPending: (outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>, sourceUri: string, adopt: (record: RecordRef) => void, isOpen: () => boolean) => () => Promise<void>) { }
-			async open(record: RecordRef, sourceUri: string) { opened.push({ record, sourceUri }); }
+			async open(record: RecordRef, sourceUri: string) { if (failRecordOpen) { failRecordOpen = false; throw new Error('panel-open-failed'); } opened.push({ record, sourceUri }); }
+			dispose() { }
 			beginEvaluation(_value: unknown, sourceUri: string) {
 				const preview = { closed: false, adopted: [] as RecordRef[] }; previews.push(preview);
 				return { update() { }, finish: (outcome?: SubmissionOutcome) => {
@@ -63,18 +66,61 @@ async function fixture(t: TestContext, lanqiao = false) {
 				} };
 			}
 		} }; }
+		if (id === './views/problemPanel') { return { ProblemPanel: class { async open(document: ProblemDocument) { shown.push(document); } updateLanguages() { } updateLanguage() { } refreshLanguages() { } refreshPreferences() { } dispose() { } } }; }
 		return original.call(this, id, ...args);
 	};
-	const extension = require('../src/extension'); await extension.activate({ subscriptions: [], globalState: { get: () => undefined, update: async () => { } } });
-	t.after(async () => { await extension.deactivate(); Module._load = original; delete require.cache[extensionPath]; });
+	const subscriptions: { dispose(): void }[] = [];
+	const extension = require('../src/extension'); await extension.activate({ subscriptions, globalState: { get: () => undefined, update: async () => { } } });
+	t.after(async () => { await extension.deactivate(); subscriptions.forEach(value => value.dispose()); Module._load = original; delete require.cache[extensionPath]; });
 	return {
 		queries, opened, notices, previews,
+		removeSource: () => { missingSource = true; },
+		failRecordOpen: () => { failRecordOpen = true; },
+		reads, shown, showProblem: () => commands.get('becoder.ojConnect.showProblem')!(),
+		dispose: () => subscriptions.forEach(value => value.dispose()),
+		problemDocument: (title: string): ProblemDocument => ({ ref: problem, title, interactive: false, bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: title }] }], samples: [], limits: [], languages: [] }),
 		submit: () => commands.get('becoder.ojConnect.submit')!(),
 		query: () => commands.get('becoder.ojConnect.continueQuery')!(),
 		settle: () => new Promise<void>(resolve => setImmediate(resolve)),
 		record: (id: string): SubmissionOutcome => ({ kind: 'record', record: { problem, id, url: lanqiao ? 'https://www.lanqiao.cn/problems/254/submissions/' + id + '/' : 'https://www.luogu.com.cn/record/' + id } })
 	};
 }
+
+test('a confirmed receipt still opens after its source is removed without another query or send', async t => {
+	const f = await fixture(t);
+	const submitting = f.submit(); await f.settle(); f.notices[0].resolve(undefined); await submitting;
+	f.removeSource();
+	const query = f.query(); await f.settle(); f.queries[0].result.resolve(f.record('33')); await query;
+	assert.deepStrictEqual(f.opened.map(value => value.record.id), ['33']);
+	await f.query();
+	assert.deepStrictEqual(f.queries.map(value => value.attemptId), ['attempt-1']);
+});
+
+test('a failed record panel can retry the confirmed receipt without reconciling or resending', async t => {
+	const f = await fixture(t);
+	const submitting = f.submit(); await f.settle(); f.notices[0].resolve(undefined); await submitting;
+	f.failRecordOpen();
+	const query = f.query(); await f.settle(); f.queries[0].result.resolve(f.record('44')); await query;
+	await f.query();
+	assert.deepStrictEqual(f.opened.map(value => value.record.id), ['44']);
+	assert.deepStrictEqual(f.queries.map(value => value.attemptId), ['attempt-1']);
+});
+
+test('a later problem read owns the panel when responses complete in reverse order', async t => {
+	const f = await fixture(t);
+	const first = f.showProblem(); await f.settle();
+	const second = f.showProblem(); await f.settle();
+	f.reads[1].resolve(f.problemDocument('new')); await second;
+	f.reads[0].resolve(f.problemDocument('old')); await first;
+	assert.deepStrictEqual(f.shown.map(value => value.title), ['new']);
+});
+
+test('disposing the extension drops a late problem read', async t => {
+	const f = await fixture(t);
+	const read = f.showProblem(); await f.settle(); f.dispose();
+	f.reads[0].resolve(f.problemDocument('late')); await read;
+	assert.deepStrictEqual(f.shown, []);
+});
 
 test('an old receipt query cannot clear a newer pending attempt', async t => {
 	const f = await fixture(t);

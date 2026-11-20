@@ -6004,10 +6004,10 @@
 			"browser.permissions.title": "{0} 的权限"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserProblemFeature": {
-			"browser.getProblem": "获取题目",
-			"browser.importCph": "导入到 CPH",
+			"browser.getProblem": "Get Problem",
+			"browser.importCph": "Import to CPH",
 			"browser.problem.actions": "题目操作",
-			"browser.problem.getTooltip": "获取题目 — OJ Connect（仅支持已接入的题目页面）",
+			"browser.problem.getTooltip": "Get Problem — OJ Connect（仅支持已接入的题目页面）",
 			"browser.problem.busy": "已有题目导入任务正在进行。",
 			"browser.problem.changed": "导入期间题目页面已更改。",
 			"browser.problem.unsupported": "此页面不支持 OJ Connect 题面。",

@@ -24,10 +24,55 @@ import { GettingStartedInputSerializer } from '../../../welcomeGettingStarted/br
 import { BrowserEditor } from '../../electron-browser/browserEditor.js';
 import { StartupPageEditorResolverContribution } from '../../../welcomeGettingStarted/browser/startupPage.js';
 import { gettingStartedResource } from '../../../welcomeGettingStarted/browser/gettingStartedInput.js';
+import { BrowserViewWorkbenchService } from '../../electron-browser/browserViewWorkbenchService.js';
 
 suite('Browser homepage actions', () => {
 
 	const disposables = ensureNoDisposablesAreLeakedInTestSuite();
+
+	test('closing a lazy input drops and disposes its late model', async () => {
+		const result = new DeferredPromise<IBrowserViewModel>();
+		let disposed = 0;
+		const model = { dispose: () => disposed++ } as unknown as IBrowserViewModel;
+		const input = disposables.add(new BrowserEditorInput({ id: 'late-home' }, () => result.p, {} as IThemeService, {} as IInstantiationService, {} as ITelemetryService));
+		const resolving = input.resolve();
+		input.dispose(); await result.complete(model);
+		await assert.rejects(resolving);
+		assert.strictEqual(input.model, undefined);
+		assert.strictEqual(disposed, 1);
+	});
+
+	test('a failed lazy input can retry model creation', async () => {
+		let calls = 0;
+		const model = { dispose() { } } as unknown as IBrowserViewModel;
+		const input = disposables.add(new BrowserEditorInput({ id: 'retry-home' }, async () => { if (++calls === 1) { throw new Error('transient'); } return model; }, {} as IThemeService, {} as IInstantiationService, {} as ITelemetryService));
+		await assert.rejects(input.resolve(), /transient/);
+		assert.strictEqual(await input.resolve(), model);
+		assert.strictEqual(calls, 2);
+	});
+
+	test('closing during native creation does not recreate the input and destroys only its native view', async () => {
+		const result = new DeferredPromise<never>();
+		const known = new Map<string, BrowserEditorInput>(), destroyed: string[] = [];
+		let modelCreations = 0;
+		const service = Object.assign(Object.create(BrowserViewWorkbenchService.prototype), {
+			_known: known, _mainWindowId: 1, _onDidChangeBrowserViews: { fire() { } },
+			resolveStorageScope: async () => 'global',
+			_browserViewService: { getOrCreateBrowserView: () => result.p, destroyBrowserView: async (id: string) => { destroyed.push(id); } },
+			instantiationService: {
+				createInstance: (ctor: unknown, options: { id: string }, resolve: () => Promise<IBrowserViewModel>) => {
+					if (ctor !== BrowserEditorInput) { modelCreations++; throw new Error('closed input must not create a model'); }
+					return disposables.add(new BrowserEditorInput(options, resolve, {} as IThemeService, {} as IInstantiationService, {} as ITelemetryService));
+				}
+			}
+		}) as BrowserViewWorkbenchService;
+		const input = service.getOrCreateLazy('closed-native');
+		const resolving = input.resolve(); await Promise.resolve();
+		input.dispose(); await result.complete({} as never);
+		await assert.rejects(resolving);
+		assert.strictEqual(known.size, 0); assert.strictEqual(modelCreations, 0);
+		assert.deepStrictEqual(destroyed, ['closed-native']);
+	});
 
 	function fixture(openComplete?: Promise<void>) {
 		const opened: { input: unknown; options: unknown; group: unknown }[] = [];

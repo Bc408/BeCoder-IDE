@@ -14,6 +14,7 @@ import product from '../product.json' with { type: 'json' };
 import { getVersion } from './lib/getVersion.ts';
 import * as task from './lib/gulp/task.ts';
 import * as util from './lib/util.ts';
+import { assertCleanBeCoderPackage } from './lib/becoderPackage.ts';
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -132,6 +133,8 @@ function defineWin32SetupTasks(arch: string, target: string) {
 function buildBeCoderSetup(arch: string): task.CallbackTask {
 	return cb => {
 		const sourcePath = buildPath(arch);
+		try { assertCleanBeCoderPackage(sourcePath); }
+		catch (error) { cb?.(error as Error); return; }
 		const outputPath = setupDir(arch, 'becoder');
 		const toolchainManifest = path.join(sourcePath, 'data', 'toolchains', 'becoder-toolchain-manifest.json');
 		if (!fs.existsSync(toolchainManifest)) {

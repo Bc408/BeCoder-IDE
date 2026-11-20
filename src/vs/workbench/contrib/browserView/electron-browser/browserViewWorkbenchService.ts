@@ -23,6 +23,7 @@ import { findGroup } from '../../../services/editor/common/editorGroupFinder.js'
 import { Schemas } from '../../../../base/common/network.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { BrowserColorTheme, BrowserColorThemeSettingId, resolveBrowserAppearance } from '../common/browserAppearance.js';
+import { CancellationError } from '../../../../base/common/errors.js';
 
 export const BrowserMaxHistoryEntriesSettingId = 'workbench.browser.maxHistoryEntries';
 export const BrowserNewTabPlacementSettingId = 'workbench.browser.newTabPlacement';
@@ -220,12 +221,14 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 	getOrCreateLazy(id: string, initialState?: IBrowserEditorViewState, model?: IBrowserViewModel): BrowserEditorInput {
 		if (!this._known.has(id)) {
 			const input = this.instantiationService.createInstance(BrowserEditorInput, { id, ...initialState }, async () => {
+				const scope = await this.resolveStorageScope();
+				if (input.isDisposed() || this._known.get(id) !== input) { throw new CancellationError(); }
 				const state = await this._browserViewService.getOrCreateBrowserView(
 					id,
 					{
 						owner: this._getDefaultOwner(),
 						sessionOptions: {
-							scope: await this.resolveStorageScope()
+							scope
 						},
 						initialState: {
 							url: initialState?.url,
@@ -234,10 +237,14 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
 						}
 					}
 				);
+				if (input.isDisposed() || this._known.get(id) !== input) {
+					if (!this._known.has(id)) { await this._browserViewService.destroyBrowserView(id); }
+					throw new CancellationError();
+				}
 				return this._createModel(id, this._getDefaultOwner(), state);
 			});
-			input.onWillDispose(() => {
-				this._known.delete(id);
+			Event.once(input.onWillDispose)(() => {
+				if (this._known.get(id) === input) { this._known.delete(id); }
 				this._onDidChangeBrowserViews.fire();
 			});
 			if (model) {

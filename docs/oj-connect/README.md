@@ -2,21 +2,17 @@
 
 [文档目录](../README.md) · [技术架构](architecture.md) · [产品方向](../../VISION.md)
 
-2026-11-19 题面性能工作：已完成[分段基线](statement-performance-2026-11-19.md)与[单文档取文优化](statement-optimization-2026-11-19.md)，两站首次实测中位数分别减少约 73%／72%。临时诊断已撤下；CF 同题重开增加官网读取成本、样本限制、最终构建与负责人验收单列。
+2026-11-20，负责人确认本次 **2.1.0 Setup 验收通过**。当前五站均已具备核心闭环，内置浏览器、统一主页及本轮边界修复随包交付；正式 Release 尚未发布。[回归与交付](release-2.1.0-regression.md)、[修复审查](release-2.1.0-review.md)和[性能复核](release-2.1.0-performance.md)分别记录证据，[原检查规划](../superpowers/plans/2026-11-20-v2.1.0-release-readiness.md)保留执行范围。
 
-2026-11-20 蓝桥候选：已按批准设计加入公开普通 C/C++ 练习的第五站适配，复用共同题面、同源码 CPH、编译器与评测页。[实施记录](lanqiao-implementation-2026-11-20.md)区分源码检查、原生合成、构建及负责人验收；真实产品提交与 C 实交仍待验收，不能将候选实现称为第五站已达成真实闭环。
+使用方式见[扩展说明](../../extensions/becoder.oj-connect/README.md)，蓝桥设计、协议采证及各轮性能工作见下方[开发文档与证据](#开发文档与证据)。
 
-[蓝桥接入设计](../superpowers/specs/2026-11-19-lanqiao-public-practice-design.md)及[正式实施计划](../superpowers/plans/2026-11-19-lanqiao-public-practice.md)已获负责人确认，由主代理顺序实现、最后统一审查，内部逐阶段验证后交付一个完整候选 stage。[运行时契约](lanqiao-runtime-contract.md)与[执行路径补证](lanqiao-execution-evidence-2026-11-20.md)已补齐任务0必要来源。source/report 各一次，不明后只 GET；蓝桥首次使用本站 C++17／唯一 C 选项，四站默认偏好保持。
-
-[真实产品会话验证](lanqiao-native-session-evidence-2026-11-19.md)记录默认安全配置下的原生GET、匿名登录首屏、负责人内置人工登录及本人固定材料读取。[阶段二](lanqiao-authenticated-evidence-2026-11-19.md)与本次补证分别取得官网人工 C++ AC；这些证据不替代 OJ Connect 原生发送及最终产品验收。
-
-确认日期：2026-11-12。负责人已确认本文的主要使用流程与扩展／宿主职责划分。本文记录目标要求；当前实现状态单列，不能将要求表当作已交付功能清单。
+主要流程与扩展／宿主职责最初于 2026-11-12 确认，后续站点与交互按负责人决定迭代。本页说明现行范围和职责；文末按日期保留阶段证据，不将旧候选状态当作当前缺口。
 
 ## 产品定位
 
 OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder、Codeforces、牛客和蓝桥。以 vscode-luogu 的核心刷题体验为标杆，用户围绕当前 C/C++ 源码，通过快捷键看题、提交和查看本次评测结果。每个站点在扩展内部拥有独立适配模块。
 
-左侧侧栏仅用于统一管理这五个站点的登录状态与登录／退出入口。2026-11-15 已确认侧栏与普通内置浏览器共用对应站点会话；登录打开官网，退出同时对共享会话生效，其他站点不受影响。当前候选源码已加入五站入口与自动摘要更新；蓝桥身份来自主站 basic，名称动作固定打开已采证 Passport 登录入口，不猜个人主页地址；实际闭环确认与最新候选待验收项见[当前实现状态](#当前实现状态)。详细设计见[洛谷会话与交互修复设计](../superpowers/specs/2026-11-15-oj-connect-luogu-session-design.md)。找题在内置浏览器中完成；独立题面页与独立评测记录页由 OJ Connect 提供。样例管理和本地测试继续使用内置 CPH。
+左侧侧栏展示五站登录摘要，点击站点名称打开官网入口；登录与退出均由用户在官网完成。侧栏与普通内置浏览器共用对应存储范围的站点会话，退出影响共享该会话的窗口，其他站点不受影响。蓝桥身份来自主站 basic，名称动作固定打开已采证 Passport 登录入口，不猜个人主页地址。独立题面与评测记录由 OJ Connect 提供，样例管理和本地测试由 CPH 负责。现行使用细节见[扩展说明](../../extensions/becoder.oj-connect/README.md)，会话设计见[洛谷会话与交互修复设计](../superpowers/specs/2026-11-15-oj-connect-luogu-session-design.md)。
 
 ## 已确认的主流程
 
@@ -31,13 +27,13 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 ### 从内置浏览器导入
 
-1. 用户在内置浏览器找到题目，点击 Import。
+1. 用户在内置浏览器找到题目，点击 Get Problem；箭头菜单另提供 Import to CPH。
 2. OJ Connect 将源码导入当前打开的工作区文件夹下的站点直子目录；目录不存在时自动创建。
 3. 同时打开该 `.cpp` 和 OJ Connect 独立题面页。
 4. 若目标目录已有这道题的同名 `.cpp`，直接打开已有源码和题面，保留磁盘内容及未保存编辑稿。
 5. 用户在题面点击“导入 CPH”后，才为这份源码建立 CPH 样例与测试关联。
 
-浏览器 Import 与题面“导入 CPH”是两个用户动作。后一步复用前一步打开的源码，不再生成第二份解答文件。重复导入不自动覆盖用户修改过的样例。
+浏览器 Get Problem 与题面“导入 CPH”是两个用户动作。后一步复用前一步打开的源码，不再生成第二份解答文件。浏览器 Import to CPH 通过 Companion 显式导入并复用同一规范源码；重复导入不自动覆盖用户修改过的样例。
 
 ## 目录设置与题目猜测
 
@@ -59,15 +55,15 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 
 ## 题面与评测界面
 
-独立题面页展示站点与题号、标题、题目正文、公式、图片、输入输出说明、样例，以及站点提供的时间／内存限制。按洛谷插件保留紧凑的“导入 CPH”“提交当前文件＋语言”操作区；标题链接通向原题。提交后自动进入本次记录，无常驻的查看结果／原题按钮行。网页登录、验证及必要的原站操作留在内置浏览器中。
+独立题面展示站点与题号、标题、正文、公式、图片、输入输出说明、样例，以及站点提供的限制、难度和标签。沿洛谷布局提供紧凑的 CPH 图标、提交图标与 C／C++ 编译器选择；操作说明保留在悬停和无障碍名称中。标题与正文题目链接在内置浏览器打开，页内锚点留在当前题面。网页人工操作仍在内置浏览器完成。
 
-提交后自动打开独立评测记录页，源码和题面继续保留。记录页展示正式提交 ID、题目、语言、评测状态，以及站点提供的分数、耗时、内存和编译错误。没有提供的字段不伪造；保留站点原始状态和正式记录链接。等待、失败、超时和无法唯一确认本次记录均需明确呈现，不能用旧 AC 代替新结果。
+用户主动提交后展示本次评测，源码和题面继续保留。蓝桥先在准备阶段打开共同页面，再原位接管正式记录；执行标识不冒充正式 ID。记录按实际可得内容展示题目、语言、状态、分数、耗时、内存和编译错误，共同判词与测试点悬停沿用洛谷英文样式。缺失字段省略，真实零值保留；等待、失败、超时和受理不明明确呈现，不能用旧 AC 代替新结果。受理不明只核对，不自动重交。
 
 五站登录摘要应与实际使用的浏览器会话一致。无法读取或尚未检查时显示未知／不可用，不以“存在 Cookie”或“打开公开提交页”推断已登录。侧栏不扩展成题库、社交或比赛监控入口。
 
 ## 洛谷插件参考与裁剪
 
-参照负责人提供的 `yltx.vscode-luogu-4.18.2.vsix` 的实际实现，以及上游 [题目查看](https://github.com/yltx/vscode-luogu/wiki/Problem-Viewer)、[提交代码](https://github.com/yltx/vscode-luogu/wiki/Code-Submission)、[评测记录](https://github.com/yltx/vscode-luogu/wiki/Judge-Records)说明。Wiki 与 VSIX 版本可能不同，不能用 Wiki 直接证明该 VSIX 的全部行为。
+最初参考负责人提供的 `yltx.vscode-luogu-4.18.2.vsix`，后续已按完整 v4.20.0 源码迁入保留的题面、提交控件、评测和渲染实现，原版权与 MIT 许可继续保留，固定来源见 [UPSTREAM](../../extensions/becoder.oj-connect/UPSTREAM.md)。上游 [题目查看](https://github.com/yltx/vscode-luogu/wiki/Problem-Viewer)、[提交代码](https://github.com/yltx/vscode-luogu/wiki/Code-Submission)、[评测记录](https://github.com/yltx/vscode-luogu/wiki/Judge-Records)用于辅助理解；Wiki 与具体版本可能不同，不代替源码证据。
 
 已核对的 4.18.2 题号猜测逻辑：先读源码旁现有 CPH 配置中的洛谷 URL，失败后对文件基本名按正则识别 `P1001`、`CF1234A`、`AT_abc001_a` 等题号；不能取得题号时弹出输入框。看题与提交共用该入口。OJ Connect 参考这种简单实现，按负责人要求加入站点目录判断。
 
@@ -78,6 +74,14 @@ OJ Connect 是随 BeCoder 分发的统一内置扩展，面向洛谷、AtCoder�
 各站共用题面页、评测记录页和操作流程，由站点适配器提供内容、状态与必要的原站交互。洛谷是视觉和使用基线，接入时须尊重各站内容、身份、认证和结果的差异，不把站点能力逐项叠加成新的外围功能。完整裁剪、共同数据和适配契约见[共同流程与洛谷接入设计](shared-workflow-design.md)。
 
 ## 当前实现状态
+
+五站均已获得负责人核心闭环确认；2026-11-20 本轮维护的 2.1.0 Setup 也已获负责人验收。共同题面、本站编译器、显式同源码 CPH、用户主动提交及本次评测均已接入。各站题型范围、蓝桥语言例外和受理不明只读核对保持，完整行为见[扩展使用说明](../../extensions/becoder.oj-connect/README.md)。
+
+本轮源码回归、stage、完整包检查和管理员 Setup 验证已经通过。负责人的整体验收与代理未重新执行全部官网 C／C++ 实交组合分别成立；不把未逐项采证的异常状态或语言组合补记为通过。确切安装包、哈希和剩余证据边界见[交付记录](release-2.1.0-regression.md)。
+
+### 阶段记录（按记录时点阅读）
+
+以下保留各轮当时的实现、候选、失败和验收状态。文中的“当前”“最新”“待验收”均指所在阶段；最新整体状态以上方及交付记录为准，不能将早期等待状态重新列为今天的待办。
 
 2026-11-20 负责人确认蓝桥核心能力闭环验收通过，当前五站均已有核心闭环。蓝桥仅公开普通标准输入输出 C/C++ 练习；默认 `lanqiao/254.cpp`，目录外纯数字文件名不自动认领。原生 Session 拥有账号和固定请求，执行 ID 经正式详情、本题本人列表、当前账号及精确归一化源码核对后才成为记录。source/report 各最多一次，取消、超时或受理不明后仅 GET；报告测试点只保留内存投影，不展示隐藏输入输出。本轮进度反馈候选在准备阶段先打开共同评测页，再显示发送、Judging、核验正式记录，确认后原位升级；没有执行中总数时不补造编号卡片。原接入检查、核心验收及本轮候选边界见[实施记录](lanqiao-implementation-2026-11-20.md)。
 
@@ -129,9 +133,13 @@ CF 准备、单次原生 POST、正式回执核对及结果查询共用当前窗
 
 ## 开发文档与证据
 
+各项设计、计划和采证保留其记录时点；当前能力及验收以上方和 2.1.0 交付记录为准。
+
+- [蓝桥接入设计](../superpowers/specs/2026-11-19-lanqiao-public-practice-design.md)、[实施计划](../superpowers/plans/2026-11-19-lanqiao-public-practice.md)及[实施记录](lanqiao-implementation-2026-11-20.md)：接入与体验细化过程；[运行时契约](lanqiao-runtime-contract.md)和[执行路径补证](lanqiao-execution-evidence-2026-11-20.md)记录固定请求、正式记录核验及不明后只读的边界。
+- [蓝桥产品会话采证](lanqiao-native-session-evidence-2026-11-19.md)和[阶段二官网采证](lanqiao-authenticated-evidence-2026-11-19.md)：分别保留内置登录、原生只读与官网人工实交证据；与 OJ Connect 产品闭环及后续 Setup 验收分开。
 - [题面首屏性能设计](../superpowers/specs/2026-11-19-oj-connect-statement-performance-design.md)与[诊断实施计划](../superpowers/plans/2026-11-19-oj-connect-statement-performance.md)：真实基线、失败及隔离纠正见[诊断结果](statement-performance-2026-11-19.md)；后续按[具体取文设计](../superpowers/specs/2026-11-19-oj-connect-statement-acquisition-design.md)实施，效果与最终边界见[优化结果](statement-optimization-2026-11-19.md)。
 - [2026-11-19 四站维护审查与分阶段方案](review-2026-11-19-maintenance.md)：原始问题、文案矩阵和性能建议；末尾分别记录第一、二阶段实施、失败尝试、检查及未构建／未网站验收边界。
-- [CF 赛后练习接入设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)、[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)与[协议采证](codeforces-protocol-evidence.md)：2026-11-18 负责人已确认设计并批准实施，当前四站候选已加入 CF 适配；四次隔离实交证明协议样本可行，不替代本轮产品运行、最终构建或负责人验收。
+- [CF 赛后练习接入设计](../superpowers/specs/2026-11-18-codeforces-practice-design.md)、[实施计划](../superpowers/plans/2026-11-18-codeforces-practice.md)与[协议采证](codeforces-protocol-evidence.md)：2026-11-18 负责人确认设计并批准实施，当轮四站候选加入 CF 适配；四次隔离实交证明协议样本可行，不替代后续产品运行、构建或负责人验收。
 - [牛客 ACM 协议证据](nowcoder-protocol-evidence.md)、[接入设计](../superpowers/specs/2026-11-17-nowcoder-acm-design.md)与[实施计划](../superpowers/plans/2026-11-17-nowcoder-acm.md)：负责人已选官网 ACM 链路，2026-11-17 候选实现见[实施记录](nowcoder-implementation-2026-11-17.md)；剩余边界、真实证据与检查／验收分别记录。
 - [分支发布前审查](publish-review-2026-11-16.md)：本轮缺陷修复、去冗余、计划语义、许可和验证边界；不代表已经提交或推送。
 - [技术架构](architecture.md)：当前源码所有者、目标扩展结构、宿主接口边界和迁移验收。
@@ -139,12 +147,12 @@ CF 准备、单次原生 POST、正式回执核对及结果查询共用当前窗
 - [共同流程与洛谷接入实施计划](luogu-shared-workflow-plan.md)：已批准的 9 项任务及接口、协议证据门禁、检查与验收。
 - [AtCoder 插件化第一阶段实施计划](atcoder-extension-plan.md)：先迁移已验收的快捷键提交能力；源码迁移与回归已完成，构建及新版本验收单独记录。
 - [AtCoder 体验补全准备](atcoder-experience-preparation-2026-11-16.md)：进入讨论前的已知问题与体验差异快照；后续已批准设计和实施，不再作为当前缺口或待批准清单。
-- [AtCoder 体验补全设计](../superpowers/specs/2026-11-16-atcoder-experience-design.md)：负责人已确认实施的语言偏好、独立提交表单、发送边界与持续评测反馈；当前候选已按[实施计划](../superpowers/plans/2026-11-16-atcoder-experience.md)修改，检查、stage 与真实账号验收分列。
+- [AtCoder 体验补全设计](../superpowers/specs/2026-11-16-atcoder-experience-design.md)：负责人已确认实施的语言偏好、独立提交表单、发送边界与持续评测反馈；当轮候选按[实施计划](../superpowers/plans/2026-11-16-atcoder-experience.md)修改，检查、stage 与真实账号验收分列。
 - [AtCoder MVP 过程与验收](../oj-connect-basic-flow.md)：保留早期增量、失败修正与真实提交证据，按各节时点阅读。
 - [多站技术调研](../oj-connect-feasibility.md)：候选协议、接口性质与证据限制，不作为统一扩展的完成声明。
 - [开发指南](../development.md)：仓库检查、构建与文档验证入口。
 
-产品、架构及第一阶段计划均已确认，AtCoder 新扩展快捷键闭环已获负责人确认。共同流程与洛谷接入设计及实施计划均已批准，双站共同流程源码已实施。下列早期交付记录保留当时事实，不重新开启已实施计划；不隐含新的 Git 发布或 Setup 发行授权。
+下列早期交付记录保留从 AtCoder 单站到洛谷共同流程的推进事实；其中的双站范围及待验收状态不替代当前五站状态，也不隐含新的 Git 发布或 Setup 发行授权。
 
 ## 历史构建与验收入口（2026-11-13）
 

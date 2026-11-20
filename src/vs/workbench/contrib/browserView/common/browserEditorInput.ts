@@ -24,6 +24,7 @@ import { LRUCachedFunction } from '../../../../base/common/cache.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { isBrowserHomeUrl } from './browserHome.js';
+import { CancellationError } from '../../../../base/common/errors.js';
 
 const LOADING_SPINNER_SVG = (color: string | undefined) => `
 	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
@@ -205,12 +206,15 @@ export class BrowserEditorInput extends EditorInput {
 	}
 
 	override async resolve(): Promise<IBrowserViewModel> {
+		if (this.isDisposed()) { throw new CancellationError(); }
 		if (!this._model && !this._modelPromise) {
 			this._modelPromise = (async () => {
-				this._model = await this._resolveModel();
-				this._modelPromise = undefined;
-
-				return this._model;
+				try {
+					const model = await this._resolveModel();
+					if (this.isDisposed()) { model.dispose(); throw new CancellationError(); }
+					this._model = model;
+					return model;
+				} finally { this._modelPromise = undefined; }
 			})();
 		}
 		return this._model || this._modelPromise!;

@@ -16,6 +16,7 @@
     "test-browser-no-install": "node test/unit/browser/index.js",
     "test-node": "mocha test/unit/node/index.js --delay --ui=tdd --timeout=5000 --exit",
     "test-lanqiao-session": "node scripts/run-lanqiao-session-tests.mts",
+    "test-browser-session": "node scripts/run-browser-session-tests.mts",
     "test-extension": "vscode-test",
     "test-build-scripts": "cd build && npm run test",
     "check-cyclic-dependencies": "node build/lib/checkCyclicDependencies.ts out",

@@ -35,6 +35,7 @@ enum NewPageLocation {
 export class BrowserView extends Disposable {
 	private readonly _view: WebContentsView;
 	private readonly _faviconRequestCache = new Map<string, Promise<string>>();
+	private _faviconRequestVersion = 0;
 
 	private _lastScreenshot: VSBuffer | undefined = undefined;
 	private _lastFavicon: string | undefined = undefined;
@@ -262,8 +263,12 @@ export class BrowserView extends Disposable {
 
 		// Favicon events
 		webContents.on('page-favicon-updated', async (_event, favicons) => {
+			const version = ++this._faviconRequestVersion;
+			const pageUrl = webContents.getURL();
+			const isCurrent = () => !this._isDisposed && !webContents.isDestroyed() && version === this._faviconRequestVersion && pageUrl === webContents.getURL();
 			// try each url in order until one works
 			for (const url of favicons) {
+				if (!isCurrent()) { return; }
 				if (!this._faviconRequestCache.has(url)) {
 					this._faviconRequestCache.set(url, (async () => {
 						if (url.startsWith('data:image/')) {
@@ -283,27 +288,36 @@ export class BrowserView extends Disposable {
 
 						return `data:${type};base64,${Buffer.from(buffer).toString('base64')}`;
 					})());
+					// A view may visit arbitrarily many sites during one window lifetime.
+					if (this._faviconRequestCache.size > 32) {
+						this._faviconRequestCache.delete(this._faviconRequestCache.keys().next().value!);
+					}
 				}
 
+				const request = this._faviconRequestCache.get(url)!;
 				try {
-					this._lastFavicon = await this._faviconRequestCache.get(url)!;
+					const favicon = await request;
+					if (!isCurrent()) { return; }
+					this._lastFavicon = favicon;
 					this._onDidChangeFavicon.fire({ favicon: this._lastFavicon });
 					this._currentHistoryHandle?.update({ favicon: this._lastFavicon });
 					// On success, stop searching
 					return;
 				} catch (e) {
+					if (this._faviconRequestCache.get(url) === request) { this._faviconRequestCache.delete(url); }
 					// On failure, just try the next one
 				}
 			}
 
 			// If we searched all favicons and none worked, clear the favicon
-			if (this._lastFavicon) {
+			if (isCurrent() && this._lastFavicon) {
 				this._lastFavicon = undefined;
 				this._onDidChangeFavicon.fire({ favicon: this._lastFavicon });
 				this._currentHistoryHandle?.update({ favicon: null });
 			}
 		});
 		webContents.on('will-navigate', (event) => {
+			this._faviconRequestVersion++;
 			// URL.parse (vs `new URL`) tolerates about:/blob:/empty strings without throwing.
 			const host = URL.parse(event.url)?.host;
 			const currHost = URL.parse(this.webContents.getURL())?.host;
@@ -394,6 +408,7 @@ export class BrowserView extends Disposable {
 		});
 
 		webContents.on('did-navigate', () => {
+			this._faviconRequestVersion++;
 			// Chromium resets the zoom factor to its per-origin default (100%) when
 			// navigating to a new document. Re-apply our stored zoom to override it.
 			this._consoleLogs.length = 0; // Clear console logs on navigation since they are per-page
@@ -978,6 +993,8 @@ export class BrowserView extends Disposable {
 			return;
 		}
 		this._isDisposed = true;
+		this._faviconRequestVersion++;
+		this._faviconRequestCache.clear();
 
 		// Dispose debugger. This detaches debug sessions first.
 		this.debugger.dispose();

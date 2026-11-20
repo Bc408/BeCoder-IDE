@@ -8,7 +8,7 @@ BeCoder 是 Code - OSS 的 Windows 产品分支。核心 TypeScript 位于 `src/
 
 开始前完整阅读 [AGENTS.md](../AGENTS.md) 与 [VISION.md](../VISION.md)。涉及 Beacon / NoteBook 时，再阅读[正式文档入口](beacon/README.md)及对应模块。负责人最新决定优先；当前代码、正式需求与运行验收分别记录。
 
-OJ Connect 工作先阅读[产品与开发入口](oj-connect/README.md)和[技术架构](oj-connect/architecture.md)。AtCoder 第一阶段已将用户工作流迁入内置扩展，真实浏览器事务仍由核心宿主执行；不能把后续的独立题面、评测页和五站接入写成现有功能。
+OJ Connect 工作先阅读[产品与开发入口](oj-connect/README.md)和[技术架构](oj-connect/architecture.md)。当前五站已具备核心闭环：扩展负责识题、源码快照、编译器偏好、题面与评测界面，核心宿主负责真实浏览器 Session 和受限官网事务，CPH 负责显式样例关联与本地测试。保留各站协议及一次发送、受理不明只读核对的边界；不能用更广的 CPH 解析范围推断交题支持。当前检查和负责人验收见 [2.1.0 交付记录](oj-connect/release-2.1.0-regression.md)。
 
 ## 准备环境
 

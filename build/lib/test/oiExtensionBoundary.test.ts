@@ -63,6 +63,22 @@ test('OJ Connect is an independently built, localized built-in with a native bro
 	}
 });
 
+test('the package verifier follows the approved inventory and OJ runtime assets', () => {
+	const inventory = readJson<{ components: { id: string; contentSha256?: string; packagedContentSha256?: string; spdxIdentifier: string }[] }>(path.join(repositoryRoot, 'resources/oi-defaults/BUNDLED-COMPONENTS.json'));
+	const verifier = fs.readFileSync(path.join(repositoryRoot, 'build/azure-pipelines/win32/verify-becoder-package.ps1'), 'utf8');
+	const ids = /\$expectedComponentIds = @\(([\s\S]*?)\r?\n\)/.exec(verifier)?.[1].match(/'([^']+)'/g)?.map(value => value.slice(1, -1));
+	assert.deepStrictEqual(ids, inventory.components.map(component => component.id));
+	const languagePack = inventory.components.find(component => component.id === 'ms-ceintl.vscode-language-pack-zh-hans')!;
+	assert.ok(verifier.includes(languagePack.contentSha256!));
+	assert.ok(verifier.includes(languagePack.packagedContentSha256!));
+	const oj = inventory.components.find(component => component.id === 'becoder.oj-connect')!;
+	assert.ok(oj.spdxIdentifier.includes('CC-BY-4.0'));
+	assert.ok(oj.spdxIdentifier.includes('CC0-1.0'));
+	for (const asset of ['dist\\syntax-worker.js', 'dist\\onig.wasm']) {
+		assert.ok(verifier.includes('extensions\\becoder.oj-connect\\' + asset), 'Missing required OJ runtime asset: ' + asset);
+	}
+});
+
 function readJson<T>(filePath: string): T {
 	return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }

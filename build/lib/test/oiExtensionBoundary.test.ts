@@ -2018,6 +2018,45 @@ suite('OI extension boundary', () => {
 		}
 	});
 
+	test('rejects changed Setup registry snapshots without exposing registry values', { skip: process.platform !== 'win32' }, t => {
+		const source = fs.readFileSync(path.join(repositoryRoot, 'build/azure-pipelines/win32/verify-becoder-setup.ps1'), 'utf8');
+		const assertion = source.match(/^function Assert-RegistryIntegrationUnchanged \{[\s\S]*?^\}/m)?.[0];
+		assert.ok(assertion, 'Setup registry assertion with safe diagnostics is missing');
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-registry-diff-'));
+		t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+		const diagnosticPath = path.join(root, 'portable-integration-diff.json');
+		const identity = 'HKEY_CURRENT_USER\\Environment|Fixture|String';
+		const before = `${identity}|"private-before-value"`;
+		const after = `${identity}|"private-after-value"`;
+		const invoke = (rows: readonly string[]) => {
+			const env: NodeJS.ProcessEnv = {
+				...process.env,
+				BECODER_REGISTRY_ASSERTION: Buffer.from(assertion, 'utf8').toString('base64'),
+				BECODER_REGISTRY_FIXTURE: Buffer.from(JSON.stringify({ before: [before], after: rows, diagnosticPath }), 'utf8').toString('base64')
+			};
+			delete env.PSModulePath;
+			return spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', [
+				'$ErrorActionPreference = \'Stop\'',
+				'Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_REGISTRY_ASSERTION)))',
+				'$fixture = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:BECODER_REGISTRY_FIXTURE)) | ConvertFrom-Json',
+				'try { Assert-RegistryIntegrationUnchanged -Before $fixture.before -After $fixture.after -DiagnosticPath $fixture.diagnosticPath } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 17 }'
+			].join('; ')], { encoding: 'utf8', env, windowsHide: true });
+		};
+		const unchanged = invoke([before]);
+		assert.ifError(unchanged.error);
+		assert.strictEqual(unchanged.status, 0, unchanged.stderr);
+		assert.ok(!fs.existsSync(diagnosticPath));
+		const changed = invoke([after]);
+		assert.ifError(changed.error);
+		assert.strictEqual(changed.status, 17, changed.stdout + changed.stderr);
+		const diagnostics = JSON.parse(fs.readFileSync(diagnosticPath, 'utf8').replace(/^\uFEFF/, '')) as { Side: string; Identity: string }[];
+		assert.deepStrictEqual(diagnostics.map(value => value.Side).sort(), ['<=', '=>']);
+		assert.ok(diagnostics.every(value => value.Identity === identity));
+		for (const value of ['private-before-value', 'private-after-value']) {
+			assert.ok(!(changed.stdout + changed.stderr + JSON.stringify(diagnostics)).includes(value));
+		}
+	});
+
 	test('keeps cloud Release publication explicitly dispatched and stable-only', () => {
 		const releaseWorkflow = fs.readFileSync(path.join(repositoryRoot, '.github', 'workflows', 'release.yml'), 'utf8');
 		const buildWorkflow = fs.readFileSync(path.join(repositoryRoot, '.github', 'workflows', 'build-windows.yml'), 'utf8');

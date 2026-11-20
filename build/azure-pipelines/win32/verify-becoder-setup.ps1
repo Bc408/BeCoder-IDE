@@ -249,6 +249,24 @@ function Get-RegistryIntegrationSnapshot {
 	} | Sort-Object -Unique)
 }
 
+function Assert-RegistryIntegrationUnchanged {
+	param([string[]]$Before, [string[]]$After, [string]$DiagnosticPath)
+	$changes = @(Compare-Object $Before $After)
+	if ($changes.Count -eq 0) { return }
+	$diagnostics = @($changes | ForEach-Object {
+		# Preserve identities and types only; registry values can contain credentials.
+		$fields = $_.InputObject -split '\|'
+		[PSCustomObject]@{
+			Side = $_.SideIndicator
+			Identity = ($fields | Select-Object -First 3) -join '|'
+			ObservedAtUtc = [DateTime]::UtcNow.ToString('o')
+		}
+	})
+	$diagnostics | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $DiagnosticPath -Encoding utf8
+	Write-Host ($diagnostics | ConvertTo-Json -Depth 4 -Compress)
+	throw "BeCoder Setup changed a monitored Windows integration registry key. See $DiagnosticPath"
+}
+
 function Get-BeCoderNamedRegistrySnapshot {
 	$lines = @()
 	foreach ($hive in @('HKCU\Software', 'HKLM\Software')) {
@@ -404,9 +422,7 @@ $namedRegistryAfter = Get-BeCoderNamedRegistrySnapshot
 if (Compare-Object $shortcutsBefore $shortcutsAfter) {
 	throw 'BeCoder Setup changed a desktop or Start-menu shortcut after default-shortcut verification and explicit opt-out installs.'
 }
-if (Compare-Object $registryBefore $registryAfter) {
-	throw 'BeCoder Setup changed a monitored Windows integration registry key.'
-}
+Assert-RegistryIntegrationUnchanged -Before $registryBefore -After $registryAfter -DiagnosticPath (Join-Path $verificationRoot 'portable-integration-diff.json')
 if (Compare-Object $namedRegistryBefore $namedRegistryAfter) {
 	throw 'BeCoder Setup created or modified a BeCoder-named registry entry.'
 }

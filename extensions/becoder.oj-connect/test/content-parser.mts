@@ -56,6 +56,50 @@ assert.equal(decodeURIComponent(elements(anchors, 'a')[1].properties.href as str
 assert.equal(elements(anchors, 'div')[1].properties.id, 'user-content-app');
 assert.equal(elements(anchors, 'div')[1].properties.onClick, undefined);
 
+await build({ entryPoints: [path.join(root, 'extensions/becoder.oj-connect/webview/lanqiaoStatement.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'lanqiao-statement.cjs'), nodePaths });
+const { lanqiaoStatement } = require(path.join(output, 'lanqiao-statement.cjs'));
+// Synthetic independent blocks reproduce the layout issue; they are not an official229 response.
+const layoutSource = '迷宫与陷阱\n\n### 题目描述\n\n题目描述\n\n保留 $N \\times N$ 与[引用][ref]。\n\n#### 输入描述\n\n真实子标题。\n\n### 输入描述\n\n输入描述\n\n输入描述\n\n两个整数。\n\n### 输出描述\n\n输出描述\n\n最少步数。\n\n[ref]: https://www.lanqiao.cn/problems/229/learning/\n';
+const layoutOriginal = renderer.renderMarkdownTree(layoutSource), beforeLayout = JSON.stringify(layoutOriginal);
+const layout = lanqiaoStatement(layoutOriginal, '迷宫与陷阱');
+assert.deepEqual(elements(layout, 'h2').map(text), ['题目描述', '输入描述', '输出描述']);
+assert.deepEqual(elements(layout, 'h4').map(text), ['输入描述'], 'lower heading levels remain actual subheadings');
+assert.equal(elements(layout, 'p').filter(node => text(node) === '迷宫与陷阱').length, 0);
+assert.equal(elements(layout, 'p').filter(node => text(node) === '输入描述').length, 1, 'only one adjacent redundant label is omitted');
+assert.ok(elements(layout, 'h2').every(node => !elements(node, 'a').some(anchor => hasClass(anchor, 'heading-anchor'))));
+assert.ok(elements(layout, 'h4').some(node => elements(node, 'a').some(anchor => hasClass(anchor, 'heading-anchor'))));
+assert.equal(elements(layout, 'h2')[1].properties.id, elements(layoutOriginal, 'h3')[1].properties.id, 'main heading fragment identity survives');
+assert.equal(elements(layout, 'a').find(node => text(node) === '引用')?.properties.href, 'https://www.lanqiao.cn/problems/229/learning/');
+assert.equal(JSON.stringify(layoutOriginal), beforeLayout, 'normalization cannot mutate a shared cached render tree');
+
+const richTitle = renderer.renderMarkdownTree('# 迷宫与陷阱\n\n### 题目描述\n\n正文。\n\n### 输入描述\n\n输入。');
+assert.equal(elements(lanqiaoStatement(richTitle, '迷宫与陷阱'), 'h1').length, 0, 'an unreferenced duplicate Markdown title is also omitted');
+const protectedSource = '### 题目描述\n\n题目描述\n这两行是同一段正文。\n\n- 项目\n  ### 输入描述\n\n> ### 输出描述\n\n<div>\n\n### 输入描述\n\n</div>\n\n:::warning[提示]{open}\n### 输出描述\n:::\n\n````cpp\n### 输入描述\n```\n题目描述\n````\n\n    ### 输出描述\n\n$$\nx = \\text{输入描述}\n$$\n';
+const protectedTree = renderer.renderMarkdownTree(protectedSource), protectedNormalized = lanqiaoStatement(protectedTree);
+for (const tag of ['pre', 'blockquote', 'ul', 'details', 'div']) {
+	assert.deepEqual(elements(protectedNormalized, tag), elements(protectedTree, tag), `${tag} descendants remain unchanged`);
+}
+assert.deepEqual(elements(protectedNormalized, 'span').filter(node => hasClass(node, 'katex')), elements(protectedTree, 'span').filter(node => hasClass(node, 'katex')));
+assert.ok(elements(protectedNormalized, 'p').some(node => text(node) === '题目描述\n这两行是同一段正文。'));
+
+for (const source of [
+	'### 教程\n\n#### 输入描述\n\n输入描述\n\n正文。',
+	'[迷宫与陷阱](https://www.lanqiao.cn/)\n\n### 题目描述\n\n正文。',
+	'`迷宫与陷阱`\n\n### 题目描述\n\n正文。',
+	'# 迷宫与陷阱\n\n[回到题名](#迷宫与陷阱)\n\n### 题目描述\n\n正文。'
+]) {
+	const tree = renderer.renderMarkdownTree(source), normalized = lanqiaoStatement(tree, '迷宫与陷阱');
+	assert.deepEqual(normalized.children[0], tree.children[0], 'unrecognized hierarchy, links, code and referenced title blocks remain readable');
+}
+const laterTitle = lanqiaoStatement(renderer.renderMarkdownTree('### 题目描述\n\n迷宫与陷阱\n\n### 输入描述\n\n输入。'), '迷宫与陷阱');
+assert.ok(elements(laterTitle, 'p').some(node => text(node) === '迷宫与陷阱'), 'the title is only removable before all actual sections');
+const labeledCode = lanqiaoStatement(renderer.renderMarkdownTree('### 输入描述\n\n`输入描述`\n\n### 输出描述\n\n[输出描述](https://www.lanqiao.cn/)'));
+assert.equal(elements(labeledCode, 'code').length, 1);
+assert.equal(elements(labeledCode, 'a').filter(node => text(node) === '输出描述').length, 1);
+const sectionTitle = lanqiaoStatement(renderer.renderMarkdownTree('### 题目描述\n\n正文。\n\n### 输入描述\n\n输入。'), '题目描述');
+assert.deepEqual(elements(sectionTitle, 'h2').map(text), ['题目描述', '输入描述'], 'a real main section is not removed when the problem happens to have the same name');
+console.log('Lanqiao statement layout normalization regressions passed');
+
 await build({ entryPoints: [path.join(root, 'extensions/becoder.shared/browser/content/dom.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(output, 'dom.cjs'), nodePaths });
 const { JSDOM } = require('jsdom');
 const document = new JSDOM('<!doctype html><main id="app"></main>').window.document;

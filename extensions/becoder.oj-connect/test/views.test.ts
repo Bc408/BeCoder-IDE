@@ -122,21 +122,29 @@ test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore 
 		const { RecordPanel } = require('../src/views/recordPanel');
 		const problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
 		const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
-		let reads = 0, queries = 0, releases = 0;
-		const panels = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => { reads++; return { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' }; } }], async () => { }, async () => { releases++; }, (outcome: { attemptId: string }, _source: string, adopt: (record: RecordRef) => void) => async () => {
+		let reads = 0, queries = 0, releases = 0, resolveFirst!: (snapshot: RecordSnapshot) => void;
+		const result: RecordSnapshot = { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' };
+		const panels = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => ++reads === 1 ? new Promise<RecordSnapshot>(resolve => { resolveFirst = resolve; }) : result }], async () => { }, async () => { releases++; }, (outcome: { attemptId: string }, _source: string, adopt: (record: RecordRef) => void) => async () => {
 			assert.strictEqual(outcome.attemptId, 'attempt'); queries++; adopt(record);
 		});
 		const initial = { problem, phase: 'preparing' as const, codeLength: '12 B' };
 		const first = panels.beginEvaluation(initial, '');
 		assert.strictEqual(captures.length, 1); assert.strictEqual(reads, 0);
 		assert.strictEqual(captures[0].state.record, undefined); assert.strictEqual(captures[0].state.snapshot, undefined);
-		first.update({ ...initial, phase: 'judging', language: 'C++（g++17）' });
+		assert.strictEqual(captures[0].state.message, undefined, 'normal verification stays in the verdict row');
+		const report = { ...initial, phase: 'confirming' as const, language: 'C++（g++17）', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }] };
+		first.update(report);
 		assert.strictEqual(first.finish({ kind: 'record', record }), false, 'the preview owns presentation and suppresses later generic reopening'); await panels.open(record);
+		const adoptedSubmission = captures[0].state.submission;
+		resolveFirst(result);
+		assert.deepStrictEqual(adoptedSubmission, report, 'formal identity adoption cannot clear known report data while the result read is pending');
+		assert.strictEqual((captures[0].state as PanelState).record?.id, record.id);
+		assert.strictEqual(captures[0].state.snapshot, undefined);
 		await new Promise(resolve => setImmediate(resolve));
 		assert.strictEqual(captures.length, 1, 'formal confirmation reuses the same page');
-		assert.strictEqual(captures[0].state.submission, undefined);
+		assert.deepStrictEqual(captures[0].state.submission, report, 'local submitted metadata remains available when the official record omits it');
 		assert.strictEqual((captures[0].state as PanelState).snapshot?.rawStatus, 'AC');
-		first.update({ ...initial, phase: 'sending' }); assert.strictEqual(captures[0].state.submission, undefined);
+		first.update({ ...initial, phase: 'sending' }); assert.deepStrictEqual(captures[0].state.submission, report, 'settled progress cannot overwrite the retained submission context');
 		captures[0].close(); assert.strictEqual(releases, 1);
 		const second = panels.beginEvaluation(initial, ''), closed = captures.at(-1)!;
 		closed.close(); second.update({ ...initial, phase: 'judging' }); second.finish({ kind: 'record', record });
@@ -147,6 +155,14 @@ test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore 
 		await pending.action({ action: 'continueQuery' }); await new Promise(resolve => setImmediate(resolve));
 		assert.strictEqual(queries, 1); assert.strictEqual(pending.state.snapshot?.rawStatus, 'AC');
 		assert.strictEqual(captures.length, 3); panels.dispose();
+		const unavailable = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => { throw new Error('lanqiao-session-changed'); } }], async () => { }, async () => { });
+		const fourth = unavailable.beginEvaluation(report, ''), stopped = captures.at(-1)!;
+		fourth.finish({ kind: 'record', record }); await new Promise(resolve => setImmediate(resolve));
+		assert.deepStrictEqual(stopped.state.submission, report, 'a failed first result read cannot remove an already visible report');
+		assert.strictEqual(stopped.state.snapshot, undefined);
+		assert.strictEqual(stopped.state.tracking, false); assert.strictEqual(stopped.state.canRetry, true);
+		assert.match(stopped.state.message!, /Continue querying this record; no code will be resent/);
+		unavailable.dispose();
 	} finally { Module._load = original; delete require.cache[modulePath]; }
 });
 

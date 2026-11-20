@@ -18,13 +18,14 @@ import SubmissionControls from './submissionControls';
 import type { PanelState } from '../../src/views/model';
 import type { Section } from '../../src/domain';
 import { contentFragment, highlightCodeBlocks } from '../content';
+import { lanqiaoStatement } from '../lanqiaoStatement';
 import type { Root } from 'hast';
 import send from '../request';
 import CopyablePre from './copyablePre';
 import { installCodeCopyButtons } from './codeCopy';
-import { CphIcon, Tag } from './presentation';
+import { CphIcon, Tag, resourceText } from './presentation';
 
-function Content({ section, url, scope }: { section: Section; url: string; scope: string }) {
+function Content({ section, url, scope, lanqiao = false, problemTitle }: { section: Section; url: string; scope: string; lanqiao?: boolean; problemTitle?: string }) {
 	const root = useRef<HTMLElement>(null);
 	useEffect(() => {
 		let disposed = false, cleanup: (() => void) | undefined, syntax: { dispose(): void } | undefined;
@@ -38,7 +39,7 @@ function Content({ section, url, scope }: { section: Section; url: string; scope
 		const render = async () => {
 			const tree = await send<Root>({ action: 'renderContent', content: section.content, format: section.format });
 			if (disposed) { return; }
-			article.replaceChildren(contentFragment(tree, section.format === 'html' ? scope : undefined));
+			article.replaceChildren(contentFragment(lanqiao && section.format === 'markdown' ? lanqiaoStatement(tree, problemTitle) : tree, section.format === 'html' ? scope : undefined));
 			syntax = highlightCodeBlocks(article);
 			article.setAttribute('aria-busy', 'false');
 			cleanup = installCodeCopyButtons(article, window.__OJ_STATE__.labels);
@@ -53,7 +54,7 @@ function Content({ section, url, scope }: { section: Section; url: string; scope
 			}
 		});
 		return () => { disposed = true; syntax?.dispose(); cleanup?.(); };
-	}, [section.format, section.content, url, scope]);
+	}, [section.format, section.content, url, scope, lanqiao, problemTitle]);
 	return <article className={'luogu-markdown'} ref={root} />;
 }
 
@@ -65,7 +66,7 @@ export default function Problem({ state }: { state: PanelState }) {
 	const problemContent = data.bodies.find(body => body.locale === choosedLanguage) ?? data.bodies[0];
 	const content = (notes: boolean) => problemContent?.sections.filter(section => section.kind !== 'sample-explanation' && (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
 		{section.heading && <h2>{section.heading}</h2>}
-		<Content section={section} url={data.ref.url} scope={scope} />
+		<Content section={section} url={data.ref.url} scope={scope} lanqiao={data.ref.site === 'lanqiao'} problemTitle={!notes && index === 0 ? data.title : undefined} />
 	</div>);
 	return <>
 		<header>
@@ -81,7 +82,7 @@ export default function Problem({ state }: { state: PanelState }) {
 				</div>
 			</div>
 			<div className={'problem-limits'}>
-				{data.limits.map(limit => <div className={'problem-limit'} key={limit.label}><div>{state.labels[limit.label] ?? limit.label}</div><div>{limit.value}</div></div>)}
+				{data.limits.map(limit => <div className={'problem-limit'} key={limit.label}><div>{state.labels[limit.label] ?? limit.label}</div><div>{data.ref.site === 'lanqiao' ? resourceText(limit.value, limit.label === 'Time Limit') : limit.value}</div></div>)}
 				{data.difficulty && <div className={'problem-difficulty'}><div>{state.labels.difficulty}</div><div><Tag {...data.difficulty} /></div></div>}
 				{!!data.tags?.length && <div className={'problem-tags haveTag'} tabIndex={0} aria-label={state.labels.tags}>
 					<div>{state.labels.tags}</div>

@@ -65,6 +65,39 @@ suite('Lanqiao public practice protocol', () => {
 		await assert.rejects(parseLanqiaoLanguages(source.replace('C++（g++17）', 'Python3')));
 		await assert.rejects(parseLanqiaoLanguages(source.replace('C++（g++17）', 'C++（g++23）')));
 	});
+	test('official problem difficulty and tags reach shared metadata without changing the statement', () => {
+		const value = parseLanqiaoProblem(problem, { ...data, difficulty: 20, difficulty_level: 8, tags: ['基础', 'C++'] }, { family: 'cpp' });
+		assert.deepStrictEqual(value.difficulty, { label: '中 LV.8', color: '#faac2b' });
+		assert.deepStrictEqual(value.tags, [{ label: '基础' }, { label: 'C++' }]);
+		assert.strictEqual(value.bodies[0].sections[0].content, parseLanqiaoProblem(problem, data, { family: 'cpp' }).bodies[0].sections[0].content);
+	});
+	test('difficulty uses official levels first and the official coarse fallback without inventing a level', () => {
+		for (const [difficulty_level, difficulty, expected] of [
+			[1, 10, { label: '易 LV.1', color: '#32b03f' }],
+			[5, 20, { label: '易 LV.5', color: '#32b03f' }],
+			[6, 30, { label: '中 LV.6', color: '#faac2b' }],
+			[10, 30, { label: '中 LV.10', color: '#faac2b' }],
+			[15, 30, { label: '难 LV.15', color: '#f64600' }],
+			[0, 20, { label: '中', color: '#faac2b' }],
+			[undefined, 30, { label: '易', color: '#32b03f' }],
+			[undefined, 10, { label: '难', color: '#f64600' }]
+		] as const) {
+			assert.deepStrictEqual(parseLanqiaoProblem(problem, { ...data, difficulty_level, difficulty }, { family: 'cpp' }).difficulty, expected);
+		}
+		for (const metadata of [{}, { difficulty_level: null, difficulty: null, tags: null }, { difficulty_level: '8', difficulty: '20', tags: [42] }, { difficulty_level: -1, difficulty: Infinity, tags: ['x'.repeat(201)] }, { difficulty_level: 16, difficulty: 20, tags: Array(257).fill('tag') }, { difficulty: 40 }, { difficulty: 0, difficulty_level: 0 }]) {
+			const value = parseLanqiaoProblem(problem, { ...data, ...metadata }, { family: 'cpp' });
+			assert.strictEqual(value.difficulty, undefined);
+			assert.strictEqual(value.tags, undefined);
+			assert.strictEqual(value.title, 'A+B', 'unavailable optional metadata cannot break the problem');
+		}
+	});
+	test('official source length counts returned UTF-8 bytes including CRLF without inventing missing content', () => {
+		const raw = { submission_id: id, problem_id: 254, language: 'cpp', status: 'AC' };
+		assert.strictEqual(parseLanqiaoRecord(ref, raw).codeLength, undefined);
+		assert.strictEqual(parseLanqiaoRecord(ref, { ...raw, content: '' }).codeLength, '0 B');
+		assert.strictEqual(parseLanqiaoRecord(ref, { ...raw, content: '// 中\r\n' }).codeLength, '8 B');
+		assert.strictEqual(parseLanqiaoRecord(ref, { ...raw, content: '// 😀\n' }).codeLength, '8 B');
+	});
 	test('summary and point projection retain zero, omit hidden data and do not infer failed verdicts', () => {
 		const raw = { submission_id: id, problem_id: 254, language: 'cpp', content: 'int main(){}\r\n', status: 'AC', elapsed_time: 0, memory: 0, pass_sample: '5 / 5', pass_rate: 100, elapsed_minutes: 100 };
 		const value = parseLanqiaoRecord(ref, raw);

@@ -27,14 +27,14 @@ export class RecordPanel implements vscode.Disposable {
 		this.panels.set(ref.url, view); void view.track();
 	}
 	beginEvaluation(value: SubmissionEvaluation, sourceUri: string) {
-		const view = this.create({ kind: 'record', labels: labels(), submission: value, sourceName: this.sourceName(sourceUri, value.problem.nativeId), tracking: true, message: vscode.l10n.t('The official submission record has not been confirmed yet.') });
+		const view = this.create({ kind: 'record', labels: labels(), submission: value, sourceName: this.sourceName(sourceUri, value.problem.nativeId), tracking: true });
 		let settled = false;
 		const adopt = (input: RecordRef) => {
 			const ref = validateRecordRef(input);
 			if (ref.problem.url !== value.problem.url || ref.problem.site !== value.problem.site || ref.problem.nativeId !== value.problem.nativeId) { throw new Error('lanqiao-record-mismatch'); }
 			if (view.closed) { void this.release(ref).catch(() => undefined); return; }
 			view.retry = undefined;
-			view.update({ record: ref, submission: undefined, tracking: true, message: undefined, canRetry: false });
+			view.update({ record: ref, tracking: true, message: undefined, canRetry: false });
 			this.panels.set(ref.url, view);
 			void view.track();
 		};

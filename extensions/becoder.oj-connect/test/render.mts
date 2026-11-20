@@ -740,30 +740,150 @@ try {
 	await page.screenshot({ path: path.join(output, 'nowcoder-record.png'), fullPage: true });
 	const lanqiaoProblem = { site: 'lanqiao', nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
 	const lanqiaoRecord = { problem: lanqiaoProblem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
-	state = { kind: 'record', labels, sourceName: '254.cpp', tracking: true, submission: { problem: lanqiaoProblem, phase: 'preparing', codeLength: '171 B' }, message: '正式提交记录尚未确认。' };
+	// Synthetic statement shaped like the owner's229 screenshot, not a captured website response.
+	const layoutStatement = '迷宫与陷阱\n\n### 题目描述\n\n题目描述\n\n在 $N \\times N$ 的迷宫中寻找出口。\n\n参见[输入](#输入描述)与[定义][format]。\n\n#### 子问题\n\n保留子标题。\n\n### 输入描述\n\n输入描述\n\n两个整数 $N,K$。\n\n### 输出描述\n\n输出描述\n\n输出最少步数。\n\n[format]: https://www.lanqiao.cn/problems/229/learning/\n';
+	for (const width of [320, 520, 700]) {
+		await page.setViewportSize({ width, height: 760 });
+		const typography = [];
+		for (const site of ['luogu', 'lanqiao']) {
+			state = { kind: 'problem', labels, sourceName: '229.cpp', languageId: 'cpp', languages: [{ id: 'cpp', family: 'cpp', label: 'C++（g++17）' }], problem: { ref: site === 'lanqiao' ? { ...lanqiaoProblem, nativeId: '229', url: 'https://www.lanqiao.cn/problems/229/learning/' } : { site: 'luogu', nativeId: 'B2001', url: 'https://www.luogu.com.cn/problem/B2001' }, title: '迷宫与陷阱', interactive: false, limits: [], bodies: [{ locale: 'zh-CN', sections: site === 'lanqiao' ? [{ format: 'markdown', content: layoutStatement }] : [{ heading: '题目描述', format: 'markdown', content: '在 $N \\times N$ 的迷宫中寻找出口。' }] }], samples: [{ input: ' 1 2\n\n', output: '3\n' }] } };
+			await page.goto(url); await page.locator('.katex').first().waitFor();
+			await page.addStyleTag({ content: 'body { --vscode-font-size:16px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
+			const description = page.locator('.problemContent h2').filter({ hasText: /^题目描述$/ });
+			assert.equal(await description.count(), 1, 'the main section uses the common h2 hierarchy');
+			typography.push(await description.evaluate(element => {
+				const style = getComputedStyle(element), rect = element.getBoundingClientRect();
+				return { fontSize: style.fontSize, fontWeight: style.fontWeight, marginTop: style.marginTop, marginBottom: style.marginBottom, x: rect.x };
+			}));
+			if (site === 'lanqiao') {
+				assert.equal(await page.locator('.problemContent').getByText('迷宫与陷阱', { exact: true }).count(), 0, 'the independent leading title is already in the page header');
+				assert.deepEqual(await page.locator('.problemContent h2').allTextContents(), ['题目描述', '输入描述', '输出描述', labels.samples]);
+				assert.equal(await page.locator('.problemContent h2 .heading-anchor').count(), 0, 'main section headings do not reserve a pin slot');
+				assert.equal(await page.locator('.problemContent h3').filter({ hasText: /^子问题$/ }).count(), 0, 'the actual nested h4 is not promoted');
+				assert.equal(await page.locator('.problemContent h4 .heading-anchor').count(), 1, 'real subheadings retain their anchor');
+				assert.equal(await page.locator('.problemContent p').filter({ hasText: /^(题目描述|输入描述|输出描述)$/ }).count(), 0, 'adjacent duplicate pure labels are omitted');
+				await page.evaluate(() => { window.__scrolledTarget = undefined; });
+				await page.getByRole('link', { name: '输入', exact: true }).click();
+				assert.equal(await page.evaluate(() => document.getElementById(window.__scrolledTarget)?.textContent), '输入描述', 'the normalized main heading keeps its fragment target');
+				assert.equal(await page.getByRole('link', { name: '定义', exact: true }).getAttribute('href'), 'https://www.lanqiao.cn/problems/229/learning/', 'cross-section reference definitions survive the single parse scope');
+				assert.equal(await page.locator('.sample-grid pre code').first().textContent(), ' 1 2\n\n');
+				assert.ok(await page.locator('.katex').count() > 0);
+				await page.evaluate(() => window.scrollTo(0, 0));
+				await page.screenshot({ path: path.join(output, `lanqiao-statement-layout-${width}.png`), fullPage: true });
+			}
+			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+		}
+		assert.deepEqual(typography[1], typography[0], 'Lanqiao main headings share Luogu size, weight, margins and left edge');
+	}
+	for (const [locale, localLabels] of [['zh-cn', labels], ['en', englishLabels]]) {
+		for (const width of [320, 480, 520, 700]) {
+			state = { kind: 'problem', labels: localLabels, sourceName: '254.cpp', languageId: 'cpp', languages: [{ id: 'cpp', family: 'cpp', label: 'C++（g++17）' }], problem: { ref: lanqiaoProblem, title: 'A+B Problem', interactive: false, limits: [{ label: 'Time Limit', value: '1 s' }, { label: 'Memory Limit', value: '256 MB' }], difficulty: { label: '中 LV.8', color: '#faac2b' }, tags: [{ label: '基础' }, { label: 'C++' }], bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: 'Compute the sum.' }] }], samples: [] } };
+			await page.setViewportSize({ width, height: 650 }); await page.goto(url); await page.locator('article').waitFor();
+			await page.addStyleTag({ content: 'body { --vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-button-background:#4b83ff;--vscode-button-foreground:white; }' });
+			assert.deepEqual(await page.locator('.problem-limit').allTextContents(), [localLabels['Time Limit'] + '1.00s', localLabels['Memory Limit'] + '256MB']);
+			assert.equal(await page.locator('.problem-difficulty .tag').textContent(), '中 LV.8');
+			assert.deepEqual(await page.locator('.problem-tag-list .tag').allTextContents(), ['基础', 'C++']);
+			assert.equal(await page.locator('.problem-limits').isVisible(), width > 480, 'Lanqiao follows the same metadata breakpoint as Luogu');
+			if (width > 480) {
+				const positions = await page.locator('.problem-limits > div').evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y }; }));
+				assert.equal(positions[0].y, positions[1].y);
+				assert.equal(positions[2].y, positions[3].y);
+				assert.equal(positions[0].x, positions[2].x);
+				assert.equal(positions[1].x, positions[3].x);
+				await page.locator('.problem-tags').focus();
+				await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.problem-tag-list')).opacity) > 0.9);
+				await page.locator('.problem-tags').blur();
+				await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.problem-tag-list')).opacity) < 0.01);
+			}
+			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+			await page.screenshot({ path: path.join(output, `lanqiao-problem-${locale}-${width}.png`), fullPage: true });
+		}
+	}
+	state = { kind: 'record', labels, sourceName: '254.cpp', tracking: true, submission: { problem: lanqiaoProblem, phase: 'preparing', codeLength: '171 B' } };
 	await page.setViewportSize({ width: 520, height: 650 }); await page.goto(url); await page.locator('.record-verdict').first().waitFor();
 	await page.addStyleTag({ content: 'body { --vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif; }' });
 	const updateLanqiao = async () => { await page.evaluate(value => window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: value } })), state); };
+	const assertNaturalRecordFlow = async () => {
+		const unusedHeight = await page.locator('.record-info').evaluate(element => element.getBoundingClientRect().bottom - element.lastElementChild.getBoundingClientRect().bottom);
+		assert.ok(unusedHeight < 1, 'record information ends after the last actual row, without reserved blank rows');
+	};
 	for (const phase of ['preparing', 'sending', 'judging', 'confirming']) {
 		state.submission = { ...state.submission, phase, ...(phase !== 'preparing' ? { language: 'C++（g++17）' } : {}) };
 		await updateLanqiao();
 		const expected = phase === 'judging' ? 'Judging' : labels[phase === 'sending' ? 'submitting' : phase];
 		await page.waitForFunction(text => document.querySelector('.record-verdict')?.textContent === text, expected);
 		assert.equal(await page.locator('.testcase').count(), 0, 'no execution point count means no invented numbered cards');
-		assert.equal(await page.locator('.spinner').count(), 2, 'phase and test results use the shared waiting indicator');
+		assert.equal(await page.locator('.testCaseData').count(), 0, 'no report means no testcase heading, section or anonymous waiting card');
+		assert.equal(await page.locator('hr').count(), 0, 'no empty result section creates a separator');
+		assert.equal(await page.locator('.spinner').count(), 1, 'only the actual overall phase shows a busy indicator');
+		assert.equal(await page.locator('.notice').count(), 0, 'normal verification is not a warning');
 		assert.equal(await page.locator('h1 a').count(), 0, 'pending execution is not a verified record link');
 		assert.equal(await page.getByRole('link', { name: labels.viewSource }).count(), 0, 'pending source is not presented as official source');
+		await assertNaturalRecordFlow();
 		await page.screenshot({ path: path.join(output, 'lanqiao-pending-' + phase + '.png'), fullPage: true });
 	}
-	state.submission = { ...state.submission, groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'Judging', '', '']] }] };
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	assert.equal(await page.locator('.record-verdict .spinner').evaluate(element => getComputedStyle(element).animationName), 'none');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	state.submission = { ...state.submission, groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'AC', '1 ms', '1 kb']] }] };
 	await updateLanqiao(); await page.locator('.testcase').first().waitFor();
-	assert.equal(await page.locator('.testcase .spinner').count(), 1, 'only a real projected running row spins');
+	assert.equal(await page.locator('.testcase .spinner').count(), 0, 'a returned report displays real verdicts without replaying a waiting animation');
+	await assertNaturalRecordFlow();
+	const reportCards = await page.locator('.testcase').allTextContents();
+	const reportNode = await page.locator('.testcase').first().elementHandle();
 	await page.screenshot({ path: path.join(output, 'lanqiao-pending-report.png'), fullPage: true });
-	state = { kind: 'record', labels, sourceName: '254.cpp', record: lanqiaoRecord, tracking: false, snapshot: { ref: lanqiaoRecord, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'AC', '1 ms', '1 kb']] }] } };
+	state.record = lanqiaoRecord;
 	await updateLanqiao(); await page.locator('h1 a').waitFor();
+	assert.deepEqual(await page.locator('.testcase').allTextContents(), reportCards, 'adopting the formal ID cannot clear a real report');
+	assert.equal(await page.locator('.testcase').first().evaluate((element, node) => element === node, reportNode), true, 'formal adoption retains the mounted card');
+	await assertNaturalRecordFlow();
+	assert.equal(await page.locator('.record-verdict').textContent(), labels.confirming);
+	assert.ok((await page.locator('.record-info').textContent()).includes('C++（g++17）'));
+	assert.ok((await page.locator('.record-info').textContent()).includes('171B'));
+	assert.equal(await page.getByRole('link', { name: labels.viewSource }).count(), 0);
+	await page.screenshot({ path: path.join(output, 'lanqiao-adopted-awaiting-result.png'), fullPage: true });
+	state.tracking = false;
+	state.snapshot = { ref: lanqiaoRecord, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched', submittedAt: '2026-11-20T03:28:10Z', source: 'int main() {}', time: '1 ms', memory: '1 kb', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb'], ['2', 'AC', '1 ms', '1 kb']] }] };
+	await updateLanqiao(); await page.locator('h1 a').waitFor();
+	await page.waitForFunction(() => document.querySelector('.record-verdict')?.textContent === 'Accepted');
 	assert.equal(await page.locator('.spinner').count(), 0, 'final result stops the same page animation');
 	assert.equal(await page.locator('.testcase').count(), 2);
+	assert.equal(await page.locator('.testcase').first().evaluate((element, node) => element === node, reportNode), true, 'the first result snapshot updates existing cards');
+	await assertNaturalRecordFlow();
+	assert.ok((await page.locator('.record-info').textContent()).includes('171B'), 'local submitted size survives an omitted official size');
+	assert.ok((await page.locator('.record-info').textContent()).includes('C++（g++17）'), 'selected language survives an omitted official label');
+	assert.equal(await page.getByRole('link', { name: labels.viewSource }).count(), 1);
 	await page.screenshot({ path: path.join(output, 'lanqiao-progress-finished.png'), fullPage: true });
+	for (const [locale, localLabels] of [['zh-cn', labels], ['en', englishLabels]]) {
+		for (const width of [320, 520]) {
+			await page.setViewportSize({ width, height: 650 });
+			state = { kind: 'record', labels: localLabels, sourceName: '254.cpp', tracking: true, submission: { problem: lanqiaoProblem, phase: 'sending', language: 'C++（g++17）', codeLength: '171 B', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }] } };
+			await updateLanqiao(); await page.locator('h1 a').waitFor({ state: 'detached' });
+			const heading = await page.locator('h1').evaluate(element => ({ height: element.getBoundingClientRect().height, line: parseFloat(getComputedStyle(element).lineHeight) }));
+			assert.ok(heading.height <= heading.line + 1, 'a pending title does not reserve space for a future record ID');
+			await assertNaturalRecordFlow();
+			state.record = lanqiaoRecord; state.submission.phase = 'confirming';
+			await updateLanqiao(); await page.locator('h1 a').waitFor();
+			await assertNaturalRecordFlow();
+			const columns = await page.locator('.record-info > div > :last-child').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().x));
+			assert.ok(columns.every(value => value === columns[0]), 'metadata values retain a common left edge');
+			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'narrow metadata and long IDs do not overflow horizontally');
+			state.tracking = false; state.canRetry = true; state.message = 'Official result temporarily unavailable. Continue querying; no code will be resent.';
+			await updateLanqiao(); await page.locator('.notice').waitFor();
+			assert.equal(await page.getByRole('button', { name: localLabels.continueQuery }).count(), 1);
+			assert.equal(await page.locator('.testcase').count(), 1, 'failed result reads retain the known report');
+			assert.equal(await page.locator('.spinner').count(), 0, 'stopped reads do not leave a busy indicator running');
+			await page.screenshot({ path: path.join(output, `lanqiao-result-read-stopped-${locale}-${width}.png`), fullPage: true });
+			state.message = undefined; state.canRetry = false;
+			state.snapshot = { ref: lanqiaoRecord, phase: 'finished', rawStatus: 'WA', sourceVerification: 'matched', language: 'Official C++', codeLength: '180 B', groups: [{ name: 'Test Cases', rows: [['1', 'WA', '3 ms', '2 kb']] }] };
+			await updateLanqiao(); await page.waitForFunction(() => document.querySelector('.record-verdict')?.textContent === 'Wrong Answer');
+			assert.ok((await page.locator('.record-info').textContent()).includes('180B'), 'official size takes precedence over submitted metadata');
+			assert.ok(!(await page.locator('.record-info').textContent()).includes('171B'));
+			assert.ok((await page.locator('.record-info').textContent()).includes('Official C++'));
+			assert.ok((await page.locator('.testcase').textContent()).includes('WA'), 'official groups replace the projected report when present');
+			assert.equal(await page.locator('.notice').count(), 0);
+		}
+	}
 	for (const [name, snapshot] of [
 		['accepted', { phase: 'finished', rawStatus: 'AC', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }], time: '0 ms', memory: '0 kb' }],
 		['summary-only', { phase: 'finished', rawStatus: 'AC', testCaseSummary: { passed: 5, total: 5 } }],

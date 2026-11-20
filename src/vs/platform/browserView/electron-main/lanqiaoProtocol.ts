@@ -81,6 +81,21 @@ function resource(raw: unknown, unit: string): string | undefined {
 	if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) { throw new Error('lanqiao-invalid-resource'); }
 	return String(raw) + ' ' + unit;
 }
+function problemMetadata(data: Record<string, unknown>): Pick<ProblemDocument, 'difficulty' | 'tags'> {
+	// Lanqiao's DifficultyLevelTag prefers levels 1-15, then falls back to 10/20/30.
+	const rawLevel = data.difficulty_level;
+	const originalLevel = typeof rawLevel === 'number' && Number.isInteger(rawLevel) && rawLevel >= 1 && rawLevel <= 15 ? rawLevel : undefined;
+	const coarse = typeof data.difficulty === 'number' && [10, 20, 30].includes(data.difficulty) ? data.difficulty : undefined;
+	const level = originalLevel ?? ((rawLevel === undefined || rawLevel === null || rawLevel === 0) && coarse !== undefined ? Math.abs(4 * (coarse / 10 - 4)) : undefined);
+	const difficulty = level === undefined ? undefined : {
+		// allow-any-unicode-next-line
+		label: (level <= 5 ? '易' : level <= 10 ? '中' : '难') + (originalLevel === undefined ? '' : ' LV.' + originalLevel),
+		color: level <= 5 ? '#32b03f' : level <= 10 ? '#faac2b' : '#f64600'
+	};
+	// Optional unfamiliar metadata must not prevent reading the actual statement.
+	const tags = Array.isArray(data.tags) && data.tags.length <= 256 && data.tags.every(tag => typeof tag === 'string' && tag.trim() && tag.length <= 200) ? data.tags.map(label => ({ label })) : undefined;
+	return { ...(difficulty ? { difficulty } : {}), ...(tags?.length ? { tags } : {}) };
+}
 export function parseLanqiaoProblem(problem: ProblemRef, raw: unknown, options: ProblemReadOptions): ProblemDocument {
 	lanqiaoQuestion(problem, raw);
 	if (!options || !['c', 'cpp'].includes(options.family)) { throw new Error('lanqiao-source-family'); }
@@ -95,7 +110,7 @@ export function parseLanqiaoProblem(problem: ProblemRef, raw: unknown, options: 
 		if (memory !== undefined) { limits.push({ label: 'Memory Limit', value: memory }); }
 	}
 	const sample = sampleSections(stem);
-	return { ref: problem, title, bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: sample.body }, ...(sample.notes ? [{ format: 'markdown' as const, kind: 'notes' as const, content: sample.notes }] : [])] }], samples: sample.samples, limits, interactive: false };
+	return { ref: problem, title, bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: sample.body }, ...(sample.notes ? [{ format: 'markdown' as const, kind: 'notes' as const, content: sample.notes }] : [])] }], samples: sample.samples, limits, ...problemMetadata(data), interactive: false };
 }
 
 async function syntax(source: string): Promise<AnyNode[]> {
@@ -184,7 +199,7 @@ export function parseLanqiaoRecord(record: RecordRef, raw: unknown): RecordSnaps
 	return {
 		// allow-any-unicode-next-line
 		ref: record, phase, rawStatus, language: data.language === 'cpp' ? 'C++（g++17）' : 'C（gcc8.3.0）', sourceVerification: source === undefined ? 'unavailable' : 'not-checked',
-		...(source === undefined ? {} : { source }), ...(time === undefined ? {} : { time }), ...(memory === undefined ? {} : { memory }),
+		...(source === undefined ? {} : { source, codeLength: Buffer.byteLength(source, 'utf8') + ' B' }), ...(time === undefined ? {} : { time }), ...(memory === undefined ? {} : { memory }),
 		...(typeof data.problem_name === 'string' ? { problemTitle: text(data.problem_name, 2048) } : {}),
 		...(typeof data.created_at === 'string' ? { submittedAt: text(data.created_at, 200) } : {}),
 		...(summary && Number(summary[2]) > 0 && Number(summary[1]) <= Number(summary[2]) && Number(summary[2]) <= 1000000 ? { testCaseSummary: { passed: Number(summary[1]), total: Number(summary[2]) } } : {}),

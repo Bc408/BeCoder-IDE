@@ -12,6 +12,28 @@
  *--------------------------------------------------------------------------------------------*/
 
 import React from 'react';
+
+// Same thresholds and precision as vscode-luogu 4.20.0 stringUtils.ts.
+// Preserve decimal/unspecified KB/MB units instead of relabelling them KiB/MiB.
+export function resourceText(value: string | undefined, time = false): string | undefined {
+	const match = value && /^(\d+(?:\.\d+)?)\s*([a-z]+)$/i.exec(value);
+	if (!match) { return value; }
+	const scales: Record<string, number> = time ? { ms: 1, s: 1000, sec: 1000, min: 60000, h: 3600000, d: 86400000 } : { B: 1, KiB: 1024, MiB: 1048576, GiB: 1073741824 };
+	const scale = scales[match[2]], number = Number(match[1]) * scale;
+	if (scale === undefined || !Number.isFinite(number)) { return match[1] + match[2]; }
+	if (time) {
+		if (number < 1000) { return `${number}ms`; }
+		if (number < 60000) { return `${(number / 1000).toFixed(2)}s`; }
+		if (number < 3600000) { return `${(number / 60000).toFixed(2)}min`; }
+		if (number < 86400000) { return `${(number / 3600000).toFixed(2)}h`; }
+		return `${(number / 86400000).toFixed(2)}d`;
+	}
+	if (number < 1024) { return `${number}B`; }
+	if (number < 1048576) { return `${(number / 1024).toFixed(2)}KiB`; }
+	if (number < 1073741824) { return `${(number / 1048576).toFixed(2)}MiB`; }
+	return `${(number / 1073741824).toFixed(2)}GiB`;
+}
+
 export function Tag({ label, color }: { label: string; color?: string }) {
 	return <span className={'tag'} style={{ backgroundColor: color ?? '#7f7f7f' }}>{label}</span>;
 }

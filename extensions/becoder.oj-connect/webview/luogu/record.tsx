@@ -19,7 +19,7 @@ import type { SiteId } from '../../src/domain';
 import send from '../request';
 import CopyablePre from './copyablePre';
 import Time from './time';
-import { Spinner } from './presentation';
+import { Spinner, resourceText } from './presentation';
 
 // RecordStatus copied from vscode-luogu v4.20.0 src/utils/shared.ts (987ca974).
 // Copyright (c) 2018 引领天下. MIT License; see ThirdPartyNotices.txt.
@@ -130,27 +130,6 @@ function statusLabel(status: string): string | undefined {
 	return Object.values(RecordStatus).some(value => value.name === name) || ['Compiling', 'Internal Error', 'Query Limit Exceeded', 'Presentation Error', 'Floating Point Exception', 'Segmentation Fault', 'Code Length Exceeded', 'Nonzero Exit Code'].includes(name) ? name : undefined;
 }
 
-// Same thresholds and precision as vscode-luogu 4.20.0 stringUtils.ts.
-// Keep decimal/unspecified KB/MB units as reported instead of relabelling them KiB/MiB.
-function resourceText(value: string | undefined, time = false): string | undefined {
-	const match = value && /^(\d+(?:\.\d+)?)\s*([a-z]+)$/i.exec(value);
-	if (!match) { return value; }
-	const scales: Record<string, number> = time ? { ms: 1, s: 1000, sec: 1000, min: 60000, h: 3600000, d: 86400000 } : { B: 1, KiB: 1024, MiB: 1048576, GiB: 1073741824 };
-	const scale = scales[match[2]], number = Number(match[1]) * scale;
-	if (scale === undefined || !Number.isFinite(number)) { return match[1] + match[2]; }
-	if (time) {
-		if (number < 1000) { return `${number}ms`; }
-		if (number < 60000) { return `${(number / 1000).toFixed(2)}s`; }
-		if (number < 3600000) { return `${(number / 60000).toFixed(2)}min`; }
-		if (number < 86400000) { return `${(number / 3600000).toFixed(2)}h`; }
-		return `${(number / 86400000).toFixed(2)}d`;
-	}
-	if (number < 1024) { return `${number}B`; }
-	if (number < 1048576) { return `${(number / 1024).toFixed(2)}KiB`; }
-	if (number < 1073741824) { return `${(number / 1048576).toFixed(2)}MiB`; }
-	return `${(number / 1073741824).toFixed(2)}GiB`;
-}
-
 // vscode-luogu 4.20.0 shared.ts getScoreColor.
 function scoreColor(score: number): string {
 	return score < 30 ? 'rgb(231, 76, 60)' : score < 80 ? 'rgb(243, 156, 17)' : 'rgb(82, 196, 26)';
@@ -158,16 +137,21 @@ function scoreColor(score: number): string {
 
 // Cropped from record/app.tsx: information rows, subtasks and original testcase cards/hover details.
 export default function Record({ state }: { state: PanelState }) {
-	if (state.submission && !state.record) { return <PendingSubmission state={state} />; }
-	const record = state.record!, snapshot = state.snapshot, labels = state.labels;
-	const problemName = record.problem.site === 'nowcoder' ? record.problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : record.problem.nativeId;
+	const record = state.record, submission = state.submission, snapshot = state.snapshot, labels = state.labels;
+	const problem = record?.problem ?? submission!.problem;
+	const problemName = problem.site === 'nowcoder' ? problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : problem.nativeId;
 	const pending = !!state.tracking && (!snapshot || snapshot.phase === 'queued' || snapshot.phase === 'judging');
-	const progress = snapshot?.phase === 'judging' && record.problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
-	const codeforcesProgress = record.problem.site === 'codeforces' && snapshot?.phase === 'judging' && /^running on (?:test|pretest) \d+$/i.test(snapshot.rawStatus) ? snapshot.rawStatus : undefined;
-	const verdictTitle = snapshot && ([...new Set([statusLabel(snapshot.rawStatus), record.problem.site === 'codeforces' ? snapshot.rawStatus : undefined].filter(Boolean))].join(' · ') || undefined);
+	const progress = snapshot?.phase === 'judging' && problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
+	const codeforcesProgress = problem.site === 'codeforces' && snapshot?.phase === 'judging' && /^running on (?:test|pretest) \d+$/i.test(snapshot.rawStatus) ? snapshot.rawStatus : undefined;
+	const verdictTitle = snapshot && ([...new Set([statusLabel(snapshot.rawStatus), problem.site === 'codeforces' ? snapshot.rawStatus : undefined].filter(Boolean))].join(' · ') || undefined);
+	const submissionStatus = !state.tracking ? labels.resultUnavailable : record || submission?.phase === 'confirming' ? labels.confirming : submission?.phase === 'preparing' ? labels.preparing : submission?.phase === 'sending' ? labels.submitting : 'Judging';
+	const verdict = snapshot ? statusName(snapshot.rawStatus) : submission ? submissionStatus : state.tracking ? labels.tracking : labels.resultUnavailable;
+	// The submitted metadata and real report stay local to this view while official fields take over.
+	const language = snapshot?.language ?? submission?.language, codeLength = snapshot?.codeLength ?? submission?.codeLength;
+	const reportedGroups = snapshot?.groups ?? submission?.groups;
 	const total = progress && Number(progress[1]) <= Number(progress[2]) && Number(progress[2]) <= 1024 ? Number(progress[2]) : 0;
 	// These are waiting positions from the site's reported total, not testcase names or verdicts.
-	let groups = snapshot?.groups?.length ? snapshot.groups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
+	let groups = reportedGroups?.length ? reportedGroups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
 	const currentTest = codeforcesProgress ? Number(/\d+$/.exec(codeforcesProgress)?.[0]) : 0;
 	if (Number.isSafeInteger(currentTest) && currentTest > 0 && currentTest <= 1024 && !groups.some(group => group.rows.some(row => row[0] === String(currentTest)))) {
 		// CF reports the current index, not a total or verdicts for the preceding tests.
@@ -175,17 +159,17 @@ export default function Record({ state }: { state: PanelState }) {
 		groups = groups.length ? groups.map((group, index) => index === 0 ? { ...group, rows: [...group.rows, current] } : group) : [{ name: 'Test Cases', rows: [current] }];
 	}
 	return <>
-		<h1><a href={record.url}>{record.problem.site === 'luogu' ? 'R' : '#'}{record.id}</a> {labels.record}</h1>
+		<h1 className={submission ? 'record-evaluation-title' : undefined}>{record && <><a href={record.url}>{problem.site === 'luogu' ? 'R' : '#'}{record.id}</a> </>}{labels.record}</h1>
 		<div className={'record-info'}>
-			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={record.problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
-			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={verdictTitle} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={labels.tracking} />}{snapshot ? statusName(snapshot.rawStatus) : state.tracking ? labels.tracking : labels.resultUnavailable}{progress && <span>{snapshot!.rawStatus}</span>}{codeforcesProgress && <span className={'record-progress'}>{codeforcesProgress}</span>}</span></div>
+			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
+			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={verdictTitle} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={verdict} />}{verdict}{progress && <span>{snapshot!.rawStatus}</span>}{codeforcesProgress && <span className={'record-progress'}>{codeforcesProgress}</span>}</span></div>
 			{snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
-			{snapshot?.language !== undefined && <div><span>{labels.language}</span><span>{snapshot.language}</span></div>}
-			{snapshot?.codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{resourceText(snapshot.codeLength)}</span></div>}
-			{record.problem.site === 'luogu' && snapshot?.owner !== undefined && <div><span>{labels.owner}</span><span>{snapshot.owner}</span></div>}
+			{(language !== undefined || submission) && <div><span>{labels.language}</span><span>{language ?? '—'}</span></div>}
+			{codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{resourceText(codeLength)}</span></div>}
+			{problem.site === 'luogu' && snapshot?.owner !== undefined && <div><span>{labels.owner}</span><span>{snapshot.owner}</span></div>}
 			{snapshot?.phase === 'finished' && (snapshot.time !== undefined || snapshot.memory !== undefined) && <div><span>{labels.resources}</span><span>{[resourceText(snapshot.time, true), resourceText(snapshot.memory)].filter(Boolean).join(' / ')}</span></div>}
-			{snapshot?.source !== undefined && <div><span>{labels.source}</span><a href={'#'} title={record.problem.site === 'nowcoder' ? labels.sentSource : labels.officialSource} onClick={event => { event.preventDefault(); event.stopPropagation(); void send({ action: 'viewSource' }).catch(() => undefined); }}>{labels.viewSource}</a></div>}
+			{snapshot?.source !== undefined && <div><span>{labels.source}</span><a href={'#'} title={problem.site === 'nowcoder' ? labels.sentSource : labels.officialSource} onClick={event => { event.preventDefault(); event.stopPropagation(); void send({ action: 'viewSource' }).catch(() => undefined); }}>{labels.viewSource}</a></div>}
 		</div>
 		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
 		{snapshot?.sourceVerification === 'mismatch' && <p className={'notice'}>{labels.verification_mismatch}</p>}
@@ -194,28 +178,11 @@ export default function Record({ state }: { state: PanelState }) {
 				{snapshot?.testCaseSummary && <p><span>{labels.passedTests}</span>{' '}{snapshot.testCaseSummary.passed} / {snapshot.testCaseSummary.total}</p>}
 			<div>
 				{groups.map((subtask, index) => <div key={index}>{!(groups.length === 1 && subtask.name === 'Test Cases') && <h3>{subtask.name}</h3>}<div className={'testcase-grid'}>
-					{subtask.rows.map((testcase, index) => <TestCase key={index} site={record.problem.site} animate={!!state.tracking && (snapshot?.phase === 'judging' || snapshot?.phase === 'queued')}>{testcase}</TestCase>)}
+					{subtask.rows.map((testcase, index) => <TestCase key={index} site={problem.site} animate={pending}>{testcase}</TestCase>)}
 				</div></div>)}
 			</div></div>
 		</>}
 		{(snapshot?.compileMessage || snapshot?.compileSucceeded !== undefined) && <><hr /><div><h2>{labels.compiler}</h2>{snapshot.compileSucceeded !== undefined && <p>{snapshot.compileSucceeded ? labels.compileSucceeded : labels.compileFailed}</p>}{snapshot.compileMessage ? <CopyablePre><code>{snapshot.compileMessage}</code></CopyablePre> : snapshot.compileSucceeded === false && <p>{labels.compileUnavailable}</p>}</div></>}
-	</>;
-}
-function PendingSubmission({ state }: { state: PanelState }) {
-	const submission = state.submission!, labels = state.labels;
-	const status = !state.tracking ? labels.resultUnavailable : submission.phase === 'preparing' ? labels.preparing : submission.phase === 'sending' ? labels.submitting : submission.phase === 'confirming' ? labels.confirming : 'Judging';
-	return <>
-		<h1>{labels.record}</h1>
-		<div className={'record-info'}>
-			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={submission.problem.url}>{submission.problem.nativeId}</a></div>
-			<div><span>{labels.verdict}</span><span className={'record-verdict'} style={{ color: RecordStatus[1].color, fontWeight: 'bold' }}>{state.tracking && <Spinner size={16} label={status} />}{status}</span></div>
-			{submission.language !== undefined && <div><span>{labels.language}</span><span>{submission.language}</span></div>}
-			<div><span>{labels.codeLength}</span><span>{resourceText(submission.codeLength)}</span></div>
-		</div>
-		{state.message && <p role={'status'} className={'notice'}>{state.message} {state.canRetry && <VSCodeButton onClick={() => { void send({ action: 'continueQuery' }).catch(() => undefined); }}>{labels.continueQuery}</VSCodeButton>}</p>}
-		<hr /><div className={'testCaseData'}><h2>{labels.testCases}</h2>
-			{submission.groups?.length ? <div>{submission.groups.map((group, index) => <div key={index}><div className={'testcase-grid'}>{group.rows.map((row, index) => <TestCase key={index} site={submission.problem.site} animate={!!state.tracking}>{row}</TestCase>)}</div></div>)}</div> : state.tracking && <p className={'record-verdict'}><Spinner label={labels.waitingTests} />{labels.waitingTests}</p>}
-		</div>
 	</>;
 }
 function TestCase({ children: data, animate, site }: { children: readonly string[]; animate: boolean; site: SiteId }) {

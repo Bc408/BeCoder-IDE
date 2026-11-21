@@ -13,7 +13,7 @@ const { buildSync } = require('../extensions/becoder.oj-connect/node_modules/esb
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.join(root, 'tmp/release-2.1.0-audit/native-browser');
 mkdirSync(output, { recursive: true });
-const names = ['browserViewFavicon.test', 'browserViewEmulator.test', 'browserSessionTrust.test', 'browserSessionPermissions.integrationTest', 'browserAppearance.integrationTest', 'ojStatementParser.test', 'ojStatementService.test', 'ojStatementTransport.test'];
+const names = ['browserViewFavicon.test', 'browserViewEmulator.test', 'browserSessionTrust.test', 'browserSessionPermissions.integrationTest', 'browserAppearance.integrationTest', 'browserPopup.integrationTest', 'ojStatementParser.test', 'ojStatementService.test', 'ojStatementTransport.test'];
 for (const name of names) {
 	buildSync({ entryPoints: [path.join(root, 'src/vs/platform/browserView/test/electron-main/' + name + '.ts')], tsconfig: path.join(root, 'src/tsconfig.json'), bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: path.join(output, name + '.cjs') });
 }

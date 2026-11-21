@@ -1223,7 +1223,9 @@ export class BrowserViewMainService extends Disposable implements IBrowserViewMa
 			(url, electronOptions, openOptions) => {
 				const child = this.createBrowserView(generateUuid(), owner, browserSession, electronOptions);
 
-				if (url) {
+				// Electron creates the initial blank document. Loading it again can cancel
+				// a navigation the opener starts on the returned window.
+				if (url && url !== 'about:blank') {
 					void child.loadURL(url).catch(() => { });
 				}
 

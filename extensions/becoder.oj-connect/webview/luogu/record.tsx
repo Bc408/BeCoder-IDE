@@ -124,6 +124,14 @@ function statusName(status: string): string {
 	return Object.values(RecordStatus).find(value => value.shortName.toLowerCase() === normalized || value.name.toLowerCase() === normalized)?.name ?? aliases[normalized] ?? officialName ?? (/^(?:\d+\s*\/\s*\d+|running on (?:test|pretest)\s+\d+)/i.test(status) ? 'Judging' : status);
 }
 
+function acmStatusName(status: string): string {
+	if (/^running on (?:test|pretest)\s+\d+/i.test(status.trim())) { return 'Judging'; }
+	const overall = status.trim().replace(/\s+on (?:test|pretest) \d+.*$/i, '');
+	if (/^partial/i.test(overall)) { return 'Partial'; }
+	if (/^idleness limit exceeded$/i.test(overall)) { return 'Idleness Limit Exceeded'; }
+	return statusName(overall);
+}
+
 // Judge terminology stays English, like Luogu checker details, regardless of the UI locale.
 function statusLabel(status: string): string | undefined {
 	const name = statusName(status);
@@ -138,18 +146,19 @@ function scoreColor(score: number): string {
 // Cropped from record/app.tsx: information rows, subtasks and original testcase cards/hover details.
 export default function Record({ state }: { state: PanelState }) {
 	const record = state.record, submission = state.submission, snapshot = state.snapshot, labels = state.labels;
+	const acm = state.acmMode === true;
 	const problem = record?.problem ?? submission!.problem;
 	const problemName = problem.site === 'nowcoder' ? problem.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : problem.nativeId;
 	const pending = !!state.tracking && (!snapshot || snapshot.phase === 'queued' || snapshot.phase === 'judging');
-	const progress = snapshot?.phase === 'judging' && problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
-	const codeforcesProgress = problem.site === 'codeforces' && snapshot?.phase === 'judging' && /^running on (?:test|pretest) \d+$/i.test(snapshot.rawStatus) ? snapshot.rawStatus : undefined;
-	const verdictTitle = snapshot && ([...new Set([statusLabel(snapshot.rawStatus), problem.site === 'codeforces' ? snapshot.rawStatus : undefined].filter(Boolean))].join(' · ') || undefined);
+	const progress = !acm && snapshot?.phase === 'judging' && problem.site === 'atcoder' ? /^(\d+)\s*\/\s*(\d+)(?:\s.*)?$/.exec(snapshot.rawStatus) : null;
+	const codeforcesProgress = !acm && problem.site === 'codeforces' && snapshot?.phase === 'judging' && /^running on (?:test|pretest) \d+$/i.test(snapshot.rawStatus) ? snapshot.rawStatus : undefined;
 	const submissionStatus = !state.tracking ? labels.resultUnavailable : record || submission?.phase === 'confirming' ? labels.confirming : submission?.phase === 'preparing' ? labels.preparing : submission?.phase === 'sending' ? labels.submitting : 'Judging';
-	const verdict = snapshot ? statusName(snapshot.rawStatus) : submission ? submissionStatus : state.tracking ? labels.tracking : labels.resultUnavailable;
+	const verdict = snapshot ? acm ? acmStatusName(snapshot.rawStatus) : statusName(snapshot.rawStatus) : submission ? submissionStatus : state.tracking ? labels.tracking : labels.resultUnavailable;
+	const verdictTitle = snapshot && (acm ? verdict : [...new Set([statusLabel(snapshot.rawStatus), problem.site === 'codeforces' ? snapshot.rawStatus : undefined].filter(Boolean))].join(' · ') || undefined);
 	// The submitted metadata and real report stay local to this view while official fields take over.
 	const language = snapshot?.language ?? submission?.language, codeLength = snapshot?.codeLength ?? submission?.codeLength;
-	const reportedGroups = snapshot?.groups ?? submission?.groups;
-	const summary = problem.site === 'lanqiao' ? undefined : snapshot?.testCaseSummary;
+	const reportedGroups = acm ? undefined : snapshot?.groups ?? submission?.groups;
+	const summary = acm || problem.site === 'lanqiao' ? undefined : snapshot?.testCaseSummary;
 	const total = progress && Number(progress[1]) <= Number(progress[2]) && Number(progress[2]) <= 1024 ? Number(progress[2]) : 0;
 	// These are waiting positions from the site's reported total, not testcase names or verdicts.
 	let groups = reportedGroups?.length ? reportedGroups : total > 0 ? [{ name: 'Test Cases', rows: Array.from({ length: total }, (_, index) => [String(index + 1), 'Judging']) }] : [];
@@ -162,9 +171,9 @@ export default function Record({ state }: { state: PanelState }) {
 	return <>
 		<h1 className={submission ? 'record-evaluation-title' : undefined}>{record && <><a href={record.url}>{problem.site === 'luogu' ? 'R' : '#'}{record.id}</a> </>}{labels.record}</h1>
 		<div className={'record-info'}>
-			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={problem.url}><span style={snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
-			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={verdictTitle} style={{ color: statusColor(snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={verdict} />}{verdict}{progress && <span>{snapshot!.rawStatus}</span>}{codeforcesProgress && <span className={'record-progress'}>{codeforcesProgress}</span>}</span></div>
-			{snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
+			<div><span>{labels.problem}</span><a className={'problemNameWithDifficulty'} href={problem.url}><span style={!acm && snapshot?.problemDifficulty?.color ? { color: snapshot.problemDifficulty.color } : undefined}>{problemName}</span>{snapshot?.problemTitle && <> {snapshot.problemTitle}</>}</a></div>
+			<div><span>{labels.verdict}</span><span className={'record-verdict'} title={verdictTitle} style={{ color: statusColor(acm ? verdict : snapshot?.rawStatus ?? 'WJ', true), fontWeight: 'bold' }}>{pending && <Spinner size={16} label={verdict} />}{verdict}{progress && <span>{snapshot!.rawStatus}</span>}{codeforcesProgress && <span className={'record-progress'}>{codeforcesProgress}</span>}</span></div>
+			{!acm && snapshot?.score !== undefined && snapshot.phase === 'finished' && <div><span>{labels.score}</span><span style={{ fontWeight: 'bold', color: scoreColor(Number(snapshot.score)) }}>{snapshot.score}</span></div>}
 			{snapshot?.submittedAt !== undefined && <div><span>{labels.submittedAt}</span><span><Time value={snapshot.submittedAt} /></span></div>}
 			{(language !== undefined || submission) && <div><span>{labels.language}</span><span>{language ?? '—'}</span></div>}
 			{codeLength !== undefined && <div><span>{labels.codeLength}</span><span>{resourceText(codeLength)}</span></div>}
@@ -183,7 +192,7 @@ export default function Record({ state }: { state: PanelState }) {
 				</div></div>)}
 			</div></div>
 		</>}
-		{(snapshot?.compileMessage || snapshot?.compileSucceeded !== undefined) && <><hr /><div><h2>{labels.compiler}</h2>{snapshot.compileSucceeded !== undefined && <p>{snapshot.compileSucceeded ? labels.compileSucceeded : labels.compileFailed}</p>}{snapshot.compileMessage ? <CopyablePre><code>{snapshot.compileMessage}</code></CopyablePre> : snapshot.compileSucceeded === false && <p>{labels.compileUnavailable}</p>}</div></>}
+		{!acm && (snapshot?.compileMessage || snapshot?.compileSucceeded !== undefined) && <><hr /><div><h2>{labels.compiler}</h2>{snapshot.compileSucceeded !== undefined && <p>{snapshot.compileSucceeded ? labels.compileSucceeded : labels.compileFailed}</p>}{snapshot.compileMessage ? <CopyablePre><code>{snapshot.compileMessage}</code></CopyablePre> : snapshot.compileSucceeded === false && <p>{labels.compileUnavailable}</p>}</div></>}
 	</>;
 }
 function TestCase({ children: data, animate, site }: { children: readonly string[]; animate: boolean; site: SiteId }) {

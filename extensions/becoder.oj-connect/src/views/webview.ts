@@ -40,7 +40,9 @@ export class Panel implements vscode.Disposable {
 		const resources = vscode.Uri.joinPath(context.extensionUri, 'dist');
 		const sourceColumn = vscode.window.activeTextEditor?.viewColumn;
 		const side = sourceColumn === undefined ? undefined : vscode.window.tabGroups?.all.filter(group => group.viewColumn > sourceColumn).sort((a, b) => a.viewColumn - b.viewColumn)[0]?.viewColumn;
-		const location = vscode.workspace.getConfiguration('becoder.ojConnect').get<string>('panelLocation');
+		const configuration = vscode.workspace.getConfiguration('becoder.ojConnect');
+		state.acmMode = configuration.get<boolean>('acmMode', false) === true;
+		const location = configuration.get<string>('panelLocation');
 		const columns: Record<string, vscode.ViewColumn> = { active: vscode.ViewColumn.Active, beside: vscode.ViewColumn.Beside, one: vscode.ViewColumn.One, two: vscode.ViewColumn.Two, three: vscode.ViewColumn.Three };
 		const viewColumn = location && Object.hasOwn(columns, location) ? columns[location] : side ?? vscode.ViewColumn.Beside;
 		this.panel = vscode.window.createWebviewPanel('becoder.ojConnect.' + state.kind, state.kind === 'problem' ? state.problem!.title : state.record ? '#' + state.record.id : state.sourceName, { viewColumn, preserveFocus: false }, { enableScripts: true, localResourceRoots: [resources] });
@@ -56,6 +58,8 @@ export class Panel implements vscode.Disposable {
 			void operation.then(data => respond(undefined, data), error => {
 				const message = userError(error); void vscode.window.showErrorMessage(vscode.l10n.t('OJ Connect: {0}', message)); respond(message);
 			});
+		}), vscode.workspace.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration('becoder.ojConnect.acmMode')) { this.update({ acmMode: vscode.workspace.getConfiguration('becoder.ojConnect').get<boolean>('acmMode', false) === true }); }
 		}), this.panel.onDidDispose(() => { this.closed = true; onClose(); this.subscriptions.splice(0).forEach(value => value.dispose()); }));
 	}
 	update(value: Partial<PanelState>): void {

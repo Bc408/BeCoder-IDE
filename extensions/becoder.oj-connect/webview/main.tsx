@@ -28,13 +28,14 @@ const navigateLink = (event: MouseEvent) => {
 root.addEventListener('click', navigateLink);
 root.addEventListener('auxclick', navigateLink);
 function App() {
-	const [state, setState] = useState(window.__OJ_STATE__);
-	root.className = 'oj-' + state.kind;
+	// Recreated Webviews may contain an old bootstrap snapshot. Wait for current host settings.
+	const [state, setState] = useState<PanelState>();
+	root.className = 'oj-' + (state?.kind ?? window.__OJ_STATE__.kind);
 	useEffect(() => {
-		const listener = (event: MessageEvent<{ type: string; state: PanelState }>) => { if (event.data?.type === 'state') { setState(event.data.state); } };
+		const listener = (event: MessageEvent<{ type: string; state: PanelState }>) => { if (event.data?.type === 'state') { window.__OJ_STATE__ = event.data.state; setState(event.data.state); } };
 		window.addEventListener('message', listener); vscode.postMessage({ action: 'ready' });
 		return () => window.removeEventListener('message', listener);
 	}, []);
-	return state.kind === 'problem' ? <Problem state={state} /> : <Record state={state} />;
+	return state ? state.kind === 'problem' ? <Problem state={state} /> : <Record state={state} /> : null;
 }
 createRoot(root).render(<App />);

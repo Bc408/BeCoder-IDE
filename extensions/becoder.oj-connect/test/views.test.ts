@@ -359,7 +359,7 @@ test('a reconstructed webview receives the latest host state after ready', async
 	const nativePanels: { title: string }[] = [];
 	const mock = {
 		l10n: { t: (value: string) => value }, ViewColumn: { Beside: -2, Active: -1, One: 1, Two: 2, Three: 3 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') },
-		workspace: { getConfiguration: () => ({ get: () => location }) }, window: {
+		workspace: { getConfiguration: () => ({ get: (key: string) => key === 'panelLocation' ? location : undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) }, window: {
 			activeTextEditor: { viewColumn: 1 }, tabGroups: { all: [{ viewColumn: 1 }, { viewColumn: 3 }] },
 			createWebviewPanel: (_type: string, title: string, options: { viewColumn: number }) => {
 				const panel = { title,
@@ -546,7 +546,7 @@ test('open statement panels and the first submission picker keep the language di
 	const mock = {
 		l10n: { t: (value: string) => value }, env: { language: 'zh-cn' }, ViewColumn: { Beside: 2 },
 		Uri: { parse: (value: string) => ({ fsPath: fileURLToPath(value) }), joinPath: (...parts: unknown[]) => parts.join('/') },
-		workspace: { getConfiguration: () => ({ get: () => undefined }), onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event },
+		workspace: { getConfiguration: () => ({ get: () => undefined }), onDidChangeConfiguration: event, onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event },
 		window: {
 			createWebviewPanel: () => {
 				const messages: typeof posted[number] = []; posted.push(messages);
@@ -577,4 +577,49 @@ test('open statement panels and the first submission picker keep the language di
 			receives[0]({ action: 'selectLanguage', languageId: '20' }); assert.strictEqual(preferred, '26');
 		} finally { panels.dispose(); }
 	} finally { Module._load = original; delete require.cache[webview]; }
+});
+
+test('ACM mode updates every open panel from current settings without invoking an action', () => {
+	const Module = require('module'), original = Module._load;
+	const modulePath = require.resolve('../src/views/webview'); delete require.cache[modulePath];
+	const changes = new Set<(event: { affectsConfiguration: (key: string) => boolean }) => void>();
+	const messages: any[][] = [], receives: ((value: unknown) => void)[] = [];
+	const disposable = () => ({ dispose() { } });
+	let mode: unknown, actions = 0;
+	const mock = {
+		l10n: { t: (value: string) => value }, ViewColumn: { Beside: 2 }, Uri: { joinPath: (...parts: unknown[]) => parts.join('/') },
+		workspace: {
+			getConfiguration: () => ({ get: (key: string) => key === 'acmMode' ? mode : undefined }),
+			onDidChangeConfiguration: (listener: (event: { affectsConfiguration: (key: string) => boolean }) => void) => { changes.add(listener); return { dispose: () => changes.delete(listener) }; }
+		},
+		window: { createWebviewPanel: () => {
+			const posted: unknown[] = []; messages.push(posted);
+			let close = () => undefined;
+			return { webview: { cspSource: 'self', asWebviewUri: (value: string) => value, postMessage: (value: unknown) => posted.push(structuredClone(value)), onDidReceiveMessage: (listener: typeof receives[number]) => { receives.push(listener); return disposable(); } }, onDidDispose: (listener: () => undefined) => { close = listener; return disposable(); }, dispose: () => close() };
+		} }
+	};
+	Module._load = function (id: string, ...args: unknown[]) { return id === 'vscode' ? mock : original.call(this, id, ...args); };
+	try {
+		const { Panel } = require('../src/views/webview');
+		const first = new Panel({ extensionUri: 'extension' }, { kind: 'problem', labels: {}, sourceName: 'a.cpp', problem: { title: 'Problem' } }, async () => { actions++; }, () => undefined);
+		const snapshot = { rawStatus: 'AC', groups: [{ name: 'Tests', rows: [['1', 'AC']] }] };
+		const second = new Panel({ extensionUri: 'extension' }, { kind: 'record', labels: {}, sourceName: 'a.cpp', record: { id: '55' }, snapshot }, async () => { actions++; }, () => undefined);
+		assert.strictEqual(first.state.acmMode, false, 'a fresh install preserves the complete ordinary view');
+		assert.strictEqual(second.state.acmMode, false);
+		for (const change of changes) { change({ affectsConfiguration: key => key === 'editor.fontSize' }); }
+		assert.deepStrictEqual(messages.map(value => value.length), [0, 0], 'unrelated settings do not refresh panels');
+		mode = true;
+		for (const change of changes) { change({ affectsConfiguration: key => key === 'becoder.ojConnect.acmMode' }); }
+		assert.deepStrictEqual(messages.map(value => value.at(-1).state.acmMode), [true, true]);
+		assert.strictEqual(second.state.snapshot, snapshot, 'mode changes preserve the real report');
+		receives[1]({ action: 'ready' });
+		assert.strictEqual(messages[1].at(-1).state.acmMode, true, 'recreated views receive the current mode');
+		first.dispose(); assert.strictEqual(changes.size, 1, 'closed views remove their configuration subscription');
+		mode = false;
+		for (const change of changes) { change({ affectsConfiguration: () => true }); }
+		assert.strictEqual(messages[0].length, 1, 'closed views stay untouched');
+		assert.strictEqual(messages[1].at(-1).state.acmMode, false);
+		assert.strictEqual(actions, 0, 'switching presentation never invokes submission or record-query actions');
+		second.dispose(); assert.strictEqual(changes.size, 0);
+	} finally { Module._load = original; delete require.cache[modulePath]; }
 });

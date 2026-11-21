@@ -37,7 +37,7 @@ const localizedLabels = (locale) => {
 	try { return require(modulePath).labels(); } finally { Module._load = original; delete require.cache[modulePath]; }
 };
 const labels = localizedLabels('zh-cn'), englishLabels = localizedLabels('en');
-let state;
+let state, bootstrapState, deferReady = false;
 Object.assign(labels, { status_AC: '答案正确', status_WA: '答案错误', status_CE: '编译错误', status_WJ: '等待评测', status_WR: '等待重新评测' });
 labels.status_QLE = '超过询问次数限制';
 labels.passedTests = '通过测试点';
@@ -50,13 +50,13 @@ const server = createServer(async (req, res) => {
 			const rows = Object.keys(names).map(site => ({ site, state: site === 'luogu' ? 'signed-in' : site === 'lanqiao' ? 'unavailable' : site === 'codeforces' ? 'unknown' : 'signed-out' }));
 			const icons = Object.fromEntries(Object.keys(names).map(site => [site, '/' + site + (site === 'luogu' || site === 'codeforces' ? '.svg' : '.png')]));
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
-			res.end(loginContent(rows, names, { 'signed-in': '已登录', 'signed-out': '未登录', unknown: '未检查', unavailable: '未接入' }, icons, '\'self\'', 'fixture').replace('<script nonce="fixture">', '<script nonce="fixture">window.__messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__messages.push(m)});'));
+			res.end(loginContent(rows, names, { 'signed-in': '已登录', 'signed-out': '未登录', unknown: '未检查', unavailable: '未接入' }, icons, '\'self\'', 'fixture', { enabled: false, label: translations['ACM Mode'] }).replace('<script nonce="fixture">', '<script nonce="fixture">window.__messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.__messages.push(m)});'));
 		} else if (/^\/((luogu|codeforces)\.svg|(atcoder|nowcoder|lanqiao)\.png)$/.test(req.url)) {
 			res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'image/png');
 			res.end(await readFile(path.resolve('resources', req.url.slice(1))));
 		} else if (req.url === '/') {
 			res.setHeader('Content-Type', 'text/html; charset=utf-8');
-			res.end(`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-fixture' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src https:; connect-src 'self'; worker-src blob:;"><link rel="stylesheet" href="/katex.min.css"><link rel="stylesheet" href="/webview.css"></head><body><main id="app"></main><script nonce="fixture">window.__OJ_STATE__=${JSON.stringify(state).replace(/</g, '\\u003c')};window.__messages=[];window.__defaultLinkOpens=[];${linkBridge}window.acquireVsCodeApi=()=>({postMessage:m=>{window.__messages.push(m);if(m.uuid && m.data.action==='renderContent'){window.__renderContent(m.data.content,m.data.format).then(data=>window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid,data}})));return;}if(m.uuid){if(m.data.action==='selectLanguage')window.__OJ_STATE__.languageId=m.data.languageId;setTimeout(()=>{window.dispatchEvent(new MessageEvent('message',{data:{type:'state',state:window.__OJ_STATE__}}));window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid}}));},0);}}});</script><script nonce="fixture" src="/webview.js"></script></body></html>`);
+			res.end(`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-fixture' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src https:; connect-src 'self'; worker-src blob:;"><link rel="stylesheet" href="/katex.min.css"><link rel="stylesheet" href="/webview.css"></head><body><main id="app"></main><script nonce="fixture">window.__OJ_STATE__=${JSON.stringify(bootstrapState ?? state).replace(/</g, '\\u003c')};window.__hostState__=${JSON.stringify(state).replace(/</g, '\\u003c')};window.__messages=[];window.__defaultLinkOpens=[];${linkBridge}window.acquireVsCodeApi=()=>({postMessage:m=>{window.__messages.push(m);if(m.action==='ready'){window.__readyRequested=true;if(!${deferReady})window.dispatchEvent(new MessageEvent('message',{data:{type:'state',state:window.__hostState__}}));return;}if(m.uuid && m.data.action==='renderContent'){window.__renderContent(m.data.content,m.data.format).then(data=>window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid,data}})));return;}if(m.uuid){if(m.data.action==='selectLanguage')window.__OJ_STATE__.languageId=m.data.languageId;setTimeout(()=>{window.dispatchEvent(new MessageEvent('message',{data:{type:'state',state:window.__OJ_STATE__}}));window.dispatchEvent(new MessageEvent('message',{data:{uuid:m.uuid}}));},0);}}});</script><script nonce="fixture" src="/webview.js"></script></body></html>`);
 		} else {
 			const filename = req.url.slice(1);
 			if (!/^(webview\.(js|css)|syntax-worker\.js|onig\.wasm|grammars\/[a-f0-9]+\.json|katex\.min\.css|fonts\/[a-zA-Z0-9_.-]+)$/.test(filename)) { res.writeHead(404).end(); return; }
@@ -86,6 +86,85 @@ try {
 		assert.deepEqual(await page.evaluate(() => window.__messages.filter(value => value.data?.action !== 'renderContent').map(value => value.data)), [{ action: 'openLink', url: target }], 'one user action dispatches one internal navigation');
 		assert.equal(page.url(), url, 'navigation stays delegated to the host');
 	};
+	// These exercise the shipped React components, including live updates and recreation.
+	const acmProblems = [
+		{ site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' },
+		{ site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' },
+		{ site: 'codeforces', nativeId: '4/A', url: 'https://codeforces.com/contest/4/problem/A' },
+		{ site: 'nowcoder', nativeId: 'problem/18204', url: 'https://ac.nowcoder.com/acm/problem/18204' },
+		{ site: 'lanqiao', nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/' }
+	];
+	const updateAcmState = async () => { await page.evaluate(value => { window.__OJ_STATE__ = value; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: value } })); }, state); };
+	for (const localLabels of [labels, englishLabels]) {
+		for (const problem of acmProblems) {
+			state = { kind: 'problem', labels: localLabels, sourceName: 'a.cpp', acmMode: true, problem: { ref: problem, title: 'ACM fixture', bodies: [{ locale: 'en', sections: [{ format: 'markdown', content: 'Preserved statement.' }] }], difficulty: { label: 'Hard', color: '#ff0000' }, tags: [{ label: 'Hidden algorithm' }], limits: [{ label: 'Time Limit', value: '2.00s' }], samples: [{ input: '1 2', output: '3' }], interactive: false } };
+			await page.goto(url); await page.locator('h1').waitFor();
+			assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0, 'ACM mode removes difficulty and tags for every site');
+			assert.equal(await page.locator('.problem-limit').count(), 1);
+			await page.getByText('Preserved statement.', { exact: true }).waitFor();
+			assert.equal(await page.locator('.sample-grid').count(), 1);
+			state.acmMode = false; await updateAcmState(); await page.locator('.problem-tags').waitFor();
+			assert.equal(await page.locator('.problem-difficulty').count(), 1, 'turning ACM off restores the unchanged metadata');
+			state.acmMode = true; await updateAcmState(); await page.locator('.problem-tags').waitFor({ state: 'detached' });
+			const record = { problem, id: '55', url: problem.url + '#record' };
+			state = { kind: 'record', labels: localLabels, sourceName: 'a.cpp', acmMode: true, record, tracking: false, snapshot: { ref: record, phase: 'finished', rawStatus: 'CE', sourceVerification: 'matched', problemDifficulty: { label: 'Hard', color: '#ff0000' }, language: 'C++20', submittedAt: '2026-11-21T09:00:00Z', codeLength: '128 B', time: '31 ms', memory: '20480 B', score: '42', source: 'int main() {}', compileSucceeded: false, compileMessage: 'PRIVATE COMPILER DIAGNOSTIC', groups: [{ name: 'Subtask #0', rows: [['1', 'WA', '31 ms', '20480 B', 'PRIVATE CHECKER DETAIL']] }], testCaseSummary: { passed: 1, total: 2 } } };
+			await page.goto(url); await page.locator('.record-verdict').waitFor();
+			assert.equal(await page.locator('.record-verdict').textContent(), 'Compile Error');
+			assert.equal(await page.locator('.testCaseData, .testcase, hr, pre').count(), 0, 'ACM leaves no testcase/compiler content or separators');
+			assert.equal(await page.getByText(localLabels.score, { exact: true }).count(), 0);
+			assert.equal(await page.getByText(localLabels.compiler, { exact: true }).count(), 0);
+			assert.doesNotMatch(await page.locator('#app').textContent(), /PRIVATE|Subtask|42/);
+			assert.equal(await page.locator('.problemNameWithDifficulty > span').evaluate(element => element.style.color), '', 'record IDs do not reveal difficulty by color');
+			assert.ok((await page.locator('.record-info').textContent()).includes('31ms / 20.00KiB'));
+			assert.ok((await page.locator('.record-info').textContent()).includes('C++20'));
+			assert.ok((await page.locator('.record-info').textContent()).includes('128B'));
+			assert.equal(await page.getByRole('link', { name: localLabels.viewSource }).count(), 1);
+			state.acmMode = false; await updateAcmState(); await page.locator('.testCaseData').waitFor();
+			assert.equal(await page.getByText(localLabels.score, { exact: true }).count(), 1);
+			assert.ok((await page.locator('pre').textContent()).includes('PRIVATE COMPILER DIAGNOSTIC'));
+			state.acmMode = true; await updateAcmState(); await page.locator('.testCaseData').waitFor({ state: 'detached' });
+			for (const [phase, rawStatus, expected] of [
+				['queued', 'WJ', 'Waiting'], ['judging', '1/21', 'Judging'], ['judging', 'Running on test 18', 'Judging'],
+				['finished', 'Wrong answer on pretest 2', 'Wrong Answer'], ['finished', 'Idleness limit exceeded on test 4', 'Idleness Limit Exceeded'],
+				['finished', 'Partial (42 points)', 'Partial'], ['finished', 'AC', 'Accepted'], ['unknown', 'NEW SITE STATUS', 'NEW SITE STATUS']
+			]) {
+				Object.assign(state.snapshot, { phase, rawStatus }); state.tracking = phase === 'queued' || phase === 'judging';
+				await updateAcmState();
+				try { await page.waitForFunction(value => document.querySelector('.record-verdict')?.textContent === value, expected, { timeout: 5000 }); }
+				catch (error) { throw new Error(`${problem.site} ${rawStatus}: expected ${expected}, received ${await page.locator('.record-verdict').textContent()}`, { cause: error }); }
+				const detailText = await page.locator('.record-verdict').evaluate(element => [element.textContent, element.getAttribute('title'), ...Array.from(element.querySelectorAll('[aria-label]'), child => child.getAttribute('aria-label'))].join(' '));
+				assert.doesNotMatch(detailText, /test\s*\d|pretest|1\s*\/\s*21|42|points/i, 'no testcase or score details in visible, hover or accessible verdict');
+				assert.equal(await page.locator('.record-verdict .spinner').count(), state.tracking ? 1 : 0);
+			}
+			state.tracking = false; state.canRetry = true; state.message = 'Continue querying; no code will be resent.';
+			await updateAcmState(); await page.getByRole('button', { name: localLabels.continueQuery }).waitFor();
+			assert.equal(await page.locator('.spinner').count(), 0);
+			state.message = undefined; state.canRetry = false; state.snapshot.phase = 'finished'; state.snapshot.rawStatus = 'AC';
+			await updateAcmState(); await page.waitForFunction(() => document.querySelector('.record-verdict')?.textContent === 'Accepted');
+			await page.setViewportSize({ width: 520, height: 650 });
+			await page.addStyleTag({ content: 'body { background:#252931;--vscode-editor-background:#252931;--vscode-editor-foreground:#bbb;--vscode-foreground:#bbb;--vscode-font-size:14px;--vscode-font-family:Segoe UI,sans-serif;--vscode-textLink-foreground:#4daafc; }' });
+			await page.screenshot({ path: path.join(output, 'acm-record-' + problem.site + (localLabels === labels ? '-zh' : '-en') + '.png'), fullPage: true });
+			if (problem.site === 'lanqiao') {
+				const report = state.snapshot.groups;
+				state.record = undefined; state.snapshot = undefined; state.tracking = true;
+				state.submission = { problem, phase: 'sending', language: 'C++17', codeLength: '128 B', groups: report };
+				await updateAcmState(); await page.waitForFunction(value => document.querySelector('.record-verdict')?.textContent === value, localLabels.submitting);
+				assert.equal(await page.locator('.testcase, .testCaseData, hr').count(), 0, 'an early Lanqiao report remains hidden before its official ID');
+				assert.equal(await page.locator('.record-verdict .spinner').count(), 1);
+				state.record = record; state.submission.phase = 'confirming';
+				await updateAcmState(); await page.locator('h1 a').waitFor();
+				assert.equal(await page.locator('.testCaseData').count(), 0, 'receipt adoption preserves ACM mode');
+			}
+		}
+	}
+	// A recreated Webview can start with an old HTML snapshot, before the host's ready reply.
+	state = { kind: 'problem', labels, sourceName: 'a.cpp', acmMode: true, problem: { ref: acmProblems[0], title: 'Recreated', bodies: [], limits: [], samples: [], difficulty: { label: 'Private difficulty' }, tags: [{ label: 'Private tag' }], interactive: false } };
+	bootstrapState = { ...state, acmMode: false }; deferReady = true;
+	await page.goto(url); await page.waitForFunction(() => window.__readyRequested === true);
+	assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0, 'stale initial HTML cannot flash metadata before current mode arrives');
+	await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: window.__hostState__ } })));
+	await page.locator('h1').waitFor(); assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0);
+	bootstrapState = undefined; deferReady = false;
 	for (const problem of [
 		{ site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' },
 		{ site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' },
@@ -923,6 +1002,15 @@ try {
 	await page.goto(url + 'accounts');
 	assert.deepEqual(await page.evaluate(() => window.__messages.splice(0)), [{ ready: true }]);
 	await page.evaluate(() => { const style = document.createElement('style'); style.nonce = 'fixture'; style.textContent = 'body { background:#1e1e1e;--vscode-foreground:#ddd;--vscode-font-size:13px;--vscode-font-family:Segoe UI,sans-serif;--vscode-textLink-foreground:#4daafc;--vscode-descriptionForeground:#aaa;--vscode-disabledForeground:#777; }'; document.head.append(style); });
+	const modeSwitch = page.getByRole('checkbox', { name: 'ACM 模式', exact: true });
+	assert.equal(await modeSwitch.isChecked(), false);
+	const modeGap = await page.locator('.acm-mode').evaluate(element => element.getBoundingClientRect().top - document.querySelector('[data-site="lanqiao"]').getBoundingClientRect().bottom);
+	assert.equal(modeGap, 30, 'the mode switch sits one account row below Lanqiao');
+	await modeSwitch.check();
+	assert.deepEqual(await page.evaluate(() => window.__messages.splice(0)), [{ action: 'setAcmMode', enabled: true }]);
+	await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { acmMode: false } })));
+	assert.equal(await modeSwitch.isChecked(), false, 'external config updates the existing checkbox');
+	await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { acmMode: true } })));
 	for (const selector of ['.status', '.account img']) { for (const element of await page.locator(selector).all()) { await element.click(); } }
 	assert.deepEqual(await page.evaluate(() => window.__messages), [], 'status text and logos remain inert');
 	assert.equal(await page.locator('[data-site="codeforces"] button').isDisabled(), false);
@@ -939,5 +1027,5 @@ try {
 	assert.equal(await page.locator('[data-site="atcoder"] .status').textContent(), '已登录 · fixture-user');
 	for (const width of [240, 320, 500]) { await page.setViewportSize({ width, height: 300 }); await page.screenshot({ path: path.join(output, 'accounts-' + width + '.png') }); }
 	assert.deepEqual(errors, []);
-	console.log(JSON.stringify({ passed: true, sites: 5, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
+	console.log(JSON.stringify({ passed: true, sites: 5, acmMode: true, acmLiveToggle: true, acmRecreation: true, acmLanqiaoReceipt: true, stoppedResultQuery: true, copyIcons: true, math: true, samplesPreserved: true, hostileMarkupRejected: true, fixedActions: true, metadata: true, judgingAnimation: true, terminalStopsAnimation: true, narrowSubmission: true }));
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

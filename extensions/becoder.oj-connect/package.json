@@ -56,6 +56,12 @@
 		"configuration": {
 			"title": "%configurationTitle%",
 			"properties": {
+				"becoder.ojConnect.acmMode": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"description": "%acmMode%"
+				},
 				"becoder.ojConnect.directories": {
 					"type": "object",
 					"additionalProperties": false,

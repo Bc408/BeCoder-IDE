@@ -5,6 +5,7 @@
 	"description": "Read problems, import samples and submit code to Luogu, AtCoder, Codeforces and Nowcoder in BeCoder.",
 	"submit": "Submit Current Code",
 	"configurationTitle": "OJ Connect",
+	"acmMode": "Use ACM mode for OJ Connect problem and submission views. Applies to all projects and is saved as a personal setting.",
 	"directories": "Site subdirectory names for problem detection and imports. Changing names does not move files.",
 	"luoguDirectory": "Luogu directory name",
 	"codeforcesDirectory": "Codeforces directory name",

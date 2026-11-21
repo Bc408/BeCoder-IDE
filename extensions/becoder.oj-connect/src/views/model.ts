@@ -8,6 +8,7 @@ export interface PanelState {
 	kind: 'problem' | 'record';
 	labels: Record<string, string>;
 	sourceName: string;
+	acmMode?: boolean;
 	problem?: ProblemDocument;
 	record?: RecordRef;
 	snapshot?: RecordSnapshot;

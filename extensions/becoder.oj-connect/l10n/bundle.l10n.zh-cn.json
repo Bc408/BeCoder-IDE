@@ -40,6 +40,7 @@
 	"Signed out": "未登录",
 	"Not checked": "未检查",
 	"Not connected yet": "尚未接入",
+	"ACM Mode": "ACM 模式",
 	"Problem number or official URL for {0}{1}": "{0}{1} 对应的题号或官方链接",
 	"Submit {0} to {1}": "将 {0} 提交到 {1}",
 	"OJ Connect: submitting {0}": "OJ Connect：正在提交 {0}",

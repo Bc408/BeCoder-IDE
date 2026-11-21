@@ -83,8 +83,8 @@ export default function Problem({ state }: { state: PanelState }) {
 			</div>
 			<div className={'problem-limits'}>
 				{data.limits.map(limit => <div className={'problem-limit'} key={limit.label}><div>{state.labels[limit.label] ?? limit.label}</div><div>{data.ref.site === 'lanqiao' ? resourceText(limit.value, limit.label === 'Time Limit') : limit.value}</div></div>)}
-				{data.difficulty && <div className={'problem-difficulty'}><div>{state.labels.difficulty}</div><div><Tag {...data.difficulty} /></div></div>}
-				{!!data.tags?.length && <div className={'problem-tags haveTag'} tabIndex={0} aria-label={state.labels.tags}>
+				{!state.acmMode && data.difficulty && <div className={'problem-difficulty'}><div>{state.labels.difficulty}</div><div><Tag {...data.difficulty} /></div></div>}
+				{!state.acmMode && !!data.tags?.length && <div className={'problem-tags haveTag'} tabIndex={0} aria-label={state.labels.tags}>
 					<div>{state.labels.tags}</div>
 					<div>
 						<svg aria-hidden={'true'} viewBox={'0 0 16 16'}><path d={'m3 6 5 5 5-5'} /></svg>

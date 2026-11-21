@@ -4,6 +4,14 @@
 
 本文维护当前安装与载荷约束，取代已完成的安装器、gch 和包体积专项执行记录。具体实现以 [Inno Setup 脚本](../build/win32/becoder.iss)、[工具链组装](../build/lib/becoderToolchain.ts)及直接验证器为依据；本文不是一次新构建、安装或运行验收的证明。
 
+## v2.1.1 发行范围
+
+- `feat(oj-connect)`：新增默认关闭的 ACM 模式。开启后隐藏题目难度、标签和逐测试点评测详情，保留整体评测状态和源码入口。已打开的 OJ Connect 页面会随个人设置即时更新。完整显示规则见 [OJ Connect 使用说明](../extensions/becoder.oj-connect/README.md)。
+- `fix(workbench)`：编辑器布局菜单在菜单项变化时复用已有监听器，避免刷新时反复重建菜单。
+- `fix(browser)`：保留网站从空白新标签发起的后续导航，使比赛题目能够在新标签中打开并保留原比赛页。
+
+发行资产为 Windows x64 的 `BeCoderSetup-x64-2.1.1.exe`。实际发布与资产记录见 `v2.1.1` Release。
+
 ## v2.1.0 交付状态
 
 2026-11-20，OJ Connect 五站、内置浏览器与统一主页的维护修复已完成，源码检查、stage、完整包及管理员 Setup 验证均通过，负责人已确认本次 2.1.0 Setup 验收通过。沿用五站核心闭环及各站现有题型、C/C++ 范围；不将未逐项验证的异常或语言组合描述为已实测。确切安装包、哈希与证据见 [交付记录](oj-connect/release-2.1.0-regression.md)，修复与性能分别见[审查](oj-connect/release-2.1.0-review.md)和[测量](oj-connect/release-2.1.0-performance.md)。正式 Release 尚未发布，版本交付不自动授权 Git 或 Release 发布。

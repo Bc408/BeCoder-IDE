@@ -428,9 +428,18 @@ export abstract class EditorTabsControl extends Themable implements IEditorTabsC
 		this.editorLayoutActionsDisposables.clear();
 
 		const editorActions = this.groupView.createEditorActions(this.editorLayoutActionsDisposables, MenuId.LayoutControlMenu);
-		this.editorLayoutActionsDisposables.add(editorActions.onDidChange(() => this.updateEditorLayoutActionsToolbar()));
+		const render = () => this.renderEditorLayoutActions(editorActions.actions);
+		// Refresh from the existing menu without replacing its listeners during event delivery.
+		this.editorLayoutActionsDisposables.add(editorActions.onDidChange(render));
+		render();
+	}
 
-		const { primary, secondary } = this.prepareEditorLayoutActions(editorActions.actions);
+	private renderEditorLayoutActions(actions: IToolbarActions): void {
+		if (!this.editorLayoutActionsToolbar || !this.editorLayoutActionsToolbarContainer) {
+			return;
+		}
+
+		const { primary, secondary } = this.prepareEditorLayoutActions(actions);
 		this.editorLayoutActionsToolbar.setActions(prepareActions(primary), prepareActions(secondary));
 
 		const hasLayoutActions = primary.length > 0 || secondary.length > 0;

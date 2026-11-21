@@ -2156,11 +2156,19 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 
 			const shouldInlineGroup = (action: SubmenuAction, group: string) => group === 'navigation' && action.actions.length <= 1;
 
-			actions = getActionBarActions(
+			const readActions = () => getActionBarActions(
 				editorTitleMenu.getActions({ arg: this.resourceContext.get(), shouldForwardArgs: true, renderShortTitle: true }),
 				'navigation',
 				shouldInlineGroup
 			);
+			if (menuId === MenuId.LayoutControlMenu) {
+				return {
+					get actions() { return readActions(); },
+					onDidChange,
+				};
+			}
+
+			actions = readActions();
 
 			// Add a "Reopen Editor With" submenu to the overflow (...) menu when the active editor's
 			// resource can be opened by more than one editor type (e.g. Text Editor vs. Markdown

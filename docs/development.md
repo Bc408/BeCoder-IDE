@@ -6,7 +6,9 @@
 
 BeCoder 是 Code - OSS 的 Windows 产品分支。核心 TypeScript 位于 `src/vs/`；内置扩展位于 `extensions/`；构建脚本位于 `build/` 与 `scripts/`；发行资产位于 `resources/`。产品版本以根 `package.json` 为准，扩展 API 版本以 `product.json` 为准，不将内核版本当作 BeCoder 发行版本。
 
-开始前完整阅读 [AGENTS.md](../AGENTS.md) 与 [VISION.md](../VISION.md)。涉及 Beacon / NoteBook 时，再阅读[正式文档入口](beacon/README.md)及对应模块。负责人最新决定优先；当前代码、正式需求与运行验收分别记录。
+开始前完整阅读 [AGENTS.md](../AGENTS.md) 与 [VISION.md](../VISION.md)。按任务阅读当前归属模块的源码和使用说明。负责人最新决定优先；当前代码、正式需求与运行验收分别记录。
+
+Beacon工作从[统一入口](beacon/README.md)继续，按完整需求、架构、底层设计、实现状态和候选执行计划阅读。软件层用户行为采集以正常所选根为资格，模式仅裁切模型消费；不能复用会因mode／聊天变化失效的消费scope作为采集scope。下一阶段计划仍待审阅与选择执行方式，已确认产品行为无需重开讨论，旧稿和历史评估不能当现行实现或验收证据。
 
 OJ Connect 工作先阅读[产品与开发入口](oj-connect/README.md)和[技术架构](oj-connect/architecture.md)。当前五站已具备核心闭环：扩展负责识题、源码快照、编译器偏好、题面与评测界面，核心宿主负责真实浏览器 Session 和受限官网事务，CPH 负责显式样例关联与本地测试。保留各站协议及一次发送、受理不明只读核对的边界；不能用更广的 CPH 解析范围推断交题支持。当前检查和负责人验收见 [2.1.0 交付记录](oj-connect/release-2.1.0-regression.md)。
 
@@ -22,16 +24,7 @@ npm ci
 
 ## 修改与检查
 
-优先运行归属模块的检查，使用根 `package.json` 或扩展 `package.json` 已定义的命令。例如 Beacon：
-
-```powershell
-npm --prefix extensions/becoder.beacon run vscode:prepublish
-npm --prefix extensions/becoder.beacon test
-npm --prefix extensions/becoder.beacon run test-render
-npm --prefix extensions/becoder.beacon run lint
-```
-
-渲染测试使用生产 Webview 与模拟宿主，不调用真实模型账户。测试通过不代表真实服务或完整桌面验收通过。修改 UI 时应检查渲染截图；修改后按影响重跑对应检查。
+优先运行归属模块的检查，使用根 `package.json` 或扩展 `package.json` 已定义的命令。测试通过不代表完整桌面验收通过。修改 UI 时应检查渲染截图；修改后按影响重跑对应检查。
 
 完整 Windows 源码验证与 staged 应用构建按以下顺序进行：
 

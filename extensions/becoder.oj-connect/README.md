@@ -24,6 +24,8 @@ AtCoder 题面首次默认英文，主动选择的日／英偏好跨题、跨重
 
 题面上的 CPH 图标将结构化样例关联到该题面绑定的源码。两种 CPH 入口复用同一文件，已有源码和未保存稿保留，仅新建源码执行 CPH 模板；替换已有样例仍需确认。缺失限制会在 CPH 明示使用本地默认限制，不伪造网站数据。
 
+Beacon协作的[下一阶段设计](../../docs/beacon/foundation-design.md)将用户Get Problem／导入／提交取得的事实与模型只读取材分开：正常所选Beacon根内三档持续采集，Blackout仅禁Beacon消费；题面保存与模型联网结果各守生命周期。模型不获得登录、提交、改写学生源码或完整Get／Import副作用。当前仍使用打开题面／判题页投影，新队列和只读题面工具的[实现差距](../../docs/beacon/implementation-status.md)单列，不影响本扩展已有用户流程。
+
 `becoder.ojConnect.directories` 默认 `luogu`、`codeforces`、`atcoder`、`lanqiao`、`nowcoder`，设置修改不会移动已有文件。直接父目录优先，再猜文件名；失配提示输入，不建持久绑定库。例：`luogu/P1001.cpp`、`codeforces/4_a.cpp`、`atcoder/abc086_a.cpp`、`lanqiao/254.cpp`、`nowcoder/18204.cpp`、`nowcoder/5657_A.cpp`；牛客保留公开题库／比赛身份，无站点目录时不从纯数字或通用比赛文件名猜测牛客，目录外纯数字文件名也不认领蓝桥；显式上下文例 `P1001@123.cpp`、`tenka1-2019-beginner@tenka1_2019_a.cpp`。CF 身份 `4/A` 对应 `codeforces/4_a.cpp`，真实题号后缀保留为 `4_a1.cpp`；站点内支持 `4/A`、`4_a` 和普通官网 contest／problemset URL，通用下划线文件名不在目录外自动猜成 CF。无目录的 `AT_abc086_a.cpp` 有歧义时提示，不静默选站。
 
 设置页搜索 `OJ Connect` 可调整以下设置。编译器与题面语言是跨项目的个人设置，页面选择写入对应设置，不另存隐藏偏好：

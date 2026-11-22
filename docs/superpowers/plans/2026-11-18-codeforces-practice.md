@@ -17,7 +17,7 @@
 - 编译器来自当次官方表单；按 CF 和 C/C++ 分开保存偏好。
 - 单次 POST，`net.request` 显式 Session、`useSessionCookies: true`、`redirect: 'manual'`；受理不明只查询、不重交。
 - 无预热、隐藏提交页、页面池、队列、API 密钥或新认证／新依赖；保留原三站协议。
-- 不改主页、主题、微信、下载、Beacon；本轮不自动 commit、push、Setup。
+- 不改主页、主题、微信、下载；本轮不自动 commit、push、Setup。
 - 测试使用隔离实例／profile，不操作用户日常窗口；最终 stage 不含研究或旧用户数据。
 
 ## Review focus

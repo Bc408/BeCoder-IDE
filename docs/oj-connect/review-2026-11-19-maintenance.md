@@ -41,7 +41,7 @@
 
 最小实现范围：在 OJ Webview 根节点建立单一链接处理，覆盖标题、记录题目、正文和转换后的嵌入链接；非 fragment 的合法 HTTPS 链接 preventDefault + stopPropagation 后只发送一次受校验的内置导航动作。面板消息校验 URL 类型、长度、HTTPS、无用户名密码，拒绝其他协议；不启用任意命令 URI。移除标题各自重复的 openOriginal 点击路线，统一保留现有内置命令与侧边打开行为。中键保持现有不导航语义，键盘和修饰键统一进入同一 click 路由。
 
-作用域限定本扩展的消息和导航。不改全局 Webview pre、mainThread opener、共享清洗器或 Beacon 行为。
+作用域限定本扩展的消息和导航。不改全局 Webview pre、mainThread opener、共享清洗器。
 
 ### R3 / P3：查看源码还会附带滚回记录页顶部
 

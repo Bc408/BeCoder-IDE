@@ -27,9 +27,7 @@ BeCoder 将看题、写代码、本地样例测试、交题和查看评测结果
 | Beacon | 接入 DeepSeek、阿里云百炼、月之暗面与 Ollama，支持流式回答、公式、图片输入和可控的文件访问与联网 |
 | 熟悉的编辑体验 | 简体中文 / 英文、One Monokai、Modern UI 与紧凑布局；通过 Open VSX 或本地 VSIX 安装扩展 |
 
-Beacon 需要自行配置模型服务；模型与网络能力取决于服务商。编辑、编译和样例测试无需配置 AI。完整能力与当前限制见[使用指南](docs/getting-started.md)和 [Beacon 说明](extensions/becoder.beacon/README.md)。
-
-Beacon 的正式请求统一带入导师规则，并按实际工具能力组织上下文说明；回答质量仍取决于所选模型。当前开发候选的合成评测、模型局限与体验验收状态见[提示词对照报告](docs/beacon/prompt-evaluation-2026-11-22.md)。
+Beacon 需要自行配置模型服务；模型与网络能力取决于服务商。编辑、编译和样例测试无需配置 AI。Beacon当前能力见[扩展说明](extensions/becoder.beacon/README.md)，安装与核心编程流程见[使用指南](docs/getting-started.md)。
 
 ## 下载与上手
 
@@ -49,6 +47,7 @@ Beacon 的正式请求统一带入导师规则，并按实际工具能力组织�
 
 - [使用指南](docs/getting-started.md)：安装、题目导入、运行、布局和数据管理。
 - [开发指南](docs/development.md)：依赖、源码检查、构建与贡献。
+- [Beacon 需求与架构](docs/beacon/README.md)：统一能力需求、下一阶段底层设计与当前实现差距；设计不等于已交付。
 - [产品方向](VISION.md)：体验目标、模块职责与长期边界。
 - [文档目录](docs/README.md)：功能说明、正式需求与当前实现状态。
 - [问题反馈](https://github.com/Bc408/BeCoder-IDE/issues) · [安全问题](SECURITY.md)。

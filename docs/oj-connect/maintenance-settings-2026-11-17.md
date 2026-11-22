@@ -35,7 +35,7 @@
 
 命令清单：忽略目录 `tmp/oj-connect-audit/fixes-settings-20261117/validation-plan.json`。每次精确命令、退出码、耗时与失败类型记录在 `tmp/oj-connect-audit/shared-workflow/fixes17-*.json` 及同名日志。
 
-已执行 83 项扩展 Node 测试及共享内容／缓存／安全策略回归，23 项工作台 Electron 测试，扩展生产构建、双站 Chromium 页面测试、Beacon 实时公式与代码回归、客户端类型检查、OI 扩展编译、scoped ESLint、层级检查和文档检查。页面回归包含键盘复制、实际跨块锚点点击、公式、高亮、窄栏和评测动画；以最终成功日志为通过证据。先前 RED 和中间夹具定位失败均保留，不能充作通过结果。
+已执行 83 项扩展 Node 测试及共享内容／缓存／安全策略回归，23 项工作台 Electron 测试，扩展生产构建、双站 Chromium 页面测试、客户端类型检查、OI 扩展编译、scoped ESLint、层级检查和文档检查。页面回归包含键盘复制、实际跨块锚点点击、公式、高亮、窄栏和评测动画；以最终成功日志为通过证据。先前 RED 和中间夹具定位失败均保留，不能充作通过结果。
 
 CSS 检查器退出 0，但对既有 Webview 专用 `--vscode-font-size`、`--vscode-editor-font-family` 输出变量名提示，并建议替换既有圆角值；本轮只修改复制控件焦点可达性，不扩展改动共享样式检查器或既有视觉基线。独立只读复核发现的激活失败、无效设置与锚点边界已补修和复核。
 

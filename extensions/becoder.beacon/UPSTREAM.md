@@ -10,8 +10,7 @@ tooltip is replaced. The full helper license is shipped in `dist/HoverLicense.tx
 `src/requestRecovery.ts` independently implements structured provider-error classification
 and category-specific retry delays with reference to Captain Who's `provider_error.rs`
 and `transport.rs` at commit `1c66395882e17a8023315e2dd4ec9fd4d1c2688e`
-(https://github.com/Tiga001/Captain_Who). Beacon retains its response-wide retry/wait
-budgets, cancellation, SDK transport and output/tool commit boundary. No Captain Who
+(https://github.com/Tiga001/Captain_Who). No Captain Who
 transport, stream rollback or provider cooldown service is imported.
 
 `webview/elements.tsx` adapts selected Conversation and MessageResponse components from Vercel AI Elements, retrieved 2026-09-23:
@@ -26,41 +25,30 @@ Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` 
 
 No Codex or Trae proprietary code or assets are included.
 
-The 2026-10-14 evidence and feedback review used these fixed references:
-
-- OpenCode `81d57087a44c0ef2fe909e10b6bcfd8c1ddcfdef`, MIT, [core tool architecture](https://github.com/anomalyco/opencode/blob/81d57087a44c0ef2fe909e10b6bcfd8c1ddcfdef/packages/core/src/tool/AGENTS.md): catalog visibility and execution authority have different responsibilities. Beacon retains its existing host boundaries; personal-information network permission is prompt guidance by the project owner's decision.
-- Graphify `fe085cedddde3a18554f8749b230bfe47f3dcce7`, Apache-2.0 with retained MIT components, [provenance and confidence explanation](https://github.com/Graphify-Labs/graphify/blob/fe085cedddde3a18554f8749b230bfe47f3dcce7/docs/how-it-works.md): identify source versions and hashes, distinguish captured facts from model inference. Beacon does not import its graph or confidence-score system.
-- ECC `b92f181b3b748d1abbc2afd94af6aa7d8c8fca29`, MIT, [local observation hooks](https://github.com/affaan-m/ECC/blob/b92f181b3b748d1abbc2afd94af6aa7d8c8fca29/hooks/memory-persistence/README.md): use actual tool outcomes as feedback. Beacon uses its existing SDK protocol, producer events and activity UI.
-
-These are design references. No code, dependencies or assets from these three projects are bundled by this change.
-
 `webview/ImagePreview.tsx` and the clipboard paste route independently implement
 the image overlay and explicit-input behavior observed in Captain Who's
 `ImagePreview.tsx` and `ChatComposer.tsx` at commit
 `1c66395882e17a8023315e2dd4ec9fd4d1c2688e` (https://github.com/Tiga001/Captain_Who).
-Beacon uses its existing captured attachments, native dialog focus handling and
-BeCoder editor routing; no Captain Who storage, Electron service or dependency is imported.
+No Captain Who storage, Electron service or dependency is imported.
 
 Chat activity behavior and streaming code snapshots reference Captain Who at commit
 `4fabf0b2a24ed1a92cafa9988a49d8abae507332` (https://github.com/Tiga001/Captain_Who).
 The text shimmer and typing indicator CSS in `webview/beacon.css` adapt
 `ChatConversationPage.agent.css` and `ConversationScrollToBottomButton.css` under Apache-2.0.
 The original license is in `licenses/captain-who.txt`; modifications map colors to VS Code
-theme tokens and keep Beacon's control placement. `ResponseActivity.tsx` implements the observed
-activity lifecycle. `elements.tsx` uses the fixed Beacon entry in `../becoder.shared/content/parser.ts`
-(unified, remark-gfm/math/breaks and rehype-sanitize) and KaTeX for the rendering pipeline.
-The shared parser retains Luogu renderer MIT provenance in LICENSE.luogu-markdown.txt,
-while Beacon's bundled entry excludes Luogu-only HTML/directive transformations. Formula slots retain their last valid
-KaTeX result while an appended command or group is incomplete; invalid final expressions
-remain ordinary readable text. `CodeBlock.tsx` adapts Captain Who's
+theme tokens and keep Beacon's control placement. `ResponseActivity.tsx` adapts the referenced
+activity presentation. The shared parser retains Luogu renderer MIT provenance in
+LICENSE.luogu-markdown.txt. `CodeBlock.tsx` adapts Captain Who's
 code-card layout, wrapping/copy controls and stable streaming-highlight behavior while using
 BeCoder's shared incremental TextMate Worker. No Electron/Rust services are imported.
 
+Beacon uses its own entry into the shared content pipeline, retaining its sanitization,
+streaming math and code presentation rules. Current behavior is documented in [README.md](README.md);
+the [Beacon design entry](../../docs/beacon/README.md) separates requirements from implementation gaps.
+
 Some npm packages omit their repository license file. The notice generator uses the Vercel AI repository Apache-2.0 license for `@ai-sdk/provider-utils`, and `licenses/remark-math.txt` for `remark-math` (source: https://github.com/remarkjs/remark-math/blob/main/license, retrieved 2026-09-23).
 
-OJ Connect and Beacon share Markdown parsing policies, math normalization, language resolution, and the incremental code renderer. Beacon retains its own safe content policy, prose animation and message container; transport updates are coalesced for 16ms rather than parsing on each animation frame. Original code text is authoritative and remains visible while coloring runs.
-
-All code languages share the incremental renderer using pinned root `vscode-textmate`, `vscode-oniguruma` and its WASM, with the default token rules under `extensions/becoder.one-monokai`. Build-time language discovery prefers the repository's bundled grammar contributions (including Better C++ Syntax, MagicPython and embedded/injection grammars); additional fence languages use the directly pinned `@shikijs/langs` grammar assets. Shiki rendering engines and themes are not dependencies of Beacon. Built-in grammar upstream notices, additional LaTeX licenses, @shikijs/langs and Better C++ Syntax/One Monokai licenses ship in ThirdPartyNotices. No semantic or user-theme customization is applied.
+Bundled syntax resources come from the pinned root `vscode-textmate`, `vscode-oniguruma` and its WASM, repository language grammars (including Better C++ Syntax, MagicPython and embedded/injection grammars), and the directly pinned `@shikijs/langs` grammar assets. Shiki rendering engines and themes are not dependencies. Built-in grammar upstream notices, additional LaTeX licenses, @shikijs/langs and Better C++ Syntax/One Monokai licenses ship in ThirdPartyNotices.
 
 ## DeepSeek provider mark
 

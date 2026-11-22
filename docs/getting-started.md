@@ -33,7 +33,7 @@ OJ Connect 已接入洛谷、AtCoder、Codeforces、牛客 ACM 和蓝桥公开�
 
 本地样例通过不等于在线评测通过。本地 `debug(...)`、`dout` 是 BeCoder 辅助功能，提交到没有这些定义的 OJ 前，需要移除相关调用或自行提供兼容定义。
 
-CPH 跟随最近获得输入焦点的 C/C++ 源码，但不会主动展开侧栏或切换当前侧栏视图（如资源管理器、搜索或扩展），需要自行点开 CPH 查看；切到题面、终端或样例输入框时保留当前题目。切到未关联源码时显示原有空界面，关闭当前源码且没有其他 C/C++ 源码接替时也回到空界面。切题前自动保存样例；保存失败保留编辑内容并提示失败。评测中保留当前运行界面，结束后对齐最近聚焦且仍打开的源码。当前窗口内保留各题的上次结果；源码修改后标注结果来自上次运行，重新评测后更新。Beacon 未选工作区或运行证据保存失败不在 CPH 面板提示，也不影响评测。
+CPH 跟随最近获得输入焦点的 C/C++ 源码，但不会主动展开侧栏或切换当前侧栏视图（如资源管理器、搜索或扩展），需要自行点开 CPH 查看；切到题面、终端或样例输入框时保留当前题目。切到未关联源码时显示原有空界面，关闭当前源码且没有其他 C/C++ 源码接替时也回到空界面。切题前自动保存样例；保存失败保留编辑内容并提示失败。评测中保留当前运行界面，结束后对齐最近聚焦且仍打开的源码。当前窗口内保留各题的上次结果；源码修改后标注结果来自上次运行，重新评测后更新。
 
 **CPH 样例导入**的内置解析器覆盖 Codeforces、AtCoder、洛谷、蓝桥杯、牛客、SPOJ、CSES、HDOJ、AcWing、LibreOJ（含归档站），以及明确支持的 DMOJ 站点：DMOJ、MOI Arena、Le Quy Don Online Judge、VNOI Online Judge、A.Y. Jackson Online Judge。导入仅支持非交互式、标准输入输出的 C/C++ 题目，不支持依赖 PDF 或额外资源的题目，也不会自动支持任意 DMOJ/Hydro 实例。网站结构变化、登录要求和访问限制可能导致解析失败；参见[解析器验证边界](../extensions/becoder.cph/test/fixtures/OJ-SOURCES.md)。
 
@@ -63,7 +63,7 @@ BC 的运行和使用输入运行通过 ConPTY 呈现 stdout/stderr，不再由�
 
 可选的 CPH 自定义检查器使用用户安装的 Python，这是私有 C/C++ 工具链之外的明确例外。调用协议为 `python script input-file actual-output-file`，退出码为零表示通过，不向检查器传递期望输出。普通 C/C++ 样例评测无需 Python。
 
-除 Beacon 的对话与学习工具外，当前产品不包含通用 MCP 客户端、Debug/GDB、Source Control/Git 图形界面或远程开发。Git 仍可作为外部命令在原生终端中使用。
+当前产品不包含通用 MCP 客户端、Debug/GDB、Source Control/Git 图形界面或远程开发。Git 仍可作为外部命令在原生终端中使用。
 
 ## 界面与布局密度
 
@@ -72,6 +72,12 @@ Modern UI 默认开启，提供圆角、悬浮侧栏与底部面板，以及更�
 打开“管理”齿轮菜单，选择 **布局密度 → 默认** 或 **紧凑**。紧凑布局移除工作台区域之间的间隙，并缩小内部间距，为内容留出更多空间。切换立即生效，选择保存在 `window.density.layout` 设置中，对应值为 `default` 或 `compact`。
 
 若希望使用经典工作台界面，可在设置中关闭 `workbench.experimental.modernUI`。布局密度仅在 Modern UI 开启时生效；这两项设置已有的值优先于默认值。
+
+## Beacon 与学习材料
+
+点击编辑器右上角Beacon按钮打开助手，在其独立设置页配置模型。各窗口独立选择Beacon工作区；Spot／Flood需要正常根，Blackout聊天使用临时内存。主动添加文件、代码／Notebook／PDF选区先进入可查看、可移除的草稿，再由用户发送；Runner、CPH、Notebook运行及必要收尾时不排队发送。
+
+当前详细用法见[Beacon扩展说明](../extensions/becoder.beacon/README.md)。下一阶段已确认将“工作区决定软件采集、模式决定模型消费”分开：有效根的Blackout仍采集用户行为记录，Beacon禁读这些持久来源；无根／根异常不采集。新的五类队列、代码快照和同步压缩尚待实施，不能由该设计推断当前版本已具备完整闭环，见[实现差距](beacon/implementation-status.md)。
 
 ## 数据与卸载
 
@@ -86,13 +92,3 @@ Modern UI 默认开启，提供圆角、悬浮侧栏与底部面板，以及更�
 Open VSX 是 BeCoder 唯一配置的在线扩展源，同时支持安装本地 VSIX。BeCoder 受保护的内置组件不能由扩展市场替换，不兼容的 Microsoft C/C++ 扩展包会被阻止。
 
 当前关闭了应用更新功能和相关设置，BeCoder 不会在应用内检查更新。新版本可从 [GitHub Releases](https://github.com/Bc408/BeCoder-IDE/releases) 获取，并由用户明确执行替换安装。
-
-## Beacon 与 NoteBook
-
-Beacon 的工作区与编辑器文件夹分别选择。打开右侧 Beacon，在设置中配置服务商、获取或添加模型，再从聊天输入区选择模型。本机 Ollama 无需密钥；云端服务使用你自己的账户与密钥。
-
-- [Beacon 使用与模型设置](../extensions/becoder.beacon/README.md)
-- [NoteBook 使用说明](../extensions/becoder.notebook/README.md)
-- [已实现能力与待完成事项](beacon/implementation-status.md)
-
-模型设置和联网开关的修改从下一轮请求生效。选择文件访问档位不会赋予模型自主执行程序或修改学生 C/C++ 源码的权限。

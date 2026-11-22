@@ -27,9 +27,7 @@ BeCoder brings problem reading, coding, local sample testing, submission and jud
 | Beacon | DeepSeek, Alibaba Cloud Bailian, Moonshot and Ollama; streamed responses, formulas, image input and controllable file access and web search |
 | Familiar editing | Simplified Chinese / English, One Monokai, Modern UI and compact layout; extensions through Open VSX or local VSIX files |
 
-Beacon requires your own model configuration. Model and network features depend on the provider; editing, compilation and ordinary sample testing do not require AI. See the [user guide (Chinese)](docs/getting-started.md) and [Beacon reference](extensions/becoder.beacon/README.md) for details and current limitations.
-
-Beacon includes tutor rules in every conversation request and describes the tools actually available. Answer quality still depends on the selected model. The [prompt evaluation report (Chinese)](docs/beacon/prompt-evaluation-2026-11-22.md) records synthetic comparisons, model limitations and acceptance status for the current development candidate.
+Beacon requires your own model configuration. Model and network features depend on the provider; editing, compilation and ordinary sample testing do not require AI. See [Beacon usage](extensions/becoder.beacon/README.md) for current capabilities and the [user guide (Chinese)](docs/getting-started.md) for installation and core programming workflows.
 
 ## Download and get started
 
@@ -49,6 +47,7 @@ Reinstallation deletes and replaces the entire existing installation directory, 
 
 - [User guide (Chinese)](docs/getting-started.md): installation, importing problems, running code, layout and data management.
 - [Development guide (Chinese)](docs/development.md): dependencies, source checks, builds and contributions.
+- [Beacon requirements and architecture (Chinese)](docs/beacon/README.md): unified capability requirements, the next foundation stage and current implementation gaps; designs are not delivered features.
 - [Product direction (Chinese)](VISION.md): experience goals, module responsibilities and long-term boundaries.
 - [Documentation index (Chinese)](docs/README.md): feature references, confirmed requirements and implementation status.
 - [GitHub Issues](https://github.com/Bc408/BeCoder-IDE/issues) · [Security policy](SECURITY.md).

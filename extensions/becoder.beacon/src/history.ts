@@ -22,6 +22,7 @@ export interface Conversation {
 	draft?: { text: string; attachments: Attachment[] };
 	draftOnly?: boolean;
 	contextSnapshots?: ContextSnapshot[];
+	pinnedTarget?: { id: string; title: string };
 }
 
 export interface HistoryData {
@@ -49,10 +50,13 @@ export function readHistory(value: unknown): HistoryData {
 		ids.add(item.id);
 		if (item.draftOnly !== undefined && typeof item.draftOnly !== 'boolean') { throw new Error('invalid-history'); }
 		if (item.contextSnapshots !== undefined && !validContextSnapshots(item.contextSnapshots)) { throw new Error('invalid-history'); }
+		if (item.pinnedTarget !== undefined && (!item.pinnedTarget || typeof item.pinnedTarget.id !== 'string' || !item.pinnedTarget.id || item.pinnedTarget.id.length > 256 || typeof item.pinnedTarget.title !== 'string' || item.pinnedTarget.title.length > 4096)) { throw new Error('invalid-history'); }
 		if (item.draft !== undefined && (!item.draft || typeof item.draft.text !== 'string' || !validAttachments(item.draft.attachments))) { throw new Error('invalid-history'); }
 		if (!Array.isArray(item.workspace) || item.workspace.some(root => typeof root.name !== 'string' || typeof root.path !== 'string')) { throw new Error('invalid-history'); }
 		let previous = 0;
 		for (const message of item.messages) {
+			if (message?.target !== undefined && (message.role !== 'user' || !message.target || typeof message.target.id !== 'string' || !message.target.id || message.target.id.length > 256 || typeof message.target.version !== 'string' || !message.target.version || message.target.version.length > 1024 || typeof message.target.title !== 'string' || message.target.title.length > 4096)) { throw new Error('invalid-history'); }
+			if (message?.target?.capturedKeys !== undefined && (!Array.isArray(message.target.capturedKeys) || message.target.capturedKeys.length > 4096 || new Set(message.target.capturedKeys).size !== message.target.capturedKeys.length || message.target.capturedKeys.some(key => typeof key !== 'string' || !key.startsWith(`page:${message.target!.id}:${message.target!.version}:`) || !/^(?:[1-9]\d*)?$/.test(key.slice(`page:${message.target!.id}:${message.target!.version}:`.length))))) { throw new Error('invalid-history'); }
 			if (message?.transition !== undefined && (message.role !== 'user' || !['temporary', 'persistent'].includes(message.transition))) { throw new Error('invalid-history'); }
 			if (message?.failure !== undefined && (message.role !== 'assistant' || !message.failure || !['connection', 'timeout', 'rate-limit', 'unavailable'].includes(message.failure.kind) || !Number.isInteger(message.failure.retries) || message.failure.retries < 0 || message.failure.retries > 2)) { throw new Error('invalid-history'); }
 			if (message?.attachments !== undefined && (message.role !== 'user' || !validAttachments(message.attachments))) { throw new Error('invalid-history'); }
@@ -118,6 +122,46 @@ export class ChatHistory {
 
 	get contextSnapshots(): ContextSnapshot[] {
 		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId)?.contextSnapshots ?? []);
+	}
+	/** Project retained evidence from the effective prefix without deleting original assets. */
+	effectiveContextSnapshots(beforeId = Infinity): ContextSnapshot[] {
+		const keys = new Set<string>();
+		for (const message of this.session.snapshot.messages) {
+			if (message.id >= beforeId) { continue; }
+			// A captured original target remains usable as historical evidence when
+			// its answer is regenerated, even though that answer's protocol is removed.
+			if (message.role === 'user') { for (const key of message.target?.capturedKeys ?? []) { keys.add(key); } }
+			if (message.role !== 'assistant' || !['complete', 'stopped'].includes(message.status)) { continue; }
+			for (const turn of message.protocol ?? []) {
+				for (const part of turn.messages) {
+					if (part.role !== 'tool') { continue; }
+					for (const result of part.content) {
+						if (result.type !== 'tool-result' || result.toolName !== 'inspectContext' || result.output.type !== 'json') { continue; }
+						const value: unknown = result.output.value;
+						if (!value || typeof value !== 'object' || Array.isArray(value)) { continue; }
+						const output = value as Record<string, unknown>;
+						if (output.ok !== true) { continue; }
+						if (typeof output.materialId === 'string') { keys.add(`material:${output.materialId}`); }
+						const source = output.source as Record<string, unknown> | undefined;
+						if (source && typeof source === 'object' && !Array.isArray(source) && source.kind === 'page' && typeof source.id === 'string' && typeof source.version === 'string') {
+							keys.add(`page:${source.id}:${source.version}:${typeof source.pageNumber === 'number' ? source.pageNumber : ''}`);
+						}
+					}
+				}
+			}
+		}
+		return this.contextSnapshots.filter(snapshot => keys.has(snapshot.key));
+	}
+	get pinnedTarget(): Conversation['pinnedTarget'] {
+		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId)?.pinnedTarget);
+	}
+	setPinnedTarget(target: Conversation['pinnedTarget']): boolean {
+		const active = this.data.conversations.find(item => item.id === this.data.activeId);
+		if (this.disposed || !active) { return false; }
+		if (target) { active.pinnedTarget = { ...target }; } else { delete active.pinnedTarget; }
+		if (!this.timer) { this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, 300); }
+		this.changed();
+		return true;
 	}
 
 	captureContext(snapshot: ContextSnapshot): void {

@@ -14,7 +14,7 @@ function event<T>() {
 }
 const configuration = event<{ affectsConfiguration(key: string): boolean }>();
 export const values = new Map<string, unknown>();
-export const controls: { updateError?: Error; secretError?: Error } = {};
+export const controls: { updateError?: Error; secretError?: Error; quickPicks?: number[] } = {};
 export const commandHandlers = new Map<string, (...args: unknown[]) => unknown>();
 export let beaconContext: IBeaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
 export const beaconConversations = new Map<string, IBeaconStoredConversation>();
@@ -30,7 +30,7 @@ export const Uri = {
 	parse: (url: string) => url.startsWith('file://') ? Uri.file(url.slice(7)) : { scheme: 'https', fsPath: '', toString: () => url }
 };
 export const ConfigurationTarget = { Global: 1 };
-export const extensions = { getExtension: (_id?: string): { activate(): Promise<unknown> } | undefined => undefined };
+export const extensions = { getExtension: (_id?: string): { activate(): Promise<unknown> } | undefined => { void _id; return undefined; } };
 export const l10n = { t: (text: string, ...args: unknown[]) => text.replace(/\{(\d+)\}/g, (_, index) => String(args[Number(index)])) };
 export const workspace = {
 	openTextDocument: async (options: { content: string; language: string }) => { textPreviews.push(options); return { uri: Uri.parse('untitled:selection'), ...options }; },
@@ -44,15 +44,15 @@ export const env = { language: 'zh-cn', clipboard: { writeText: async () => {} }
 export const commands = { registerCommand: (id: string, handler: (...args: unknown[]) => unknown) => { commandHandlers.set(id, handler); return { dispose: () => commandHandlers.delete(id) }; }, executeCommand: async (id: string, ...args: unknown[]) => { commandCalls.push({ id, args }); return commandHandlers.get(id)?.(...args); } };
 export const window = {
 	activeTextEditor: undefined as { selection: { isEmpty: boolean }; document: { uri: ReturnType<typeof Uri.file>; isClosed: boolean; getText(selection?: unknown): string } } | undefined,
-	showInformationMessage: async (_message: string) => undefined,
-	showTextDocument: async (_document: unknown, _options: unknown) => undefined,
+	showInformationMessage: async (_message: string) => { void _message; return undefined; },
+	showTextDocument: async (_document: unknown, _options: unknown) => { void _document; void _options; return undefined; },
 	createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
 	createWebviewPanel: () => { const panel = makePanel(); panels.push(panel); return panel; },
 	onDidChangeWindowState: () => ({ dispose() {} }),
 	registerWebviewViewProvider: (id: string, provider: typeof viewProviders extends Map<string, infer T> ? T : never) => { viewProviders.set(id, provider); return { dispose: () => viewProviders.delete(id) }; },
 	showOpenDialog: async (): Promise<ReturnType<typeof Uri.file>[] | undefined> => undefined,
 	showInputBox: async () => undefined,
-	showQuickPick: async () => undefined
+	showQuickPick: async <T>(items: readonly T[]): Promise<T | undefined> => { const index = controls.quickPicks?.shift(); return index === undefined ? undefined : items[index]; }
 };
 function makePanel() {
 	const view = makeView();
@@ -67,7 +67,7 @@ export function makeView() {
 }
 export function reset(directory: string) {
 	extensions.getExtension = () => undefined;
-	configuration.clear(); values.clear(); viewProviders.clear(); commandHandlers.clear(); commandCalls.length = 0; panels.length = 0; textPreviews.length = 0; window.activeTextEditor = undefined; workspace.notebookDocuments = []; delete controls.updateError; delete controls.secretError;
+	configuration.clear(); values.clear(); viewProviders.clear(); commandHandlers.clear(); commandCalls.length = 0; panels.length = 0; textPreviews.length = 0; window.activeTextEditor = undefined; workspace.notebookDocuments = []; delete controls.updateError; delete controls.secretError; delete controls.quickPicks;
 	const data = emptyConfiguration();
 	data.providers.deepseek.models = ['deepseek-flash', 'deepseek-chat'].map(id => ({ id, name: id, enabled: true, parameters: {}, settings: {}, discovered: { purpose: 'chat' as const, vision: id !== 'deepseek-chat', reasoning: true as const, tools: true as const, source: 'service' as const, reasoningEfforts: ['low', 'high', 'max'] as ('low' | 'high' | 'max')[] } }));
 	data.selection = { provider: 'deepseek', model: 'deepseek-flash' };
@@ -79,6 +79,7 @@ export function reset(directory: string) {
 		const key = (id: string) => `${beaconContext.root}:${id}`;
 		switch (operation) {
 			case 'checkPageAccess': return;
+			case 'pages': case 'runtimeList': return [];
 			case 'context': return structuredClone(beaconContext);
 			case 'busy': beaconContext.busy = input.busy; return;
 			case 'release': delete beaconContext.activeId; return;

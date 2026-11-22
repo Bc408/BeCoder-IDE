@@ -7,8 +7,90 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { validateProblem, validateRecord, validateProblemRef, validateOutcome, validateLanqiaoProgress } from '../src/domain';
 import { cphSamples } from '../src/cphHost';
+import { createBeaconPages } from '../src/beaconPages';
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('Beacon reads the displayed locale, exact samples and the published record version', () => {
+	const document = validateProblem({ ref, title: 'A+B', bodies: [
+		{ locale: 'en', sections: [{ format: 'markdown', content: 'english' }] },
+		{ locale: 'zh-CN', sections: [{ format: 'markdown', content: '中文题面' }] }
+	], samples: [{ input: '  1\n\n', output: '  2\n' }], limits: [], interactive: false });
+	const record = validateRecord({ ref: { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' }, phase: 'finished', rawStatus: 'WA', sourceVerification: 'matched', source: 'V1\r\n' });
+	let open = true;
+	let snapshot = record;
+	const problemIdentity = {}, recordIdentity = {};
+	const api = createBeaconPages({ beaconProblems: () => open ? [{ identity: problemIdentity, document, locale: 'zh-CN', sourceUri: undefined, active: true }] : [] }, { beaconRecords: () => [{ identity: recordIdentity, snapshot, sourceUri: undefined, active: false }] });
+	const [problem, submission] = api.listBeaconPages();
+	assert.strictEqual(Object.hasOwn(problem, 'contents'), false);
+	const material = JSON.parse(api.readBeaconPage(problem.id, problem.version)!.contents);
+	assert.strictEqual(material.body.locale, 'zh-CN');
+	assert.deepStrictEqual(material.samples, document.samples);
+	assert.match(submission.kind === 'oj-record' ? submission.sourceSha256! : '', /^[0-9a-f]{64}$/);
+	snapshot = { ...record, rawStatus: 'AC', sourceVerification: 'not-checked' };
+	assert.strictEqual(api.readBeaconPage(submission.id, submission.version), undefined);
+	assert.strictEqual(api.listBeaconPages().find(page => page.kind === 'oj-record')?.sourceSha256, undefined);
+	open = false;
+	assert.strictEqual(api.readBeaconPage(problem.id, problem.version), undefined);
+});
+for (const kind of ['problem', 'record'] as const) {
+	test('Beacon ' + kind + ' handles cannot revive after a panel closes and reopens', () => {
+		const document = validateProblem({ ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false });
+		const snapshot = validateRecord({ ref: { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' }, phase: 'finished', rawStatus: 'WA', sourceVerification: 'matched', source: 'V1' });
+		// Like a WebviewPanel, an instance keeps its identity until disposal; reopening creates another object.
+		let identity: object | undefined = {};
+		const api = createBeaconPages({
+			beaconProblems: () => kind === 'problem' && identity ? [{ identity, document, locale: undefined, sourceUri: 'file:///C:/chosen/main.cpp', active: true }] : []
+		}, {
+			beaconRecords: () => kind === 'record' && identity ? [{ identity, snapshot, sourceUri: 'file:///C:/chosen/main.cpp', active: true }] : []
+		});
+		const old = api.listBeaconPages()[0];
+		identity = undefined;
+		assert.deepStrictEqual(api.listBeaconPages(), []);
+		assert.strictEqual(api.readBeaconPage(old.id, old.version), undefined);
+		identity = {};
+		const reopened = api.listBeaconPages()[0];
+		assert.strictEqual(reopened.version, old.version);
+		assert.notStrictEqual(reopened.id, old.id);
+		assert.strictEqual(api.readBeaconPage(old.id, old.version), undefined);
+		assert.ok(api.readBeaconPage(reopened.id, reopened.version));
+	});
+}
+test('Beacon keeps separate problem panels readable when both source bindings expire', () => {
+	const document = validateProblem({ ref, title: 'A+B', bodies: [
+		{ locale: 'en', sections: [{ format: 'markdown', content: 'english' }] },
+		{ locale: 'zh-CN', sections: [{ format: 'markdown', content: '中文题面' }] }
+	], samples: [], limits: [], interactive: false });
+	const identities = [{}, {}];
+	let bindings: (string | undefined)[] = ['file:///C:/chosen/a.cpp', 'file:///C:/chosen/b.cpp'];
+	const api = createBeaconPages({
+		beaconProblems: () => identities.map((identity, index) => ({ identity, document, locale: index ? 'zh-CN' : 'en', sourceUri: bindings[index], active: index === 1 }))
+	}, { beaconRecords: () => [] });
+	const before = api.listBeaconPages();
+	bindings = [undefined, undefined];
+	const current = api.listBeaconPages();
+	assert.notStrictEqual(current[0].id, current[1].id);
+	assert.deepStrictEqual(current.map(page => page.id), before.map(page => page.id));
+	assert.strictEqual(JSON.parse(api.readBeaconPage(current[0].id, current[0].version)!.contents).body.locale, 'en');
+	assert.strictEqual(JSON.parse(api.readBeaconPage(current[1].id, current[1].version)!.contents).body.locale, 'zh-CN');
+});
+test('Beacon locale switches change content versions while preserving the panel handle', () => {
+	const document = validateProblem({ ref, title: 'A+B', bodies: [
+		{ locale: 'en', sections: [{ format: 'markdown', content: 'english' }] },
+		{ locale: 'zh-CN', sections: [{ format: 'markdown', content: '中文题面' }] }
+	], samples: [], limits: [], interactive: false });
+	const identity = {};
+	let locale = 'en';
+	const api = createBeaconPages({ beaconProblems: () => [{ identity, document, locale, sourceUri: undefined, active: true }] }, { beaconRecords: () => [] });
+	const original = api.listBeaconPages()[0];
+	locale = 'zh-CN';
+	const translated = api.listBeaconPages()[0];
+	assert.strictEqual(translated.id, original.id);
+	assert.notStrictEqual(translated.version, original.version);
+	assert.strictEqual(api.readBeaconPage(original.id, original.version), undefined);
+	assert.strictEqual(JSON.parse(api.readBeaconPage(translated.id, translated.version)!.contents).body.locale, 'zh-CN');
+	locale = 'en';
+	assert.ok(api.readBeaconPage(original.id, original.version));
+});
 test('Lanqiao progress accepts only bounded local milestones and projected cells', () => {
 	assert.strictEqual(validateLanqiaoProgress(undefined), undefined);
 	assert.deepStrictEqual(validateLanqiaoProgress({ phase: 'judging', source: 'private', record: 'not-verified' }), { phase: 'judging' });

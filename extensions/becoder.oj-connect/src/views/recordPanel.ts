@@ -13,7 +13,7 @@ import { userError } from '../messages';
 import type { PanelState } from './model';
 
 type PendingOutcome = Extract<SubmissionOutcome, { kind: 'unconfirmed' }>;
-interface RecordView { panel: Panel; stop(): void; track(): Promise<void>; update(value: Partial<PanelState>): void; closed: boolean; started: boolean; retry?: () => Promise<void> }
+interface RecordView { panel: Panel; sourceUri: string; stop(): void; track(): Promise<void>; update(value: Partial<PanelState>): void; closed: boolean; started: boolean; retry?: () => Promise<void> }
 
 export class RecordPanel implements vscode.Disposable {
 	private readonly panels = new Map<string, RecordView>();
@@ -23,11 +23,11 @@ export class RecordPanel implements vscode.Disposable {
 		const ref = validateRecordRef(input), existing = this.panels.get(ref.url);
 		if (existing) { existing.panel.reveal(); if (!existing.started) { void existing.track(); } return; }
 		if (!this.adapters.some(item => item.site === ref.problem.site)) { throw new Error(vscode.l10n.t('This site is not available yet.')); }
-		const view = this.create({ kind: 'record', labels: labels(), record: ref, sourceName: this.sourceName(sourceUri, ref.problem.nativeId) });
+		const view = this.create({ kind: 'record', labels: labels(), record: ref, sourceName: this.sourceName(sourceUri, ref.problem.nativeId) }, sourceUri);
 		this.panels.set(ref.url, view); void view.track();
 	}
 	beginEvaluation(value: SubmissionEvaluation, sourceUri: string) {
-		const view = this.create({ kind: 'record', labels: labels(), submission: value, sourceName: this.sourceName(sourceUri, value.problem.nativeId), tracking: true });
+		const view = this.create({ kind: 'record', labels: labels(), submission: value, sourceName: this.sourceName(sourceUri, value.problem.nativeId), tracking: true }, sourceUri);
 		let settled = false;
 		const adopt = (input: RecordRef) => {
 			const ref = validateRecordRef(input);
@@ -58,7 +58,7 @@ export class RecordPanel implements vscode.Disposable {
 		};
 	}
 	private sourceName(sourceUri: string, fallback: string): string { return sourceUri ? path.basename(vscode.Uri.parse(sourceUri).fsPath) : fallback; }
-	private create(state: PanelState): RecordView {
+	private create(state: PanelState, sourceUri: string): RecordView {
 		let active: AbortController | undefined;
 		const stop = () => { active?.abort(); active = undefined; };
 		const update = (value: Partial<PanelState>) => { if (!view.closed) { Object.assign(state, value); panel.update(value); } };
@@ -90,8 +90,14 @@ export class RecordPanel implements vscode.Disposable {
 			view.closed = true; stop(); this.views.delete(view);
 			if (state.record) { this.panels.delete(state.record.url); void this.release(state.record).catch(() => undefined); }
 		});
-		const view: RecordView = { panel, stop, track, update, closed: false, started: false };
+		const view: RecordView = { panel, sourceUri, stop, track, update, closed: false, started: false };
 		this.views.add(view); return view;
+	}
+	beaconRecords() {
+		return [...this.views].flatMap(view => {
+			const identity: object = view.panel.panel;
+			return view.panel.state.snapshot && !view.closed ? [{ identity, snapshot: view.panel.state.snapshot, sourceUri: view.sourceUri || undefined, active: view.panel.panel.active }] : [];
+		});
 	}
 	dispose(): void { for (const view of this.views) { view.stop(); view.panel.dispose(); } this.views.clear(); this.panels.clear(); }
 }

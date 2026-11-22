@@ -12,7 +12,45 @@ import { readHistory, type Conversation, type HistoryData } from './history';
 export type BeaconTransport = <T>(operation: string, input?: unknown) => Promise<T>;
 export interface BeaconHistoryBinding { root?: string; readonly revision?: number; data: HistoryData; save(data: HistoryData): Promise<HistoryData> }
 
-export type BeaconPage = IBeaconPage | (Omit<IBeaconPage, 'kind'> & { kind: 'pdf'; pageCount?: number });
+export type BeaconPage = IBeaconPage | (Omit<IBeaconPage, 'kind'> & {
+	kind: 'pdf' | 'oj-problem' | 'oj-record';
+	pageCount?: number;
+	sourceUri?: string;
+	problemKey?: string;
+	sourceSha256?: string;
+});
+export type PageReference = Pick<BeaconPage, 'id' | 'version'>;
+export interface OjPageApi {
+	listBeaconPages(): BeaconPage[];
+	readBeaconPage(id: string, version: string): (BeaconPage & { contents: string; totalCharacters: number }) | undefined;
+}
+
+/** Only exposes published, currently open OJ panels. There is no network operation here. */
+export function withOjPages(native: (operation: string, input?: unknown) => Promise<unknown>, oj: () => OjPageApi | undefined): (operation: string, input?: unknown) => Promise<unknown> {
+	return async (operation, input) => {
+		if (operation !== 'pages' && operation !== 'page') { return native(operation, input); }
+		const owner = oj();
+		const canRead = async (page: BeaconPage) => {
+			if ('sourceUri' in page && page.sourceUri?.startsWith('file:')) { await native('checkPageAccess', { source: fileURLToPath(page.sourceUri) }); }
+		};
+		if (operation === 'pages') {
+			const originals = await native(operation, input) as BeaconPage[];
+			const added = await Promise.all((owner?.listBeaconPages() ?? []).map(async page => {
+				try { await canRead(page); return page; } catch { return undefined; }
+			}));
+			return [...originals, ...added.filter(page => page !== undefined)];
+		}
+		const value = input as { id?: string; version?: string } | undefined;
+		if (!value?.id?.startsWith('oj:')) { return native(operation, input); }
+		const page = owner?.listBeaconPages().find(item => item.id === value.id);
+		if (!owner || !page) { throw new Error('beacon-page-closed'); }
+		if (page.version !== value.version) { throw new Error('beacon-page-changed'); }
+		await canRead(page);
+		const result = owner.readBeaconPage(page.id, page.version);
+		if (!result || oj() !== owner || result.id !== page.id || result.version !== page.version || !('sourceUri' in result) || result.sourceUri !== ('sourceUri' in page ? page.sourceUri : undefined)) { throw new Error('beacon-page-changed'); }
+		return result;
+	};
+}
 export interface PdfPageApi {
 	listPages(): BeaconPage[];
 	readPage(id: string, version: string, pageNumber: number): Promise<BeaconPage & { contents: string; totalCharacters: number }>;

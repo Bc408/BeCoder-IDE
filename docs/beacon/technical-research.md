@@ -1,6 +1,16 @@
 # Beacon 技术研究与后续验证
 
-更新：2026-10-23。本文是工程研究入口；产品规则见[PRD](prd.md)、[架构](architecture.md)与[Notebook 设计](notebook.md)，当前覆盖见[实现状态](implementation-status.md)。研究建议不等于实施授权，源码存在入口不等于真实旅程通过。
+更新：2026-11-22。本文是工程研究入口；产品规则见[PRD](prd.md)、[架构](architecture.md)与[Notebook 设计](notebook.md)，当前覆盖见[实现状态](implementation-status.md)。研究建议不等于实施授权，源码存在入口不等于真实旅程通过。
+
+## 当前开发连接
+
+负责人已通过 2026-11-21 统一架构图。其正式细化见[统一请求与提示词设计](../superpowers/specs/2026-11-21-beacon-prompt-context-design.md)，首轮任务见[提示词开发计划](../superpowers/plans/2026-11-21-beacon-prompt-optimization.md)，质量要求见[行为评估案例](prompt-evaluation.md)。先在完整有效历史上比较提示词，再以同一批案例推进压缩；不因接入材料工具而假定模型已看准代码或能稳定教学。
+
+2026-11-21 的机制研究核对了 `openai/codex` 的 `1145028ae47e8119955323d38ce34122d418f951`：规则片段装配、替换/撤销、请求快照和压缩后重建值得参考。公开源码和模拟测试不证明线上提示服从率；不直接搬用其编码 agent 的自主执行目标、工具权限或专用压缩协议。固定来源和取舍集中在统一设计，不新增另一套产品要求。
+
+2026-11-22 再次读取了 Codex `357fe240c91563c1e6c9690bb27a2e609282d615`，并拉取 OpenCode `73a0eae88de47f10068a0f9dc7a743638fa3d830` 与 pi `9c4652688590abb836b40ebd1e4725ecf9a7c7d1`，跟踪实际提示消费者、动态能力、历史恢复与压缩；未运行上游或模型。负责人已采纳将后续工作聚焦完整请求生命周期的建议，具体收敛为[正式调整方案](../superpowers/specs/2026-11-22-beacon-request-lifecycle-design.md)，当前待书面审阅。A1 先复用现有 owner 明确快照/投影，A2 补证据和多步旅程，A3 再独立设计预算与同步压缩；不重复实现已存在的统一 core，不从源码组织推定教学正确。
+
+最新材料修订见[共享材料与近期凭证](../superpowers/specs/2026-11-22-beacon-workspace-evidence-design.md)：只复用三来源持久化近期队列，统一记录与读取，不另建长期库/索引/多版本层。该数据边界优先于上段的原实施顺序；共享队列消费者与本轮代码快照需纳入后续计划。
 
 ## 已落地的工程方向
 

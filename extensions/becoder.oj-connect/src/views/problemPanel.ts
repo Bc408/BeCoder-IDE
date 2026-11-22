@@ -153,5 +153,14 @@ export class ProblemPanel implements vscode.Disposable {
 			panel.update({ languageId, ...(problem.ref.site === 'atcoder' ? { locale: this.preferences?.statementLocale(problem.bodies.map(body => body.locale)) } : {}) });
 		}
 	}
+	beaconProblems() {
+		return [...this.panels.values()].flatMap(({ panel, binding }) => {
+			if (!panel.state.problem) { return []; }
+			let sourceUri: string | undefined;
+			try { binding.assertCurrent(); sourceUri = binding.uri; } catch { /* The page remains usable without a source binding. */ }
+			const identity: object = panel.panel;
+			return [{ identity, document: panel.state.problem, locale: panel.state.locale, sourceUri, active: panel.panel.active }];
+		});
+	}
 	dispose(): void { for (const value of this.panels.values()) { value.panel.dispose(); } this.panels.clear(); }
 }

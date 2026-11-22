@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "25f4204d-58aa-48a7-8fbb-3471333acd07",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\Bc\\Desktop\\BeCoder\\BeCoder_maintenance\\.archify\\architecture-beacon-unified-20261121-191755\\candidate.json",
+  "output": "C:\\Users\\Bc\\Desktop\\BeCoder\\BeCoder_maintenance\\.archify\\architecture-beacon-unified-20261121-191755\\beacon-review.html",
+  "specification": {
+    "sha256": "4226ea283e433ccee3168797ad8d47e96dd49aa24d33f33e9b774e23bbd6dc95",
+    "bytes": 10938
+  },
+  "artifact": {
+    "sha256": "9e549e8fb4d6a8c81b6562ac9f2c2824f69cc7d23808d03d253d77bc4048fd18",
+    "bytes": 864185
+  }
+}

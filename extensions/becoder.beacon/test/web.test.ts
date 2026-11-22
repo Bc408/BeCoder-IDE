@@ -148,7 +148,7 @@ suite('Beacon web conversation lifecycle', () => {
 				await session.send('hello', createGenerator(async () => ({ ...connection, capabilities }), async (_url, init) => {
 					const body = JSON.parse(String(init?.body));
 					assert.deepStrictEqual(body.tools?.map((tool: { function: { name: string } }) => tool.function.name), enabled && support ? ['browseWeb'] : undefined);
-					assert.equal(body.messages.some((message: { role: string; content: string }) => message.role === 'system' && message.content.includes('untrusted reference material')), enabled && support);
+					assert.equal(body.messages.some((message: { role: string; content: string }) => message.role === 'system' && message.content.includes('Capability: browseWeb')), enabled && support);
 					return modelStream([{ content: 'hello' }]);
 				}, 'none', [], enabled, async () => { throw new Error('Unexpected search for greeting'); }));
 				assert.equal(session.snapshot.error, '');

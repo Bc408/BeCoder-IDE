@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Beacon 当前架构 · 已提交基线",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-beacon-20261121-184625/beacon-current.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Bc408/BeCoder-IDE.git",
+      "revision": "e701f9c0ecd1c36dbe5d708833e3eeb9c0f58973"
+    }
+  },
+  "components": [
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "聊天面板",
+      "sublabel": "输入 / 附件 / 流式呈现",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/webview/App.tsx",
+          "line": 202,
+          "end_line": 211
+        },
+        {
+          "path": "extensions/becoder.beacon/webview/App.tsx",
+          "line": 242,
+          "end_line": 258
+        }
+      ]
+    },
+    {
+      "id": "session",
+      "type": "backend",
+      "label": "会话与请求",
+      "sublabel": "ChatSession / extension",
+      "pos": [
+        355,
+        40
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/src/extension.ts",
+          "line": 111,
+          "end_line": 122
+        },
+        {
+          "path": "extensions/becoder.beacon/src/session.ts",
+          "line": 125,
+          "end_line": 145
+        },
+        {
+          "path": "extensions/becoder.beacon/src/context.ts",
+          "line": 143,
+          "end_line": 157
+        }
+      ]
+    },
+    {
+      "id": "provider",
+      "type": "backend",
+      "label": "模型请求装配",
+      "sublabel": "system / messages / tools",
+      "pos": [
+        685,
+        40
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/src/provider.ts",
+          "line": 290,
+          "end_line": 314
+        },
+        {
+          "path": "extensions/becoder.beacon/src/provider.ts",
+          "line": 317,
+          "end_line": 344
+        }
+      ]
+    },
+    {
+      "id": "model",
+      "type": "cloud",
+      "label": "用户所选模型",
+      "sublabel": "云端或本机 Ollama",
+      "pos": [
+        1015,
+        40
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/src/provider.ts",
+          "line": 275,
+          "end_line": 298
+        }
+      ]
+    },
+    {
+      "id": "context",
+      "type": "backend",
+      "label": "上下文读取工具",
+      "sublabel": "页面 / 运行 / 本会话材料",
+      "pos": [
+        685,
+        250
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/src/contextTools.ts",
+          "line": 138,
+          "end_line": 155
+        },
+        {
+          "path": "extensions/becoder.beacon/src/contextTools.ts",
+          "line": 174,
+          "end_line": 206
+        }
+      ]
+    },
+    {
+      "id": "host",
+      "type": "security",
+      "label": "原生协调与存储",
+      "sublabel": "根 / 档位 / 单会话占用",
+      "pos": [
+        355,
+        250
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "src/vs/platform/beacon/node/beaconCoordinator.ts",
+          "line": 326,
+          "end_line": 370
+        },
+        {
+          "path": "src/vs/platform/beacon/node/beaconCoordinator.ts",
+          "line": 406,
+          "end_line": 440
+        },
+        {
+          "path": "src/vs/platform/beacon/node/beaconCoordinator.ts",
+          "line": 292,
+          "end_line": 305
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": ".beaconWork",
+      "sublabel": "会话 / 原始队列 / 材料快照",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "src/vs/platform/beacon/node/beaconStore.ts",
+          "line": 150,
+          "end_line": 174
+        },
+        {
+          "path": "src/vs/platform/beacon/node/beaconStore.ts",
+          "line": 240,
+          "end_line": 270
+        }
+      ]
+    },
+    {
+      "id": "pages",
+      "type": "frontend",
+      "label": "工作台页面",
+      "sublabel": "已打开内容 / 内存版本",
+      "pos": [
+        685,
+        450
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts",
+          "line": 40,
+          "end_line": 85
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "用户运行的证据",
+      "sublabel": "Runner / CPH / NoteBook",
+      "pos": [
+        355,
+        450
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/danielpinto8zz6.c-cpp-compile-run/src/beaconEvidence.ts",
+          "line": 27,
+          "end_line": 61
+        }
+      ]
+    },
+    {
+      "id": "optional",
+      "type": "backend",
+      "label": "可选领域工具",
+      "sublabel": "文件 / 联网 / 笔记编辑",
+      "pos": [
+        1015,
+        250
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "extensions/becoder.beacon/src/provider.ts",
+          "line": 308,
+          "end_line": 340
+        }
+      ],
+      "tag": "按能力与权限"
+    }
+  ],
+  "connections": [
+    {
+      "id": "chat-send",
+      "from": "chat",
+      "to": "session",
+      "label": "提问",
+      "variant": "emphasis"
+    },
+    {
+      "id": "session-input",
+      "from": "session",
+      "to": "provider",
+      "label": "历史与协议",
+      "variant": "emphasis"
+    },
+    {
+      "id": "provider-call",
+      "from": "provider",
+      "to": "model",
+      "label": "流式调用",
+      "variant": "emphasis"
+    },
+    {
+      "id": "context-tool",
+      "from": "provider",
+      "to": "context",
+      "label": "按需读取"
+    },
+    {
+      "id": "record-read",
+      "from": "context",
+      "to": "host",
+      "label": "固定 revision",
+      "variant": "security"
+    },
+    {
+      "id": "persist",
+      "from": "host",
+      "to": "store",
+      "label": "受控读写",
+      "variant": "security"
+    },
+    {
+      "id": "session-save",
+      "from": "session",
+      "to": "host",
+      "label": "保存会话",
+      "variant": "security"
+    },
+    {
+      "id": "page-read",
+      "from": "context",
+      "to": "pages",
+      "label": "读取当前页"
+    },
+    {
+      "id": "runtime-write",
+      "from": "runtime",
+      "to": "host",
+      "label": "区内用户运行"
+    },
+    {
+      "id": "optional-tools",
+      "from": "provider",
+      "to": "optional",
+      "label": "条件注册"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "读取方式",
+      "items": [
+        "先给来源、版本与入口元数据，再按需读取正文。",
+        "页面读权限于本窗口已经打开的内容，运行记录按 revision 获取。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "存储与隔离",
+      "items": [
+        "原生宿主校验工作区、档位和会话占用；会话消费的运行材料独立留存。",
+        "Blackout 对话保留在内存；Spot / Flood 的持久化会话归所选根。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "本轮讨论的起点",
+      "items": [
+        "基线 e701f9c0：导师身份提示与联网条件耦合；历史由会话直接重放。",
+        "活动对象跟随与 OJ 结构化材料接入属于未提交工作区改动，见目标图。"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "范围",
+      "items": [
+        "这是 Beacon 主调用关系；流式结果沿调用链返回聊天面板。",
+        "NoteBook 是可选学习资产工具；压缩、工作区记忆和 dream 尚无完整实现。"
+      ]
+    }
+  ]
+}

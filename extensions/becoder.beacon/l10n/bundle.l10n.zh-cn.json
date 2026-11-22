@@ -1,4 +1,13 @@
 {
+	"Follow the active editor": "跟随活动编辑器",
+	"Choose the context for your question": "选择本轮问题的上下文对象",
+	"Use for the next question": "仅用于下一问",
+	"Keep this context for the conversation": "在本会话中固定此对象",
+	"The original context page is no longer open.": "原上下文页面已关闭。",
+	"The original context page changed.": "原上下文页面已变更。",
+	"This answer keeps the original target version and can use its captured historical snapshot.": "本次回答保留原对象版本，可使用当时已采集的历史快照。",
+	"The original target version was not captured. Its contents are unavailable; a new question can use the current page.": "原对象版本尚未采集，无法取得其正文；发送新问题可使用当前页面。",
+	"The selected context page is no longer open. Reopen it and choose it again, or follow the active editor.": "所选上下文页面已关闭，请重新打开并选择，或恢复跟随活动编辑器。",
 	"The saved generation parameters conflict with the current model capabilities. Adjust them in Beacon settings.": "已保存的生成参数与当前模型能力冲突，请在 Beacon 设置中调整。",
 	"Send a new question to inherit this context, or switch back to the original mode to change earlier messages.": "发送新问题以继承上文；如需修改此前消息，请切回原模式。",
 	"The new conversation accepted your question, but the original draft could not be cleared. It is still saved in the original conversation.": "新对话已接收问题，但未能清除原草稿；它仍保存在原对话中。",

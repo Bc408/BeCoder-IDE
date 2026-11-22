@@ -6,8 +6,8 @@
 import { suite, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { BeaconContextClient, withPdfPages } from '../src/context';
-import { ContextTools, redactContext, type ContextSnapshot } from '../src/contextTools';
+import { BeaconContextClient, withOjPages, withPdfPages } from '../src/context';
+import { ContextTools, redactContext, redactValues, type ContextSnapshot } from '../src/contextTools';
 import { NotebookTools } from '../src/notebookTools';
 import { createGenerator } from '../src/provider';
 import { ChatSession } from '../src/session';
@@ -19,6 +19,103 @@ import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beac
 const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 2, busy: false, runtimeBusy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
 
 suite('Beacon native context consumer', () => {
+	test('cookie header lines preserve code outside the complete header value', () => {
+		const cases = [
+			['Cookie: sid=fixture-a; preference=fixture-b\r\nint after = 1;', 'Cookie: [redacted]\r\nint after = 1;'],
+			['// sEt-CoOkIe: sid=fixture-c; Path=/; HttpOnly\nint cookie = 2;', '// sEt-CoOkIe: [redacted]\nint cookie = 2;'],
+			['/* Cookie: sid=fixture-d; preference=fixture-e */ int after = 3;', '/* Cookie: [redacted] */ int after = 3;'],
+			['const char* header = "Cookie: sid=fixture-f; preference=fixture-g"; int after = 4;', 'const char* header = "Cookie: [redacted]"; int after = 4;'],
+			["headers = {'Set-Cookie': 'sid=fixture-h; Path=/'}; int after = 5;", "headers = {'Set-Cookie': '[redacted]'}; int after = 5;"],
+			['const char* request = "GET / HTTP/1.1\\r\\nCookie: sid=fixture-i; preference=fixture-j\\r\\nAccept: text/plain\\r\\n"; int after = 6;', 'const char* request = "GET / HTTP/1.1\\r\\nCookie: [redacted]\\r\\nAccept: text/plain\\r\\n"; int after = 6;'],
+			['Cookie: [redacted]\\nint cookie = 1;', 'Cookie: [redacted]\\nint cookie = 1;'],
+			['int cookie = 1; int set_cookie = 2; auto cookies = "ordinary"; // keep this code', 'int cookie = 1; int set_cookie = 2; auto cookies = "ordinary"; // keep this code']
+		];
+		for (const [input, expected] of cases) { assert.equal(redactContext(input), expected); }
+	});
+	test('structured cookie header keys hide their entire values', () => {
+		assert.deepEqual(redactValues({ headers: { Cookie: 'sid=fixture-a; preference=fixture-b', 'sEt-CoOkIe': ['sid=fixture-c; Path=/', 'other=fixture-d; HttpOnly'] }, cookieCount: 2, source: 'int cookie = 2;' }), {
+			headers: { Cookie: '[redacted]', 'sEt-CoOkIe': '[redacted]' }, cookieCount: 2, source: 'int cookie = 2;'
+		});
+	});
+	test('OJ cookie values are filtered before source and compiler message pagination', async () => {
+		const page = { id: 'oj:cookie', kind: 'oj-record' as const, title: 'CE', version: '1' };
+		const contents = JSON.stringify({
+			rawStatus: 'CE', phase: 'finished', sourceVerification: 'not-checked',
+			source: '// Cookie: sid=fixture-source; other=fixture-other\nint cookie = 1;\nconst char* header = "Set-Cookie: sid=fixture-quoted; Path=/"; int after = cookie;',
+			compileMessage: 'Set-Cookie: sid=fixture-compiler; Path=/; HttpOnly\r\ncompile failed on line 2'
+		}, null, 2);
+		const api = { listBeaconPages: () => [page], readBeaconPage: () => ({ ...page, sourceUri: undefined, contents, totalCharacters: contents.length }) };
+		const client = new BeaconContextClient(withOjPages(async operation => operation === 'context' ? selected() : [], () => api));
+		await client.refresh();
+		const tools = new ContextTools(client, client.captureScope());
+		const signal = new AbortController().signal;
+		let combined = '';
+		let offset = 0;
+		do {
+			const result = await tools.execute({ operation: 'page', id: page.id, version: page.version, offset, limit: 7 }, signal);
+			assert.equal(result.ok, true);
+			assert.equal(result.redacted, true);
+			combined += result.contents;
+			if (result.nextOffset === undefined) { break; }
+			offset = result.nextOffset as number;
+		} while (true);
+		const record = JSON.parse(combined);
+		assert.equal(record.source, '// Cookie: [redacted]\nint cookie = 1;\nconst char* header = "Set-Cookie: [redacted]"; int after = cookie;');
+		assert.equal(record.compileMessage, 'Set-Cookie: [redacted]\r\ncompile failed on line 2');
+		assert.equal(combined.includes('fixture-'), false);
+	});
+	test('a turn keeps its selected version and distinguishes a prior verified OJ result', async () => {
+		const uri = 'file:///C:/chosen/main.cpp';
+		const source = { id: 'editor', kind: 'text', title: 'main.cpp', uri, version: '2', dirty: true, active: true };
+		const result = { id: 'oj:result', kind: 'oj-record', title: 'WA', version: '1', sourceUri: uri, problemKey: 'atcoder:practice_1', sourceSha256: createHash('sha256').update('V1').digest('hex') };
+		let pages = [source, result];
+		const client = new BeaconContextClient(async (operation, input) => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'pages') { return pages; }
+			if (operation === 'page') {
+				const page = pages.find(page => page.id === (input as { id: string }).id);
+				return { ...page, contents: page === result ? JSON.stringify({ rawStatus: 'WA' }) : 'V2' };
+			}
+			return [];
+		});
+		await client.refresh();
+		const tools = new ContextTools(client, client.captureScope(), [], [], undefined, { id: 'editor', version: '2' });
+		const signal = new AbortController().signal;
+		const overview = await tools.execute({ operation: 'overview' }, signal);
+		assert.deepEqual(overview.target, source);
+		assert.deepEqual(overview.relatedPages, [result]);
+		await tools.execute({ operation: 'page', id: source.id, version: source.version }, signal);
+		const evidence = await tools.execute({ operation: 'page', id: result.id, version: result.version }, signal);
+		assert.deepEqual(evidence.ojSourceComparison, [{ id: result.id, relation: 'different-source' }]);
+		pages = [{ ...source, version: '3' }, result];
+		assert.equal((await tools.execute({ operation: 'page', id: 'editor', version: '3' }, signal)).code, 'beacon-page-changed');
+	});
+	test('OJ pages use only a current, authorized publication', async () => {
+		const page = { id: 'oj:one', kind: 'oj-record' as const, title: 'WA', version: '1', sourceUri: 'file:///C:/chosen/main.cpp' };
+		let pages = [page];
+		let blocked = false;
+		let reads = 0;
+		const api = {
+			listBeaconPages: () => pages,
+			readBeaconPage: () => { reads++; return { ...page, contents: 'WA', totalCharacters: 2 }; }
+		};
+		const transport = withOjPages(async op => {
+			if (op === 'pages') { return []; }
+			assert.equal(op, 'checkPageAccess');
+			if (blocked) { throw new Error('beacon-protected-page'); }
+			return undefined;
+		}, () => api);
+		assert.deepEqual(await transport('pages'), [page]);
+		await assert.rejects(transport('page', { id: page.id, version: '0' }), /beacon-page-changed/);
+		blocked = true;
+		assert.deepEqual(await transport('pages'), []);
+		await assert.rejects(transport('page', { id: page.id, version: '1' }), /beacon-protected-page/);
+		blocked = false;
+		await transport('page', { id: page.id, version: '1' });
+		pages = [];
+		await assert.rejects(transport('page', { id: page.id, version: '1' }), /beacon-page-closed/);
+		assert.equal(reads, 1);
+	});
 	test('request admission refreshes runtime activity without mistaking its own preparation for a run', async () => {
 		let running = false;
 		const client = new BeaconContextClient(async () => ({ ...selected(), busy: true, runtimeBusy: running }));

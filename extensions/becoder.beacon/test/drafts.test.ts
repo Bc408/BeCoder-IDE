@@ -10,12 +10,53 @@ import { BeaconContextClient } from '../src/context';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { Attachment } from '../src/attachments';
 import type { ContextSnapshot } from '../src/contextTools';
+import type { Generate } from '../src/session';
 
 const attachment: Attachment = { id: 'one', path: 'C:\\chosen\\main.cpp', source: 'picker', name: 'main.cpp', kind: 'text', contents: 'int main() {}', truncated: false };
 const conversation = (): Conversation => ({ id: 'draft-one', title: '', updatedAt: 1, messages: [], error: '', workspace: [], draftOnly: true });
 const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
 
 suite('Beacon conversation drafts', () => {
+	test('effective PDF target materials retain only pages actually consumed by the original question', async () => {
+		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => data, () => {}, () => 'error');
+		const page = (pageNumber: number): ContextSnapshot => ({ key: `page:pdf:version:${pageNumber}`, raw: 'page ' + pageNumber, metadata: { source: { kind: 'page', id: 'pdf', version: 'version', pageNumber, capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded PDF page text' } } });
+		const readPage = (pageNumber: number): Generate => async function* () {
+			const snapshot = page(pageNumber); history.captureContext(snapshot);
+			yield { type: 'protocol', turn: { provider: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'synthetic', messages: [
+				{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'page-' + pageNumber, toolName: 'inspectContext', input: { operation: 'page', id: 'pdf', version: 'version', pageNumber } }] },
+				{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'page-' + pageNumber, toolName: 'inspectContext', output: { type: 'json', value: { ok: true, contents: snapshot.raw, source: { kind: 'page', id: 'pdf', version: 'version', pageNumber } } } }] }
+			] } };
+			yield { type: 'text', text: 'Read page ' + pageNumber };
+		};
+		try {
+			await history.session.send('Original page one', readPage(1), undefined, undefined, [], undefined, { id: 'pdf', version: 'version', title: 'problem.pdf' });
+			const firstReply = history.snapshot.messages[1].id;
+			await history.session.send('Later page two', readPage(2), undefined, undefined, [], undefined, { id: 'pdf', version: 'version', title: 'problem.pdf' });
+			assert.deepEqual(history.effectiveContextSnapshots(firstReply).map(snapshot => snapshot.key), ['page:pdf:version:1']);
+			await history.session.regenerate(firstReply, async function* () { yield { type: 'text', text: 'Replacement using original page' }; });
+			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), ['page:pdf:version:1']);
+			assert.deepEqual(history.contextSnapshots.map(snapshot => snapshot.key), ['page:pdf:version:1', 'page:pdf:version:2']);
+		} finally { await history.dispose(); }
+	});
+	test('conversation pin metadata rejects malformed identities when history is restored', () => {
+		const pinnedTarget = { id: 'editor-a', title: 'a.cpp' };
+		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), pinnedTarget }] };
+		assert.deepEqual((readHistory(data).conversations[0] as Conversation & { pinnedTarget: unknown }).pinnedTarget, pinnedTarget);
+		for (const invalid of [null, {}, { id: '', title: 'a.cpp' }, { id: 7, title: 'a.cpp' }, { id: 'a', title: false }]) {
+			assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), pinnedTarget: invalid }] }), /invalid-history/);
+		}
+	});
+	test('turn target metadata is validated before restoring a user question', () => {
+		const target = { id: 'editor-a', version: 'a:1', title: 'a.cpp' };
+		const user = { id: 1, role: 'user', text: 'Explain A', status: 'complete', activities: [], target };
+		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), messages: [user] }] };
+		const restored = readHistory(data);
+		assert.deepEqual((restored.conversations[0].messages[0] as typeof user).target, target);
+		for (const invalid of [null, {}, { ...target, id: '' }, { ...target, version: 7 }, { ...target, title: false }, { ...target, capturedKeys: true }, { ...target, capturedKeys: ['page:other:version:1'] }, { ...target, capturedKeys: ['page:editor-a:a:1:../file'] }]) {
+			assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), messages: [{ ...user, target: invalid }] }] }), /invalid-history/);
+		}
+		assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), messages: [{ ...user, role: 'assistant' }] }] }), /invalid-history/);
+	});
 	test('captured context persists independently and remains detached across restores and updates', async () => {
 		let saved: HistoryData | undefined;
 		const snapshot: ContextSnapshot = { key: 'page:one:2:', raw: 'captured complete page', metadata: { source: { kind: 'page', id: 'one', version: '2', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded editor text model' } } };

@@ -61,6 +61,13 @@ try {
 		{ id: 5, role: 'user', text: '保存后继续讨论', status: 'complete', activities: [], transition: 'persistent' }
 	] }, '*'));
 	await page.getByText('原聊天中的问题', { exact: true }).waitFor();
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', usedTarget: 'solution.cpp' }, '*'));
+	const questionContext = page.getByRole('button', { name: '选择提问对象' });
+	await page.getByText('上轮对象 · solution.cpp', { exact: true }).waitFor();
+	await questionContext.click();
+	assert.equal(await page.evaluate(() => window.messages.some(message => message.type === 'pickTarget')), true);
+	await page.screenshot({ path: path.join(output, 'question-context.png') });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', usedTarget: undefined }, '*'));
 	assert.equal(await page.getByRole('separator').count(), 2, 'Both inherited conversation boundaries are visible');
 	await page.getByText('已继承上文，开始临时对话', { exact: true }).waitFor();
 	await page.getByText('已继承上文，建立持久化对话', { exact: true }).waitFor();

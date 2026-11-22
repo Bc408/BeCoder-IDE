@@ -3,6 +3,7 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createBeaconPages } from './beaconPages';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
@@ -48,7 +49,7 @@ export async function readProblemLanguages(problem: ProblemRef, signal: AbortSig
 }
 
 let controller: SubmissionController | undefined;
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext) {
 	const configuration = () => vscode.workspace.getConfiguration('becoder.ojConnect');
 	const preferences = new OjPreferences({
 		get: <T>(key: string) => configuration().get<T>(key),
@@ -212,6 +213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('becoder.ojConnect.continueQuery', guard(continueQuery)),
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);
+	return createBeaconPages(problems, records);
 }
 
 export async function deactivate(): Promise<void> { await controller?.dispose(); controller = undefined; }

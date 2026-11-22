@@ -37,7 +37,7 @@ export type BeaconProducer = 'runner' | 'cph' | 'notebook';
 export interface IBeaconRuntimeRecord { id: string; code: string; startedAt: number; events: unknown[]; revision: number; sequence: number }
 export interface IBeaconConsumedRecord extends IBeaconRuntimeRecord { materialId: string }
 export interface IBeaconRuntimeItem { id: string; producer: BeaconProducer; revision: number; startedAt: number; source?: string; sha256?: string; finished: boolean }
-export interface IBeaconPage { id: string; kind: 'text' | 'browser' | 'notebook' | 'unsupported'; title: string; uri?: string; version: string; dirty?: boolean; reason?: string }
+export interface IBeaconPage { id: string; kind: 'text' | 'browser' | 'notebook' | 'unsupported'; title: string; uri?: string; version: string; dirty?: boolean; reason?: string; active?: boolean }
 export interface IBeaconPageRead extends IBeaconPage { contents: string; nextOffset?: number; totalCharacters: number }
 export const beaconContextChannel = 'becoderBeaconContext';
 export const beaconContextCommand = '_becoder.beacon.context';

@@ -30,7 +30,7 @@ const api = acquireVsCodeApi();
 const zh = document.documentElement.lang.startsWith('zh');
 const configuration = document.body.dataset.surface === 'configuration';
 const t = (en: string, cn: string) => zh ? cn : en;
-type State = Snapshot & { navigationBusy?: boolean; modeTransitionPending?: boolean; responseBusy?: boolean; context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
+type State = Snapshot & { usedTarget?: string; selectedTarget?: string; navigationBusy?: boolean; modeTransitionPending?: boolean; responseBusy?: boolean; context?: IBeaconContext; screen: 'home' | 'conversation'; canSend: boolean; temporary: boolean; viewKey: string; draftText?: string; homeHasDraft?: boolean; attachments: Attachment[]; connection: ConnectionState; configured: boolean; activeId: string; history: HistoryItem[]; saveFailed: boolean; historyUnreadable: boolean; permission: FilePermission; webEnabled: boolean; requestNotice?: { id: number; text: string } };
 // Calendar-day comparison avoids daylight-saving transitions changing the date label.
 const formatTime = (value: number, now: number) => {
 	const date = new Date(value);
@@ -272,6 +272,9 @@ function App() {
 		<footer>
 			{!failedReply && state.error && <div className={temporaryFailure ? 'connection-notice' : 'error'} role="alert">{temporaryFailure && <Icon name="info" />}{state.error}</div>}
 			<form ref={composer} className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
+				<button className="beacon-context-choice" type="button" disabled={!ready || busy} onClick={() => api.postMessage({ type: 'pickTarget' })} aria-label={t('Choose question context', '选择提问对象')}>
+					{state.selectedTarget ? `${t('Selected', '已选择')} · ${state.selectedTarget}` : state.usedTarget ? `${t('Last question', '上轮对象')} · ${state.usedTarget}` : t('Follow active editor', '跟随活动编辑器')}
+				</button>
 				{!!state.attachments.length && <div className="attachments draft-attachments">{state.attachments.map(item => <AttachmentCard key={item.id} item={item} busy={busy} preview={(item, url) => openAttachment(state.attachments, item, url)} remove={() => api.postMessage({ type: 'removeAttachment', id: item.id })} />)}</div>}
 				{blocked && <div className="attachment-warning" role="status">{blocked}</div>}
 				<textarea ref={input} value={draft} maxLength={32000} rows={1} aria-label={t('Message Beacon', '向 Beacon 提问')} placeholder={t('Ask Beacon…', '向 Beacon 提问…')} onPaste={pasteImages} onChange={event => { draftEditRevision.current++; draftRef.current = event.target.value; draftPending.current = true; setDraft(event.target.value); api.postMessage({ type: 'draft', text: event.target.value, viewKey: activeRef.current }); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => {

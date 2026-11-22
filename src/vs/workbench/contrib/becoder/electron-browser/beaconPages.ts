@@ -82,7 +82,7 @@ export class BeaconWorkbenchPages extends Disposable {
 				const model = this.models.getModel(uri);
 				let version = model && this.versions.get(model);
 				if (model && !version) { version = { id: generateUuid(), navigation: 0 }; this.versions.set(model, version); }
-				return { key: this.key(editor, uri.toString()), kind: 'text' as const, title: editor.getName(), uri: uri.toString(), version: `${version?.id}:${model?.getVersionId()}`, dirty: editor.isDirty(), reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
+				return { key: this.key(editor, uri.toString()), kind: 'text' as const, title: editor.getName(), uri: uri.toString(), version: `${version?.id}:${model?.getVersionId()}`, dirty: editor.isDirty(), active: this.editors.activeEditor === editor, reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
 					if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
 					if (!model || model.isDisposed() || this.models.getModel(uri) !== model) { throw new Error('beacon-page-changed'); }
 					return model.getValue();

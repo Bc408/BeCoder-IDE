@@ -26,6 +26,7 @@ export function fileModelOutput(output: FileOutput) {
 }
 
 export interface Message {
+	target?: { id: string; version: string; title: string; capturedKeys?: string[] };
 	transition?: 'temporary' | 'persistent';
 	failure?: RequestFailure;
 	attachments?: Attachment[];
@@ -92,11 +93,11 @@ export class ChatSession {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = [], transition?: Message['transition']): Promise<void> {
+	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = [], transition?: Message['transition'], target?: Message['target']): Promise<void> {
 		if (this.disposed || this.controller) { return; }
 		text = text.trim();
 		if ((!text && !attachments.length) || text.length > 32000 || !validAttachments(attachments)) { return; }
-		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(transition ? { transition } : {}), ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
+		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(target ? { target: { id: target.id, version: target.version, title: target.title } } : {}), ...(transition ? { transition } : {}), ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
 		await this.respond(generate, files, source);
 	}
 
@@ -166,6 +167,23 @@ export class ChatSession {
 				if (controller.signal.aborted) { break; }
 				if ('turn' in delta && delta.turn) {
 					(reply.protocol ??= [])[protocolOffset] = structuredClone({ ...delta.turn, messages: [...(resumedReply ? [context.at(-1)!] : []), ...delta.turn.messages] });
+					const target = this.messages.findLast(message => message.role === 'user')?.target;
+					if (target) {
+						for (const message of delta.turn.messages) {
+							if (message.role !== 'tool') { continue; }
+							for (const result of message.content) {
+								if (result.type !== 'tool-result' || result.toolName !== 'inspectContext' || result.output.type !== 'json') { continue; }
+								const value: unknown = result.output.value;
+								if (!value || typeof value !== 'object' || Array.isArray(value)) { continue; }
+								const output = value as Record<string, unknown>;
+								const source = output.source as Record<string, unknown> | undefined;
+								if (output.ok === true && typeof output.contents === 'string' && source?.kind === 'page' && source.id === target.id && source.version === target.version) {
+									const key = `page:${target.id}:${target.version}:${typeof source.pageNumber === 'number' ? source.pageNumber : ''}`;
+									if (!target.capturedKeys?.includes(key)) { (target.capturedKeys ??= []).push(key); }
+								}
+							}
+						}
+					}
 				}
 				if (delta.type === 'protocol') { this.publish(); continue; }
 				if (delta.type === 'text') {

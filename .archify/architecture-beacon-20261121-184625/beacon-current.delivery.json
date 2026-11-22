@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "b3a7478e-fa89-4441-89b8-c5b36ea23bf1",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\Bc\\Desktop\\BeCoder\\BeCoder_maintenance\\.archify\\architecture-beacon-20261121-184625\\current.candidate.json",
+  "output": "C:\\Users\\Bc\\Desktop\\BeCoder\\BeCoder_maintenance\\.archify\\architecture-beacon-20261121-184625\\beacon-current.html",
+  "specification": {
+    "sha256": "ecab0e88a66f6f5a9f2a439f4c2e5cd5cd106b103a255b68176a89a06ff4ff3c",
+    "bytes": 8545
+  },
+  "artifact": {
+    "sha256": "9c25b68b46bcce33e67055aab8912de123b7bfa94e54889fb75c3a5a2efa1ab0",
+    "bytes": 852739
+  }
+}

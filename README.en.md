@@ -29,6 +29,8 @@ BeCoder brings problem reading, coding, local sample testing, submission and jud
 
 Beacon requires your own model configuration. Model and network features depend on the provider; editing, compilation and ordinary sample testing do not require AI. See the [user guide (Chinese)](docs/getting-started.md) and [Beacon reference](extensions/becoder.beacon/README.md) for details and current limitations.
 
+Beacon includes tutor rules in every conversation request and describes the tools actually available. Answer quality still depends on the selected model. The [prompt evaluation report (Chinese)](docs/beacon/prompt-evaluation-2026-11-22.md) records synthetic comparisons, model limitations and acceptance status for the current development candidate.
+
 ## Download and get started
 
 Supports **64-bit Windows 10 and later**. Download Setup from [GitHub Releases](https://github.com/Bc408/BeCoder-IDE/releases) and choose the application or Portable edition. Both include the toolchain and request administrator authorization during installation.

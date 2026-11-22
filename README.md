@@ -29,6 +29,8 @@ BeCoder 将看题、写代码、本地样例测试、交题和查看评测结果
 
 Beacon 需要自行配置模型服务；模型与网络能力取决于服务商。编辑、编译和样例测试无需配置 AI。完整能力与当前限制见[使用指南](docs/getting-started.md)和 [Beacon 说明](extensions/becoder.beacon/README.md)。
 
+Beacon 的正式请求统一带入导师规则，并按实际工具能力组织上下文说明；回答质量仍取决于所选模型。当前开发候选的合成评测、模型局限与体验验收状态见[提示词对照报告](docs/beacon/prompt-evaluation-2026-11-22.md)。
+
 ## 下载与上手
 
 支持 **64 位 Windows 10 及以上版本**。从 [GitHub Releases](https://github.com/Bc408/BeCoder-IDE/releases) 下载 Setup，选择应用版或 Portable 版。两种模式均包含工具链，安装时均请求管理员权限。

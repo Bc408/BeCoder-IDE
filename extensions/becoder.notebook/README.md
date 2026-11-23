@@ -22,7 +22,7 @@ stdout/stderr 合并成普通连续输出，保留 ANSI 颜色，不按流染色
 
 Notebook可独立使用，不依赖Beacon、模型或`.beaconWork`。代码／笔记选区通过“询问 Beacon”进入可查看、可移除的草稿，由用户发送；模型在用户明确请求、目标和权限合法时才创建或改写笔记。改写空闲目标前备份最新完整稿，保真实输出，沿原生编辑／保存反馈实际状态；模型没有程序执行API。
 
-当前已保存笔记在所选根内时具备独立执行凭证接线，但Blackout后续写入仍受当前store限制；不能宣称已实现三档持续采集。下一阶段将统一为正常所选根下三档持续采集，Beacon在Blackout禁读这些记录；Notebook输出／备份与近期凭证的生命周期独立。模型自动取执行事实只走持久凭证，不以笔记页面或资产工具的outputs／attempt作为旁路；宿主完整备份、用户编辑和输出保存继续保留。见[完整能力](../../docs/beacon/prd.md)的NB／NBA条目与[实现差距](../../docs/beacon/implementation-status.md)。
+已保存笔记在正常所选Beacon根内时，用户input运行持续产生独立近期凭证，Blackout不停止软件采集，但Beacon禁读这些持久记录。Notebook输出／备份与近期凭证各守生命周期；模型自动取材只获得正文内容投影，不从功能页、资产工具或文件JSON中的outputs／attempt／executionSummary旁读执行事实。宿主完整备份、用户编辑和真实输出保存继续保留。见[完整能力](../../docs/beacon/prd.md)的NB／NBA条目与[实施状态](../../docs/beacon/implementation-status.md)。
 
 ## 开发与许可
 

@@ -290,8 +290,10 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		let failed = false;
 		let beaconActivity: string | undefined;
 		let runtimeActivity: string | undefined;
+		let collectionScope: unknown;
 		try {
 			if (request.command === 'run' || request.command === 'compile') {
+				try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* Core execution does not require evidence storage. */ }
 				try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
 				catch (error) { console.warn('Beacon CPH runtime tracking unavailable', error); }
 			}
@@ -332,7 +334,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			} else {
 				const source = this.session.current?.problem.srcPath;
 				if (source) {
-					try { beaconActivity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source }); }
+					try { beaconActivity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source, collectionScope }); }
 					catch (error) { console.warn('Beacon CPH activity tracking unavailable', error); }
 				}
 				if (this.preparationCancelled) { throw new Error('CPH request cancelled.'); }

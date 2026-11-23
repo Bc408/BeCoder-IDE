@@ -77,7 +77,7 @@ Modern UI 默认开启，提供圆角、悬浮侧栏与底部面板，以及更�
 
 点击编辑器右上角Beacon按钮打开助手，在其独立设置页配置模型。各窗口独立选择Beacon工作区；Spot／Flood需要正常根，Blackout聊天使用临时内存。主动添加文件、代码／Notebook／PDF选区先进入可查看、可移除的草稿，再由用户发送；Runner、CPH、Notebook运行及必要收尾时不排队发送。
 
-当前详细用法见[Beacon扩展说明](../extensions/becoder.beacon/README.md)。下一阶段已确认将“工作区决定软件采集、模式决定模型消费”分开：有效根的Blackout仍采集用户行为记录，Beacon禁读这些持久来源；无根／根异常不采集。新的五类队列、代码快照和同步压缩尚待实施，不能由该设计推断当前版本已具备完整闭环，见[实现差距](beacon/implementation-status.md)。
+候选源码用法见[Beacon扩展说明](../extensions/becoder.beacon/README.md)：正常所选根持续采集用户行为，Blackout仅关闭Beacon持久来源能力；代码由模型主动读取时同次保存，发送不捕获。五类共享队列、历史代码和同步摘要的源码与验收边界见[实施状态](beacon/implementation-status.md)，源码接通不替代真实五站和负责人体验验收。
 
 ## 数据与卸载
 

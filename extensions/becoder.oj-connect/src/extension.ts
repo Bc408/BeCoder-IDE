@@ -3,10 +3,11 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createBeaconPages } from './beaconPages';
+import { fileURLToPath } from 'url';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import type { IBeaconAcquisition, IBeaconCollectionScope, IBeaconOjCapture } from 'becoder-beacon';
 import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost, CommandLanqiaoHost } from './browserHost';
 import { LanqiaoAdapter } from './adapters/lanqiao/adapter';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
@@ -25,7 +26,7 @@ import { cphSamples } from './cphHost';
 import { OperationError } from './operationError';
 import { userError } from './messages';
 import { OjPreferences } from './preferences';
-import { validateLanguageCatalogue, type LanguageCatalogue, type ProblemRef, type ProblemDocument, type RecordRef, type SubmissionOutcome, type ISourceSnapshot } from './domain';
+import { validateLanguageCatalogue, validateProblemRef, type LanguageCatalogue, type ProblemRef, type ProblemDocument, type RecordRef, type RecordSnapshot, type SubmissionOutcome, type ISourceSnapshot } from './domain';
 
 export async function readProblemLanguages(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue> {
 	if (signal.aborted) { throw new Error('oj-connect-operation-cancelled'); }
@@ -62,6 +63,33 @@ export async function activate(context: vscode.ExtensionContext) {
 		void vscode.window.showWarningMessage(vscode.l10n.t('OJ Connect could not migrate saved preferences. Unmigrated choices are kept; check your user settings and reload to retry.'));
 	}
 	const execute = async (command: string, ...args: unknown[]) => vscode.commands.executeCommand(command, ...args);
+	const collectionScope = async (): Promise<IBeaconCollectionScope | undefined> => {
+		try { return await vscode.commands.executeCommand<IBeaconCollectionScope>('_becoder.beacon.context', 'captureCollectionScope'); }
+		catch { return undefined; }
+	};
+	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
+		if (!scope) { return; }
+		try { await execute('_becoder.beacon.context', 'captureProblem', { input: { document, sourceUri, viewedAt, trigger }, scope }); }
+		catch { void vscode.window.showWarningMessage(vscode.l10n.t('The problem was opened, but Beacon could not save its context.')); }
+	};
+	const createOjCapture = (sourceUri: string, scope: IBeaconCollectionScope | undefined, identity: { attemptId?: string; recordKey?: string }) => {
+		let tail = Promise.resolve(), handle: string | undefined, failed = false;
+		const enqueue = (operation: () => Promise<unknown>) => {
+			if (!scope) { return; }
+			tail = tail.then(async () => { if (!failed) { await operation(); } }).catch(() => { failed = true; void vscode.window.showWarningMessage(vscode.l10n.t('The submission continues, but Beacon could not save its context.')); });
+		};
+		if (sourceUri) { enqueue(async () => { handle = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginOjCaptureActivity', { input: { sourceUri, ...identity }, scope }); }); }
+		return {
+			accept: (input: IBeaconOjCapture) => enqueue(() => execute('_becoder.beacon.context', 'captureOj', { input, scope })),
+			finish: async () => { await tail; if (handle) { await execute('_becoder.beacon.context', 'endOjCaptureActivity', { id: handle }).catch(() => undefined); } }
+		};
+	};
+	const publishObservedRecord = async (record: RecordSnapshot, sourceUri: string, scope: IBeaconCollectionScope | undefined, attemptId: string) => {
+		const capture = createOjCapture(sourceUri, scope, { attemptId, recordKey: JSON.stringify([record.ref.problem.site, record.ref.id, record.ref.url]) });
+		capture.accept({ record, sourceUri, attemptId });
+		await capture.finish();
+	};
+	const evaluationCaptures = new Map<string, ReturnType<typeof createOjCapture>>();
 	const captcha = new LuoguCaptcha(async requestId => vscode.commands.executeCommand<string>('_becoder.ojConnect.luogu.getCaptcha', requestId));
 	context.subscriptions.push(captcha,
 		vscode.commands.registerCommand('_becoder.ojConnect.luogu.askCaptcha', (image: string, requestId: string) => captcha.ask(image, requestId)),
@@ -72,9 +100,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const openInBrowser = async (url: string) => { await vscode.commands.executeCommand('workbench.action.browser.open', { url, openToSide: true }); };
 	const login = new LoginView(context, adapters, execute, openInBrowser, site => problems?.refreshLanguages(site));
 	context.subscriptions.push(login, vscode.window.registerWebviewViewProvider('becoder.ojConnect.accounts', login));
-	const records = new RecordPanel(context, adapters, openInBrowser, async record => { await execute('_becoder.ojConnect.releaseRecord', record); }, (outcome, sourceUri, onRecord, isOpen) => {
-		const value: Pending = { outcome, sourceUri, onRecord, isOpen }; pending = value;
+	const records = new RecordPanel(context, adapters, openInBrowser, async record => { await execute('_becoder.ojConnect.releaseRecord', record); }, (outcome, sourceUri, onRecord, isOpen, scope) => {
+		const value: Pending = { outcome, sourceUri, onRecord, isOpen, scope }; pending = value;
 		return () => continueQuery(value);
+	}, (ref, sourceUri, scope, attemptId) => {
+		const capture = createOjCapture(sourceUri, scope, { attemptId, recordKey: JSON.stringify([ref.problem.site, ref.id, ref.url]) });
+		return { accept: record => capture.accept({ record, sourceUri: sourceUri || undefined, attemptId }), finish: capture.finish };
 	});
 	const columns = new Map<string, vscode.ViewColumn>();
 	const revealSource = async (sourceUri: string) => {
@@ -82,10 +113,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		await vscode.window.showTextDocument(document, { preview: false, viewColumn: columns.get(sourceUri) ?? vscode.ViewColumn.One });
 		return document;
 	};
-	const openRecord = async (record: RecordRef, sourceUri: string) => {
+	const openRecord = async (record: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope, attemptId?: string) => {
 		// The official receipt remains useful when its original local source was removed.
 		await revealSource(sourceUri).catch(() => undefined);
-		await records.open(record, sourceUri);
+		await records.open(record, sourceUri, scope, attemptId);
 	};
 	const requestProblem = async (fileName: string, site?: SiteId): Promise<ProblemRef | undefined> => {
 		const candidates = adapters.filter(adapter => !site || adapter.site === site);
@@ -113,13 +144,20 @@ export async function activate(context: vscode.ExtensionContext) {
 				status.show();
 				return await operation(value => { status.tooltip = value.phase === 'sending' || value.phase === 'interaction' ? vscode.l10n.t('Submitting code.') : value.evaluation ? vscode.l10n.t('Reading the current submission result…') : value.message; });
 			} finally { status.dispose(); }
-		}, openRecord, beginEvaluation: (value, sourceUri) => records.beginEvaluation(value, sourceUri)
+		}, openRecord, beginEvaluation: (value, sourceUri, scope) => records.beginEvaluation(value, sourceUri, scope),
+		onRecord: publishObservedRecord,
+		onEvaluation: (attemptId, evaluation, sourceUri, scope) => {
+			let capture = evaluationCaptures.get(attemptId);
+			if (!capture) { capture = createOjCapture(sourceUri, scope, { attemptId }); evaluationCaptures.set(attemptId, capture); }
+			capture.accept({ attemptId, evaluation, sourceUri });
+		},
+		onEvaluationEnd: async attemptId => { const capture = evaluationCaptures.get(attemptId); evaluationCaptures.delete(attemptId); await capture?.finish(); }
 	}, preferences);
 	const snapshot = (document: vscode.TextDocument): ISourceSnapshot => {
 		if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file' || !['c', 'cpp'].includes(document.languageId)) { throw new Error(vscode.l10n.t('Focus a C/C++ source in a trusted local workspace.')); }
 		return { uri: document.uri.toString(), fileName: path.basename(document.uri.fsPath), version: document.version, family: document.languageId as 'c' | 'cpp', source: document.getText() };
 	};
-	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; query?: Promise<void>; record?: RecordRef; resolved?: boolean; onRecord?: (record: RecordRef) => void; isOpen?: () => boolean };
+	type Pending = { outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>; sourceUri: string; scope?: IBeaconCollectionScope; query?: Promise<void>; record?: RecordRef; resolved?: boolean; onRecord?: (record: RecordRef) => void; isOpen?: () => boolean };
 	let pending: Pending | undefined;
 	const continueQuery = async (value = pending): Promise<void> => {
 		if (!value || value.resolved) { return; }
@@ -130,11 +168,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		value.query = (async () => {
 			try {
 				const adapter = adapters.find(item => item.site === value.outcome.problem.site)!;
-				const outcome = value.record ? { kind: 'record' as const, record: value.record } : await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
+				const outcome: SubmissionOutcome = value.record ? { kind: 'record', record: value.record } : await adapter.reconcile(value.outcome.attemptId, new AbortController().signal);
 				if (outcome.kind === 'record') {
 					value.record = outcome.record;
+					if (outcome.observed) { try { await publishObservedRecord(outcome.observed.snapshot, value.sourceUri, value.scope, outcome.observed.attemptId); } catch { /* Storage cannot undo a confirmed query. */ } }
 					if (onRecord) { onRecord(outcome.record); }
-					else { await openRecord(outcome.record, value.sourceUri); }
+					else { await openRecord(outcome.record, value.sourceUri, value.scope, value.outcome.attemptId); }
 					value.resolved = true;
 					if (pending === value) { pending = undefined; }
 				} else { await vscode.window.showWarningMessage(vscode.l10n.t('The submission is still unconfirmed. Open its official record in the same browser and continue querying. No code was resent.')); }
@@ -144,8 +183,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 	const submitDocument = async (document: vscode.TextDocument, problem?: ProblemRef) => {
 		const input = snapshot(document);
+		const scope = await collectionScope();
 		if (vscode.window.activeTextEditor?.document === document && vscode.window.activeTextEditor.viewColumn) { columns.set(input.uri, vscode.window.activeTextEditor.viewColumn); }
-		const outcome = await controller!.submit(input, problem);
+		const outcome = await controller!.submit(input, problem, scope);
 		void login.refresh();
 		if (outcome?.kind === 'not-sent') {
 			if (outcome.reason === 'luogu-browser-verification-required' || outcome.reason === 'nowcoder-browser-verification-required') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
@@ -153,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 		else if (outcome?.kind === 'rejected') { await vscode.window.showWarningMessage(userError(outcome.reason)); }
 		else if (outcome?.kind === 'unconfirmed') {
-			const value: Pending = pending?.outcome.attemptId === outcome.attemptId && pending.outcome.problem.url === outcome.problem.url ? pending : { outcome, sourceUri: input.uri }; pending = value;
+			const value: Pending = pending?.outcome.attemptId === outcome.attemptId && pending.outcome.problem.url === outcome.problem.url ? pending : { outcome, sourceUri: input.uri, scope }; pending = value;
 			const query = vscode.l10n.t('Continue Querying');
 			if (await vscode.window.showWarningMessage(vscode.l10n.t('Submission receipt unconfirmed: {0}. Continue querying instead of submitting again.', userError(outcome.message)), query) === query) { await continueQuery(value); }
 		}
@@ -163,13 +203,18 @@ export async function activate(context: vscode.ExtensionContext) {
 		preferredLanguage: (site, family) => controller!.preferredLanguage(site, family),
 		selectLanguage: (site, family, languageId) => controller!.selectLanguage(site, family, languageId),
 		submit: async (source, document) => submitDocument(source, document.ref),
-		importCph: async (sourceUri, document) => { await vscode.commands.executeCommand('_becoder.cph.importSamplesForSource', { sourceUri, problem: cphSamples(document) }); },
+		importCph: async (sourceUri, document) => {
+			const scope = await collectionScope();
+			const imported = await vscode.commands.executeCommand('_becoder.cph.importSamplesForSource', { sourceUri, problem: cphSamples(document) });
+			if (imported) { await publishAcquiredProblem(document, sourceUri, Date.now(), 'import-cph', scope); }
+		},
 		openLink: openInBrowser
 	}, preferences);
 	const importer = new ImportController(adapters, {
 		folders: () => (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === 'file').map(folder => folder.uri.fsPath), directories,
 		selectFolder: async folders => (await vscode.window.showQuickPick(folders.map(folder => ({ label: path.basename(folder), description: folder, folder })), { title: vscode.l10n.t('Choose an import folder') }))?.folder,
-		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, source.uri.toString(), source); }
+		open: async (sourceUri, document) => { const source = await revealSource(sourceUri); await problems.open(document, source.uri.toString(), source); },
+		acquired: async (document, sourceUri, acquisition) => { if (acquisition) { await publishAcquiredProblem(document, sourceUri, Date.now(), acquisition.trigger, acquisition.scope); } }
 	});
 	context.subscriptions.push(problems, records, importer,
 		vscode.workspace.onDidChangeConfiguration(event => {
@@ -192,6 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('becoder.ojConnect.submit', guard(async () => submitDocument(currentDocument()))),
 		vscode.commands.registerCommand('becoder.ojConnect.showProblem', guard(async () => {
 			const source = currentDocument(), input = snapshot(source), column = vscode.window.activeTextEditor?.viewColumn;
+			const scope = await collectionScope();
 			if (column) { columns.set(input.uri, column); }
 			problemReads.get(input.uri)?.abort();
 			const read = new AbortController(); problemReads.set(input.uri, read);
@@ -203,17 +249,39 @@ export async function activate(context: vscode.ExtensionContext) {
 				const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, read.signal, { family: input.family });
 				if (read.signal.aborted) { return; }
 				await revealSource(input.uri);
-				if (!read.signal.aborted) { await problems.open(document, input.uri, source); }
+				if (!read.signal.aborted) { await problems.open(document, input.uri, source); await publishAcquiredProblem(document, input.uri, Date.now(), 'get-problem', scope); }
 			} catch (error) { if (!read.signal.aborted) { throw error; } }
 			finally { if (problemReads.get(input.uri) === read) { problemReads.delete(input.uri); } }
 		})),
 		vscode.commands.registerCommand('_becoder.ojConnect.importTarget', (url: string) => typeof url === 'string' ? browserImportTarget(url, directories, adapters) : undefined),
 		vscode.commands.registerCommand('_becoder.ojConnect.cancelBrowserImport', (requestId: string) => importer.cancel(requestId)),
-		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument, requestId?: string) => { if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); } return importer.import(document, requestId); }),
+		vscode.commands.registerCommand('_becoder.ojConnect.importFromBrowser', async (document: ProblemDocument, requestId?: string, acquisition?: IBeaconAcquisition) => {
+			if (!vscode.workspace.isTrusted) { throw new Error(vscode.l10n.t('Trust this workspace before importing a problem.')); }
+			return importer.import(document, requestId, acquisition ?? { scope: await collectionScope(), trigger: 'get-problem' });
+		}),
+		vscode.commands.registerCommand('_becoder.ojConnect.captureImportedProblem', async (sourcePath: string, pageUrl: string, acquisition: IBeaconAcquisition) => {
+			if (!acquisition?.scope || !vscode.workspace.isTrusted) { return; }
+			const problem = adapters.map(adapter => adapter.resolve(pageUrl)).find(ref => !!ref);
+			if (!problem) { return; }
+			try {
+				const document = await adapters.find(adapter => adapter.site === problem.site)!.readProblem(problem, new AbortController().signal, { family: path.extname(sourcePath).toLowerCase() === '.c' ? 'c' : 'cpp' });
+				await publishAcquiredProblem(document, vscode.Uri.file(sourcePath).toString(), Date.now(), acquisition.trigger, acquisition.scope);
+			} catch { void vscode.window.showWarningMessage(vscode.l10n.t('Samples were imported, but Beacon could not acquire the full problem statement.')); }
+		}),
 		vscode.commands.registerCommand('becoder.ojConnect.continueQuery', guard(continueQuery)),
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);
-	return createBeaconPages(problems, records);
+	return {
+		resolveBeaconUrl: (url: string) => adapters.map(adapter => adapter.resolve(url)).find(ref => !!ref),
+		resolveBeaconProblem: (sourceUri: string) => {
+			if (!sourceUri.startsWith('file:')) { return { kind: 'inputRequired' as const }; }
+			return resolveProblem(fileURLToPath(sourceUri), directories(), adapters);
+		},
+		readBeaconProblem: async (input: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }) => {
+			const ref = validateProblemRef(input);
+			return adapters.find(adapter => adapter.site === ref.site)!.readProblem(ref, signal, { family: options?.family ?? 'cpp' });
+		}
+	};
 }
 
 export async function deactivate(): Promise<void> { await controller?.dispose(); controller = undefined; }

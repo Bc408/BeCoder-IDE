@@ -9,7 +9,7 @@ import { JudgeRun } from './execution';
 import { ImportedProblem } from './problem';
 
 export interface JudgeEngine {
-	judge(problem: ImportedProblem, source: string, compileOnly?: boolean): Promise<JudgeRun>;
+	judge(problem: ImportedProblem, source: string, compileOnly?: boolean, sampleNumbers?: readonly number[]): Promise<JudgeRun>;
 	cancel(): void;
 	dispose(): void;
 }
@@ -66,7 +66,7 @@ export class JudgeSession {
 			await this.saveSource(snapshot.problem.srcPath);
 			if (this.disposed) { throw new Error('CPH closed.'); }
 			if (this.cancelled) { throw new Error('CPH request cancelled.'); }
-			const run = await this.engine.judge({ ...snapshot.problem, tests: selected }, snapshot.problem.srcPath, compileOnly);
+			const run = await this.engine.judge({ ...snapshot.problem, tests: selected }, snapshot.problem.srcPath, compileOnly, selected.map(sample => snapshot.problem.tests.indexOf(sample) + 1));
 			return { run, ids: selected.map(sample => sample.id) };
 		} finally { this.running = false; }
 	}

@@ -1,4 +1,5 @@
 {
+	"Samples were imported, but Beacon could not acquire the full problem statement.": "样例已导入，但 Beacon 未能取得完整题面。",
 	"Choose the source language": "选择源文件语言",
 	"Only C and C++ are supported.": "仅支持 C 和 C++。",
 	"Invalid template file.": "模板文件无效。",

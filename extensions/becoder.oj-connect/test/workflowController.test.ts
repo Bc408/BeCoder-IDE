@@ -93,6 +93,64 @@ test('a closed submission preview suppresses reopening on a late formal receipt'
 	assert.deepStrictEqual(f.records, [], 'closing a preview does not cancel delivery but does suppress a late reopen');
 });
 
+test('a formal receipt is observed before a closed preview releases it without another query', async () => {
+	const f = fixture(), problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+	const scope = { slot: 'chosen', root: 'C:/cpp', workspaceIdentity: 'root-one', rootSelectionEpoch: 1 };
+	const source = { ...snapshot, uri: 'file:///C:/cpp/lanqiao/254.cpp', fileName: '254.cpp' };
+	const fact = { ref: record, phase: 'finished' as const, rawStatus: 'AC', sourceVerification: 'matched' as const };
+	const observed: unknown[][] = [], order: string[] = [];
+	Object.assign(f.host, { onRecord: async (...args: unknown[]) => { observed.push(args); order.push('observed'); } });
+	f.host.beginEvaluation = () => ({ update() { }, finish: () => { order.push('closed-preview'); return false; } });
+	const adapter: OjAdapter = { ...f.luogu, site: 'lanqiao', prepare: async () => ({ languages: [{ id: 'cpp', label: 'C++17', family: 'cpp' }], hasDraft: false,
+		send: async () => ({ kind: 'record', record, observed: { attemptId: 'native-attempt', snapshot: fact } }), cancel: async () => { }, dispose: async () => { }
+	}), readRecord: async () => assert.fail('observation must not query the website') };
+	Object.assign(f.host, { adapters: [adapter] });
+	assert.strictEqual((await f.controller.submit(source, problem, scope))?.kind, 'record');
+	assert.deepStrictEqual(observed, [[fact, source.uri, scope, 'native-attempt']]);
+	assert.deepStrictEqual(order, ['observed', 'closed-preview']);
+	assert.deepStrictEqual(f.records, []);
+});
+
+test('a receipt observation failure leaves the accepted submission and its preview successful', async () => {
+	const f = fixture();
+	let observations = 0;
+	Object.assign(f.host, { onRecord: async () => { observations++; throw new Error('Beacon unavailable'); } });
+	const prepare = f.luogu.prepare;
+	f.luogu.prepare = async (...args) => {
+		const session = await prepare(...args);
+		return { ...session, send: async (...sendArgs) => {
+			const outcome = await session.send(...sendArgs);
+			assert.strictEqual(outcome.kind, 'record');
+			if (outcome.kind !== 'record') { throw new Error('expected record'); }
+			return { ...outcome, observed: { attemptId: 'native-attempt', snapshot: { ref: outcome.record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' } } };
+		} };
+	};
+	assert.strictEqual((await f.controller.submit(snapshot))?.kind, 'record');
+	assert.strictEqual(observations, 1);
+	assert.strictEqual(f.records[0]?.id, '11');
+	assert.strictEqual(f.released(), 1);
+});
+
+test('native evaluation evidence is independent of a closed preview and keeps the acquisition scope', async () => {
+	const f = fixture(), problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+	const scope = { slot: 'chosen', root: 'C:/cpp', workspaceIdentity: 'root-one', rootSelectionEpoch: 1 };
+	const evidence: unknown[][] = [];
+	Object.assign(f.host, { onEvaluation: (...args: unknown[]) => evidence.push(args) });
+	f.host.beginEvaluation = () => ({ update() { throw new Error('preview closed'); }, finish: () => false });
+	const evaluation = { problem, phase: 'judging' as const, codeLength: '1 B', attemptId: 'native-attempt' };
+	const adapter: OjAdapter = { ...f.luogu, site: 'lanqiao', prepare: async () => ({ languages: [{ id: 'cpp', label: 'C++17', family: 'cpp' }], hasDraft: false,
+		send: async (_input, progress) => {
+			progress({ phase: 'sending', message: 'synthetic display', evaluation: { ...evaluation, phase: 'sending', attemptId: undefined } });
+			progress({ phase: 'confirming', message: 'native result', evaluation });
+			return { kind: 'unconfirmed', problem, attemptId: 'native-attempt', message: 'pending' };
+		}, cancel: async () => { }, dispose: async () => { }
+	}) };
+	Object.assign(f.host, { adapters: [adapter] });
+	await Reflect.apply(f.controller.submit, f.controller, [{ ...snapshot, uri: 'file:///C:/cpp/lanqiao/254.cpp' }, problem, scope]);
+	assert.deepStrictEqual(evidence, [['native-attempt', evaluation, 'file:///C:/cpp/lanqiao/254.cpp', scope]]);
+});
+
 test('AtCoder compiler choices persist across controllers and an expired choice asks again', async () => {
 	const values = new Map<string, unknown>();
 	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { values.set(key, value); } });

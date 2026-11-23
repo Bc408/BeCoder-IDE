@@ -22,6 +22,12 @@ const chunk = (delta: Record<string, unknown>, finish: string | null = null) => 
 const answer = () => new Response(chunk({ content: 'answer' }) + chunk({}, 'stop') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 
 suite('Beacon request recovery', () => {
+	test('structured context rejection in HTTP 400 is not a transport retry', async () => {
+		let calls = 0;
+		const recovery = new RequestRecovery(async () => { calls++; return new Response(JSON.stringify({ error: { code: 'context_length_exceeded' } }), { status: 400 }); }, signal(), { wait });
+		await assert.rejects(recovery.fetch('https://provider.invalid', init), error => error instanceof RequestRejectedError && error.code === 'CONTEXT_TOO_LARGE');
+		assert.equal(calls, 1);
+	});
 	test('two transient retries reuse bytes and emit only bounded, redacted diagnostics', async () => {
 		let requests = 0; const delays: number[] = []; const progress: (RequestRetry | undefined)[] = []; const diagnostics: RequestDiagnostic[] = [];
 		const recovery = new RequestRecovery(async (_url, options) => { assert.equal(options?.body, init.body); if (++requests < 3) { throw networkError(); } return answer(); }, signal(), { wait: async milliseconds => { delays.push(milliseconds); }, random: () => 0, progress: value => progress.push(value), diagnostic: value => diagnostics.push(value) });

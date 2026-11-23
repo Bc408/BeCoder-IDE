@@ -4,16 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
-import { beCoderNotebookType, beCoderNotebookStreamMime, isBeCoderInputCell, describeNotebookMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
-import { type NotebookData, encodeNotebook, notebookCreationTarget, prepareAssociationLocation } from './model';
+import { beCoderNotebookType, isBeCoderInputCell, describeNotebookMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
+import { type NotebookData, encodeNotebook, decodeNotebook, beaconNotebookContent, notebookCreationTarget, prepareAssociationLocation } from './model';
 import { type ContentCell } from './edits';
 import { NotebookEditOwner, createNotebook } from './editOwner';
 import { writeNotebookBackup } from './backup';
 
 export interface NotebookEditInput { operation: 'create' | 'begin' | 'read' | 'apply' | 'finish' | 'cancel'; path?: string; sourcePath?: string; handle?: string; revision?: number; cells?: ContentCell[]; cellId?: string; part?: 'content' | 'outputs' | 'attempt' }
-export interface NotebookEditApi { edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>> }
+export interface NotebookEditApi { edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>>; readBeaconContent?(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content' }> }
 const nativeCells = (data: NotebookData) => data.cells.map(cell => {
 	const value = new vscode.NotebookCellData(cell.kind, cell.value, cell.languageId); value.metadata = cell.metadata;
 	value.outputs = cell.outputs?.map(output => new vscode.NotebookCellOutput(output.items.map(item => new vscode.NotebookCellOutputItem(item.data, item.mime)), output.metadata)); value.executionSummary = cell.executionSummary; return value;
@@ -26,9 +27,25 @@ export class NotebookEdits implements NotebookEditApi {
 	private readonly pendingCreations = new Set<Promise<Record<string, unknown>>>();
 	private disposed = false;
 	constructor(private readonly ensureIds: (document: vscode.NotebookDocument) => Promise<void>, private readonly editing: Set<vscode.NotebookDocument>) { }
+	async readBeaconContent(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content' }> {
+		signal.throwIfAborted(); const uri = vscode.Uri.parse(sourceUri);
+		if (uri.scheme !== 'file' || !/\.bcnb(?:-backup)?$/i.test(uri.fsPath)) { throw new Error('notebook-invalid-type'); }
+		const loaded = vscode.workspace.notebookDocuments.find(document => !document.isClosed && document.uri.toString() === sourceUri);
+		if (loaded) { const version = loaded.version; const contents = beaconNotebookContent(snapshot(loaded)); signal.throwIfAborted(); if (loaded.version !== version || loaded.isClosed) { throw new Error('notebook-version-changed'); } return { contents, version: String(version), representation: 'notebook-content' }; }
+		const before = await fs.stat(uri.fsPath, { bigint: true });
+		if (!before.isFile() || before.size > 32n * 1024n * 1024n) { throw new Error('notebook-invalid-type'); }
+		const text = vscode.workspace.textDocuments.find(document => !document.isClosed && document.uri.toString() === sourceUri);
+		const version = text?.version;
+		const data = decodeNotebook(text ? Buffer.from(text.getText(), 'utf8') : await fs.readFile(uri.fsPath));
+		const after = await fs.stat(uri.fsPath, { bigint: true });
+		signal.throwIfAborted();
+		if (after.ino !== before.ino || after.dev !== before.dev || after.size !== before.size || after.mtimeNs !== before.mtimeNs || (text && (text.isClosed || text.version !== version))) { throw new Error('notebook-version-changed'); }
+		return { contents: beaconNotebookContent(data), ...(version === undefined ? {} : { version: String(version) }), representation: 'notebook-content' };
+	}
 	private resource<T>(operation: string, input: object): PromiseLike<T> { return vscode.commands.executeCommand<T>('_becoder.notebook.resource', operation, input); }
 	async edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>> {
 		if (this.disposed) { throw new Error('notebook-closed'); }
+		if (input.operation === 'read' && input.part !== undefined && input.part !== 'content') { throw new Error('notebook-execution-part-unavailable'); }
 		if (input.operation === 'create') {
 			if (!scope.usable || !['spot', 'flood'].includes(scope.mode) || !Array.isArray(input.cells)) { throw new Error('notebook-write-denied'); }
 			const roots = vscode.workspace.workspaceFolders?.filter(folder => folder.uri.scheme === 'file').map(folder => folder.uri.fsPath) ?? [];
@@ -78,8 +95,6 @@ export class NotebookEdits implements NotebookEditApi {
 					if (input.cellId && !cells.length) { throw new Error('notebook-unknown-cell'); }
 					const visible = cells.map(cell => {
 						const metadata = cell.metadata?.becoder as { id?: string; name?: string; attempt?: unknown } | undefined; const identity = { id: metadata?.id, kind: cell.kind, language: cell.languageId, role: isBeCoderInputCell(cell.metadata) ? 'input' : undefined, name: metadata?.name };
-						if (input.part === 'attempt') { return { ...identity, attempt: metadata?.attempt, executionSummary: cell.executionSummary }; }
-						if (input.part === 'outputs') { return { ...identity, outputs: cell.outputs?.map(output => ({ items: output.items.map(item => ({ mime: item.mime, ...(item.mime === beCoderNotebookStreamMime || item.mime.startsWith('text/') || item.mime.includes('stdout') || item.mime.includes('stderr') ? { text: Buffer.from(item.data).toString('utf8') } : { byteLength: item.data.length }) })) })) }; }
 						return { ...identity, attachments: describeNotebookMetadata(cell.metadata ?? {}).attachments, source: cell.value };
 					});
 					return { path: session.path, text: JSON.stringify({ cells: visible }, null, 2), representation: 'captured native Notebook contents; attachments remain in native cell metadata; actual prior outputs remain host owned' };

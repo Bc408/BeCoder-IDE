@@ -48,6 +48,8 @@ export class LanqiaoBridgeController {
 	private remember(value: SubmissionOutcome, problem: ProblemRef, attemptId: string): SubmissionOutcome {
 		if (value.kind === 'record') {
 			if (value.record.problem.site !== 'lanqiao' || value.record.problem.nativeId !== problem.nativeId || value.record.problem.url !== problem.url || lanqiaoRecord(problem, value.record.id).url !== value.record.url) { throw new Error('lanqiao-invalid-record'); }
+			if (value.observed && value.observed.attemptId !== attemptId) { throw new Error('lanqiao-invalid-attempt'); }
+			if (value.observed && (value.observed.snapshot.ref.url !== value.record.url || value.observed.snapshot.ref.problem.url !== problem.url)) { throw new Error('lanqiao-invalid-record'); }
 			this.records.set(value.record.url, structuredClone(value.record));
 		} else if (value.kind === 'unconfirmed') {
 			if (value.attemptId !== attemptId || value.problem.site !== 'lanqiao' || value.problem.nativeId !== problem.nativeId || value.problem.url !== problem.url) { throw new Error('lanqiao-invalid-attempt'); }
@@ -78,6 +80,7 @@ export class LanqiaoBridgeController {
 		const current = () => !this.disposed && this.leases.get(handle) === lease && !!lease?.active && !lease.controller.signal.aborted && this.ports.isCurrent(lease.page);
 		if (!lease || !current()) { return undefined; }
 		const value = await this.ports.readProgress?.(lease.page, handle);
+		if (value && value.attemptId !== handle) { return undefined; }
 		return current() ? structuredClone(value) : undefined;
 	}
 	async reconcile(attemptId: string): Promise<SubmissionOutcome> {

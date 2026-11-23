@@ -6,7 +6,7 @@
 import { parseDeepSeekModels } from './deepseekModels';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { InvalidToolInputError, jsonSchema, stepCountIs, streamText, tool, type FilePart, type LanguageModel, type ModelMessage } from 'ai';
+import { InvalidToolInputError, jsonSchema, streamText, tool, wrapLanguageModel, type FilePart, type LanguageModel, type ModelMessage } from 'ai';
 import { fileModelOutput, type Generate, type ToolActivity } from './session';
 import { safeFileError, type FileInput, type FileOutput, type FilePermission, type FileRoot } from './fileTools';
 import { ConnectionError, normalizeBaseURL, type Connection, type ModelInfo, type ProviderId } from './connection';
@@ -14,10 +14,15 @@ import { defaultCapabilities, ModelCapabilityError, reasoningOptions, resolveCap
 import { ProtocolRecorder } from './protocol';
 import { createWebTool, webModelOutput, type WebInput, type WebOutput } from './webTools';
 import { toolErrorCode, type ToolError } from './toolFeedback';
-import { RequestRecovery, type RecoveryOptions } from './requestRecovery';
+import { RequestRecovery, RequestRejectedError, type RecoveryOptions } from './requestRecovery';
 import type { ContextAccess, ContextInput, ContextOutput } from './contextTools';
+import { contextToolSchema } from './contextToolContract';
 import type { NotebookAccess, NotebookInput, NotebookOutput } from './notebookTools';
 import { composeBeaconPrompt, type BeaconToolName } from './prompts';
+import { measureBeaconRequest, beaconFingerprint, beaconMedia, type PreparedBeaconRequest, type BeaconUsageAnchor } from './contextBudget';
+import { compactBeaconContext, coveredCount, prefixFingerprint, projectCompaction, selectCompaction, type BeaconCompaction, type EffectiveUnit } from './compaction';
+
+class BeaconPreparationError extends Error { constructor() { super('beacon-context-capacity'); } }
 
 interface ProviderAdapter {
 	createModel(connection: Connection, request: typeof fetch): LanguageModel;
@@ -214,24 +219,8 @@ const webSchema = jsonSchema<WebInput>({
 	additionalProperties: false
 });
 
-const contextSchema = jsonSchema<ContextInput>({
-	type: 'object',
-	properties: {
-		operation: { type: 'string', enum: ['overview', 'pages', 'page', 'records', 'record', 'material'], description: 'page reads an entry in pages/relatedPages using its id and version, including OJ problem/submission pages. record reads an entry in records/relatedRecords using its producer, id and revision. material reads an already consumed material id. Use the corresponding list when identity is missing.' },
-		id: { type: 'string', maxLength: 256, description: 'Exact listed id for the chosen page, runtime record or consumed material; these identities are not interchangeable.' },
-		version: { type: 'string', description: 'For page: the exact version listed with that page id.' },
-		pageNumber: { type: 'integer', minimum: 1, description: 'Required for an open PDF: physical page number from 1 to its listed pageCount. Not used for other page kinds.' },
-		producer: { type: 'string', enum: ['runner', 'cph', 'notebook'], description: 'For record: copy from records/relatedRecords, never infer from a title or OJ submission. For records: optional producer filter.' },
-		revision: { type: 'integer', minimum: 1, description: 'For record: the exact positive revision listed in records/relatedRecords; not a page version or submission id.' },
-		part: { type: 'string', enum: ['all', 'code', 'events'] },
-		offset: { type: 'integer', minimum: 0 },
-		limit: { type: 'integer', minimum: 1, maximum: 131072 }
-	},
-	required: ['operation'], additionalProperties: false
-});
-
 const notebookSchema = jsonSchema<NotebookInput>({ type: 'object', properties: {
-	operation: { type: 'string', enum: ['create', 'begin', 'read', 'apply', 'finish', 'cancel'] }, path: { type: 'string' }, sourcePath: { type: 'string' }, handle: { type: 'string' }, revision: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 131072 }, cellId: { type: 'string' }, part: { type: 'string', enum: ['content', 'outputs', 'attempt'] },
+	operation: { type: 'string', enum: ['create', 'begin', 'read', 'apply', 'finish', 'cancel'] }, path: { type: 'string' }, sourcePath: { type: 'string' }, handle: { type: 'string' }, revision: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 131072 }, cellId: { type: 'string' }, part: { type: 'string', enum: ['content'] },
 	cells: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, kind: { type: 'integer', enum: [1, 2] }, source: { type: 'string' }, language: { type: 'string', enum: ['c', 'cpp', 'becoder-input'] }, name: { type: 'string' } }, required: ['kind'], additionalProperties: false } }
 }, required: ['operation'], additionalProperties: false });
 
@@ -274,12 +263,14 @@ function fileMessages(messages: ModelMessage[], vision: boolean): ModelMessage[]
 }
 
 export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch, permission: FilePermission = 'none', roots: FileRoot[] = [], webEnabled = true, webRequest: typeof fetch = fetchImplementation, recoveryOptions: Omit<RecoveryOptions, 'progress'> = {}, context?: ContextAccess, notebooks?: NotebookAccess): Generate {
-	return async function* (messages, signal, files, progress) {
+	return async function* (messages, signal, files, progress, generation) {
 		const connection = await readConnection();
 		if (connection.provider !== 'ollama' && !connection.apiKey) { throw new Error('missing-key'); }
 		if (!connection.model.trim()) { throw new Error('missing-model'); }
 		if (signal.aborted) { return; }
 		const capabilities = resolveCapabilities(connection.provider, connection.baseURL, connection.model, connection.capabilities, connection.modelSettings);
+		const maxOutputTokens = connection.parameters.maxOutputTokens ?? capabilities.maxOutputTokens!;
+		const limits = { contextWindow: capabilities.contextWindow!, maxInputTokens: capabilities.maxInputTokens!, maxOutputTokens };
 		if (!['chat', 'unknown'].includes(capabilities.purpose)) { throw new ModelCapabilityError('non-chat'); }
 		if (connection.parameters.maxOutputTokens && capabilities.maxOutputTokens && connection.parameters.maxOutputTokens > capabilities.maxOutputTokens) { throw new ModelCapabilityError('output-limit'); }
 		const providerOptions = reasoningOptions(connection.provider, connection.model, capabilities, connection.modelSettings ?? {});
@@ -295,8 +286,8 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				...(notebooks && permission !== 'none' ? { editNotebook: tool({ description: 'Only explicitly requested Notebook creation or edits. create(path, cells) creates a new complete .bcnb; alternatively create(sourcePath, cells) uses the editor-root association path. Use exactly one target form. It requires an opened folder and refuses existing files or open models; no automatic overwrite, fallback name, execution or first-create backup. begin(path) backs up the latest complete native document and returns handle/revision. read(handle, offset, limit) reads that captured version; attachments remain host-owned metadata. apply(handle, revision, cells) applies one full ordered candidate; omit ids only for new cells, use kind 1 Markdown, or kind 2 with c/cpp program text or becoder-input input. Each input runs the nearest preceding C/C++ block only when the user runs it. Keep existing attachment references on their original cell id. No output, attempt, metadata or execution fields. finish saves only this target and returns actual applied/saved/dirty state. cancel releases without undoing applied edits. A busy, inaccessible, stale or failed backup target is not replaced by another target.', inputSchema: notebookSchema, execute: (input, options): Promise<NotebookOutput> => { recovery.commit(); return notebooks.execute(input, options.abortSignal ?? signal); } }) } : {}),
 				...(context ? {
 					inspectContext: tool({
-						description: 'Read authorized Beacon context as needed. overview gives current workspace and metadata; pages lists actual open pages, including OJ problems and submission results. Read each listed page with operation page, id and version while it remains open. OJ submission pages are not Runner records. records lists Runner/CPH/Notebook metadata; record requires the producer, id and exact positive revision from that runtime listing, saves that revision to the active conversation before returning it; material rereads only a consumed material id in this conversation. record/material part selects code or events directly (default all), so compile errors do not require paging past a large source. Text ranges use offset and limit in characters (default 32768, max 131072), nextOffset continues the same snapshot and part. No paths, conversation ids, workspace switches, file fallback, execution, browsing or permission grants. Errors explain missing evidence; do not invent it.',
-						inputSchema: contextSchema,
+						description: 'Read authorized context on demand. Choose the source needed for the question: currentCode for latest code, codeSnapshot for retained history, record for actual execution/verdict facts. Always include operation. record requires listed producer/id/revision, fixed for this answer; CPH sampleIndex + all includes that sample input, expected and observed result. selection and availableParts describe returned scope; pagination is separate from source omissions. Copy continuation verbatim when needed. snapshotSave refers only to conversation code, never saving the student file. problemHints gives independent candidates; problem reads an exact saved statement or readonly network statement; refresh explicitly fetches a new observation without persistence. Blackout excludes persistent operations. page reads other authorized pages and physical PDF pageNumber. No source edits, execution, import, login or submission.',
+						inputSchema: contextToolSchema(context.operations),
 						toModelOutput: ({ output }) => ({ type: 'json' as const, value: JSON.parse(JSON.stringify(output)) }),
 						execute: (input, options): Promise<ContextOutput> => { recovery.commit(); return context.execute(input, options.abortSignal ?? signal); }
 					})
@@ -328,25 +319,107 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				} : {})
 			};
 			const prompt = composeBeaconPrompt({ currentTime: systemTime, toolNames: Object.keys(tools) as BeaconToolName[], contextDescription });
+			let ordinaryStep = 0; let observerError: unknown;
+			let requestPhase: 'answer' | 'compaction' = 'answer', repairUsed = false, stepStarted = false;
+			const steps = { remaining: 20 };
+			let installedSummary: BeaconCompaction | undefined;
+			let remainingToolBytes = Number.POSITIVE_INFINITY;
+			let requestMessages = fileMessages([...messages], vision);
+			let usageAnchor: BeaconUsageAnchor | undefined, lastPrepared: PreparedBeaconRequest | undefined;
+			const anchors = new Map<string, BeaconUsageAnchor>(), measuredRequests = new Map<string, PreparedBeaconRequest>();
+			const prepared = (instructions: unknown, messages: readonly ModelMessage[], definitions: readonly { name: string; definition: unknown }[]): PreparedBeaconRequest => ({ source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, phase: requestPhase, limits, instructions, activeTools: definitions, messages, media: beaconMedia(messages), projectionFingerprint: beaconFingerprint(messages), contractFingerprint: beaconFingerprint({ instructions, definitions }), unitFingerprints: messages.map(beaconFingerprint) });
+			const hardGate = (request: PreparedBeaconRequest) => {
+				measuredRequests.set(request.contractFingerprint, request);
+				const measured = measureBeaconRequest(request, anchors.get(request.contractFingerprint) ?? usageAnchor);
+				if (measured.estimatedInput > measured.budget || requestPhase === 'answer' && measured.estimatedInput >= measured.trigger) { throw new BeaconPreparationError(); }
+				return measured;
+			};
+			const guardedFetch: typeof fetch = async (url, init) => {
+				if (typeof init?.body === 'string') {
+					const body = JSON.parse(init.body) as { messages?: ModelMessage[]; tools?: { function?: { name?: string } }[] };
+					const input = body.messages ?? [];
+					lastPrepared = prepared(input.filter(message => message.role === 'system'), input.filter(message => message.role !== 'system'), (body.tools ?? []).map((definition, index) => ({ name: definition.function?.name ?? String(index), definition })));
+					hardGate(lastPrepared);
+				}
+				return recovery.fetch(url, init);
+			};
+			const logicalStepId = () => `${generation?.requestId ?? 'request'}:${ordinaryStep}`;
+			const protocol = new ProtocolRecorder();
+			const model = wrapLanguageModel({ model: adapters[connection.provider].createModel(connection, guardedFetch) as Exclude<LanguageModel, string>, middleware: { transformParams: async ({ params }) => { hardGate(prepared(undefined, params.prompt as unknown as ModelMessage[], (params.tools ?? []).map((definition, index) => ({ name: 'name' in definition ? definition.name : String(index), definition })))); return params; } } });
+			const declarations = Object.entries(tools).map(([name, definition]) => ({ name, definition: { description: definition.description, inputSchema: definition.inputSchema } }));
+			const snapshot = () => ({ requestId: generation?.requestId ?? 'temporary', sequence: protocol.sequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.closedMessages, stepEnds: protocol.stepEnds }, stepEnds: protocol.stepEnds });
+			const prepareAnswer = async (current: readonly ModelMessage[], force = false): Promise<ModelMessage[]> => {
+				if (observerError) { throw observerError; } requestSignal.throwIfAborted();
+				if (steps.remaining < 1) { throw new Error('beacon-step-budget'); }
+				const state = generation ? await generation.prepare(snapshot(), requestSignal) : { conversationId: 'temporary', checkpoints: installedSummary ? [installedSummary] : [], units: current.map((message, index): EffectiveUnit => ({ key: String(index), messageId: index, unitIndex: 0, isUserQuestion: message.role === 'user', messages: [message], fingerprint: beaconFingerprint(message) })) };
+				const old = selectCompaction(state.units, state.checkpoints);
+				let projection = fileMessages(projectCompaction(state.units, old), vision);
+				const input = prepared(prompt.system, projection, declarations), measured = measureBeaconRequest(input, anchors.get(input.contractFingerprint));
+				measuredRequests.set(input.contractFingerprint, input);
+				// A completed tool result may cross the proactive line; the next closed
+				// step performs compaction. Keep its bounded result inside hard capacity.
+				const resultBudget = (estimate: number) => { remainingToolBytes = Math.max(0, Math.floor((measured.budget - estimate - 512) * 0.8)); context?.setResultBudget?.(remainingToolBytes); };
+				if (!force && measured.estimatedInput < measured.trigger) { resultBudget(measured.estimatedInput); return projection; }
+				if (repairUsed || stepStarted) { throw new BeaconPreparationError(); } repairUsed = true;
+				const count = state.units.length - 1, already = old ? coveredCount(state.units, old) : 0;
+				if (count <= already || count < 1) { throw new BeaconPreparationError(); }
+				const prefix = state.units.slice(0, count), tailUnits = state.units.slice(count), question = state.units.findLast(unit => unit.isUserQuestion);
+				const tail = [...(question && !tailUnits.includes(question) ? question.messages : []), ...tailUnits.flatMap(unit => [...unit.messages])];
+				requestPhase = 'compaction';
+				let summary: string;
+				try { summary = (await compactBeaconContext({ model, prepared: { ...input, phase: 'compaction' }, units: prefix.slice(already), old, tail, context: capabilities.tools ? context?.compactionView?.() : undefined, steps }, requestSignal)).summary; }
+				finally { requestPhase = 'answer'; }
+				const last = prefix.at(-1)!;
+				const candidate: BeaconCompaction = { schemaVersion: 1, coveredThrough: { messageId: last.messageId, unit: last.unitIndex }, prefixSha256: prefixFingerprint(prefix), summary, createdAt: Date.now(), ...(old ? { inputCompaction: { prefixSha256: old.prefixSha256, summarySha256: beaconFingerprint(old.summary) } } : {}) };
+				projection = fileMessages(projectCompaction(state.units, candidate), vision);
+				const after = measureBeaconRequest(prepared(prompt.system, projection, declarations));
+				if (after.estimatedInput >= measured.estimatedInput || after.estimatedInput >= measured.trigger || after.estimatedInput > after.budget) { throw new Error('beacon-compaction-no-gain'); }
+				if (generation) { await generation.commitCompaction(candidate, { conversationId: state.conversationId, requestId: generation.requestId, prefixSha256: candidate.prefixSha256 }, requestSignal); }
+				installedSummary = candidate; usageAnchor = undefined; anchors.clear(); measuredRequests.clear(); resultBudget(after.estimatedInput); return projection;
+			};
 			while (true) {
-				const protocol = new ProtocolRecorder();
-				const checkpoint = () => ({ type: 'protocol' as const, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.messages } });
+				const checkpoint = () => ({ type: 'protocol' as const, sequence: protocol.consumedSequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.messages, stepEnds: protocol.stepEnds.slice(0, protocol.consumedSequence) } });
 				const attemptController = new AbortController();
 				const result = streamText({
-					model: adapters[connection.provider].createModel(connection, recovery.fetch),
+					model,
 					system: prompt.system,
-					messages: fileMessages([...messages], vision),
-					prepareStep: ({ messages }) => ({ messages: fileMessages(messages, vision) }),
+					messages: requestMessages,
+					prepareStep: async ({ messages }) => {
+						if (observerError) { throw observerError; }
+						return { messages: await prepareAnswer(fileMessages(messages, vision)), maxOutputTokens };
+					},
 					providerOptions,
 					// SDK's default logger includes request bodies. Report through the
 					// classified diagnostics and the consumed error stream instead.
 					onError: () => {},
-					onStepEnd: step => { protocol.step(step.response.messages); },
+					onStepEnd: step => {
+						try {
+							protocol.seal(step.response.messages, logicalStepId());
+							generation?.acceptClosed({ requestId: generation.requestId, sequence: protocol.sequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.closedMessages, stepEnds: protocol.stepEnds }, stepEnds: protocol.stepEnds });
+							ordinaryStep++;
+							steps.remaining--; repairUsed = false; stepStarted = false;
+							if (lastPrepared && step.usage.inputTokens && step.usage.inputTokens > 0) { usageAnchor = { source: lastPrepared.source, phase: lastPrepared.phase, inputTokens: step.usage.inputTokens, projectionFingerprint: lastPrepared.projectionFingerprint, contractFingerprint: lastPrepared.contractFingerprint, unitFingerprints: lastPrepared.unitFingerprints }; }
+							if (step.usage.inputTokens && step.usage.inputTokens > 0) { for (const value of measuredRequests.values()) { if (value.phase === 'answer') { anchors.set(value.contractFingerprint, { source: value.source, phase: value.phase, inputTokens: step.usage.inputTokens, projectionFingerprint: value.projectionFingerprint, contractFingerprint: value.contractFingerprint, unitFingerprints: value.unitFingerprints }); } } }
+							measuredRequests.clear();
+						} catch (error) { observerError = error; }
+					},
+					onToolExecutionEnd: event => {
+						if (!generation) { return; }
+						try {
+							const name = event.toolCall.toolName, result = event.toolOutput;
+							if (result.type === 'tool-error' && requestSignal.aborted && (result.error === requestSignal.reason || result.error instanceof Error && ['AbortError', 'TimeoutError'].includes(result.error.name))) { return; }
+							const output = result.type === 'tool-error' ? { type: 'error-text' as const, value: 'Tool execution failed.' } : name === 'inspectFiles' ? fileModelOutput(result.output as FileOutput) : name === 'browseWeb' ? webModelOutput(result.output as WebOutput) : { type: 'json' as const, value: JSON.parse(JSON.stringify(result.output)) };
+							generation.acceptCompletedTool({ requestId: generation.requestId, turnIndex: generation.turnIndex, logicalStepId: logicalStepId(), toolCallId: event.toolCall.toolCallId, toolName: name, input: event.toolCall.input, output });
+						} catch (error) { observerError = error; }
+					},
 					tools: Object.keys(tools).length ? tools : undefined,
-					stopWhen: stepCountIs(20),
+					onChunk: ({ chunk }) => { if ((chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') && chunk.text || chunk.type === 'tool-input-start' || chunk.type === 'tool-call') { stepStarted = true; } },
+					onToolExecutionStart: () => { stepStarted = true; },
+					stopWhen: () => steps.remaining <= 0,
 					abortSignal: AbortSignal.any([requestSignal, attemptController.signal]),
 					maxRetries: 0,
-					...connection.parameters
+					...connection.parameters,
+					maxOutputTokens
 				});
 				let startedStep = false;
 				try {
@@ -360,7 +433,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						}
 						if (part.type === 'text-delta' || part.type === 'reasoning-delta') {
 							protocol.text(part.type === 'text-delta' ? 'text' : 'reasoning', part.id, part.text, part.providerMetadata);
-							yield { type: part.type === 'text-delta' ? 'text' : 'reasoning', text: part.text, turn: checkpoint().turn };
+							yield { type: part.type === 'text-delta' ? 'text' : 'reasoning', text: part.text, turn: checkpoint().turn, sequence: checkpoint().sequence };
 						}
 						if (part.type === 'text-end' || part.type === 'reasoning-end') { protocol.text(part.type === 'text-end' ? 'text' : 'reasoning', part.id, '', part.providerMetadata); yield checkpoint(); }
 						if (part.type === 'finish') { protocol.finishStep(); yield checkpoint(); }
@@ -395,8 +468,10 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						if (part.type === 'error') { throw part.error; }
 						if (part.type === 'finish' && part.finishReason !== 'stop') { throw new Error('incomplete-response'); }
 					}
+					if (observerError) { throw observerError; }
 				} catch (error) {
 					attemptController.abort();
+					if (!requestSignal.aborted && !stepStarted && !repairUsed && (error instanceof BeaconPreparationError || error instanceof RequestRejectedError && error.code === 'CONTEXT_TOO_LARGE')) { requestMessages = await prepareAnswer(requestMessages, true); continue; }
 					if (await recovery.retryStream(error)) { continue; }
 					throw recovery.wrap(error);
 				} finally { attemptController.abort(); }

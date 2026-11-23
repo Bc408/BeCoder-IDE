@@ -581,7 +581,7 @@ suite('Beacon provider connections', () => {
 				assert.equal(body.model, 'selected-model');
 				assert.equal(body.temperature, undefined);
 				assert.equal(body.top_p, undefined);
-				assert.equal(body.max_tokens, undefined);
+				assert.equal(body.max_tokens, 8192);
 				assert.equal(options?.redirect, 'error');
 				const chunks = [{ reasoning_content: 'thinking' }, { content: 'answer' }, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'test', model: 'selected-model', choices: [{ index: 0, delta, finish_reason: index === 2 ? 'stop' : null }] }) + '\n\n');
 				return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });

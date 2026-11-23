@@ -72,6 +72,9 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 		try { captured = captureInputRun({ cells: document.getCells().map(value => ({ kind: value.kind, value: value.document.getText(), languageId: value.document.languageId, metadata: value.metadata })) }, cell.index); }
 		catch { void vscode.window.showInformationMessage(vscode.l10n.t('Add a C/C++ program block above this input before running.')); return; }
 		const programCell = document.cellAt(captured.codeIndex);
+		let collectionScope: unknown;
+		try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* The independent notebook remains usable without Beacon. */ }
+		if (document.isClosed || !document.getCells().includes(cell) || running.has(key)) { return; }
 		let resource: string | undefined;
 		if (document.uri.scheme === 'file') {
 			try { resource = await vscode.commands.executeCommand<string>('_becoder.notebook.resource', 'beginRun', { file: document.uri.fsPath }); }
@@ -104,7 +107,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 			const attempt = { id: randomUUID(), code: captured.code, codeCellId: captured.codeCellId, input: request.input, inputName: request.inputName, startedAt: Date.now(), status: 'preparing' };
 			currentAttempt = attempt;
 			await patch(cell, { attempt });
-			if (notebookPath) { try { activity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source: notebookPath }); } catch { await execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(vscode.l10n.t('Beacon evidence is unavailable for this execution.'))])); } }
+			if (notebookPath) { try { activity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source: notebookPath, collectionScope }); } catch { await execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(vscode.l10n.t('Beacon evidence is unavailable for this execution.'))])); } }
 			const runnerExtension = vscode.extensions.getExtension<RunnerCompilerApi>('becoder.runner');
 			if (!runnerExtension) { throw new Error(vscode.l10n.t('The BeCoder Runner extension is unavailable.')); }
 			const runner = await runnerExtension.activate();

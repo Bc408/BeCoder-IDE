@@ -4,6 +4,6 @@
 		"outDir": "out", "rootDir": "src", "sourceMap": true,
 		"typeRoots": ["../../node_modules/@types"], "types": ["node"], "skipLibCheck": true
 	},
-	"include": ["src/**/*", "../../src/vscode-dts/vscode.d.ts", "../../src/typings/becoder-oj-connect.d.ts"],
+	"include": ["src/**/*", "../../src/vscode-dts/vscode.d.ts", "../../src/typings/becoder-oj-connect.d.ts", "../../src/typings/becoder-beacon.d.ts"],
 	"exclude": ["out", "out-test"]
 }

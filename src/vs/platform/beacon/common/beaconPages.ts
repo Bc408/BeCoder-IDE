@@ -12,6 +12,7 @@ export interface IBeaconPageSource {
 	title: string;
 	uri?: string;
 	version: string;
+	languageId?: string;
 	dirty?: boolean;
 	active?: boolean;
 	reason?: string;
@@ -29,8 +30,8 @@ export class BeaconPages {
 		return sources.map(source => {
 			let id = this.handles.get(source.key);
 			if (!id) { id = generateUuid(); this.handles.set(source.key, id); }
-			const { kind, title, uri, version, dirty, reason, active } = source;
-			return { id, kind, title, uri, version, dirty, reason, ...(active ? { active } : {}) };
+			const { kind, title, uri, version, languageId, dirty, reason, active } = source;
+			return { id, kind, title, uri, version, languageId, dirty, reason, ...(active ? { active } : {}) };
 		});
 	}
 	async read(id: string, version: string, offset = 0, limit = 32768): Promise<IBeaconPageRead> {

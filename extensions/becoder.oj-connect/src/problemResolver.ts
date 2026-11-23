@@ -5,9 +5,9 @@
 
 import * as path from 'path';
 import { SiteDirectories, SiteId } from './settings';
-import type { ProblemRef } from 'becoder-oj-connect';
+import type { ProblemRef, ProblemResolution } from 'becoder-oj-connect';
 
-export type ProblemResolution = { kind: 'problem'; problem: ProblemRef } | { kind: 'inputRequired'; site?: SiteId } | { kind: 'unsupported'; site: SiteId };
+export type { ProblemResolution } from 'becoder-oj-connect';
 
 export function resolveProblem(filePath: string, directories: SiteDirectories, adapters: readonly { site: SiteId; resolve(input: string): ProblemRef | undefined }[]): ProblemResolution {
 	const parent = path.basename(path.dirname(filePath)).toLowerCase();

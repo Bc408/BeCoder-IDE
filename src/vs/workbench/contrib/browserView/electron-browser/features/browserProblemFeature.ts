@@ -26,6 +26,7 @@ import { GroupDirection, IEditorGroupsService } from '../../../../services/edito
 import { IBrowserViewModel } from '../../common/browserView.js';
 import { BrowserEditor, BrowserEditorContribution, BROWSER_EDITOR_ACTIVE, BrowserActionCategory, BrowserActionGroup } from '../browserEditor.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../../common/contributions.js';
+import type { IBeaconCollectionScope } from '../../../../../platform/beacon/common/beaconContextTypes.js';
 
 export const browserProblemMenu = new MenuId('BrowserProblemActions');
 const canGet = new RawContextKey('browserCanGetProblem', false);
@@ -124,6 +125,9 @@ export class BrowserProblemContribution extends BrowserEditorContribution {
 		const cancel = () => { if (importCommand) { void this.commands.executeCommand(`_becoder.${importCommand}.cancelBrowserImport`, requestId).catch(() => undefined); } };
 		controller.signal.addEventListener('abort', cancel, { once: true });
 		try {
+			const scope = await this.commands.executeCommand<IBeaconCollectionScope | undefined>('_becoder.beacon.context', 'captureCollectionScope').catch(() => undefined);
+			check();
+			const acquisition = { scope, trigger: kind === 'get' ? 'get-problem' as const : 'import-cph' as const };
 			if (kind === 'get') {
 				const problem = await this.service.resolveBrowserProblem(url);
 				check();
@@ -135,7 +139,7 @@ export class BrowserProblemContribution extends BrowserEditorContribution {
 				const document = await this.service.readOjProblem(sessionId, mainWindow.vscodeWindowId, problem, ...(problem.site === 'lanqiao' ? [{ family: 'cpp' as const }] : []));
 				check();
 				importCommand = 'ojConnect';
-				await this.commands.executeCommand('_becoder.ojConnect.importFromBrowser', document, requestId);
+				await this.commands.executeCommand('_becoder.ojConnect.importFromBrowser', document, requestId, acquisition);
 			} else {
 				const browserGroup = editor.group, browserInput = editor.input;
 				const existingGroups = new Set(this.groups.groups.map(group => group.id));
@@ -144,7 +148,7 @@ export class BrowserProblemContribution extends BrowserEditorContribution {
 				const target = await this.commands.executeCommand('_becoder.ojConnect.importTarget', result.url);
 				check();
 				importCommand = 'cph';
-				const imported = await this.commands.executeCommand<{ problem: { srcPath: string } } | undefined>('_becoder.cph.importProblem', result.json, result.url, target, requestId);
+				const imported = await this.commands.executeCommand<{ problem: { srcPath: string } } | undefined>('_becoder.cph.importProblem', result.json, result.url, target, requestId, acquisition);
 				check();
 				if (imported && browserInput && this.groups.getGroup(browserGroup.id) === browserGroup && browserGroup.contains(browserInput)) {
 					const source = URI.file(imported.problem.srcPath);

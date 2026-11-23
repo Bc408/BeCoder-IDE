@@ -66,6 +66,14 @@ test('single sample run saves source first and cannot choose a different path', 
 	assert.deepStrictEqual(state.selected()!.tests, [{ id: 7, input: 'x', output: 'y' }]);
 });
 
+test('selected sample retains its original user-facing ordinal for Beacon evidence', async t => {
+	const state = await setup(t), calls: unknown[][] = [], original = state.engine.judge;
+	state.engine.judge = async (...args) => { calls.push(args); return original(...args); };
+	const session = new JudgeSession(state.engine, async () => undefined), current = session.open(state.source)!;
+	await session.run(current.revision, [{ id: 7, input: 'first', output: 'a' }, { id: 8, input: 'second', output: 'b' }], 8);
+	assert.deepStrictEqual(calls[0][3], [2]);
+});
+
 test('run owner rejects concurrent edits and cancellation during source-save prevents execution', async t => {
 	const state = await setup(t);
 	let release!: () => void;

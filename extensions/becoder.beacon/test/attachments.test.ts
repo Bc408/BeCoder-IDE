@@ -48,13 +48,40 @@ function requestTarget(body: string): { id: string; version: string; unavailable
 }
 
 suite('Beacon attachments', () => {
+	test('a first short question with the discovered 1M model reaches live code and the answer through all tools', async () => fixture(async directory => {
+		const context = mock.reset(directory), view = mock.makeView(), originalFetch = globalThis.fetch;
+		const configuration = structuredClone(mock.values.get('modelConfiguration')) as import('../src/modelConfiguration').ModelConfiguration;
+		configuration.providers.deepseek.models[0].discovered = { ...defaultCapabilities, source: 'service', contextWindow: 1048576, maxOutputTokens: 393216 };
+		mock.values.set('modelConfiguration', configuration); mock.values.set('webEnabled', true);
+		const native = mock.commandHandlers.get('_becoder.beacon.context')!;
+		const requests: string[] = []; let reads = 0, saves = 0;
+		mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => {
+			if (operation === 'pages') { return [{ id: 'code-a', kind: 'text', title: 'abc485_b.cpp', uri: 'file:///C:/chosen/abc485_b.cpp', version: '1', languageId: 'cpp', active: true }]; }
+			if (operation === 'listRecent') { const { producer } = input as { producer: string }; return Array.from({ length: producer === 'problem' ? 13 : 20 }, (_, index) => ({ producer, id: `record-${producer}-${index}`, revision: 1, capturedAt: 1795401000000 + index, viewedAt: 1795401000000 + index, sourceUri: `file:///C:/practice/atcoder/abc485/abc485_${index}.cpp`, state: 'finished', problem: { site: 'atcoder', nativeId: `abc485/abc485_${index}`, url: `https://atcoder.jp/contests/abc485/tasks/abc485_${index}` } })); }
+			if (operation === 'listCodeSnapshots') { return Array.from({ length: 10 }, (_, index) => ({ id: `code-${index}`, fileName: 'abc485_b.cpp', sourceUri: 'file:///C:/practice/atcoder/abc485/abc485_b.cpp', version: String(index), capturedAt: 1795401000000 + index, lastObservedAt: 1795401000000 + index })); }
+			if (operation === 'currentCode') { reads++; return { pageId: 'code-a', sourceUri: 'file:///C:/chosen/abc485_b.cpp', fileName: 'abc485_b.cpp', version: '1', languageId: 'cpp', observedAt: 1, contents: 'int main(){return 0;}' }; }
+			if (operation === 'saveCodeRead') { saves++; return { state: 'saved', id: 'code-one', reused: false }; }
+			return native(operation, input);
+		});
+		globalThis.fetch = async (_url, init) => { requests.push(String(init?.body)); return requests.length === 1 ? contextResponse({ operation: 'currentCode' }) : response('已读取当前代码'); };
+		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean };
+		try {
+			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
+			view.receive({ type: 'send', text: '我这份代码写对了吗' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
+			assert.equal(snapshot().error, ''); assert.equal(requests.length, 2);
+			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'editNotebook', 'inspectContext', 'inspectFiles']);
+			assert.equal(reads, 1); assert.equal(saves, 1); assert.ok(requests[1].includes('int main(){return 0;}'));
+			assert.equal(snapshot().messages[1].text, '已读取当前代码');
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+	}));
 	for (const action of ['regenerate', 'edit', 'continue'] as const) {
-		test(`turn target restores a once selection for ${action} without changing the next new question`, async () => fixture(async directory => {
-			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+		test(`the model receives page observations without a bound discussion object on ${action}`, async () => fixture(async directory => {
+			const context = mock.reset(directory), view = mock.makeView(), originalFetch = globalThis.fetch;
 			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
-			const requests: string[] = [];
-			let paused = action === 'continue';
-			globalThis.fetch = async (_input, options) => {
+			const requests: string[] = []; let active = 'a', paused = action === 'continue';
+			globalThis.fetch = async (_url, options) => {
 				requests.push(String(options?.body));
 				if (!paused) { return response(); }
 				return new Response(new ReadableStream({ start(controller) {
@@ -62,103 +89,28 @@ suite('Beacon attachments', () => {
 					options?.signal?.addEventListener('abort', () => controller.error(options.signal?.reason), { once: true });
 				} }), { headers: { 'Content-Type': 'text/event-stream' } });
 			};
-			mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: id + ':1', active: id === 'b' })) : native(operation, input));
-			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; selectedTarget?: string; usedTarget?: string };
+			mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: '1', languageId: 'cpp', active: id === active })) : native(operation, input));
+			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; usedTarget?: string; selectedTarget?: string };
 			try {
 				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
-				mock.controls.quickPicks = [1, 0]; view.receive({ type: 'pickTarget' }); await until(() => snapshot().selectedTarget === 'a.cpp');
-				view.receive({ type: 'send', text: 'Explain A' });
-				if (paused) {
-					await until(() => snapshot().messages.at(-1)?.text === 'half'); view.receive({ type: 'stop' });
-				}
+				view.receive({ type: 'send', text: 'Discuss B even though A is open' });
+				if (paused) { await until(() => snapshot().messages.at(-1)?.text === 'half'); view.receive({ type: 'stop' }); }
 				await until(() => snapshot().messages.length === 2 && !snapshot().busy);
-				assert.equal(snapshot().selectedTarget, undefined);
-				paused = false;
-				view.receive({ type: action, id: action === 'edit' ? snapshot().messages[0].id : snapshot().messages[1].id, ...(action === 'edit' ? { text: 'Explain A more clearly' } : {}) });
+				assert.equal(snapshot().usedTarget, undefined); assert.equal(snapshot().selectedTarget, undefined);
+				assert.equal(Reflect.get(snapshot().messages[0], 'target'), undefined);
+				assert.equal(Reflect.get(snapshot().messages[0], 'targetSelection'), undefined);
+				active = 'b'; paused = false;
+				view.receive({ type: action, id: action === 'edit' ? snapshot().messages[0].id : snapshot().messages[1].id, text: 'Explain B' });
 				await until(() => requests.length === 2 && !snapshot().busy);
-				assert.equal(requestTarget(requests[1])?.id, 'a');
-				assert.equal(requestTarget(requests[1])?.version, 'a:1');
-				assert.equal(snapshot().usedTarget, 'a.cpp');
-				view.receive({ type: 'send', text: 'Now the active file' }); await until(() => requests.length === 3 && !snapshot().busy);
-				assert.equal(requestTarget(requests[2])?.id, 'b');
-				assert.equal(snapshot().usedTarget, 'b.cpp');
-			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
-		}));
-	}
-	test('conversation pin survives returning home and reopening the same conversation until follow is selected', async () => fixture(async directory => {
-		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
-		const native = mock.commandHandlers.get('_becoder.beacon.context')!;
-		const requests: string[] = [];
-		globalThis.fetch = async (_input, options) => { requests.push(String(options?.body)); return response(); };
-		mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: id + ':1', active: id === 'b' })) : native(operation, input));
-		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; selectedTarget?: string; activeId: string; screen: string };
-		const navigate = async (message: unknown) => { view.receive(message); await until(() => snapshot().busy); await until(() => !snapshot().busy); };
-		try {
-			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
-			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
-			await navigate({ type: 'selectWorkspace', root: directory });
-			mock.controls.quickPicks = [1, 1]; view.receive({ type: 'pickTarget' }); await until(() => snapshot().selectedTarget === 'a.cpp');
-			view.receive({ type: 'send', text: 'Keep discussing A' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
-			const id = snapshot().activeId;
-			await navigate({ type: 'back' }); await navigate({ type: 'openHistory', conversationId: id });
-			assert.equal(snapshot().selectedTarget, 'a.cpp');
-			view.receive({ type: 'send', text: 'What about now?' }); await until(() => requests.length === 2 && !snapshot().busy);
-			assert.equal(requestTarget(requests[1])?.id, 'a');
-			mock.controls.quickPicks = [0]; view.receive({ type: 'pickTarget' }); await until(() => snapshot().selectedTarget === undefined);
-			view.receive({ type: 'send', text: 'Follow the editor again' }); await until(() => requests.length === 3 && !snapshot().busy);
-			assert.equal(requestTarget(requests[2])?.id, 'b');
-		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
-	}));
-	test('conversation pin reports a closed page and preserves the unsent draft and choice', async () => fixture(async directory => {
-		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
-		const native = mock.commandHandlers.get('_becoder.beacon.context')!;
-		let open = true; let requests = 0;
-		globalThis.fetch = async () => { requests++; return response(); };
-		mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? open ? [{ id: 'a', kind: 'text', title: 'a.cpp', version: '1', active: true }] : [] : native(operation, input));
-		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; selectedTarget?: string; draftText: string; viewKey: string; requestNotice?: { text: string } };
-		try {
-			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
-			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
-			mock.controls.quickPicks = [1, 1]; view.receive({ type: 'pickTarget' }); await until(() => snapshot().selectedTarget === 'a.cpp');
-			view.receive({ type: 'draft', text: 'Unsent question', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'Unsent question');
-			open = false; view.receive({ type: 'send', text: 'Unsent question' }); await until(() => !!snapshot().requestNotice && !snapshot().busy);
-			assert.match(snapshot().requestNotice!.text, /page.*no longer open/i);
-			assert.equal(snapshot().draftText, 'Unsent question'); assert.equal(snapshot().selectedTarget, 'a.cpp'); assert.equal(requests, 0);
-		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
-	}));
-	for (const choice of ['pin', 'follow'] as const) {
-		test(`conversation pin ${choice} during a pending Blackout fork leaves the source pin unchanged`, async () => fixture(async directory => {
-			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
-			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
-			const requests: string[] = [];
-			globalThis.fetch = async (_input, options) => { requests.push(String(options?.body)); return response(); };
-			mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: '1', active: id === 'b' })) : native(operation, input));
-			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; activeId: string; selectedTarget?: string; saveFailed?: boolean };
-			const navigate = async (message: unknown) => { view.receive(message); await until(() => snapshot().busy); await until(() => !snapshot().busy); };
-			try {
-				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
-				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
-				await navigate({ type: 'selectWorkspace', root: directory });
-				mock.controls.quickPicks = [1, 1]; view.receive({ type: 'pickTarget' }); await until(() => snapshot().selectedTarget === 'a.cpp');
-				view.receive({ type: 'send', text: 'Source A' }); await until(() => requests.length === 1 && !snapshot().busy);
-				await mock.commands.executeCommand('_becoder.beacon.flush');
-				const source = structuredClone(mock.beaconConversations.get(`${directory}:${snapshot().activeId}`)!);
-				await navigate({ type: 'setPermission', permission: 'none' });
-				mock.controls.quickPicks = choice === 'pin' ? [2, 1] : [0]; view.receive({ type: 'pickTarget' });
-				await until(() => snapshot().selectedTarget === (choice === 'pin' ? 'b.cpp' : undefined));
-				await mock.commands.executeCommand('_becoder.beacon.flush');
-				assert.equal(snapshot().saveFailed, false, 'Choosing context in Blackout does not schedule a source save');
-				assert.deepEqual(mock.beaconConversations.get(`${directory}:${source.data.id}`), source);
-				view.receive({ type: 'send', text: 'Temporary B' }); await until(() => requests.length === 2 && !snapshot().busy);
-				assert.equal(requestTarget(requests[1])?.id, 'b');
-				assert.equal(snapshot().selectedTarget, choice === 'pin' ? 'b.cpp' : undefined);
-				assert.deepEqual(mock.beaconConversations.get(`${directory}:${source.data.id}`)!.data.pinnedTarget, source.data.pinnedTarget);
+				assert.equal(requestTarget(requests[1]), undefined);
+				assert.ok(requestSystem(requests[1]).includes('b.cpp'));
+				assert.equal(mock.commandCalls.some(call => ['currentCode', 'saveCodeRead'].includes(String(call.args[0]))), false, 'Sending and resuming do not read or bind code');
 			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 		}));
 	}
 	for (const change of ['changed', 'closed'] as const) {
-		test(`turn target reports its ${change} original version and keeps the captured snapshot for regeneration`, async () => fixture(async directory => {
+		test(`regeneration reports a ${change} page and cannot revive unreferenced historical material`, async () => fixture(async directory => {
 			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
 			let open = true; let version = '1'; let requested: ContextInput | undefined = { operation: 'page', id: 'a', version: '1' };
@@ -182,19 +134,20 @@ suite('Beacon attachments', () => {
 			try {
 				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+				view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 				view.receive({ type: 'send', text: 'Explain V1' }); await until(() => requests.length === 2 && !snapshot().busy);
 				version = '2'; open = change !== 'closed'; cursor = requests.length;
 				requested = { operation: 'page', id: 'a', version: '1' };
 				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
-				assert.equal(requestTarget(requests[cursor])?.version, '1'); assert.equal(requestTarget(requests[cursor])?.unavailable, true);
+				assert.equal(requestTarget(requests[cursor])?.version, undefined, 'ordinary text without a code language is not the live code target');
 				assert.equal(outputs.at(-1)?.code, 'beacon-page-' + change);
-				assert.match(snapshot().requestNotice?.text ?? '', change === 'closed' ? /no longer open/i : /changed/i);
+				assert.equal(snapshot().requestNotice, undefined, 'The host does not claim a send-time version lock or missing code snapshot');
 				cursor = requests.length; requested = { operation: 'material', id: 'page:a:1:' };
 				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
-				assert.equal(outputs.at(-1)?.contents, 'captured V1'); assert.equal(outputs.at(-1)?.snapshot, true);
+				assert.equal(outputs.at(-1)?.ok, false); assert.equal(outputs.at(-1)?.code, 'beacon-material-missing');
 				if (change === 'changed') {
 					cursor = requests.length; view.receive({ type: 'send', text: 'Now V2' }); await until(() => requests.length === cursor + 1 && !snapshot().busy);
-					assert.equal(requestTarget(requests[cursor])?.version, '2');
+					assert.equal(requestTarget(requests[cursor])?.version, undefined);
 				}
 			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 		}));
@@ -226,10 +179,13 @@ suite('Beacon attachments', () => {
 				const firstUser = snapshot().messages[0].id; const firstReply = snapshot().messages[1].id;
 				active = 'b'; requested = { operation: 'page', id: 'b', version: '1' };
 				view.receive({ type: 'send', text: 'Later question B' }); await until(() => requests.length === 4 && !snapshot().busy);
+				assert.equal(snapshot().messages[3].status, 'complete', snapshot().error);
+				const actualTools = JSON.stringify((JSON.parse(requests[3]) as { messages: { role: string; content: unknown }[] }).messages.filter(message => message.role === 'tool'));
+				assert.ok(actualTools.includes('captured b'), actualTools);
 				openB = false; active = 'a';
 				view.receive({ type: action, id: action === 'edit' ? firstUser : firstReply, text: 'Revised first question A' }); await until(() => requests.length === 5 && !snapshot().busy);
 				assert.doesNotMatch(requests[4], /page:b:1:|Later question B|captured b/);
-				assert.match(requests[4], /page:a:1:/);
+				assert.doesNotMatch(requests[4], /page:a:1:/, 'A removed answer no longer authorizes its private page body');
 				requested = { operation: 'page', id: 'a', version: '1' };
 				view.receive({ type: 'send', text: 'Follow-up A' }); await until(() => requests.length === 7 && !snapshot().busy);
 				assert.doesNotMatch(requests[5], /page:b:1:|Later question B|captured b/);
@@ -268,30 +224,31 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'edit', id: snapshot().messages[0].id, text: 'Revise the first conceptual question' }); await until(() => requests.length === 5 && !snapshot().busy);
 			assert.equal(/page:a:1:/.test(requestSystem(requests[3])), false, 'A target reference is not consumption of its body');
 			assert.equal(outputs.at(-1)?.ok, false);
-			assert.match(snapshot().requestNotice?.text ?? '', /not captured/i);
+			assert.equal(snapshot().requestNotice, undefined, 'Material access is reported by the tool without obsolete snapshot claims');
 			view.receive({ type: 'send', text: 'Another conceptual question' }); await until(() => requests.length === 6 && !snapshot().busy);
 			assert.equal(/page:a:1:/.test(requestSystem(requests[5])), false);
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
-	test('a follow-up freezes the newly active source in the model request', async () => fixture(async directory => {
+	test('a follow-up supplies observed active-page metadata without choosing a discussion object', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const native = mock.commandHandlers.get('_becoder.beacon.context')!;
 		const originalFetch = globalThis.fetch;
 		let active = 'a';
 		const requests: string[] = [];
 		globalThis.fetch = async (_input, options) => { requests.push(String(options?.body)); return response(); };
-		mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: id + ':2', active: id === active })) : native(operation, input));
+		mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => operation === 'pages' ? ['a', 'b'].map(id => ({ id, kind: 'text', title: id + '.cpp', version: id + ':2', languageId: 'cpp', active: id === active })) : native(operation, input));
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; usedTarget?: string };
 		try {
 			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
 			view.receive({ type: 'send', text: 'Where is the error?' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
-			assert.equal(snapshot().usedTarget, 'a.cpp');
+			assert.equal(snapshot().usedTarget, undefined);
 			active = 'b';
 			view.receive({ type: 'send', text: 'What about now?' }); await until(() => snapshot().messages.length === 4 && !snapshot().busy);
 			const system = (JSON.parse(requests[1]) as { messages: { role: string; content: string }[] }).messages.find(message => message.role === 'system')!.content;
-			assert.match(system, /"target":\{"id":"b","kind":"text","title":"b\.cpp","version":"b:2"/);
-			assert.equal(snapshot().usedTarget, 'b.cpp');
+			assert.doesNotMatch(system, /"target":/);
+			assert.ok(system.includes('"id":"b","kind":"text","title":"b.cpp","version":"b:2","languageId":"cpp","active":true'));
+			assert.equal(snapshot().usedTarget, undefined);
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
 	test('settings key reveal addresses the requested provider and includes its identity', async () => fixture(async directory => {

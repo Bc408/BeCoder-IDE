@@ -17,7 +17,7 @@ const conversation = (): Conversation => ({ id: 'draft-one', title: '', updatedA
 const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
 
 suite('Beacon conversation drafts', () => {
-	test('effective PDF target materials retain only pages actually consumed by the original question', async () => {
+	test('effective PDF materials require tool facts in the retained branch', async () => {
 		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => data, () => {}, () => 'error');
 		const page = (pageNumber: number): ContextSnapshot => ({ key: `page:pdf:version:${pageNumber}`, raw: 'page ' + pageNumber, metadata: { source: { kind: 'page', id: 'pdf', version: 'version', pageNumber, capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded PDF page text' } } });
 		const readPage = (pageNumber: number): Generate => async function* () {
@@ -29,33 +29,28 @@ suite('Beacon conversation drafts', () => {
 			yield { type: 'text', text: 'Read page ' + pageNumber };
 		};
 		try {
-			await history.session.send('Original page one', readPage(1), undefined, undefined, [], undefined, { id: 'pdf', version: 'version', title: 'problem.pdf' });
+			await history.session.send('Original page one', readPage(1));
 			const firstReply = history.snapshot.messages[1].id;
-			await history.session.send('Later page two', readPage(2), undefined, undefined, [], undefined, { id: 'pdf', version: 'version', title: 'problem.pdf' });
-			assert.deepEqual(history.effectiveContextSnapshots(firstReply).map(snapshot => snapshot.key), ['page:pdf:version:1']);
+			await history.session.send('Later page two', readPage(2));
+			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), ['page:pdf:version:1', 'page:pdf:version:2']);
+			assert.deepEqual(history.effectiveContextSnapshots(firstReply).map(snapshot => snapshot.key), []);
 			await history.session.regenerate(firstReply, async function* () { yield { type: 'text', text: 'Replacement using original page' }; });
-			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), ['page:pdf:version:1']);
+			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), []);
 			assert.deepEqual(history.contextSnapshots.map(snapshot => snapshot.key), ['page:pdf:version:1', 'page:pdf:version:2']);
 		} finally { await history.dispose(); }
 	});
-	test('conversation pin metadata rejects malformed identities when history is restored', () => {
-		const pinnedTarget = { id: 'editor-a', title: 'a.cpp' };
-		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), pinnedTarget }] };
-		assert.deepEqual((readHistory(data).conversations[0] as Conversation & { pinnedTarget: unknown }).pinnedTarget, pinnedTarget);
-		for (const invalid of [null, {}, { id: '', title: 'a.cpp' }, { id: 7, title: 'a.cpp' }, { id: 'a', title: false }]) {
-			assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), pinnedTarget: invalid }] }), /invalid-history/);
-		}
-	});
-	test('turn target metadata is validated before restoring a user question', () => {
-		const target = { id: 'editor-a', version: 'a:1', title: 'a.cpp' };
-		const user = { id: 1, role: 'user', text: 'Explain A', status: 'complete', activities: [], target };
-		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), messages: [user] }] };
-		const restored = readHistory(data);
-		assert.deepEqual((restored.conversations[0].messages[0] as typeof user).target, target);
-		for (const invalid of [null, {}, { ...target, id: '' }, { ...target, version: 7 }, { ...target, title: false }, { ...target, capturedKeys: true }, { ...target, capturedKeys: ['page:other:version:1'] }, { ...target, capturedKeys: ['page:editor-a:a:1:../file'] }]) {
-			assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), messages: [{ ...user, target: invalid }] }] }), /invalid-history/);
-		}
-		assert.throws(() => readHistory({ ...data, conversations: [{ ...conversation(), messages: [{ ...user, role: 'assistant' }] }] }), /invalid-history/);
+	test('obsolete discussion bindings are ignored without changing user history or granting material access', async () => {
+		const user = { id: 1, role: 'user', text: 'Discuss the other file', status: 'complete', activities: [], target: { id: 'closed', version: '1', title: 'old.cpp', capturedKeys: ['page:closed:1:'] }, targetSelection: { kind: 'page', id: 'closed' } };
+		const snapshot: ContextSnapshot = { key: 'page:closed:1:', raw: 'old private body', metadata: { source: { kind: 'page', id: 'closed', version: '1', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded page' } } };
+		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), pinnedTarget: { id: 'closed', title: 'old.cpp' }, messages: [user], contextSnapshots: [snapshot] }] };
+		const before = structuredClone(data), restored = readHistory(data);
+		assert.deepEqual(data, before);
+		assert.equal(Reflect.get(restored.conversations[0], 'pinnedTarget'), undefined);
+		assert.equal(Reflect.get(restored.conversations[0].messages[0], 'target'), undefined);
+		assert.equal(Reflect.get(restored.conversations[0].messages[0], 'targetSelection'), undefined);
+		assert.equal(restored.conversations[0].messages[0].text, 'Discuss the other file');
+		const history = new ChatHistory(data, async value => value, () => {}, String);
+		try { assert.deepEqual(history.effectiveContextAccess().keys, []); } finally { await history.dispose(); }
 	});
 	test('captured context persists independently and remains detached across restores and updates', async () => {
 		let saved: HistoryData | undefined;

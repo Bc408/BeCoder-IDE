@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { createHash } from 'crypto';
+import { URI } from '../../../../base/common/uri.js';
 import * as fs from 'fs/promises';
 import * as path from '../../../../base/common/path.js';
 import { tmpdir } from 'os';
@@ -21,6 +23,130 @@ async function fixture(run: (directory: string) => Promise<void>): Promise<void>
 }
 
 const conversation = (id: string, text = 'original'): IBeaconConversation => ({ id, title: 'Title', updatedAt: 1, messages: [{ role: 'user', text }], error: '', workspace: [] });
+
+suite('Beacon bounded context queues', function () {
+	this.timeout(10000);
+	ensureNoDisposablesAreLeakedInTestSuite();
+	const observation = (contents: string, file = 'file:///C:/chosen/main.cpp', version = '1') => ({ sourceUri: file, fileName: 'main.cpp', pageId: 'editor', version, languageId: 'cpp' as const, observedAt: Number(version), contents, contentSha256: createHash('sha256').update(contents).digest('hex') });
+	test('four execution sources retain twenty records and problem retains thirteen independently', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		for (const producer of ['runner', 'cph', 'notebook', 'oj', 'problem'] as const) {
+			for (let index = 0; index < 22; index++) {
+				await store.saveRecentRecord(producer, { producer, dedupKey: `key-${index}`, capturedAt: index, state: 'available', coverage: { channels: [] }, payload: { kind: 'runtime', activityId: `run-${index}`, lastEventSequence: 0, code: `V${index}`, startedAt: index, events: [] } }, new Set(), true);
+			}
+			const rows = await store.listRecentRecords(producer);
+			assert.equal(rows.length, producer === 'problem' ? 13 : 20);
+			assert.equal(rows.at(-1)!.capturedAt, 21);
+		}
+	}));
+	test('legacy notebook thirty reads unchanged and batch watermark remains distinct after migration', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		const directory = path.join(root, '.beaconWork', 'cache', 'notebook'); await fs.mkdir(directory, { recursive: true });
+		const file = path.join(directory, 'records.json');
+		const bytes = JSON.stringify({ version: 1, records: Array.from({ length: 30 }, (_, index) => ({ id: `old-${index}`, code: 'old', startedAt: index, events: [], revision: 1, sequence: 42 })) });
+		await fs.writeFile(file, bytes);
+		assert.equal((await store.listRuntimeRecords('notebook')).length, 30);
+		assert.equal(await fs.readFile(file, 'utf8'), bytes);
+		assert.equal(await store.appendRuntimeEvents('notebook', 'old-29', 42, []), false);
+		assert.equal(await store.appendRuntimeEvents('notebook', 'old-29', 43, ['new']), true);
+		assert.equal((await store.listRuntimeRecords('notebook')).at(-1)!.sequence, 43);
+		assert.equal((await store.listRecentRecords('notebook')).length, 20);
+		assert.equal(JSON.parse(await fs.readFile(file, 'utf8')).version, 2);
+	}));
+	test('damaged queues are not overwritten by a new production write', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		const directory = path.join(root, '.beaconWork', 'cache', 'runner'); await fs.mkdir(directory, { recursive: true });
+		const file = path.join(directory, 'records.json'); await fs.writeFile(file, '{damaged');
+		await assert.rejects(store.commitRuntimeRecord('runner', { id: 'new', code: 'code', startedAt: 1, events: [] }), /queue/);
+		assert.equal(await fs.readFile(file, 'utf8'), '{damaged');
+	}));
+	test('eviction then same-key reinsertion cannot alias an older precise reference', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		const entry = { producer: 'oj' as const, dedupKey: 'same', capturedAt: 1, state: 'available' as const, coverage: { channels: [] }, payload: { kind: 'runtime' as const, activityId: 'same', lastEventSequence: 0, code: 'old', startedAt: 1, events: [] } };
+		const old = await store.saveRecentRecord('oj', entry, new Set(), true);
+		for (let i = 0; i < 21; i++) { await store.saveRecentRecord('oj', { ...entry, dedupKey: `other-${i}` }, new Set(), true); }
+		const next = await store.saveRecentRecord('oj', { ...entry, payload: { ...entry.payload, code: 'new' } }, new Set(), true);
+		assert.notEqual(next.id, old.id);
+		await assert.rejects(store.readRecentRecord(old), /evicted/);
+		assert.equal((await store.readRecentRecord(next)).payload.kind, 'runtime');
+	}));
+	test('code queue ten preserves complete utf8 boundary, deduplicates and rejects oversized writes', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true)); await store.saveConversation(conversation('one'), 0);
+		const first = await store.saveCodeRead('one', observation('V1'));
+		assert.equal(first.state, 'saved'); if (first.state !== 'saved') { return; }
+		const reused = await store.saveCodeRead('one', observation('V1', undefined, '2'));
+		assert.deepStrictEqual(reused, { state: 'saved', id: first.id, reused: true });
+		assert.equal((await store.readCodeSnapshot('one', first.id)).version, '1');
+		assert.equal((await store.readCodeSnapshot('one', first.id)).lastObservedVersion, '2');
+		await store.saveCodeRead('one', observation('V1', 'file:///C:/chosen/other.cpp'));
+		assert.equal((await store.listCodeSnapshots('one')).length, 2);
+		const exact = '中'.repeat(87381) + 'a';
+		assert.equal((await store.saveCodeRead('one', observation(exact))).state, 'saved');
+		const before = await store.listCodeSnapshots('one');
+		assert.deepStrictEqual(await store.saveCodeRead('one', observation(exact + 'a')), { state: 'not-saved', reason: 'too-large' });
+		assert.deepStrictEqual(await store.listCodeSnapshots('one'), before);
+		for (let i = 0; i < 10; i++) { await store.saveCodeRead('one', observation(`new-${i}`)); }
+		assert.equal((await store.listCodeSnapshots('one')).length, 10);
+		await assert.rejects(store.readCodeSnapshot('one', first.id), /evicted/);
+		await store.saveConversation(conversation('two'), 0);
+		assert.deepStrictEqual(await store.listCodeSnapshots('two'), []);
+	}));
+	test('failed queue publication preserves existing code and promotion order', async () => fixture(async root => {
+		const binding = await prepareBeaconWorkspace(root, true); const store = new BeaconStore(binding);
+		await store.saveConversation(conversation('one'), 0); await store.saveCodeRead('one', observation('original'));
+		const before = await store.listCodeSnapshots('one');
+		const failing = new BeaconStore(binding, { rename: async () => { throw new Error('disk-full'); }, unlink: fs.unlink });
+		assert.deepStrictEqual(await failing.saveCodeRead('one', observation('new')), { state: 'not-saved', reason: 'save-failed' });
+		assert.deepStrictEqual(await failing.saveCodeRead('one', observation('original')), { state: 'not-saved', reason: 'save-failed' });
+		assert.deepStrictEqual(await store.listCodeSnapshots('one'), before);
+	}));
+	test('deleting a conversation deletes its code queue but keeps shared records and student files', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		await fs.writeFile(path.join(root, 'main.cpp'), 'student');
+		await store.saveConversation(conversation('one'), 0); await store.saveCodeRead('one', observation('V1'));
+		await store.commitRuntimeRecord('runner', { id: 'real-run', code: 'student', startedAt: 1, events: [] });
+		await store.deleteConversation('one');
+		await assert.rejects(fs.stat(path.join(root, '.beaconWork', 'conversations', 'one', 'code-snapshots.json')), /ENOENT/);
+		assert.equal((await store.listRuntimeRecords('runner')).length, 1);
+		assert.equal(await fs.readFile(path.join(root, 'main.cpp'), 'utf8'), 'student');
+	}));
+	test('conversation deletion rejects a replaced ordinary conversation directory', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		await store.saveConversation(conversation('one'), 0); await store.saveCodeRead('one', observation('original'));
+		const directory = path.join(root, '.beaconWork', 'conversations', 'one'), retired = path.join(root, '.beaconWork', 'conversations', 'old-one');
+		const read = store.readConversation.bind(store); let replaced = false;
+		store.readConversation = async id => {
+			const value = await read(id);
+			if (id === 'one' && !replaced) { replaced = true; await fs.rename(directory, retired); await fs.mkdir(directory); await fs.writeFile(path.join(directory, 'conversation.json'), JSON.stringify({ version: 1, revision: 1, data: conversation('one', 'replacement') })); await fs.writeFile(path.join(directory, 'code-snapshots.json'), 'replacement-owned-body'); }
+			return value;
+		};
+		await assert.rejects(store.deleteConversation('one'), /changed/);
+		assert.equal(await fs.readFile(path.join(directory, 'code-snapshots.json'), 'utf8'), 'replacement-owned-body');
+		assert.ok((await fs.readFile(path.join(directory, 'conversation.json'), 'utf8')).includes('replacement'));
+	}));
+	test('failed materials removal restores its owned name so retry cleans the actual private body', async () => fixture(async root => {
+		const binding = await prepareBeaconWorkspace(root, true), store = new BeaconStore(binding);
+		await store.saveConversation(conversation('one'), 0);
+		const directory = path.join(root, '.beaconWork', 'conversations', 'one', 'materials'); await fs.mkdir(directory); await fs.writeFile(path.join(directory, 'old.json'), 'private-body');
+		const publication = { rename: fs.rename, unlink: fs.unlink, rm: async () => { throw Object.assign(new Error('blocked'), { code: 'EACCES' }); } };
+		await assert.rejects(new BeaconStore(binding, publication).deleteConversation('one'), /blocked/);
+		assert.equal(await fs.readFile(path.join(directory, 'old.json'), 'utf8'), 'private-body');
+		await store.deleteConversation('one'); await assert.rejects(fs.stat(directory), /ENOENT/);
+	}));
+	test('rolling channel snapshots replace the old stored tail and publish coverage separately', async () => fixture(async root => {
+		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
+		await store.commitRuntimeRecord('runner', { id: 'running', code: 'int main(){}', startedAt: 1, events: [] });
+		const channel = (tail: string, observedBytes: number) => ({ type: 'stream', channelId: 'program-stdout', phase: 'running', stream: 'stdout', byteRepresentation: 'process-bytes', observedBytes, sourceTruncated: false, ranges: [{ offset: 0, bytesBase64: Buffer.from('HEAD').toString('base64') }, { offset: observedBytes - 4, bytesBase64: Buffer.from(tail).toString('base64') }] });
+		await store.appendRuntimeEvents('runner', 'running', 1, [channel('OLD!', 100)]);
+		await store.appendRuntimeEvents('runner', 'running', 2, [channel('TAIL', 200), { type: 'finished', outcome: { status: 'completed' } }]);
+		const row = (await store.listRecentRecords('runner'))[0]; assert.equal(row.payload.kind, 'runtime');
+		if (row.payload.kind !== 'runtime') { return; }
+		assert.equal(row.payload.events.filter(event => (event as { type?: string }).type === 'stream').length, 1);
+		assert.deepStrictEqual(row.coverage.channels[0].omittedRanges, [[4, 196]]);
+		assert.deepStrictEqual(row.coverage.channels[0].retainedRanges, [[0, 4], [196, 200]]);
+		assert.equal(row.state, 'finished');
+	}));
+});
 
 suite('Notebook resource occupancy', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
@@ -89,7 +215,7 @@ suite('Beacon workspace preparation and assets', () => {
 		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
 		await store.saveConversation(conversation('chat'), 0);
 		for (let index = 0; index < 31; index++) { await store.commitRuntimeRecord('notebook', { id: `cell-${index}`, code: 'captured cell code', startedAt: index, events: [] }); if (index === 0) { await store.consumeRuntimeRecord('chat', 'notebook', 'cell-0'); } }
-		assert.equal((await store.listRuntimeRecords('notebook')).length, 30);
+		assert.equal((await store.listRuntimeRecords('notebook')).length, 20);
 		assert.deepEqual(await store.listRuntimeRecords('runner'), []); assert.deepEqual(await store.listRuntimeRecords('cph'), []);
 		assert.equal((await store.readMaterial('chat', 'notebook-cell-0-1'))?.code, 'captured cell code');
 	}));
@@ -135,12 +261,12 @@ suite('Beacon workspace preparation and assets', () => {
 	test('disposable runtime queues are independent FIFO and consumed materials survive eviction', async () => fixture(async root => {
 		const store = new BeaconStore(await prepareBeaconWorkspace(root, true));
 		await store.saveConversation(conversation('chat'), 0);
-		for (let index = 0; index < 11; index++) {
+		for (let index = 0; index < 21; index++) {
 			await store.commitRuntimeRecord('runner', { id: `run-${index}`, code: 'captured-code', startedAt: index, events: [] });
 			if (index === 0) { await store.consumeRuntimeRecord('chat', 'runner', 'run-0'); }
 		}
 		await store.commitRuntimeRecord('cph', { id: 'round', code: 'all-cases-one-round', startedAt: 1, events: [] });
-		assert.equal((await store.listRuntimeRecords('runner')).length, 10);
+		assert.equal((await store.listRuntimeRecords('runner')).length, 20);
 		assert.equal((await store.listRuntimeRecords('cph')).length, 1);
 		assert.equal(await store.appendRuntimeEvents('runner', 'run-0', 1, ['late']), false);
 		assert.equal((await store.readMaterial('chat', 'runner-run-0-1'))?.code, 'captured-code');
@@ -220,13 +346,91 @@ suite('Beacon workspace preparation and assets', () => {
 
 suite('Beacon window context and conversation ownership', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
+	test('valid selected root collects in blackout while model record reads are denied', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			const source = path.join(root, 'main.cpp'); await fs.writeFile(source, 'V1');
+			assert.equal(await service.captureCollectionScope(1), undefined);
+			await service.selectWorkspace(1, root);
+			const scope = await service.captureCollectionScope(1);
+			await service.setMode(1, 'blackout');
+			assert.deepStrictEqual(await service.captureCollectionScope(1), scope);
+			const handle = (await service.beginActivity(1, source, scope))!;
+			await service.startRuntime(1, handle, 'runner', source, 'V1', [{ sourceSnapshot: { canonicalPath: await fs.realpath(source) } }]);
+			await service.appendRuntime(1, handle, 1, [{ type: 'finished' }]);
+			await service.endActivity(1, handle);
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			assert.equal((await store.listRuntimeRecords('runner'))[0].code, 'V1');
+			await assert.rejects(service.listRecent(1, 'runner', await service.getContext(1)), /workspace/);
+		} finally { await service.dispose(); }
+	}));
+	test('an absent or retired acquisition scope never backfills into a selected root', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			const source = path.join(root, 'main.cpp'); await fs.writeFile(source, 'V1');
+			const absent = await service.captureCollectionScope(1);
+			await service.selectWorkspace(1, root);
+			assert.equal(await service.beginActivity(1, source, absent), undefined);
+			const old = await service.captureCollectionScope(1);
+			await service.clearWorkspace(1); await service.selectWorkspace(1, root);
+			await assert.rejects(service.beginActivity(1, source, old), /changed/);
+		} finally { await service.dispose(); }
+	}));
+	test('get problem and oj collect in all modes without a chat and retain real activity until retirement', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			const source = path.join(root, 'main code.cpp'); await fs.writeFile(source, 'V1');
+			const sourceUri = `file:///${source.replace(/\\/g, '/')}`;
+			await service.selectWorkspace(1, root);
+			const scope = (await service.captureCollectionScope(1))!;
+			const ref = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+			const document = { ref, title: 'A+B', bodies: [{ locale: 'zh', sections: [{ format: 'markdown' as const, content: 'Add the numbers' }] }], samples: [], limits: [], interactive: false };
+			for (const mode of ['blackout', 'spot', 'flood'] as const) {
+				await service.setMode(1, mode);
+				await service.captureProblem(1, { document, sourceUri, viewedAt: 123, trigger: 'get-problem' }, scope);
+				await service.captureOj(1, { record: { ref: { problem: ref, id: mode, url: `https://www.luogu.com.cn/record/${mode}` }, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' }, sourceUri }, scope);
+			}
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			const rows = await store.listRecentRecords('problem'); assert.equal(rows.length, 1); assert.equal(rows[0].viewedAt, 123); assert.equal(rows[0].revision, 3);
+			await service.captureProblem(1, { document, sourceUri: URI.file(source).toString(), viewedAt: 124, trigger: 'get-problem' }, scope);
+			assert.equal((await store.listRecentRecords('problem')).length, 1, 'browser and editor URI encodings identify the same source');
+			assert.equal((await store.listRecentRecords('oj')).length, 3);
+			const handle = await service.beginOjCaptureActivity(1, { sourceUri, attemptId: 'active-attempt' }, scope);
+			await service.captureOj(1, { attemptId: 'active-attempt', evaluation: { problem: ref, phase: 'judging', codeLength: '2' }, sourceUri }, scope);
+			for (let i = 0; i < 21; i++) { await service.captureOj(1, { record: { ref: { problem: ref, id: `${i}`, url: `https://www.luogu.com.cn/record/${i}` }, phase: 'finished', rawStatus: 'WA', sourceVerification: 'not-checked' }, sourceUri }, scope); }
+			assert.equal((await store.listRecentRecords('oj')).length, 21);
+			await service.endOjCaptureActivity(1, handle);
+			assert.equal((await store.listRecentRecords('oj')).length, 20);
+			await service.setMode(1, 'spot'); await service.openConversation(1, 'chat', true);
+			assert.equal((await service.listRecent(1, 'problem', await service.getContext(1))).length, 1);
+		} finally { await service.dispose(); }
+	}));
+	test('same-root windows protect each others running records beyond twenty and trim on finish', async () => fixture(async root => {
+		const { service } = coordinator();
+		try {
+			const source = path.join(root, 'main.cpp'); await fs.writeFile(source, 'V1');
+			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
+			const first = (await service.beginActivity(1, source, await service.captureCollectionScope(1)))!;
+			const events = [{ sourceSnapshot: { canonicalPath: await fs.realpath(source) } }];
+			await service.startRuntime(1, first, 'runner', source, 'old', events);
+			for (let i = 0; i < 21; i++) {
+				const next = (await service.beginActivity(2, source, await service.captureCollectionScope(2)))!;
+				await service.startRuntime(2, next, 'runner', source, `${i}`, events); await service.appendRuntime(2, next, 1, [{ type: 'finished' }]); await service.endActivity(2, next);
+			}
+			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
+			assert.equal((await store.listRuntimeRecords('runner')).length, 21);
+			assert.equal(await service.appendRuntime(1, first, 1, [{ type: 'finished' }]), true);
+			await service.endActivity(1, first);
+			assert.equal((await store.listRuntimeRecords('runner')).length, 20);
+		} finally { await service.dispose(); }
+	}));
 	test('same-root windows serialize runtime writes instead of losing one to a lease collision', async () => fixture(async root => {
 		const { service } = coordinator();
 		const source = path.join(root, 'main.cpp'); await fs.writeFile(source, 'code');
-		const originalStore = Reflect.get(service, 'store');
+		const originalStore = Reflect.get(service, 'collectionStore');
 		try {
 			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
-			const first = (await service.beginActivity(1, source))!; const second = (await service.beginActivity(2, source))!;
+			const first = (await service.beginActivity(1, source, await service.captureCollectionScope(1)))!; const second = (await service.beginActivity(2, source, await service.captureCollectionScope(2)))!;
 			const store = new BeaconStore(await prepareBeaconWorkspace(root, false));
 			const commit = store.commitRuntimeRecord.bind(store);
 			let active = 0; let maximum = 0;
@@ -235,7 +439,7 @@ suite('Beacon window context and conversation ownership', () => {
 				try { await commit(...args); } finally { active--; }
 			};
 			// Control the resolution boundary; real files and Windows write leases remain in use.
-			Reflect.set(service, 'store', async () => store);
+			Reflect.set(service, 'collectionStore', async () => store);
 			const events = [{ sourceSnapshot: { canonicalPath: await fs.realpath(source) } }];
 			const results = await Promise.allSettled([
 				service.startRuntime(1, first, 'runner', source, 'code', events),
@@ -244,14 +448,14 @@ suite('Beacon window context and conversation ownership', () => {
 			assert.equal(maximum, 1);
 			assert.deepEqual(results.map(result => result.status), ['fulfilled', 'fulfilled']);
 			assert.equal((await store.listRuntimeRecords('runner')).length, 2);
-		} finally { Reflect.set(service, 'store', originalStore); await service.dispose(); }
+		} finally { Reflect.set(service, 'collectionStore', originalStore); await service.dispose(); }
 	}));
 	test('runtime writes bind to the initiating window activity and survive without a chat', async () => fixture(async root => {
 		const { service } = coordinator();
 		try {
 			const source = path.join(root, 'main.cpp'); await fs.writeFile(source, 'V1');
 			await service.selectWorkspace(1, root); await service.selectWorkspace(2, root);
-			const handle = (await service.beginActivity(1, source))!;
+			const handle = (await service.beginActivity(1, source, await service.captureCollectionScope(1)))!;
 			const writer = service as BeaconCoordinator & {
 				startRuntime(id: number, handle: string, producer: 'runner' | 'cph', source: string, code: string, events: unknown[]): Promise<void>;
 				appendRuntime(id: number, handle: string, sequence: number, events: unknown[]): Promise<boolean>;
@@ -377,12 +581,12 @@ suite('Beacon window context and conversation ownership', () => {
 		try {
 			await service.selectWorkspace(1, root); await service.openConversation(1, 'one', true);
 			const own = path.join(root, '.beaconWork', 'conversations', 'one');
-			await service.checkPageAccess(1, path.join(own, 'conversation.json'));
+			await assert.rejects(service.checkPageAccess(1, path.join(own, 'conversation.json')), /protected-page/);
 			await service.openConversation(1, 'two', true);
 			const alias = path.join(root, 'alias'); await fs.symlink(own, alias, 'junction');
-			await assert.rejects(service.checkPageAccess(1, path.join(alias, 'conversation.json')), /owner/);
+			await assert.rejects(service.checkPageAccess(1, path.join(alias, 'conversation.json')), /protected-page/);
 			await fs.rename(path.join(own, 'conversation.json'), path.join(own, 'saved.json'));
-			await assert.rejects(service.checkPageAccess(1, path.join(alias, 'conversation.json')), /owner/);
+			await assert.rejects(service.checkPageAccess(1, path.join(alias, 'conversation.json')), /protected-page/);
 			await assert.rejects(service.checkPageAccess(1, path.join(root, '.env')), /protected-page/);
 			await service.checkPageAccess(1, path.join(root, 'unsaved.cpp'));
 		} finally { await service.dispose(); }
@@ -439,8 +643,8 @@ suite('Beacon window context and conversation ownership', () => {
 		const { service } = coordinator();
 		try {
 			await service.selectWorkspace(1, a);
-			assert.equal(await service.beginActivity(1, outside), undefined);
-			const first = await service.beginActivity(1, inside); const second = await service.beginActivity(1, inside);
+			assert.equal(await service.beginActivity(1, outside, await service.captureCollectionScope(1)), undefined);
+			const first = await service.beginActivity(1, inside, await service.captureCollectionScope(1)); const second = await service.beginActivity(1, inside, await service.captureCollectionScope(1));
 			await assert.rejects(service.selectWorkspace(1, b), /busy/);
 			await service.endActivity(1, first!);
 			await assert.rejects(service.selectWorkspace(1, b), /busy/);

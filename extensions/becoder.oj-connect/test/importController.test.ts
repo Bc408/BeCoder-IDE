@@ -45,3 +45,17 @@ test('cancellation delivered before extension activation cannot publish an old p
 	importer.cancel('pending-activation');
 	await assert.rejects(importer.import({}, 'pending-activation'), { name: 'AbortError' });
 });
+
+test('successful import publishes the original acquisition and full statement without failing the user import', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-acquisition-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const acquisition = { scope: undefined, trigger: 'get-problem' };
+	const document = { ref: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, title: 'A+B', bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: 'Actual full statement' }] }], samples: [], limits: [], interactive: false };
+	const published: unknown[][] = [];
+	const host = { folders: () => [root], directories: () => defaultDirectories, selectFolder: async () => undefined, open: async () => { }, acquired: async (...args: unknown[]) => { published.push(args); throw new Error('storage-unavailable'); } };
+	const importer = new ImportController([{ site: 'luogu', fileName: () => 'P1001.cpp' }] as unknown as OjAdapter[], host);
+	const result = await Reflect.apply(importer.import, importer, [document, 'request-one', acquisition]);
+	assert.ok(result?.sourceUri);
+	assert.equal(published.length, 1);
+	assert.deepStrictEqual(published[0].slice(0, 2), [document, result.sourceUri]);
+	assert.equal(published[0][2], acquisition, 'explicit absence of scope must survive asynchronous import');
+});

@@ -206,7 +206,7 @@ async function fixtureContext(turn: PromptEvaluationTurn) {
 		throw new Error('beacon-context-unavailable');
 	});
 	await client.refresh();
-	return new ContextTools(client, client.captureScope(), [], [], undefined, overview.target as { id: string; version: string } | undefined);
+	return new ContextTools(client, client.captureScope());
 }
 
 function parseResponse(log: EvaluationRequest): void {

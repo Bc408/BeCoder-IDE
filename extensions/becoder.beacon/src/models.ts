@@ -62,7 +62,7 @@ export function resolveCapabilities(_provider: ProviderId, _baseURL: string, _mo
 	const defaults = discovered?.source === 'catalog' ? { ...defaultCapabilities } : discovered ?? { ...defaultCapabilities };
 	const merged = { ...defaults, ...settings.overrides };
 	const contextWindow = merged.contextWindow ?? Math.max(capacityDefaults.contextWindow, merged.maxInputTokens ?? 0, merged.maxOutputTokens ?? 0);
-	return { ...merged, vision: normalizeSupport(merged.vision), reasoning: normalizeSupport(merged.reasoning), tools: normalizeSupport(merged.tools), contextWindow, maxInputTokens: merged.maxInputTokens ?? Math.min(capacityDefaults.maxInputTokens, contextWindow), maxOutputTokens: merged.maxOutputTokens ?? Math.min(capacityDefaults.maxOutputTokens, contextWindow), source: settings.overrides && Object.keys(settings.overrides).length ? 'manual' : defaults.source };
+	return { ...merged, vision: normalizeSupport(merged.vision), reasoning: normalizeSupport(merged.reasoning), tools: normalizeSupport(merged.tools), contextWindow, maxInputTokens: merged.maxInputTokens ?? (merged.contextWindow !== undefined ? contextWindow : Math.min(capacityDefaults.maxInputTokens, contextWindow)), maxOutputTokens: merged.maxOutputTokens ?? Math.min(capacityDefaults.maxOutputTokens, contextWindow), source: settings.overrides && Object.keys(settings.overrides).length ? 'manual' : defaults.source };
 }
 
 /** Read only explicit service metadata; do not infer capabilities from an arbitrary model name. */

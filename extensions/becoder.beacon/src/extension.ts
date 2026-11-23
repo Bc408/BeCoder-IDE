@@ -11,7 +11,8 @@ import { Connections, connectionError, settingsError } from './connections';
 import { isProvider } from './connection';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
-import { BeaconContextClient, withOjPages, withPdfPages, type BeaconPage, type PageReference, type OjPageApi, type PdfPageApi, type BeaconHistoryBinding } from './context';
+import { BeaconContextClient, withPdfPages, type PdfPageApi, type BeaconHistoryBinding } from './context';
+import type { ProblemRef, ProblemDocument, ProblemResolution } from 'becoder-oj-connect';
 import { ContextTools, redactContext } from './contextTools';
 import { NotebookTools } from './notebookTools';
 import type { NotebookEditApi } from '../../becoder.notebook/src/editApi';
@@ -33,12 +34,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let alive = true;
 	const describeError = connectionError;
 	let historyUnreadable = false;
-	const native = new BeaconContextClient(withOjPages(withPdfPages(async (operation, input) => vscode.commands.executeCommand('_becoder.beacon.context', operation, input), () => {
+	const native = new BeaconContextClient(withPdfPages(async (operation, input) => vscode.commands.executeCommand('_becoder.beacon.context', operation, input), () => {
 		const pdf = vscode.extensions.getExtension<PdfPageApi>('mathematic.vscode-pdf');
 		return pdf?.isActive && typeof pdf.exports?.listPages === 'function' && typeof pdf.exports?.readPage === 'function' ? pdf.exports : undefined;
-	}), () => {
-		const extension = vscode.extensions.getExtension<OjPageApi>('becoder.oj-connect');
-		return extension?.isActive && typeof extension.exports?.listBeaconPages === 'function' && typeof extension.exports?.readBeaconPage === 'function' ? extension.exports : undefined;
 	}));
 	let binding: BeaconHistoryBinding = { data: { version: 1, activeId: '', conversations: [] }, save: async data => data };
 	let history = new ChatHistory(binding.data, binding.save, schedule, describeError);
@@ -111,50 +109,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	let webEnabled = readWebEnabled();
 	let requestNotice: { id: number; text: string } | undefined;
 	const canSend = () => !historyUnreadable && (modeDraft ? !binding.root || binding.root === native.state.root : temporary ? !native.consumingWorkspace : !history.snapshot.activeId || (!!native.consumingWorkspace && binding.root === native.state.root && native.state.activeId === history.snapshot.activeId));
-	let targetChoice: { view: string; id: string; title: string; once: boolean } | undefined;
-	const contextPages = async () => native.scopedCall<BeaconPage[]>(native.captureScope(), 'pages', {}, new AbortController().signal);
-	const availableTarget = (page: BeaconPage) => !page.reason && (page.kind === 'text' || page.kind === 'oj-problem' || page.kind === 'oj-record');
-	const pickTarget = async () => {
-		if (busy()) { return; }
-		const view = viewKey();
-		try {
-			const pages = (await contextPages()).filter(availableTarget);
-			const target = await vscode.window.showQuickPick([
-				{ label: vscode.l10n.t('Follow the active editor'), id: '' },
-				...pages.map(page => ({ label: page.title, description: page.uri, id: page.id }))
-			], { placeHolder: vscode.l10n.t('Choose the context for your question') });
-			if (!target || view !== viewKey() || busy()) { return; }
-			if (!target.id) { targetChoice = modeDraft ? { view, id: '', title: '', once: false } : undefined; if (!modeDraft) { history.setPinnedTarget(undefined); } publish(); return; }
-			const once = { label: vscode.l10n.t('Use for the next question'), once: true };
-			const pin = { label: vscode.l10n.t('Keep this context for the conversation'), once: false };
-			const choice = await vscode.window.showQuickPick([once, pin]);
-			if (choice && view === viewKey() && !busy()) {
-				targetChoice = { view, id: target.id, title: target.label, once: choice.once };
-				if (!modeDraft) {
-					if (choice.once) { history.setPinnedTarget(undefined); }
-					else if (history.setPinnedTarget({ id: target.id, title: target.label })) { targetChoice = undefined; }
-				}
-				publish();
-			}
-		} catch (error) { attachmentNotice(error); }
-	};
-	const captureTarget = async (): Promise<(PageReference & { title: string }) | undefined> => {
-		const choice = targetChoice?.view === viewKey() ? targetChoice.id ? targetChoice : undefined : history.pinnedTarget;
-		const pages = await contextPages();
-		const page = choice ? pages.find(page => page.id === choice.id) : pages.find(page => page.active && availableTarget(page));
-		if (choice && (!page || !availableTarget(page))) { throw new Error('beacon-page-closed'); }
-		return page && { id: page.id, version: page.version, title: page.title };
-	};
-	const request = async (beforeId = Infinity, target?: PageReference) => {
+	const request = async (beforeId = Infinity) => {
 		if (connections.testing) { throw new Error('settings-pending'); }
 		await native.refreshForRequest(); permission = native.permission;
 		if (!canSend()) { throw new Error('beacon-conversation-owner'); }
 		const roots = native.roots;
 		const scope = native.captureScope();
 		const requestHistory = history;
-		const files = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] }).execute;
+		const privateContext = requestHistory.effectiveContextAccess(beforeId);
+		const fileTools = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] });
+		const files = fileTools.execute;
+		const oj = async () => {
+			const extension = vscode.extensions.getExtension<{ resolveBeaconProblem(sourceUri: string): ProblemResolution; resolveBeaconUrl(url: string): ProblemRef | undefined; readBeaconProblem(ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }): Promise<ProblemDocument> }>('becoder.oj-connect');
+			if (!extension) { throw new Error('beacon-page-provider-unavailable'); } return extension.activate();
+		};
 		const notebooks = permission === 'none' ? undefined : new NotebookTools(async () => { const extension = vscode.extensions.getExtension<NotebookEditApi>('becoder.notebook'); if (!extension) { throw new Error('notebook-extension-unavailable'); } return extension.activate(); }, scope);
-		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], requestHistory.effectiveContextSnapshots(beforeId), snapshot => requestHistory.captureContext(snapshot), target), notebooks);
+		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], {
+			privateSnapshots: privateContext.snapshots, allowedPrivateKeys: privateContext.keys, capturePrivate: snapshot => requestHistory.captureContext(snapshot),
+			authorizeLocal: (file, signal) => fileTools.authorize(file, signal),
+			resolveProblem: async sourceUri => (await oj()).resolveBeaconProblem(sourceUri),
+			resolveUrl: async url => (await oj()).resolveBeaconUrl(url),
+			readAssociation: async sourceUri => { const extension = vscode.extensions.getExtension<{ readBeaconAssociation(sourceUri: string): Promise<{ sourceUri: string; url: string; revision: string } | undefined> }>('becoder.cph'); return (await extension?.activate())?.readBeaconAssociation(sourceUri); },
+			readProblem: async (ref, signal, options) => { if (!webEnabled) { throw new Error('beacon-web-disabled'); } return (await oj()).readBeaconProblem(ref, signal, options); }
+		}), notebooks);
+		const generate = next.generate;
+		next.generate = (messages, signal, files, progress, generation) => generate(messages, signal, files, progress, generation ? {
+			...generation,
+			commitCompaction: (candidate, expected, abort) => requestHistory.commitCompaction(candidate, { ...expected, scope, persist: scope.mode !== 'blackout' }, abort)
+		} : undefined);
 		if (!next.capabilities.vision && session.snapshot.messages.some(message => message.id < beforeId && (message.attachments?.some(item => item.kind === 'image') || message.toolResults?.some(item => item.output.kind === 'image')))) { throw new ModelCapabilityError('vision'); }
 		return next;
 	};
@@ -183,7 +165,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (visible.attachments) { visible.attachments = visible.attachments.map(item => ({ ...item, contents: '' })); }
 				return visible;
 			});
-			const message = { type: 'snapshot', ...snapshot, modeTransitionPending: !!modeDraft, acceptedInputView: acceptedInputView?.current === viewKey() ? acceptedInputView : undefined, screen, history: native.consumingWorkspace ? modeDraft && temporary ? modeHistory ?? [] : snapshot.history : [], context: native.state, canSend: canSend(), temporary: !native.consumingWorkspace, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), navigationBusy: workspaceJob, responseBusy: session.snapshot.busy, stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice, usedTarget: snapshot.messages.findLast(message => message.role === 'user')?.target?.title, selectedTarget: targetChoice?.view === viewKey() ? targetChoice.title || undefined : history.pinnedTarget?.title };
+			const message = { type: 'snapshot', ...snapshot, modeTransitionPending: !!modeDraft, acceptedInputView: acceptedInputView?.current === viewKey() ? acceptedInputView : undefined, screen, history: native.consumingWorkspace ? modeDraft && temporary ? modeHistory ?? [] : snapshot.history : [], context: native.state, canSend: canSend(), temporary: !native.consumingWorkspace, viewKey: viewKey(), draftText: draft().text, homeHasDraft: home()?.hasDraft ?? false, busy: busy(), navigationBusy: workspaceJob, responseBusy: session.snapshot.busy, stopping: snapshot.stopping || attachmentJob?.signal.aborted, messages, attachments: attachments().map(item => ({ ...item, contents: '' })), configured: connections.configured, connection: connections.snapshot, historyUnreadable, permission, webEnabled, requestNotice };
 			void view?.webview.postMessage(message);
 			if (configurationPanel) {
 				const connection = connections.snapshot;
@@ -213,7 +195,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			case 'draft': if (typeof value.text === 'string' && typeof value.viewKey === 'string') { updateDraft(value.text, value.viewKey); } break;
 			case 'send': if (typeof value.text === 'string') { void track(send(value.text, value.editRevision)); } break;
 			case 'addFiles': void pickFiles(); break;
-			case 'pickTarget': void pickTarget(); break;
 			case 'pasteImages': addClipboardImages(value.images, value.activeId); break;
 			case 'attachmentInputError': if (value.code === 'image' || value.code === 'budget' || value.code === 'busy') { attachmentNotice(new AttachmentError(value.code)); } break;
 			case 'unsupportedDrop': attachmentNotice(new AttachmentError('source')); break;
@@ -411,18 +392,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const controller = new AbortController(); attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
 		try {
-			const messages = session.snapshot.messages;
-			const index = messages.findIndex(message => message.id === id);
-			const user = messages[kind === 'edit' ? index : index - 1];
-			if (user?.target) {
-				const page = (await contextPages()).find(page => page.id === user.target!.id);
-				if (!page || page.version !== user.target.version || page.reason) {
-					const retained = history.contextSnapshots.some(snapshot => user.target!.capturedKeys?.includes(snapshot.key));
-					const reason = !page ? vscode.l10n.t('The original context page is no longer open.') : vscode.l10n.t('The original context page changed.');
-					requestNotice = { id: Date.now(), text: reason + ' ' + (retained ? vscode.l10n.t('This answer keeps the original target version and can use its captured historical snapshot.') : vscode.l10n.t('The original target version was not captured. Its contents are unavailable; a new question can use the current page.')) };
-				}
-			}
-			const next = await request(kind === 'edit' ? id + 1 : kind === 'regenerate' ? id : Infinity, user?.role === 'user' ? user.target : undefined);
+			const next = await request(kind === 'edit' ? id + 1 : kind === 'regenerate' ? id : Infinity);
 			controller.signal.throwIfAborted();
 			completion = kind === 'edit' && typeof text === 'string' ? session.edit(id, text, next.generate, next.source, next.files) : kind === 'regenerate' ? session.regenerate(id, next.generate, next.source, next.files) : session.resume(id, next.generate, next.source, next.files);
 		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
@@ -496,7 +466,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	function attachmentNotice(error: unknown): void {
 		const contextErrors: Record<string, string> = {
-			'beacon-page-closed': vscode.l10n.t('The selected context page is no longer open. Reopen it and choose it again, or follow the active editor.'),
+			'beacon-page-closed': vscode.l10n.t('The requested page is no longer open.'),
 			'beacon-runtime-busy': vscode.l10n.t('Wait for the current run to finish before sending to Beacon.'),
 			'beacon-busy': vscode.l10n.t('Finish the current response, run or save before switching the Beacon workspace.'),
 			'conversation-open': vscode.l10n.t('This chat is already open in another window.'),
@@ -590,10 +560,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			});
 			draftTail = preparing.catch(attachmentNotice);
 			await preparing;
-			const turnTarget = await captureTarget();
 			const refs = attachments();
 			const activeId = history.snapshot.activeId;
-			let next = await request(Infinity, turnTarget);
+			let next = await request();
 			if (refs.some(item => item.kind === 'image') && !next.capabilities.vision) { throw new ModelCapabilityError('vision'); }
 			const captured = structuredClone(refs);
 			controller.signal.throwIfAborted();
@@ -626,7 +595,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					target = await native.bindHistory({ id: targetId, create: true });
 				} else { target = { data: { version: 1, activeId: randomUUID(), conversations: [] }, save: async data => data }; }
 				const id = target.data.activeId;
-				const conversation: Conversation = { id, title: history.currentConversation?.title ?? '', updatedAt: Date.now(), messages: inherited, error: '', workspace: native.roots, draftOnly: inherited.length === 0, draft: pending, contextSnapshots: history.contextSnapshots, ...(history.pinnedTarget ? { pinnedTarget: history.pinnedTarget } : {}) };
+				const conversation: Conversation = { id, title: history.currentConversation?.title ?? '', updatedAt: Date.now(), messages: inherited, error: '', workspace: native.roots, draftOnly: inherited.length === 0, draft: pending, contextSnapshots: history.contextSnapshots };
 				target.data = { ...target.data, conversations: [...target.data.conversations.filter(item => item.id !== id), conversation] };
 				await replaceHistory(target);
 				await draftTail;
@@ -635,7 +604,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (inherited.length) { transition = temporary ? 'temporary' : 'persistent'; }
 				consumeTemporary = sourceTemporary;
 				if (!sourceTemporary && sourceData.activeId) { consumedSource = { id: sourceData.activeId, binding: sourceBinding }; }
-				next = await request(Infinity, turnTarget);
+				next = await request();
 			}
 			await draftTail;
 			const previousDraftText = draft().text;
@@ -659,12 +628,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			}
 			screen = 'conversation';
 			generation++; acceptedInputView = { previous: sentViewKey, current: viewKey(), editRevision };
-			const previousLength = session.snapshot.messages.length;
-			completion = session.send(text, next.generate, next.source, next.files, captured, transition, turnTarget);
-			if (session.snapshot.messages.length > previousLength && targetChoice?.view === sentViewKey) {
-				history.setPinnedTarget(!targetChoice.once && targetChoice.id ? { id: targetChoice.id, title: targetChoice.title } : undefined);
-				targetChoice = undefined;
-			}
+			completion = session.send(text, next.generate, next.source, next.files, captured, transition);
+
 			rollback = undefined;
 			if (home()?.id === activeId || consumedSource?.id === home()?.id) { homes.delete(native.state.root!); }
 			if (consumeTemporary) { temporaryDrafts.delete(native.state.root ?? ''); }

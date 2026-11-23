@@ -20,6 +20,7 @@ export interface FileOutput {
 	ok: boolean;
 	path: string;
 	kind?: 'text' | 'binary' | 'image' | 'entries' | 'matches';
+	representation?: 'notebook-content';
 	contents?: string;
 	mediaType?: string;
 	nextOffset?: number;
@@ -29,7 +30,7 @@ export interface FileOutput {
 }
 export type FileTool = (input: FileInput, signal: AbortSignal) => Promise<FileOutput>;
 export interface FileRoot { name: string; path: string }
-export interface FileAccessOptions { protectedRoots?: string[]; suppliedFiles?: string[] }
+export interface FileAccessOptions { protectedRoots?: string[]; suppliedFiles?: string[]; readRepresentation?: (file: string, signal: AbortSignal) => Promise<{ contents: string; representation: 'notebook-content' } | undefined> }
 
 const chunkBytes = 128 * 1024;
 const responseBytes = 8 * 1024 * 1024;
@@ -69,7 +70,7 @@ export class FileTools {
 	private readonly roots: Promise<FileRoot[]>;
 	private readonly protectedRoots: Promise<string[]>;
 	private readonly suppliedFiles: Promise<string[]> | undefined;
-	constructor(readonly permission: FilePermission, roots: FileRoot[], private readonly openText: (file: string) => string | undefined | Promise<string | undefined> = () => undefined, options: FileAccessOptions = {}) {
+	constructor(readonly permission: FilePermission, roots: FileRoot[], private readonly openText: (file: string) => string | undefined | Promise<string | undefined> = () => undefined, private readonly options: FileAccessOptions = {}) {
 		const canonical = async (files: string[]) => Promise.all(files.map(async file => { try { return await fs.realpath(file); } catch { return path.resolve(file); } }));
 		this.protectedRoots = canonical(options.protectedRoots ?? []);
 		this.suppliedFiles = options.suppliedFiles ? canonical(options.suppliedFiles) : undefined;
@@ -77,6 +78,7 @@ export class FileTools {
 			try { return { ...root, path: await fs.realpath(root.path) }; } catch { return undefined; }
 		})).then(roots => roots.filter((root): root is FileRoot => root !== undefined));
 	}
+	authorize(file: string, signal: AbortSignal): Promise<string> { return this.resolve(file, signal); }
 	private async resolve(input: string, signal: AbortSignal): Promise<string> {
 		signal.throwIfAborted();
 		if (this.permission === 'none') { throw new Error('files-disabled'); }
@@ -134,13 +136,16 @@ export class FileTools {
 			const stat = await handle.stat();
 			if (!stat.isFile()) { throw new Error('not-ordinary-file'); }
 			await this.verify(file, stat, signal);
-			const text = await this.openText(file);
+			const representation = this.suppliedFiles ? undefined : await this.options.readRepresentation?.(file, signal);
+			if (!this.suppliedFiles && /\.bcnb(?:-backup)?$/i.test(file) && !representation) { throw new Error('notebook-content-unavailable'); }
+			const text = representation?.contents ?? await this.openText(file);
 			if (text !== undefined) {
 				// Character offsets preserve surrogate pairs; disk reads below use byte offsets.
 				let end = Math.min(text.length, offset + Math.max(1, Math.floor(limit / 4)));
 				if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) { end += end === offset + 1 ? 1 : -1; }
 				signal.throwIfAborted();
-				return { ...base, kind: 'text', contents: text.slice(offset, end), ...(end < text.length ? { nextOffset: end } : {}) };
+				await this.verify(file, stat, signal);
+				return { ...base, kind: 'text', ...(representation ? { representation: representation.representation } : {}), contents: text.slice(offset, end), ...(end < text.length ? { nextOffset: end } : {}) };
 			}
 			const imageType: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
 			const mediaType = imageType[path.extname(file).toLowerCase()];

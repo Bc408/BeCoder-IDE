@@ -20,5 +20,11 @@ export function createFileTools(permission: FilePermission, roots = currentFileR
 			try { if (await fs.realpath(document.uri.fsPath) === file) { return document.getText(); } } catch { /* An editor file may have been removed. */ }
 		}
 		return undefined;
-	}, options);
+	}, { ...options, readRepresentation: options.readRepresentation ?? (async (file, signal) => {
+		if (!/\.bcnb(?:-backup)?$/i.test(file)) { return undefined; }
+		const extension = vscode.extensions.getExtension<{ readBeaconContent?(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; representation: 'notebook-content' }> }>('becoder.notebook');
+		const api = await extension?.activate();
+		if (!api?.readBeaconContent) { throw new Error('notebook-content-unavailable'); }
+		return api.readBeaconContent(vscode.Uri.file(file).toString(), signal);
+	}) });
 }

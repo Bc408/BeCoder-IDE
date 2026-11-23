@@ -2,7 +2,7 @@
 
 BeCoder 内置的算法与编程学习助手。点击编辑器右上角 Beacon 按钮，或运行 **Beacon: 打开/关闭 Beacon 侧边栏**；聊天设置按钮、**Beacon: 打开设置**和扩展“功能”页打开同一个独立设置标签页。
 
-本说明面向2026-11-22核对的当前源码；未重新执行运行验收。[现行设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现差距](../../docs/beacon/implementation-status.md)分别维护。新的五类共享队列、代码快照、同步压缩以及后续记忆／dream、完整视觉不能由已有工具推定已交付。
+本说明面向2026-11-23的底层建筑实施候选源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
 
 ## 模型连接与设置
 
@@ -48,11 +48,11 @@ Ollama 本地同步和测试无需密钥，代理服务可选填。回环地址�
 
 | 档位 | 当前范围 |
 | --- | --- |
-| Blackout | 菜单说明“只读已打开文件的无痕模式”；可用主动材料、当前打开页和已加载上文，不新增工作区历史、记忆、运行记录或自由文件读取；临时消息/草稿只在内存 |
+| Blackout | 可用主动材料、合法打开页和普通已加载上文；临时聊天／草稿只在内存，Beacon不使用持久上下文。正常所选根的软件用户行为采集持续 |
 | Spot | 菜单说明“只工作在当前Beacon工作区”；文件及允许的学习资产写入限所选根 |
 | Flood | 菜单说明“可自由访问本机文件”；扩大允许的文件位置，仍排除凭据、内部会话资产和其他受保护路径，不扩大资产种类或执行权限 |
 
-当前实现的三档页面工具可按需读取打开文本（含未保存与根外内容）、Notebook、已渲染网页及PDF文字；页面读权不允许从 backing file 补正文、导航或读取相关/隐藏文件。凭据过滤和其他会话隔离继续生效。主动添加外部单文件只提供该次快照，不授权目录或持续追读。
+三档均可按需读取打开代码（含未保存与根外内容）的正文、文件名和路径，以及普通文本、网页和PDF文字；Notebook功能页及OJ题面／判题功能页不作自动取材入口；页面读权不允许从 backing file 补正文、导航或读取相关/隐藏文件。凭据过滤和其他会话隔离继续生效。主动添加外部单文件只提供该次快照，不授权目录或持续追读。
 
 工作区聊天和草稿归 `.beaconWork` 中对应对话，同根窗口共享列表，同一对话只允许单窗口打开。空主页不创建记录；首次输入/附件可建立隐藏草稿，首次发送转为历史聊天。返回主页保留详情草稿，主页“新聊天”清空主页草稿。真正关窗发布最后关闭窗口的页面和输入状态，显式空白覆盖旧草稿，恢复遇占用静默回主页。
 
@@ -60,21 +60,21 @@ Ollama 本地同步和测试无需密钥，代理服务可选填。回环地址�
 
 Runner、CPH、Notebook 运行、必要清理及证据收尾期间，输入区保留暗淡禁用发送箭头，无工作区也适用；只有真实 Beacon 回答显示暂停。文字和附件保留，被拒绝发送不排队或补发。
 
-## 已确认的下一阶段规则
+## 用户行为与受控上下文
 
-工作区决定软件采集资格，模式决定Beacon消费权限：必须先选择正常可用的Beacon根，Get Problem及Runner／CPH／Notebook／OJ用户行为材料才采集落盘；有效根下Blackout也持续采集，但Beacon不能列举或读取这些持久记录。无根／异常不采集，之后不补采；切回Spot／Flood可读仍保留记录。
+工作区决定软件采集，模式决定Beacon消费：必须已选择正常可用的Beacon根，Get Problem及Runner／CPH／Notebook／OJ用户行为材料才采集落盘。有效根下Blackout仍持续采集，Beacon不能列举或读取这些持久记录；无根或根异常不采集，不改投其他根、不后补。
 
-Blackout仍可读打开代码的正文、文件名和路径，不存代码快照；题面改走OJ Connect只读联网。Spot／Flood将由LLM主动代码工具同次保存当前稿到对话10份／256KiB队列；Get Problem13条、四执行来源各20条。模型联网题面只入上下文。当前store仍会拒绝Blackout运行记录写入，队列和专属工具尚未按此落地，不能按目标规则推断当前软件已实现。
+Get Problem记录题面、对应代码文件和用户查看时间，题目＋文件去重，最近13条；Runner／CPH／Notebook／OJ各20条，实际活动额外保护，收尾再裁剪。队列在当前`.beaconWork`跨对话共享，不跨工作区。模型首次精确读取共享记录后，在本回答内固定该revision；不再复制整条记录到对话。下一回答重新核对是否仍存在。
 
-所有模式将统一取消运行／测评功能页面和Notebook运行字段的备用自动读取，持久记录成为唯一一等执行事实来源；用户主动提供材料与独立Notebook功能保留。详细差量与回归见[实现状态](../../docs/beacon/implementation-status.md)。
+当前工具候选区分本次读取范围与仍可读取的部分，按同源参数续读；指定CPH样例可一起取得其实际保存的输入、期望和结果，保留原样例号与空值。读取代码后的保存状态仅指本对话快照，不表示替用户保存源码。参数错误返回具体缺项，模型仍需正确补读和理解，不能把接口成功当作回答质量通过；专项验证见[实现状态](../../docs/beacon/implementation-status.md)。
 
-## 上下文、Notebook 与联网
+发送、继续和重答不自动捕获代码。模型调用`currentCode`时读取当下编辑稿，harness同次保存完整原文到本对话10份队列，UTF-8正文上限256KiB；同文件同内容复用晋升，历史读取不晋升。超限或保存失败仍返回实际代码和诚实状态，旧队列保留。返回正文按请求剩余容量分页，完整保存与实际返回的片段分别标明。Blackout仅返回现场代码，不保存、列举或读取代码快照。
 
-支持工具的模型通过 `inspectContext` 先看合法来源/版本和入口，再按需读取正文。以下为当前旧接线，下一阶段将按[底层设计](../../docs/beacon/foundation-design.md)调整。工作区运行记录固定 revision，先保存为当前对话独立材料再交付，队列淘汰不破坏副本。`source` 提供来源、捕获时间、版本/哈希和可得的采集遗漏；哈希不证明正确或完整，返回截断与采集缺失分别表达。
+讨论对象由模型结合用户问题、对话和工具观测判断，不显示“上轮对象”，不提供下一问选择或会话固定。模型调用代码工具时，可指定已打开页面ID；省略时读取调用当下的活动代码页。指定页关闭则明确失败，不换文件。编辑／重答后，本对话代码队列仍可读；其他分支文字、许可和普通私有材料继续隔离。未保存稿的续页必须带原页面及版本，变版失败；已保存稿使用快照ID，若已被队列淘汰则失败。
 
-新问题默认跟随活动文本编辑器，可在对象入口选择仅用于下一问、固定到本会话或恢复跟随。固定保存对象身份，新问题仍读取其当前版本；编辑旧问题、重答和继续保留原问题的对象版本。页面已关闭或变版时会提示，已有原轮快照只能作为历史材料，不能冒充当前页面。删除后续对话分支也会从后续模型输入中排除该分支独占的材料，原始留存资产保留。
+`inspectContext`按需提供目录、当前代码、历史代码、五类共享记录及结构化片段。初始目录仅展示各来源最近3项和总数，可按producer列出完整保留列表；目录不是正文读取。Get Problem、CPH已有源码关联及文件名／路径各自提供题目线索，由模型选择。读取保存题面须指定记录或源码文件；模型刷新题面只调用OJ只读接口，结果只进入上下文，不新增缓存、修改Get行为时间或触发导入／建文件。
 
-当前已激活OJ Connect的打开题面和判题面板仍提供只读结构化材料；该旧来源将在下一阶段移除，改为保存题面／只读联网与持久测评凭证。当前页面读取不因 Beacon 读取而重新查询、提交或导航。判词属于对应提交，旧稿 WA 不说明当前编辑稿已重新验证；只有实际核对过的同口径源码哈希才参与源码关系比较。页面标题与版本目录不等于模型已经读取正文。
+执行／测评事实仅消费持久凭证，所有档位不以功能页面作备用来源。Notebook自动文件读取和搜索先由Notebook owner提供内容投影，排除outputs、attempt和executionSummary；损坏或owner不可用时不回退原JSON。用户主动材料、独立Notebook真实输出和完整备份保留。哈希只证明相应表示的身份，不证明正确性、完整覆盖或当前代码已验证。
 
 PDF 使用已加载 PDF.js 文档按物理页提取文字；扫描页可能为空，不含 OCR 或完整图片/公式理解。网页 iframe、未渲染代码和图片等缺口如实反馈。文本、Notebook 和 PDF 文字选区通过“询问 Beacon”加入可查看、移除的草稿，由用户发送。
 
@@ -90,6 +90,10 @@ Spot/Flood 下，Beacon 可按明确请求创建/改写 `.bcnb`，使用打开�
 
 尚未交付文字、思考或工具活动时，临时网络/限流/过载可自动恢复，整轮至多两次重试、累计等待不超过 10 秒，保留原模型和三分钟期限；停止取消请求及等待。鉴权、余额、参数、证书等错误不自动重试；已输出内容或完成工具不自动重放。最终故障保留手动重试。连接诊断仅记服务商/随机请求标识、分类、次数与耗时，不记提示词、图片、密钥、地址或响应正文。
 
+每次实际模型步骤均检查最终规则、工具定义、消息及媒体预算：`B=min(I,C−O)`，90%主动整理，目标60%。同一模型同步生成摘要投影，保留原始聊天与完整工具协议；候选保存确认后才使用。覆盖前缀被编辑时摘要失效，尾部修改或追加不自动废弃合法前缀。同一普通待发步骤最多整理修复一次，普通和整理共用20步及原期限，整理不递归、不删除代码队列。无法可靠估算图片token时保留图片并标明未知，不静默丢图或换模型。
+
+回答失败保留实际完成的工具调用／结果；失败正文不投影给后续模型。停止保留已接收文字及兼容思考，拒绝迟到正文；不补造未完成工具结果。切换供应商、端点或模型后过滤私有思考字段，业务JSON保留。
+
 ## 开发与验证
 
 仓库根执行 `npm run compile-oi-extensions`。本目录可执行 `npm run typecheck`、`npm run build`、`npm test`；正式检查按 [AGENTS.md](../../AGENTS.md)预检。模拟 SSE/宿主测试不证明真实账号连通、模型效果或桌面验收；生产渲染也不代替负责人验收。第三方来源见 [UPSTREAM.md](UPSTREAM.md)。
@@ -104,4 +108,6 @@ Each window selects an independent Beacon workspace. Blackout keeps temporary ch
 
 Message Markdown and incremental code rendering share the OJ Connect content core. Code uses fixed One Monokai colors; source appears before local grammar loading and syntax coloring. Streaming parsing is separate from text animation.
 
-Explicitly requested Notebook creation/editing is available, with complete pre-edit backup and native save. Beacon does not edit student source, execute programs, log in or submit. The planned five shared producer queues, conversation code queue and synchronous compression are not implemented under the new contract. With a healthy selected root, the target design keeps software collection active in Blackout while denying Beacon persistent-source access; the current store still blocks those writes. Open code remains readable and statement retrieval will use the narrow OJ network tool. Workspace memory/dream and full visual materials remain future work. See [implementation status](../../docs/beacon/implementation-status.md), [formal requirements](../../docs/beacon/README.md) and the [English project guide](../../README.en.md). Tests and older builds do not establish current live-model or runtime acceptance.
+Explicitly requested Notebook creation/editing remains available with complete backup and native save. Beacon never edits student source, executes programs, logs in or submits. A healthy selected Beacon root continuously collects actual user Get Problem and execution events in every mode; Blackout clips model access to persistent sources while preserving live open-code reading. Shared queues retain 13 problem statements and 20 records per execution source, plus actual active records. Model-triggered live code reads save the same full observation to a conversation-wide queue of 10, capped at 256 KiB UTF-8; sending does not capture code. Saved history reads do not promote entries. Model statement refresh is read-only and has no dedicated persistence. Automatic Notebook context excludes execution fields; original outputs/backups remain host owned.
+
+The model chooses the discussed problem and code from the user's question, conversation and tool observations. There is no host discussion-object picker, pin or last-object badge. Live-code calls specify an open page or read the active code editor at call time. The current model performs synchronous input compaction with explicit capacity checks, a single repair per pending ordinary step and 20 shared model steps. A discovered context window is used when an input limit is not separately supplied; the unrelated default input ceiling is not retained. Only confirmed summary saves become projections; raw history and completed tool pairs remain intact. Unknown image estimates retain the image. Memory/dream and full visual support remain future work. See [implementation status](../../docs/beacon/implementation-status.md) for validation and owner-acceptance boundaries.

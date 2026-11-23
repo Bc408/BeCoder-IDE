@@ -59,10 +59,11 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 						const accepted = chunk.subarray(0, Math.max(0, remaining));
 						if (accepted.length !== chunk.length) {
 							result.truncated = true; result.omittedBytes += chunk.length - accepted.length;
+							callbacks.evidence?.event({ type: 'stream', phase, stream: name, blockId: captured.cellId, inputId: captured.inputCellId, bytesBase64: '', sourceOmittedBytes: chunk.length - accepted.length });
 							if (limitedProgramOutput && !outputLimitReached) { outputLimitReached = true; onOutputLimit?.(); }
 						}
 						if (accepted.length) {
-							callbacks.evidence?.event({ type: 'stream', phase, stream: name, bytesBase64: accepted.toString('base64') });
+							callbacks.evidence?.event({ type: 'stream', phase, stream: name, blockId: captured.cellId, inputId: captured.inputCellId, bytesBase64: accepted.toString('base64') });
 							buffers[index].push(accepted); sizes[index] += accepted.length; if (limitedProgramOutput) { total += accepted.length; } callbacks.output(phase, name, decoders[index].write(accepted));
 						}
 					});

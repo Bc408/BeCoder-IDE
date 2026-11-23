@@ -35,7 +35,6 @@ function providerFailure(status: number | undefined, ...values: unknown[]): Tran
 	const kind = status === 429 ? 'rate-limit' : status === 408 ? 'timeout' : [409, 425].includes(status ?? 0) ? 'connection' : [500, 502, 503, 504, 520, 522, 524, 529].includes(status ?? 0) ? 'unavailable' : undefined;
 	// A structured code may refine a temporary HTTP failure, never turn an
 	// authentication, address or parameter rejection into a retryable request.
-	if (status !== undefined && !kind) { return; }
 	const codes = values.flatMap(value => {
 		const root = value && typeof value === 'object' ? value as { error?: unknown; code?: unknown; type?: unknown } : undefined;
 		const detail = root?.error && typeof root.error === 'object' ? root.error as { code?: unknown; type?: unknown } : undefined;
@@ -48,6 +47,7 @@ function providerFailure(status: number | undefined, ...values: unknown[]): Tran
 					: ['invalid_request_error', 'invalid_request'].includes(code) ? 'INVALID_REQUEST' : undefined;
 		if (rejected) { return { kind: 'rejected', code: rejected, retryable: false }; }
 	}
+	if (status !== undefined && !kind) { return; }
 	if (codes.some(code => ['overloaded', 'overloaded_error', 'service_unavailable'].includes(code))) { return { kind: 'unavailable', code: 'PROVIDER_OVERLOADED', retryable: true }; }
 	if (codes.some(code => ['rate_limit', 'rate_limit_error', 'rate_limit_exceeded', 'too_many_requests', 'resource_exhausted'].includes(code))) { return { kind: 'rate-limit', code: 'PROVIDER_RATE_LIMIT', retryable: true }; }
 	return kind ? { kind, code: `HTTP_${status}`, retryable: true } : undefined;
@@ -56,7 +56,7 @@ function providerFailure(status: number | undefined, ...values: unknown[]): Tran
 /** Read only a bounded error-body copy; broken or slow bodies retain the HTTP policy. */
 async function responseFailure(response: Response, signal: AbortSignal): Promise<TransportFailure | undefined> {
 	const fallback = providerFailure(response.status);
-	if (!fallback) { return; }
+	if (!fallback && response.status < 400) { return; }
 	const reader = response.clone().body?.getReader();
 	if (!reader) { return fallback; }
 	const cancel = () => { void reader.cancel().catch(() => {}); };

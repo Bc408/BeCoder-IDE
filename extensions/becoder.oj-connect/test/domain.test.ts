@@ -10,6 +10,12 @@ import { cphSamples } from '../src/cphHost';
 import { createBeaconPages } from '../src/beaconPages';
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('receipt observations retain their real attempt and reject a different formal record', () => {
+	const record = { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' };
+	const observed = { attemptId: 'native-attempt', snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' } };
+	assert.deepStrictEqual(Reflect.get(validateOutcome({ kind: 'record', record, observed }), 'observed'), observed);
+	assert.throws(() => validateOutcome({ kind: 'record', record, observed: { ...observed, snapshot: { ...observed.snapshot, ref: { ...record, id: '124', url: 'https://www.luogu.com.cn/record/124' } } } }), /receipt/);
+});
 test('Beacon reads the displayed locale, exact samples and the published record version', () => {
 	const document = validateProblem({ ref, title: 'A+B', bodies: [
 		{ locale: 'en', sections: [{ format: 'markdown', content: 'english' }] },

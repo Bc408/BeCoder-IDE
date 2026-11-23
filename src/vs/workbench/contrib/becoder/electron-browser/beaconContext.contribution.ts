@@ -16,7 +16,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { IBrowserViewService, ipcBrowserViewChannelName } from '../../../../platform/browserView/common/browserView.js';
 import { BeaconWorkbenchPages } from './beaconPages.js';
-import type { IBeaconContext, IBeaconResume } from '../../../../platform/beacon/common/beaconContextTypes.js';
+import type { IBeaconContext, IBeaconResume, BeaconRecentProducer, IBeaconCollectionScope, IBeaconProblemCapture, IBeaconOjCapture, IBeaconRecordRef, IBeaconCodeObservation } from '../../../../platform/beacon/common/beaconContextTypes.js';
 import { INotebookService } from '../../notebook/common/notebookService.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
 
@@ -26,9 +26,15 @@ let pageProvider: BeaconWorkbenchPages | undefined;
 CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unknown, input: unknown) => {
 	const service = ProxyChannel.toService<IBeaconContextService>(accessor.get(IMainProcessService).getChannel(beaconContextChannel));
 	const windowId = mainWindow.vscodeWindowId;
+	const recent = input as { input?: IBeaconProblemCapture & IBeaconOjCapture & { sourceUri: string; attemptId?: string; recordKey?: string }; scope?: IBeaconContext & IBeaconCollectionScope; collectionScope?: IBeaconCollectionScope; producer?: BeaconRecentProducer; ref?: IBeaconRecordRef; observation?: IBeaconCodeObservation; id?: string } | undefined;
 	const value = input as { root?: string; source?: string; handle?: string; producer?: 'runner' | 'cph' | 'notebook'; code?: string; events?: unknown[]; sequence?: number; mode?: unknown; retainConversation?: boolean; busy?: boolean; id?: string; create?: boolean; title?: string; revision?: number; data?: IBeaconConversation; scope?: IBeaconContext; version?: string; view?: IBeaconResume } | undefined;
 	const pages = () => pageProvider ??= new BeaconWorkbenchPages(accessor.get(IEditorService), accessor.get(IModelService), ProxyChannel.toService<IBrowserViewService>(accessor.get(IMainProcessService).getChannel(ipcBrowserViewChannelName)), service, windowId, accessor.get(INotebookService));
 	switch (operation) {
+		case 'currentCode': {
+			const code = input as { id?: string; expectedVersion?: string } | undefined;
+			if (code && (code.id === undefined || typeof code.id === 'string')) { return pages().readCurrentCode(code.id, code.expectedVersion); }
+			break;
+		}
 		case 'context': return service.getContext(windowId);
 		case 'resume': return service.getResume(windowId);
 		case 'view': if (value?.view) { return service.setView(windowId, value.view); } break;
@@ -39,7 +45,17 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'busy': if (typeof value?.busy === 'boolean') { return service.setBusy(windowId, value.busy); } break;
 		case 'beginRuntimeActivity': return service.beginRuntimeActivity(windowId);
 		case 'endRuntimeActivity': if (typeof value?.handle === 'string') { return service.endRuntimeActivity(windowId, value.handle); } break;
-		case 'beginActivity': if (typeof value?.source === 'string') { return service.beginActivity(windowId, value.source); } break;
+		case 'captureCollectionScope': return service.captureCollectionScope(windowId);
+		case 'beginActivity': if (typeof value?.source === 'string') { return service.beginActivity(windowId, value.source, recent?.collectionScope); } break;
+		case 'captureProblem': if (recent?.input && recent.scope) { return service.captureProblem(windowId, recent.input, recent.scope); } break;
+		case 'captureOj': if (recent?.input && recent.scope) { return service.captureOj(windowId, recent.input, recent.scope); } break;
+		case 'beginOjCaptureActivity': if (recent?.input && recent.scope) { return service.beginOjCaptureActivity(windowId, recent.input, recent.scope); } break;
+		case 'endOjCaptureActivity': if (recent?.id) { return service.endOjCaptureActivity(windowId, recent.id); } break;
+		case 'listRecent': if (recent?.producer && recent.scope) { return service.listRecent(windowId, recent.producer, recent.scope); } break;
+		case 'readRecent': if (recent?.ref && recent.scope) { return service.readRecent(windowId, recent.ref, recent.scope); } break;
+		case 'saveCodeRead': if (recent?.observation && recent.scope) { return service.saveCodeRead(windowId, recent.observation, recent.scope); } break;
+		case 'listCodeSnapshots': if (recent?.scope) { return service.listCodeSnapshots(windowId, recent.scope); } break;
+		case 'readCodeSnapshot': if (recent?.id && recent.scope) { return service.readCodeSnapshot(windowId, recent.id, recent.scope); } break;
 		case 'endActivity': if (typeof value?.handle === 'string') { return service.endActivity(windowId, value.handle); } break;
 		case 'startRuntime': if (typeof value?.handle === 'string' && (value.producer === 'runner' || value.producer === 'cph' || value.producer === 'notebook') && typeof value.source === 'string' && typeof value.code === 'string' && Array.isArray(value.events)) { return service.startRuntime(windowId, value.handle, value.producer, value.source, value.code, value.events); } break;
 		case 'appendRuntime': if (typeof value?.handle === 'string' && typeof value.sequence === 'number' && Array.isArray(value.events)) { return service.appendRuntime(windowId, value.handle, value.sequence, value.events); } break;
@@ -51,7 +67,7 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'materialRead': if (value?.scope && typeof value.id === 'string') { return service.readConsumed(windowId, value.id, value.scope); } break;
 		case 'history': return service.listHistory(windowId);
 		case 'open': if (typeof value?.id === 'string') { return service.openConversation(windowId, value.id, value.create === true); } break;
-		case 'save': if (value?.data && typeof value.revision === 'number') { return service.saveConversation(windowId, value.data, value.revision); } break;
+		case 'save': if (value?.data && typeof value.revision === 'number') { return service.saveConversation(windowId, value.data, value.revision, value.scope); } break;
 		case 'consumeDraft': if (typeof value?.id === 'string' && typeof value.revision === 'number') { return service.consumeDraft(windowId, value.id, value.revision); } break;
 		case 'rename': if (typeof value?.id === 'string' && typeof value.title === 'string') { return service.renameConversation(windowId, value.id, value.title); } break;
 		case 'delete': if (typeof value?.id === 'string') { return service.deleteConversation(windowId, value.id); } break;

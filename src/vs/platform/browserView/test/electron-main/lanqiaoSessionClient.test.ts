@@ -129,7 +129,7 @@ suite('Lanqiao one-source one-report transaction', () => {
 		let observed = false;
 		f.afterExecution(() => {
 			const before = f.operations.length;
-			assert.deepStrictEqual(f.client.readProgress('attempt'), { phase: 'judging' });
+			assert.deepStrictEqual(f.client.readProgress('attempt'), { phase: 'judging', attemptId: 'attempt' });
 			assert.strictEqual(f.client.readProgress('other'), undefined);
 			assert.strictEqual(f.operations.length, before, 'progress reads are memory-only');
 			observed = true;
@@ -138,6 +138,25 @@ suite('Lanqiao one-source one-report transaction', () => {
 		assert.ok(observed);
 		assert.strictEqual(f.client.readProgress('attempt'), undefined, 'completed sends cannot leak retained progress');
 		assert.strictEqual(f.sourcePosts(), 1); assert.strictEqual(f.reportPosts(), 1);
+	});
+	test('accepted sends and reconciliation return the already verified snapshot and native attempt', async () => {
+		for (const reconcile of [false, true]) {
+			const f = fixture(), signal = new AbortController().signal;
+			if (reconcile) { f.mode('no-detail'); }
+			const prepared = await f.client.prepare(problem, signal);
+			let outcome = await f.client.send(problem, payload, prepared.ownerKey, 'native-attempt', signal);
+			if (reconcile) { assert.strictEqual(outcome.kind, 'unconfirmed'); f.mode('ok'); outcome = await f.client.reconcile('native-attempt', signal); }
+			assert.strictEqual(outcome.kind, 'record');
+			const operations = [...f.operations];
+			const observed = Reflect.get(outcome, 'observed');
+			assert.strictEqual(observed?.attemptId, 'native-attempt');
+			assert.strictEqual(observed.snapshot.sourceVerification, 'matched');
+			assert.strictEqual(observed.snapshot.source, 'int main(){}\n');
+			assert.strictEqual(observed.snapshot.rawStatus, 'AC');
+			assert.deepStrictEqual(observed.snapshot.groups?.[0].rows, [['1', 'AC', '0 ms', '0 kb']]);
+			assert.deepStrictEqual(f.operations, operations);
+			assert.strictEqual(f.sourcePosts(), 1); assert.strictEqual(f.reportPosts(), 1);
+		}
 	});
 	test('credential changes hide progress until the current account has been checked', async () => {
 		const f = fixture(), signal = new AbortController().signal, prepared = await f.client.prepare(problem, signal);

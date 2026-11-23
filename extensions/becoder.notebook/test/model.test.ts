@@ -8,9 +8,16 @@ import assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { encodeNotebook, decodeNotebook, associatedNotebook, prepareAssociationLocation, inputCommandTarget, notebookCreationTarget, type NotebookData } from '../src/model';
+import { encodeNotebook, decodeNotebook, beaconNotebookContent, associatedNotebook, prepareAssociationLocation, inputCommandTarget, notebookCreationTarget, type NotebookData } from '../src/model';
 import { CellOutputQueue } from '../src/outputQueue';
 import { formatBeCoderRunHeading } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
+
+test('Beacon content projection retains student content while excluding actual execution fields', () => {
+	const data = decodeNotebook(encodeNotebook({ cells: [{ kind: 1, languageId: 'markdown', value: 'normal WA explanation', metadata: { becoder: { attempt: { status: 'secret-attempt' } } }, outputs: [{ items: [{ mime: 'text/plain', data: Buffer.from('secret-output') }] }], executionSummary: { executionOrder: 42 } }] }));
+	const before = encodeNotebook(data); const text = beaconNotebookContent(data);
+	assert.ok(text.includes('normal WA explanation')); assert.ok(!/secret-attempt|secret-output|executionSummary|outputs/.test(text));
+	assert.deepEqual(encodeNotebook(data), before);
+});
 
 test('Notebook output heading uses actual phase timings and English states', () => {
 	assert.equal(typeof formatBeCoderRunHeading, 'function');

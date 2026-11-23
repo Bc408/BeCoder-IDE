@@ -79,7 +79,7 @@ export function reset(directory: string) {
 		const key = (id: string) => `${beaconContext.root}:${id}`;
 		switch (operation) {
 			case 'checkPageAccess': return;
-			case 'pages': case 'runtimeList': return [];
+			case 'pages': case 'runtimeList': case 'listRecent': case 'listCodeSnapshots': return [];
 			case 'context': return structuredClone(beaconContext);
 			case 'busy': beaconContext.busy = input.busy; return;
 			case 'release': delete beaconContext.activeId; return;

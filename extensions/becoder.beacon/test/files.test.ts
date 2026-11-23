@@ -21,6 +21,17 @@ async function fixture(run: (directory: string) => Promise<void>) {
 }
 
 suite('Beacon read-only permissions', () => {
+	test('notebook reads and search use owner content before paging, with no raw fallback', async () => fixture(async directory => {
+		const file = path.join(directory, 'note.bcnb');
+		await fs.writeFile(file, JSON.stringify({ cells: [{ source: 'normal WA discussion', outputs: ['secret-run'], metadata: { becoder: { attempt: 'secret-attempt' } } }] }));
+		const original = await fs.readFile(file, 'utf8');
+		const tools = new FileTools('workspace', [{ name: 'root', path: directory }], async () => original, { readRepresentation: async () => ({ contents: 'normal WA discussion', representation: 'notebook-content' }) });
+		const result = await tools.execute({ operation: 'read', path: file, limit: 128 }, signal);
+		assert.equal(result.contents, 'normal WA discussion'); assert.equal(result.representation, 'notebook-content');
+		assert.equal((await tools.execute({ operation: 'search', path: directory, query: 'secret-run' }, signal)).contents, '');
+		assert.equal((await new FileTools('workspace', [{ name: 'root', path: directory }], async () => original).execute({ operation: 'read', path: file }, signal)).ok, false);
+		assert.equal(await fs.readFile(file, 'utf8'), original);
+	}));
 	test('unknown error names cannot resolve inherited properties instead of a safe message', () => {
 		for (const code of ['toString', 'constructor', 'private-token']) {
 			const message = safeFileError(new Error(code));

@@ -10,7 +10,7 @@ import type { FileInput, FileOutput, FilePermission, FileRoot, FileTool } from '
 import { readHistory, type Conversation, type HistoryData } from './history';
 
 export type BeaconTransport = <T>(operation: string, input?: unknown) => Promise<T>;
-export interface BeaconHistoryBinding { root?: string; readonly revision?: number; data: HistoryData; save(data: HistoryData): Promise<HistoryData> }
+export interface BeaconHistoryBinding { root?: string; readonly revision?: number; data: HistoryData; save(data: HistoryData, expectedScope?: IBeaconContext): Promise<HistoryData> }
 
 export type BeaconPage = IBeaconPage | (Omit<IBeaconPage, 'kind'> & {
 	kind: 'pdf' | 'oj-problem' | 'oj-record';
@@ -19,7 +19,6 @@ export type BeaconPage = IBeaconPage | (Omit<IBeaconPage, 'kind'> & {
 	problemKey?: string;
 	sourceSha256?: string;
 });
-export type PageReference = Pick<BeaconPage, 'id' | 'version'>;
 export interface OjPageApi {
 	listBeaconPages(): BeaconPage[];
 	readBeaconPage(id: string, version: string): (BeaconPage & { contents: string; totalCharacters: number }) | undefined;
@@ -178,14 +177,14 @@ export class BeaconContextClient {
 		const id = active?.id;
 		let baseline = active ? JSON.stringify(active) : '';
 		const data = await this.metadata(active);
-		return { root, data, get revision() { return revision; }, save: async value => {
+		return { root, data, get revision() { return revision; }, save: async (value, expectedScope) => {
 			if (!id) { if (value.activeId || value.conversations.some(item => item.messages.length)) { throw new Error('beacon-conversation-owner'); } return value; }
 			const changed = value.conversations.find(item => item.id === id);
 			if (!changed || value.activeId !== id) { throw new Error('beacon-conversation-owner'); }
 			if (JSON.stringify(changed) === baseline) { return value; }
 			await this.refresh();
 			if (!this.consumingWorkspace || this.state.root !== root || this.state.slot !== slot || this.state.activeId !== id) { throw new Error('beacon-conversation-owner'); }
-			const saved = await this.call<IBeaconStoredConversation>('save', { data: changed as IBeaconConversation, revision });
+			const saved = await this.call<IBeaconStoredConversation>('save', { data: changed as IBeaconConversation, revision, ...(expectedScope ? { scope: expectedScope } : {}) });
 			const next = readHistory({ version: 1, activeId: id, conversations: [saved.data] }).conversations[0];
 			revision = saved.revision; baseline = JSON.stringify(next);
 			return { ...value, conversations: value.conversations.map(item => item.id === id ? next : item) };

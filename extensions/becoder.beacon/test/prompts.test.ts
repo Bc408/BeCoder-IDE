@@ -19,7 +19,7 @@ function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], fin
 suite('Beacon pure prompt composition', () => {
 	test('always supplies mentor and evidence rules with a captured time and no unavailable capabilities', () => {
 		const prompt = composeBeaconPrompt({ currentTime: '2026-11-21T00:00:00Z', toolNames: [] });
-		assert.equal(prompt.version, '2026-11-22.4');
+		assert.equal(prompt.version, '2026-11-23.3');
 		assert.ok(prompt.system.includes('Beacon mentor core'));
 		assert.ok(prompt.system.includes('2026-11-21T00:00:00Z'));
 		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }, { id: 'evidence', source: 'application' }]);
@@ -110,8 +110,8 @@ suite('Beacon prompt request assembly', () => {
 								if (tools && hasContext) {
 									const inspection = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'inspectContext').function;
 									const fields = inspection.parameters.properties;
-									assert.match(inspection.description, /OJ.*page/);
-									assert.match(fields.operation.description, /page.*id.*version/);
+									assert.match(inspection.description, /readonly network statement/);
+									assert.match(fields.operation.description, /currentCode/);
 									assert.match(fields.id.description, /listed/);
 									assert.match(fields.version.description, /page/);
 									assert.match(fields.producer.description, /records/);

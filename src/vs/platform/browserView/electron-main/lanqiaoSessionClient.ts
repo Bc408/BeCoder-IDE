@@ -135,14 +135,14 @@ export class LanqiaoSessionClient {
 	}
 	private accepted(attempt: Attempt, snapshot: RecordSnapshot): SubmissionOutcome {
 		this.records.set(snapshot.ref.url, { attempt, ref: snapshot.ref, reads: new Set() });
-		return { kind: 'record', record: snapshot.ref };
+		return { kind: 'record', record: snapshot.ref, observed: { attemptId: attempt.requestId, snapshot } };
 	}
 	readProgress(requestId: string): ILanqiaoProgress | undefined {
 		this.ports.assertCurrent?.();
 		const progress = this.progress;
 		if (this.disposed || !progress || progress.signal.aborted || progress.attempt.requestId !== requestId || progress.attempt.generation !== this.generation || progress.revision !== this.credentialRevision) { return undefined; }
 		const attempt = progress.attempt;
-		return { phase: attempt.reportConsumed ? 'confirming' : attempt.id ? 'judging' : 'sending', ...(attempt.projection?.rows.length ? { groups: [{ name: 'Test Cases', rows: structuredClone(attempt.projection.rows) }] } : {}) };
+		return { attemptId: attempt.requestId, phase: attempt.reportConsumed ? 'confirming' : attempt.id ? 'judging' : 'sending', ...(attempt.projection?.rows.length ? { groups: [{ name: 'Test Cases', rows: structuredClone(attempt.projection.rows) }] } : {}) };
 	}
 	async send(problem: ProblemRef, payload: ILanqiaoSourcePayload, ownerKey: string, requestId: string, signal: AbortSignal): Promise<SubmissionOutcome> {
 		assertLanqiaoProblem(problem); this.current(signal);

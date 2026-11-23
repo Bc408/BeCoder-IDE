@@ -6,7 +6,27 @@
 import assert from 'assert';
 import { test } from 'node:test';
 import { LanqiaoAdapter, type LanqiaoHost } from '../src/adapters/lanqiao/adapter';
+import { CommandLanqiaoHost } from '../src/browserHost';
 const problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
+test('native receipt observations survive transport and adapter validation without another query', async () => {
+	const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
+	const observed = { attemptId: 'native-attempt', snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'unavailable' } };
+	const calls: string[] = [];
+	const host = new CommandLanqiaoHost(async command => {
+		calls.push(command);
+		if (command.endsWith('.prepare')) { return { handle: 'native-attempt', languages: [{ id: 'cpp', label: 'C++17', family: 'cpp' }], hasDraft: false }; }
+		if (command.endsWith('.send') || command.endsWith('.reconcile')) { return { kind: 'record', record, observed }; }
+		if (command.endsWith('.readProgress') || command.endsWith('.release')) { return undefined; }
+		assert.fail('unexpected query: ' + command);
+	});
+	const adapter = new LanqiaoAdapter(host), signal = new AbortController().signal;
+	const session = await adapter.prepare(problem, 'file:///lanqiao/254.cpp', () => { }, signal);
+	const outcome = await session.send({ snapshot: { uri: 'file:///lanqiao/254.cpp', family: 'cpp', fileName: '254.cpp', version: 1, source: 'int main(){}' }, languageId: 'cpp', replaceDraft: false }, () => { }, signal);
+	assert.deepStrictEqual(Reflect.get(outcome, 'observed'), observed);
+	assert.deepStrictEqual(Reflect.get(await adapter.reconcile('native-attempt', signal), 'observed'), observed);
+	assert.ok(calls.every(command => !/readRecord|loginSummary|readProblem/.test(command)));
+	await session.dispose();
+});
 test('Lanqiao adapter carries source family and a fixed unsaved snapshot through its one-use session', async () => {
 	const reads: string[] = [], sends: unknown[] = [], releases: string[] = [];
 	const host: LanqiaoHost = {

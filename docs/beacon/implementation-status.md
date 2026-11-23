@@ -1,42 +1,60 @@
-# Beacon 实现状态与下一阶段差距
+# Beacon 实施候选与验证边界
 
-核对日期：2026-11-22。源码基线：`Beacon_Next`，`e28ac79c490921aee8e27e92c589648c129607b0`；工作区另有文档清洗与回迁差异。本页基于源码只读核对，不表示运行、构建、模型效果或负责人验收已通过。开始实施前重核分支、源码与本页状态。
+更新：2026-11-23。负责人已批准底层方案并选择Native连续实施。候选代码在`Beacon_Next`本地工作树，备份基线仍为`c54e9e4970c59fb1553b38581dc951fc3fb9d8fa`，本轮未提交或推送。源码检查、模型观察、staged应用和负责人运行验收分别成立。
 
 [统一入口](README.md) · [阶段设计](foundation-design.md) · [执行计划](../superpowers/plans/2026-11-22-beacon-foundation-implementation.md)
 
-## 当前已有基础
+## 上下文效果测试与工具调整
 
-| 所有者 | 源码可确认的能力 | 证据入口 |
+后续工具信息流专项已获负责人确认，见[专项设计](../superpowers/specs/2026-11-23-beacon-tool-information-flow-design.md)与[执行计划](../superpowers/plans/2026-11-23-beacon-tool-information-flow.md)。当前候选新增字段级参数错误反馈、snapshotSave身份、选择范围／可读部分／同源续读参数、指定CPH样例组合视图、原样例号目录、题目线索matched/no-match及同回答并行首读合并。导师提示2026-11-23.3减少工程汇报并明确按问题取材；旧协议不改写。独立审阅发现的CPH组合大字节输出解码／脱敏遗漏和未完成样例流遗漏已修正，组合与单独选择统一沿解码后过滤，相关中间模型批次停止并保留为未通过审阅证据。最新拥有者回归304项通过，客户端类型检查和原生57项已有通过证据；最终候选重新编译、DeepSeek新旧对照和旧保护集的结果分别以台账及报告为准，不能据源码回归宣称模型稳定性已达标。摘要格式／恢复策略未改变。
+
+该专项[正式统计](evaluation/2026-11-23-tool-information-flow-report.md)已齐备：600个新场景配对槽位、48条新连续轨迹、640次旧场景及36条旧轨迹，合计1324。排除每版5个安全停止槽位后，新场景语义基线265/295、候选261/295；新轨迹全轮完成22/24→24/24、辅助语义18/24→21/24。单场景未显示整体质量提升；快照／分页及题目线索等分组仍未达目标。候选的新场景和新轨迹重复无效参数调用为0，首次非法参数及错误取材仍存在，不能换算为全面tool正确。22项无效／缺失裁判单次修复后仍有2项无效，原答／原判保留；14项独立抽审另列，自动误判不静默翻分。旧压缩专项15次结构失败及中途失败继续冻结，未将模型瓶颈伪装成已修复。最终stage结果单独交付，负责人真实流程验收未由本批模型统计替代。
+
+2026-11-23效果测试以当前生产Store／Coordinator／ContextTools／History／Provider和真实DeepSeek Flash为对象，编辑器、网站返回与用户行为凭证使用合成边界。补充128个独立场景各5次、12条连续轨迹各3次及图片兼容观察；原始尝试、服务故障后的补测、辅助裁判和独立语义审阅分别保留。完整结果及未达标能力见[能力报告](evaluation/2026-11-23-context-foundation-report.md)，不能用非空回答或构建成功替代质量验收。
+
+余额补充后的固定槽位已全部执行：场景630/640完成、轨迹35/36完成；11次未完成均为结构化摘要格式失败。有效辅助评分分别580/622和28/35通过，不能据整体比率覆盖分组差距或独立审阅指出的误判。压缩输出格式、分支历史的语义判断及长对话质量继续列为冻结瓶颈，未宣称全能力通过。
+
+本轮修正工具结果余量过度受90%主动整理线限制的问题，改为在输入硬容量内分配有界结果，并在完整工具批次后的下一步骤继续检查整理；同时移除整理输入中与保留尾部重复的当前问题。近期目录按各来源最新在前展示顺序，仍由模型判断讨论对象。提示版本为2026-11-23.2，进一步区分题意、历史稿和当前稿的取材范围。上述差异不改变队列配额、来源权限或学生源码保护。
+
+最终源码回归289项、原生基础设施57项、类型及相关lint／分层检查已有通过证据；统一扩展编译与本轮干净staged应用的实际结果另以执行台账、构建结果文件和交付说明为准。服务限流／余额不足与真实模型质量问题分开，Ollama4B校准不并入DeepSeek验收。
+
+## 负责人使用后发现的P0与修正
+
+前一候选通过源码回归，但负责人实测首问即被容量整理错误拦截，不能据旧测试／构建宣称运行验收。根因是服务给出C=1048576、O=393216而未单列I时，解析仍使用缺省I=24576；完整工具定义、近期目录及10份快照元数据即可触发，空目录测试没有覆盖。
+
+现已改为有明确C时用C约束缺失I，B仍按min(I,C−O)计算，显式I和无容量信息时缺省值保持。新增真实扩展装配、完整13／20近期队列、10份代码目录和全部四类工具的红灯／绿灯回归，确认首问能发出、读取代码并保存同次快照、接工具结果完成回答。真实已授权API只使用合成材料，验证两次请求、一次读存和非空回答。
+
+负责人同时撤回讨论对象的harness绑定。已移除“上轮对象”、对象选择器、下一问／会话固定、发送时捕获及会话绑定字段。旧绑定只在历史读取的脱离副本中忽略，不改用户原始输入。目录仅提供页面／活动编辑器的观测信息，由LLM结合提问选择；代码工具每次指定页面ID或读取调用当下活动代码页。最新完整Beacon源码回归289项通过，生产Webview渲染已核对无旧显示，输入容量字段与恢复默认也按新规则通过；最终源码检查和重建结果见执行台账。
+
+## 已接通的候选源码
+
+| 所有者 | 本轮行为 | 入口 |
 | --- | --- | --- |
-| Beacon扩展 | 四供应商配置、密钥、模型能力、流式对话、导师规则、工具和草稿／历史接线 | [extension.ts](../../extensions/becoder.beacon/src/extension.ts)、[provider.ts](../../extensions/becoder.beacon/src/provider.ts)、[prompts.ts](../../extensions/becoder.beacon/src/prompts.ts) |
-| 原生Store／Coordinator | 所选根校验、会话占用、保存、三类运行近期队列及消费副本 | [beaconStore.ts](../../src/vs/platform/beacon/node/beaconStore.ts)、[beaconCoordinator.ts](../../src/vs/platform/beacon/node/beaconCoordinator.ts) |
-| 当前编辑器页面 | 从已加载model.getValue()读取文本及dirty／版本／标题／URI，不为取材打开磁盘资源；Notebook和浏览器仍有页面投影 | [beaconPages.ts](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts) |
-| OJ／CPH | OJ只读取题与显示流程可分开；文件名／目录解析和已有CPH关联可复用 | [problemResolver.ts](../../extensions/becoder.oj-connect/src/problemResolver.ts)、[problemStore.ts](../../extensions/becoder.cph/src/problemStore.ts)、[browserHost.ts](../../extensions/becoder.oj-connect/src/browserHost.ts) |
-| Notebook／PDF | 独立文档编辑／运行／备份、主动选区材料和已加载PDF文字读取 | [Notebook说明](../../extensions/becoder.notebook/README.md)、[PDF说明](../../extensions/mathematic.vscode-pdf/README.md) |
+| 原生Store／Coordinator | 采集与消费scope分开；Get Problem13条、四执行来源各20条、真实活动保护；v1只读兼容，真实写入才迁v2 | [Store](../../src/vs/platform/beacon/node/beaconStore.ts)、[Coordinator](../../src/vs/platform/beacon/node/beaconCoordinator.ts) |
+| Get／Import／OJ | 用户取得完整题面后按原scope交接；native attempt和正式记录各守身份，展示不控制事实观察，不新增提交或查询 | [OJ入口](../../extensions/becoder.oj-connect/src/extension.ts)、[提交owner](../../extensions/becoder.oj-connect/src/workflowController.ts) |
+| Runner／CPH／Notebook | 真实主编译开始后供证，保原编译稿、终态和字段结构；通道保头尾，磁盘替换旧尾而不累计，区分进程字节与已观测文本 | [执行凭证](../../extensions/danielpinto8zz6.c-cpp-compile-run/src/beaconEvidence.ts)、[CPH](../../extensions/becoder.cph/src/execution.ts) |
+| 实时代码 | 按本次工具页面ID或调用当下活动代码页读最新dirty稿，同次完整观测保存本对话10份／256KiB队列；无讨论对象绑定，发送不捕获，历史读不晋升，失败不伪造ID | [页面owner](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)、[ContextTools](../../extensions/becoder.beacon/src/contextTools.ts) |
+| 题目与共享消费 | Get／CPH／路径独立提供线索，由模型选题；保存题面与无专门持久化的只读联网分开；共享首次精确读在本回答固定revision，不整条复制到对话 | [ContextTools](../../extensions/becoder.beacon/src/contextTools.ts) |
+| 唯一执行事实来源 | 不使用OJ／Notebook功能页或笔记运行字段；普通笔记／备份文件先由owner投影内容，失败不回raw JSON；真实输出和完整备份保留 | [Notebook owner](../../extensions/becoder.notebook/src/editApi.ts)、[文件工具](../../extensions/becoder.beacon/src/fileTools.ts) |
+| 协议与分支 | 同步seal和请求绑定完成sink；error只投影完成工具，stopped保已接收文字；完整模型来源隔离私有字段，普通私有材料查有效前缀，代码队列归整段对话 | [协议](../../extensions/becoder.beacon/src/protocol.ts)、[会话](../../extensions/becoder.beacon/src/session.ts)、[历史](../../extensions/becoder.beacon/src/history.ts) |
+| 预算与摘要 | prepare／middleware／最终fetch检查，实际O一致，保留未知图片；同模型同步摘要，候选确认保存后发布，前缀校验、一次修复、20步共用、不递归、不删除代码 | [预算](../../extensions/becoder.beacon/src/contextBudget.ts)、[整理](../../extensions/becoder.beacon/src/compaction.ts)、[provider](../../extensions/becoder.beacon/src/provider.ts) |
 
-当前能力的详细用法见[扩展使用说明](../../extensions/becoder.beacon/README.md)，不能将下表目标行为写成当前用法。
+初始目录每来源最多展示最近3项和总数，显式`records`仍能列出全部保留条目；队列容量未变。工具正文分页受剩余输入额度约束，完整保存与实际返回片段分别标明。
 
-## 必须落地的差量
+Blackout关闭Beacon持久来源目录／读取／模型落盘，仍可读普通打开代码正文、文件名和路径，以及OJ只读联网题面。正常所选根的软件用户行为采集持续；无根或根失效不写替代位置、不后补。内部`.beaconWork`不借普通页面绕过owner或分支检查。
 
-| 主题 | 当前源码事实 | 已确认目标与任务 |
-| --- | --- | --- |
-| 采集与消费分离 | beginActivity检查根和源码，可在Blackout建立句柄；runtimeWrite却调用拒绝Blackout的store，实际写入仍会失败。消费checkScope含mode／epoch／activeId | 独立采集scope固定根身份和根选择代数，不含mode／聊天；有效根三档持续采集，无根／异常不采集，无回填。Task1–3 |
-| 五类共享近期材料 | Store仅接runner／cph／notebook，现有限额10／10／30；没有本方案Get Problem／OJ队列 | Get Problem13条含题面及真实行为；四执行来源各20条，活动保护、原生结构与诚实收尾。Task1–3 |
-| 实时代码与历史 | ContextTools检查发送时target.version，旧捕获进入contextSnapshots及内存map；尚非本对话10份有界队列 | 每次新主动读可取最新dirty稿，同次完整内容保存；256KiB、去重晋升、失败保队列、淘汰后分页失败。Task1、4 |
-| 共享消费 | consumeRuntimeRecord复制整条记录到当前对话materials | 取消整条永久复制，只保实际工具返回；精确首次读取在本回答固定版本。Task1、5 |
-| 题目与题面 | 已有解析器和CPH存储，Beacon仍以withOjPages加入打开题面／判题页 | 聚合真实Get／CPH／路径线索，LLM选题；保存题面和只读联网分开，模型联网零专门持久化。Task2、5 |
-| 唯一执行事实来源 | 打开Notebook页面投影包含outputs；editNotebook.read仍可读outputs／attempt，普通文件read／search还会返回笔记JSON中的可逆base64与attempt；OJ题面／判题页面仍可读 | 移除模型自动功能页和资产工具运行字段；笔记／备份自动文件读取先投影内容、再分页／检索，失败不回原文。宿主完整备份、用户输出和内容编辑继续保留。Task5 |
-| 完成工具与分支 | 已有协议记录与重放，但错误／中断、私有材料原生回退和换模型的完整目标矩阵尚待补齐 | 完成事实不重演；普通材料查有效分支，代码队列为对话范围例外；按完整模型来源清私有字段。Task6 |
-| 输入预算 | provider.prepareStep主要执行fileMessages，尚无本方案实际预算关卡 | 计最终system／tools／messages／媒体，实际O只预留一次，普通每步与整理每步分别守容量。Task7 |
-| 同步压缩 | 尚无本稿摘要投影实现；ChatHistory普通writer会吞保存失败，不能直接用flush当确认提交 | 有效前缀、候选隔离、确认串行提交后发布、取消／失败保原文、同普通步骤一次修复且整理不递归。Task8 |
-| 综合质量 | 旧提示评估只代表旧场景与旧实现，不能证明新基础链路 | 真实入口联合回归、合成强模型观察、五站流程和负责人验收分别完成。Task9 |
+## 验证与待验收
 
-## 阶段入口与验收边界
+本轮用真实Store／Coordinator、ContextTools、ChatHistory、AI SDK及适配器作确定性回归，网站与模型端可由合成材料／mock替代。精确命令、失败修正、退出码保存在本地执行台账；旧提示评估或旧构建不作本轮证据。
 
-现行需求共141个稳定ID；九项任务是本阶段实施切片，不等于交付全部能力。数量、容量、材料来源和Blackout裁切已经确认；DTO、非产品容量参数、接线与测试仍按候选执行计划审阅。文档回迁只完成文档工作。
+强模型只使用合成案例，观察换题、旧判词、指定样例、未知覆盖、完成工具断线、分支代码、换模型、保存失败、只读题面和实际摘要。完整链路返回不等于教学语义全部达标；历史代码解释仍可能出现未经新读的“当前未变”措辞，记录为后续提示质量观察。4B模型不作为教学能力上限。
 
-Notebook旁路的当前源码依据为[工具schema](../../extensions/becoder.beacon/src/provider.ts)、[资产读取owner](../../extensions/becoder.notebook/src/editApi.ts)、[文件读取与搜索](../../extensions/becoder.beacon/src/fileTools.ts)及[笔记序列化](../../extensions/becoder.notebook/src/model.ts)。内容投影的具体接线是工程提案，用于落实已经确认的单一事实来源，不是新增笔记存储机制。
+独立只读审阅已完成，报告的重要问题已修复并通过定向回归。负责人随后要求增量复查，再修复9项问题：样例文本被JSON解析导致64位整数及换行失真；代码保存异常丢弃已读正文；Notebook代码选择器绕过身份校验；联网题面忽略选择器；续答压缩遗漏原问题及附件；无工具能力模型在压缩时收到工具定义；通道重新分配丢失已采集尾部；蓝桥关闭预览后遗漏已确认结果；继续／重答仍提示发送时版本锁定。已取得的蓝桥结果沿现有桥接传递，不追加网站查询，不重开已关闭预览。
 
-后续实施依次完成共享存储、生产者、代码工具、题目与局部读取、协议恢复、预算、摘要、联合回归。完整工具调用可视化UI、教学记忆／dream、完整视觉和更充分的本人同题历史仍属后续。Notebook独立功能与已有用户流程是保护范围。
+增量复查后的Beacon扩展289项、Runner118项、OJ167项、蓝桥Session与bridge合计19项测试通过。此前原生基础设施57项、五站浏览器接入11项、Notebook30项、CPH26项通过／1项跳过（本机生成的gch缓存用例，发行工具链不携带）；这些未改所有者的证据与本轮增量回归分别保留。客户端与扩展类型检查、相关lint通过；最终分层检查、统一扩展编译和staged构建结果以本地执行台账及交付说明为准。
 
-源码测试与类型检查、staged应用、Setup、真实站点、模型语义、负责人体验分别成立。本轮未运行产品测试、构建、API评估或真实账号操作；未形成这些层面的新通过结论。最新文档回迁核对见[文档校验记录](review/2026-11-22-document-return.md)。
+候选交付门包括统一OI扩展编译及staged应用构建；实际完成情况单独以执行台账和交付说明为准。负责人再按五站正常流程验收关联、讲解依据和失败提示。本候选未宣称Setup、真实网站登录／交题、安装版运行或负责人体验通过。
+
+## 后续范围
+
+PRD仍保留141个稳定需求ID，九项底层任务不等于全部能力已交付。完整工具可视化UI、tips/status、记忆／dream、完整视觉和本人同题历史查询增强继续保留后续；Notebook独立功能、草稿与主动材料是保护范围。现行需求以本目录为准，历史文档仅供追溯。

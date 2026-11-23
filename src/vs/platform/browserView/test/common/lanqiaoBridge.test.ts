@@ -43,6 +43,11 @@ suite('Lanqiao semantic window bridge', () => {
 		g.ports.send = async () => ({ kind: 'record', record: { ...record, url: record.url.replace('/254/', '/255/') } });
 		await assert.rejects(g.bridge.send(ready.handle, { source: 'x', fileName: '254.cpp', languageId: 'cpp' }));
 	});
+	test('receipt observations must keep the active native attempt identity', async () => {
+		const f = fixture(), lease = await f.bridge.prepare(problem, 'file:///254.cpp');
+		f.ports.send = async () => ({ kind: 'record', record, observed: { attemptId: 'foreign-attempt', snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' } } });
+		await assert.rejects(f.bridge.send(lease.handle, { source: 'x', fileName: '254.cpp', languageId: 'cpp' }), /attempt/);
+	});
 	test('progress is private to an active lease and a scope change suppresses a late read', async () => {
 		const f = fixture(), lease = await f.bridge.prepare(problem, 'file:///254.cpp');
 		assert.strictEqual(await f.bridge.readProgress(lease.handle), undefined);

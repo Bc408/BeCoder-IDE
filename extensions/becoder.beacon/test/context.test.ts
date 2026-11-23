@@ -18,7 +18,398 @@ import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beac
 
 const selected = (): IBeaconContext => ({ slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 2, busy: false, runtimeBusy: false, activeId: 'conversation-one', recent: ['C:\\chosen'] });
 
+const recentRuntime = (record: { id: string; revision: number; code: string; events: unknown[]; startedAt: number; sequence?: number; materialId?: string }) => ({ producer: 'runner', id: record.id, revision: record.revision, capturedAt: record.startedAt, coverage: { channels: [] }, payload: { kind: 'runtime', activityId: record.id, code: record.code, events: record.events, startedAt: record.startedAt, lastEventSequence: record.sequence ?? 0 } });
+
 suite('Beacon native context consumer', () => {
+	test('invalid context input reports exact missing fields before native reads', async () => {
+		let calls = 0;
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return selected(); } calls++; throw new Error(operation); });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+		for (const [input, fields] of [
+			[{ producer: 'runner', id: 'run', revision: 1 }, ['operation']],
+			[{ operation: 'record', producer: 'runner', id: 'run' }, ['revision']],
+			[{ operation: 'currentCode', offset: 1 }, ['id', 'version']],
+			[{ operation: 'records', limit: 'many' }, ['limit']],
+			[{ operation: 'currentCode', part: 'code' }, ['part']]
+		] as const) {
+			const result = await tools.execute(input as never, new AbortController().signal);
+			assert.equal(result.ok, false); assert.equal(result.code, 'beacon-invalid-context-input');
+			assert.deepEqual((result.issues as { field: string }[] | undefined)?.map(issue => issue.field), fields);
+		}
+		assert.equal(calls, 0);
+	});
+	test('unavailable operation is rejected by the advertised operation set', async () => {
+		let calls = 0;
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return { ...selected(), mode: 'blackout', workspaceState: 'blackout' }; } calls++; throw new Error(operation); });
+		await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'records', producer: 'runner' }, new AbortController().signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'beacon-workspace-unavailable');
+		assert.equal(calls, 0);
+	});
+	test('each live code call uses the model page choice or the active editor at call time', async () => {
+		let active = 'a';
+		const client = new BeaconContextClient(async (operation, raw) => {
+			if (operation === 'context') { return { ...selected(), mode: 'blackout', workspaceState: 'blackout' }; }
+			if (operation === 'currentCode') {
+				const input = raw as { id?: string; target?: unknown };
+				assert.equal(input.target, undefined);
+				const id = input.id ?? active;
+				return { sourceUri: `untitled:${id}.cpp`, fileName: `${id}.cpp`, pageId: id, version: '1', languageId: 'cpp', observedAt: 1, contents: `live ${id}` };
+			}
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'currentCode', id: 'b' }, signal)).contents, 'live b');
+		assert.equal((await tools.execute({ operation: 'currentCode' }, signal)).contents, 'live a');
+		active = 'b'; assert.equal((await tools.execute({ operation: 'currentCode' }, signal)).contents, 'live b');
+	});
+	test('sample text preserves int64 digits, JSON-looking text and trailing newlines', async () => {
+		for (const value of ['9223372036854775807\n', '9007199254740993\n', 'null\n', '"label"\n', '{"value":9223372036854775807}\n']) {
+			const row = { producer: 'cph', id: 'exact', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: value, events: [{ type: 'compile-attempt', details: { problem: { tests: [{ input: value, output: value }] } } }, { type: 'sample-finished', sampleId: '1', result: { stdout: value } }], startedAt: 1, lastEventSequence: 1 } };
+			const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row);
+			await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+			for (const part of ['input', 'expected', 'actual', 'code'] as const) {
+				const result = await tools.execute({ operation: 'record', producer: 'cph', id: 'exact', revision: 1, sampleIndex: 1, part }, signal);
+				assert.equal(result.ok, true); assert.equal(result.contents, value);
+			}
+		}
+	});
+	test('a code snapshot write-lock failure still returns the successful live observation', async () => {
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '2', languageId: 'cpp', observedAt: 2, contents: 'int main(){}' }; }
+			if (operation === 'saveCodeRead') { throw new Error('beacon-write-busy'); }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+		const result = await tools.execute({ operation: 'currentCode' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.equal(result.contents, 'int main(){}');
+		assert.deepEqual(result.snapshotSave, { state: 'not-saved', reason: 'save-failed' }); assert.equal(result.snapshotId, undefined);
+	});
+	test('snapshot save recovery rechecks scope and never converts cancellation or ownership loss into success', async () => {
+		for (const failure of ['changed', 'owner', 'aborted'] as const) {
+			let changed = false; const controller = new AbortController();
+			const client = new BeaconContextClient(async operation => {
+				if (operation === 'context') { return { ...selected(), epoch: changed ? 3 : 2 }; }
+				if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '1', languageId: 'cpp', observedAt: 1, contents: 'read but retired' }; }
+				if (operation === 'saveCodeRead') { changed = failure === 'changed'; if (failure === 'aborted') { controller.abort(); } throw new Error(failure === 'owner' ? 'beacon-conversation-owner' : 'beacon-write-busy'); }
+				throw new Error(operation);
+			});
+			await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+			const result = tools.execute({ operation: 'currentCode' }, controller.signal);
+			if (failure === 'aborted') { await assert.rejects(result, { name: 'AbortError' }); }
+			else { const output = await result; assert.equal(output.ok, false); assert.equal(output.code, failure === 'owner' ? 'beacon-conversation-owner' : 'beacon-context-changed'); assert.equal(output.contents, undefined); }
+		}
+	});
+	test('Notebook code selectors cannot return code from a different block or input', async () => {
+		const row = { producer: 'notebook', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'block A code', events: [{ type: 'compile-attempt', details: { cellId: 'block-a', inputCellId: 'input-a', input: { text: 'A' } } }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row);
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		for (const selectors of [{ blockId: 'block-b' }, { inputId: 'input-b' }, { blockId: 'block-b', inputId: 'input-b' }]) {
+			const result = await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, part: 'code', ...selectors }, signal);
+			assert.equal(result.ok, false); assert.equal(result.code, 'beacon-part-unavailable');
+		}
+		assert.equal((await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, part: 'code', blockId: 'block-a', inputId: 'input-a' }, signal)).contents, 'block A code');
+	});
+	test('network problem reads honor sample and section selectors in refresh and Blackout', async () => {
+		const problem = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+		const document = { ref: problem, title: 'selected problem', bodies: [{ locale: 'zh-CN', sections: [{ content: 'first section', format: 'markdown' as const }, { content: 'second section', format: 'markdown' as const }] }], samples: [{ input: 'first input', output: 'first output' }, { input: '9223372036854775807\n', output: '9007199254740993\n' }], limits: [], interactive: false };
+		for (const blackout of [false, true]) {
+			const operations: string[] = [];
+			const client = new BeaconContextClient(async operation => { operations.push(operation); if (operation === 'context') { return blackout ? { ...selected(), mode: 'blackout', workspaceState: 'blackout' } : selected(); } throw new Error(operation); });
+			await client.refresh(); const tools = new ContextTools(client, client.captureScope(), [], { readProblem: async () => document }), signal = new AbortController().signal;
+			const request = { operation: 'problem' as const, problem, refresh: !blackout };
+			assert.equal((await tools.execute({ ...request, sampleIndex: 2, part: 'input', limit: 64 }, signal)).contents, '9223372036854775807\n');
+			assert.equal((await tools.execute({ ...request, sampleIndex: 2, part: 'expected' }, signal)).contents, '9007199254740993\n');
+			assert.equal((await tools.execute({ ...request, locale: 'zh-CN', sectionIndex: 2 }, signal)).contents, 'second section');
+			assert.equal((await tools.execute({ ...request, sampleIndex: 3, part: 'input' }, signal)).code, 'beacon-part-unavailable');
+			assert.equal((await tools.execute({ ...request, locale: 'missing', sectionIndex: 1 }, signal)).code, 'beacon-part-unavailable');
+			assert.ok(operations.every(operation => operation === 'context'));
+		}
+	});
+	test('initial directory remains bounded with full shared queues and keeps explicit listing available', async () => {
+		const client = new BeaconContextClient(async (operation, raw) => {
+			if (operation === 'context') { return selected(); } if (operation === 'pages' || operation === 'listCodeSnapshots') { return []; }
+			if (operation === 'listRecent') { const { producer } = raw as { producer: string }; return Array.from({ length: 20 }, (_, index) => ({ producer, id: `record-${index}`, revision: 1, capturedAt: index, sourceUri: 'file:///C:/chosen/main.cpp', dedupKey: 'unused identity'.repeat(100), coverage: { channels: [] }, state: 'finished' })); }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		const overview = await tools.execute({ operation: 'overview' }, signal);
+		assert.equal((overview.records as unknown[]).length, 15); assert.ok(JSON.stringify(overview).length < 8192);
+		assert.deepEqual((overview.records as { producer: string; id: string }[]).filter(record => record.producer === 'runner').map(record => record.id), ['record-19', 'record-18', 'record-17']);
+		assert.equal(((await tools.execute({ operation: 'records', producer: 'runner' }, signal)).records as unknown[]).length, 20);
+	});
+	test('model input allowance bounds returned code while persisting the complete observation', async () => {
+		const full = 'x'.repeat(5000); let saved = '';
+		const client = new BeaconContextClient(async (operation, raw) => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '1', languageId: 'cpp', observedAt: 1, contents: full }; }
+			if (operation === 'saveCodeRead') { saved = (raw as { observation: { contents: string } }).observation.contents; return { state: 'saved', id: 'full-original', reused: false }; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); tools.setResultBudget(4096);
+		const result = await tools.execute({ operation: 'currentCode' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.equal(saved, full); assert.ok(result.contents!.length < full.length); assert.equal(result.snapshotId, 'full-original'); assert.ok(result.nextOffset);
+	});
+	test('a small actual code return fits a 1500-byte remainder without a fixed 2KiB minimum', async () => {
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return selected(); } if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '1', languageId: 'cpp', observedAt: 1, contents: 'V1' }; } if (operation === 'saveCodeRead') { return { state: 'saved', id: 'one', reused: false }; } throw new Error(operation); });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); tools.setResultBudget(1500);
+		const result = await tools.execute({ operation: 'currentCode' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.equal(result.contents, 'V1'); assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 1500);
+	});
+	test('saved statements are exact by file while network refresh never calls persistence', async () => {
+		const problem = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, calls: string[] = [];
+		const record = (file: string, id: string) => ({ producer: 'problem', id, revision: 1, sourceUri: file, viewedAt: id === 'one' ? 10 : 20, capturedAt: 1, problem, coverage: { channels: [] }, payload: { kind: 'problem', document: { ref: problem, title: id, bodies: [{ locale: 'zh-CN', sections: [{ content: `body for ${id}`, format: 'markdown' as const }] }], samples: [], limits: [], interactive: false } } });
+		const rows = [record('file:///C:/chosen/a.cpp', 'one'), record('file:///C:/chosen/b code.cpp', 'two')];
+		const client = new BeaconContextClient(async (operation, input) => { calls.push(operation); if (operation === 'context') { return selected(); } if (operation === 'listRecent') { return rows; } if (operation === 'readRecent') { return rows.find(row => row.id === (input as { ref: { id: string } }).ref.id); } throw new Error(operation); });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope(), [], { readProblem: async () => ({ ...rows[0].payload.document, title: 'network only' }) }); const signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'problem', problem }, signal)).selectionRequired, true);
+		const saved = await tools.execute({ operation: 'problem', problem, sourceUri: rows[1].sourceUri.replace(' ', '%20') }, signal); assert.equal(saved.viewedAt, 20); assert.ok(saved.contents?.includes('body for two'));
+		calls.length = 0; const fresh = await tools.execute({ operation: 'problem', problem, refresh: true }, signal); assert.ok(fresh.contents?.includes('network only')); assert.ok(calls.every(call => call === 'context'));
+	});
+	test('file-selected problem pin is reused by its normalized exact ref after eviction', async () => {
+		const problem = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }; let exists = true, reads = 0;
+		const row = { producer: 'problem', id: 'one', revision: 1, capturedAt: 1, viewedAt: 10, sourceUri: 'file:///C:/chosen/main.cpp', problem, coverage: { channels: [] }, payload: { kind: 'problem', document: { ref: problem, title: 'saved body', bodies: [], samples: [], limits: [], interactive: false } } };
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return selected(); } if (operation === 'listRecent') { return exists ? [row] : []; } if (operation === 'readRecent') { reads++; if (!exists) { throw new Error('beacon-record-evicted'); } return row; } throw new Error(operation); });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		const first = await tools.execute({ operation: 'problem', sourceUri: row.sourceUri }, signal);
+		assert.equal(first.ok, true); assert.deepEqual(first.ref, { producer: 'problem', id: 'one', revision: 1 }); exists = false;
+		const ref = first.ref as { id: string; revision: number };
+		const exact = await tools.execute({ operation: 'problem', id: ref.id, revision: ref.revision }, signal);
+		assert.equal(exact.ok, true); assert.ok(exact.contents?.includes('saved body')); assert.equal(reads, 1);
+	});
+	test('missing execution selector is unavailable rather than a successful empty output', async () => {
+		const row = { producer: 'notebook', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'stream', blockId: 'exists', phase: 'running', stream: 'stdout', bytesBase64: '' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, blockId: 'missing', part: 'output' }, signal)).code, 'beacon-part-unavailable');
+		assert.equal((await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, blockId: 'exists', part: 'output' }, signal)).ok, true);
+	});
+	test('actual Notebook header selectors retain input and prove empty output without a synthetic stream', async () => {
+		const row = { producer: 'notebook', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'int main(){}', events: [{ type: 'compile-attempt', details: { cellId: 'code-one', inputCellId: 'input-one', input: { name: 'data', text: '123' } } }, { type: 'compiled', exitCode: 0 }, { type: 'finished', outcome: { status: 'completed' }, coverage: { truncated: false } }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		const input = await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, blockId: 'code-one', inputId: 'input-one', part: 'input' }, signal);
+		assert.equal(input.ok, true); assert.ok(input.contents?.includes('123'));
+		const output = await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, blockId: 'code-one', inputId: 'input-one', part: 'output' }, signal);
+		assert.equal(output.ok, true); assert.equal(output.contents, '');
+		assert.equal((await tools.execute({ operation: 'record', producer: 'notebook', id: 'one', revision: 1, blockId: 'missing', part: 'input' }, signal)).code, 'beacon-part-unavailable');
+	});
+	test('selected CPH input uses its original ordinal rather than its local batch position', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: 'second sample', output: 'expected' }] } } }, { type: 'sample-finished', sampleId: '2', result: { stdout: '' } }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'input' }, signal)).contents, 'second sample');
+		assert.equal((await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'actual' }, signal)).contents, '');
+		assert.equal((await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'actual', stream: 'stdout' }, signal)).contents, '');
+		assert.equal((await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'actual', stream: 'missing' }, signal)).code, 'beacon-part-unavailable');
+	});
+	test('whole CPH actual output preserves later failing samples instead of choosing the first', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'sample-finished', sampleId: '1', index: 0, result: { stdout: 'FIRST PASSED' }, verdict: 'passed' }, { type: 'sample-finished', sampleId: '2', index: 1, result: { stdout: 'SECOND WRONG OUTPUT' }, verdict: 'wrong-answer' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		for (const part of ['output', 'actual'] as const) { const result = await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, part }, signal); assert.equal(result.ok, true); assert.ok(result.contents?.includes('FIRST PASSED')); assert.ok(result.contents?.includes('SECOND WRONG OUTPUT')); }
+	});
+	test('shared record first read pins the revision only for this answer without private copying', async () => {
+		let reads = 0, exists = true; const privateCopies: unknown[] = [];
+		const record = { producer: 'runner', id: 'run', revision: 1, state: 'finished', capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', activityId: 'a', code: 'captured', events: [{ type: 'finished' }] } };
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'readRecent') { reads++; if (!exists) { throw new Error('beacon-record-evicted'); } return record; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope(), [], { capturePrivate: value => privateCopies.push(value) }); const signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1, part: 'code' }, signal)).contents, 'captured');
+		exists = false;
+		assert.equal((await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1, part: 'events' }, signal)).ok, true);
+		assert.equal(reads, 1); assert.equal(privateCopies.length, 0);
+		assert.equal((await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1 }, signal)).ok, false);
+	});
+	test('selected CPH all contains original input expected and result from the same sample', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'compiled source', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: '9223372036854775807\n', output: '' }] } } }, { type: 'sample-finished', sampleId: '2', index: 0, result: { stdout: '', stderr: 'debug\n' }, verdict: 'passed' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'all' }, new AbortController().signal);
+		assert.equal(result.ok, true);
+		const sample = JSON.parse(result.contents!);
+		assert.equal(sample.sampleNumber, 2); assert.equal(sample.input, '9223372036854775807\n'); assert.equal(sample.expected, '');
+		assert.equal(sample.actual, ''); assert.equal(sample.stderr, 'debug\n'); assert.equal(sample.verdict, 'passed');
+		assert.deepEqual(result.selection, { part: 'all', sampleIndex: 2 });
+		assert.ok((result.availableParts as string[]).includes('input'));
+		assert.deepEqual(result.sampleNumbers, [2]);
+	});
+	test('compaction directory listing does not receive invalid pagination parameters', async () => {
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return selected(); } if (operation === 'listCodeSnapshots') { return []; } throw new Error(operation); });
+		await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).compactionView()!.execute({ operation: 'codeSnapshots' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.deepEqual(result.snapshots, []);
+	});
+	test('sample stream selection is either honored or explicitly rejected and not advertised as complete all', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: 'in', output: 'expected' }] } } }, { type: 'sample-finished', sampleId: '2', result: { stdout: 'wrong output', stderr: 'debug trace' }, verdict: 'wrong-answer' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'all', stream: 'stderr' }, new AbortController().signal);
+		assert.equal(result.ok, false); assert.equal((result.issues as {field:string}[])[0].field, 'stream');
+	});
+	test('available sample verdict is not borrowed from another completed sample', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [1, 2], problem: { tests: [{ input: 'a', output: 'a' }, { input: 'b', output: 'b' }] } } }, { type: 'sample-finished', sampleId: '1', verdict: 'passed', result: { stdout: 'a' } }, { type: 'sample-started', sampleId: '2' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2 }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.equal((result.availableParts as string[]).includes('verdict'), false);
+	});
+	test('CPH combined sample decodes retained byte ranges before redaction', async () => {
+		const bytes = Buffer.from('api_key="synthetic-value-that-must-be-redacted"\n');
+		const bounded = { partial: true, observedBytes: bytes.length + 100, ranges: [{ offset: 0, bytesBase64: bytes.toString('base64') }] };
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: 'input', output: 'expected' }] } } }, { type: 'sample-finished', sampleId: '2', result: { stdout: bounded, stderr: '' }, verdict: 'wrong-answer' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'all' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.ok(!JSON.stringify(result).includes(bytes.toString('base64')));
+		assert.ok(!JSON.stringify(result).includes('synthetic-value-that-must-be-redacted'));
+		assert.ok(result.contents?.includes('[redacted]')); assert.ok(!result.contents?.includes('bytesBase64'));
+	});
+	test('individual CPH bounded input expected and actual use the same decoded representation', async () => {
+		const bytes = Buffer.from('api_key="individual-synthetic-secret"\n');
+		const bounded = { partial: true, ranges: [{ offset: 0, bytesBase64: bytes.toString('base64') }] };
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: bounded, output: bounded }] } } }, { type: 'sample-finished', sampleId: '2', result: { stdout: bounded }, verdict: 'wrong-answer' }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const tools = new ContextTools(client, client.captureScope());
+		for (const part of ['input', 'expected', 'actual'] as const) {
+			const result = await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part }, new AbortController().signal);
+			assert.equal(result.ok, true); assert.ok(!result.contents?.includes('bytesBase64'));
+			assert.ok(result.contents?.includes('[redacted]')); assert.ok(!result.contents?.includes('individual-synthetic-secret'));
+		}
+		const allActual = await tools.execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, part: 'actual' }, new AbortController().signal);
+		assert.equal(allActual.ok, true); assert.ok(!allActual.contents?.includes('bytesBase64'));
+		assert.ok(allActual.contents?.includes('[redacted]'));
+	});
+	test('CPH combined sample retains stream when checker fails before sample-finished', async () => {
+		const row = { producer: 'cph', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'code', events: [{ type: 'compile-attempt', details: { sampleNumbers: [2], problem: { tests: [{ input: 'in', output: 'expected' }] } } }, { type: 'sample-started', sampleId: '2' }, { type: 'stream', phase: 'running', stream: 'stdout', sampleId: '2', bytesBase64: Buffer.from('CAPTURED_PARTIAL').toString('base64') }, { type: 'finished', outcome: { status: 'failed' } }], startedAt: 1, lastEventSequence: 1 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'cph', id: 'one', revision: 1, sampleIndex: 2, part: 'all' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.ok(result.contents?.includes('CAPTURED_PARTIAL'));
+		assert.ok(!JSON.parse(result.contents!).verdict);
+	});
+	test('concurrent first selectors share the same record fixation', async () => {
+		let reads = 0, release!: () => void, started!: () => void;
+		const gate = new Promise<void>(resolve => { release = resolve; });
+		const reading = new Promise<void>(resolve => { started = resolve; });
+		const row = recentRuntime({ id: 'one', revision: 1, startedAt: 1, code: 'old code', events: [{ type: 'compile-attempt', details: { input: 'old input' } }] });
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'readRecent') { reads++; if (reads > 1) { throw new Error('beacon-record-changed'); } started(); await gate; return row; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), signal = new AbortController().signal;
+		const first = tools.execute({ operation: 'record', producer: 'runner', id: 'one', revision: 1, part: 'code' }, signal);
+		await reading;
+		const second = tools.execute({ operation: 'record', producer: 'runner', id: 'one', revision: 1, part: 'input' }, signal);
+		await new Promise<void>(resolve => setImmediate(resolve)); release();
+		const results = await Promise.all([first, second]);
+		assert.equal(reads, 1); assert.deepEqual(results.map(result => result.ok), [true, true]);
+		assert.deepEqual(results.map(result => result.contents), ['old code', 'old input']);
+	});
+	test('an aborted first fixation cannot populate a later read of that ref', async () => {
+		let reads = 0, release!: () => void, started!: () => void;
+		const gate = new Promise<void>(resolve => { release = resolve; }), reading = new Promise<void>(resolve => { started = resolve; });
+		const row = recentRuntime({ id: 'one', revision: 1, startedAt: 1, code: 'must-not-pin', events: [] });
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'readRecent') { reads++; if (reads > 1) { throw new Error('beacon-record-evicted'); } started(); await gate; return row; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()), controller = new AbortController();
+		const first = tools.execute({ operation: 'record', producer: 'runner', id: 'one', revision: 1, part: 'code' }, controller.signal);
+		await reading; controller.abort(); release(); await assert.rejects(first);
+		const next = await tools.execute({ operation: 'record', producer: 'runner', id: 'one', revision: 1, part: 'code' }, new AbortController().signal);
+		assert.equal(next.ok, false); assert.equal(reads, 2);
+	});
+	test('problem hint availability does not pretend an unmatched query has a problem', async () => {
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'pages') { return [{ id: 'one', kind: 'text', active: true, title: 'plain.cpp', uri: 'file:///C:/chosen/plain.cpp', version: '1' }]; }
+			if (operation === 'listRecent') { return []; }
+			throw new Error(operation);
+		});
+		await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'problemHints' }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.deepEqual(result.hints, []);
+		assert.equal((result.sources as Record<string, string>).getProblem, 'no-match');
+		assert.equal((result.sources as Record<string, string>).cph, 'unavailable');
+	});
+	test('saved problem records retain section and locale selectors through validation', async () => {
+		const row = { producer: 'problem', id: 'one', revision: 1, capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'problem', document: { ref: { site: 'luogu', nativeId: 'P1', url: 'https://www.luogu.com.cn/problem/P1' }, title: 'synthetic', bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: 'first' }, { format: 'markdown', content: 'second' }] }], samples: [], limits: [], interactive: false } } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'problem', id: 'one', revision: 1, locale: 'zh-CN', sectionIndex: 2 }, new AbortController().signal);
+		assert.equal(result.ok, true); assert.equal(result.contents, 'second');
+	});
+	test('SDK returns field issues and pairs an invalid call before the corrected code read', async () => {
+		let requests = 0, reads = 0;
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return { ...selected(), mode: 'blackout', workspaceState: 'blackout' }; }
+			if (operation === 'pages') { return []; }
+			if (operation === 'currentCode') { reads++; return { sourceUri: 'untitled:a.cpp', fileName: 'a.cpp', pageId: 'a', version: '1', languageId: 'cpp', observedAt: 1, contents: 'int main(){return 0;}' }; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://provider.invalid', model: 'synthetic', apiKey: 'synthetic', parameters: {}, capabilities: resolveCapabilities('deepseek', 'https://provider.invalid', 'synthetic') };
+		const generator = createGenerator(async () => connection, async (_url, init) => {
+			const body = JSON.parse(String(init?.body)); requests++;
+			if (requests === 2) { const result = JSON.parse(body.messages.find((message: { role: string }) => message.role === 'tool').content); assert.equal(result.issues[0].field, 'operation'); }
+			const delta = requests <= 2 ? { tool_calls: [{ index: 0, id: `call-${requests}`, type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify(requests === 1 ? {} : { operation: 'currentCode' }) } }] } : { content: '只返回0。' };
+			return new Response('data: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'test', choices: [{ index: 0, delta: {}, finish_reason: requests <= 2 ? 'tool_calls' : 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+		}, 'none', [], false, undefined, {}, tools);
+		const session = new ChatSession(() => {}, () => 'failed'); await session.send('看当前代码。', generator);
+		assert.equal(session.snapshot.error, ''); assert.equal(reads, 1); assert.equal(requests, 3);
+		const protocol = JSON.stringify(session.snapshot.messages.at(-1)?.protocol);
+		assert.ok(protocol.includes('call-1')); assert.ok(protocol.includes('operation')); assert.ok(protocol.includes('call-2'));
+	});
+	test('live read names conversation snapshot saving and supplies a complete continuation', async () => {
+		let saves = 0;
+		const client = new BeaconContextClient(async operation => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '2', languageId: 'cpp', observedAt: 2, contents: 'abcdef' }; }
+			if (operation === 'saveCodeRead') { saves++; return { state: 'saved', id: 'kept', reused: false }; }
+			throw new Error(operation);
+		});
+		await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'currentCode', limit: 2 }, new AbortController().signal);
+		assert.equal(result.save, undefined);
+		assert.deepEqual(result.snapshotSave, { state: 'saved', id: 'kept', reused: false });
+		assert.deepEqual(result.continuation, { operation: 'codeSnapshot', id: 'kept', offset: 2, limit: 2 });
+		assert.equal(result.contents, 'ab'); assert.equal(result.totalCharacters, 6); assert.equal(saves, 1);
+	});
+	test('shared evidence cannot bypass protected source paths', async () => {
+		const row = { producer: 'runner', id: 'one', revision: 1, sourceUri: 'file:///C:/chosen/.env/main.cpp', capturedAt: 1, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'private body', events: [], startedAt: 1, lastEventSequence: 0 } };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : row); await client.refresh();
+		const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'runner', id: 'one', revision: 1, part: 'code' }, new AbortController().signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'beacon-protected-page'); assert.equal(result.contents, undefined);
+	});
+	test('live current code reads dirty edits and saves exactly the observation returned by the owner', async () => {
+		let text = 'V1', version = '1'; const saved: unknown[] = [];
+		const client = new BeaconContextClient(async (operation, input) => {
+			if (operation === 'context') { return selected(); }
+			if (operation === 'currentCode') {
+				const observed = { sourceUri: 'file:///C:/chosen/main.cpp', fileName: 'main.cpp', filePath: 'C:/chosen/main.cpp', pageId: 'editor', version, languageId: 'cpp', observedAt: Number(version), contents: text };
+				text = 'later'; version = '2'; return observed;
+			}
+			if (operation === 'saveCodeRead') { saved.push((input as { observation: unknown }).observation); return { state: 'saved', id: 'snapshot-' + saved.length, reused: false }; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		assert.equal(saved.length, 0);
+		const first = await tools.execute({ operation: 'currentCode' } as never, signal);
+		assert.equal(first.ok, true); assert.equal(first.contents, 'V1');
+		assert.equal((saved[0] as { contents: string }).contents, 'V1');
+		const next = await tools.execute({ operation: 'currentCode' } as never, signal);
+		assert.equal(next.contents, 'later'); assert.equal((saved[1] as { version: string }).version, '2');
+	});
+	test('Blackout reads live code with no persistent owner calls', async () => {
+		const state = { ...selected(), mode: 'blackout', workspaceState: 'blackout' }; const calls: string[] = [];
+		const client = new BeaconContextClient(async operation => {
+			calls.push(operation); if (operation === 'context') { return state; }
+			if (operation === 'currentCode') { return { sourceUri: 'untitled:main.cpp', fileName: 'main.cpp', pageId: 'editor', version: '1', languageId: 'cpp', observedAt: 1, contents: 'dirty' }; }
+			throw new Error(operation);
+		});
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		const read = await tools.execute({ operation: 'currentCode' } as never, signal);
+		assert.equal(read.ok, true); assert.equal(read.contents, 'dirty'); assert.deepEqual(read.snapshotSave, { state: 'disabled', reason: 'blackout' });
+		assert.equal((await tools.execute({ operation: 'codeSnapshots' } as never, signal)).ok, false);
+		assert.ok(calls.every(call => ['context', 'currentCode'].includes(call)));
+	});
 	test('cookie header lines preserve code outside the complete header value', () => {
 		const cases = [
 			['Cookie: sid=fixture-a; preference=fixture-b\r\nint after = 1;', 'Cookie: [redacted]\r\nint after = 1;'],
@@ -37,59 +428,23 @@ suite('Beacon native context consumer', () => {
 			headers: { Cookie: '[redacted]', 'sEt-CoOkIe': '[redacted]' }, cookieCount: 2, source: 'int cookie = 2;'
 		});
 	});
-	test('OJ cookie values are filtered before source and compiler message pagination', async () => {
-		const page = { id: 'oj:cookie', kind: 'oj-record' as const, title: 'CE', version: '1' };
-		const contents = JSON.stringify({
-			rawStatus: 'CE', phase: 'finished', sourceVerification: 'not-checked',
-			source: '// Cookie: sid=fixture-source; other=fixture-other\nint cookie = 1;\nconst char* header = "Set-Cookie: sid=fixture-quoted; Path=/"; int after = cookie;',
-			compileMessage: 'Set-Cookie: sid=fixture-compiler; Path=/; HttpOnly\r\ncompile failed on line 2'
-		}, null, 2);
-		const api = { listBeaconPages: () => [page], readBeaconPage: () => ({ ...page, sourceUri: undefined, contents, totalCharacters: contents.length }) };
-		const client = new BeaconContextClient(withOjPages(async operation => operation === 'context' ? selected() : [], () => api));
-		await client.refresh();
-		const tools = new ContextTools(client, client.captureScope());
-		const signal = new AbortController().signal;
-		let combined = '';
-		let offset = 0;
-		do {
-			const result = await tools.execute({ operation: 'page', id: page.id, version: page.version, offset, limit: 7 }, signal);
-			assert.equal(result.ok, true);
-			assert.equal(result.redacted, true);
-			combined += result.contents;
-			if (result.nextOffset === undefined) { break; }
-			offset = result.nextOffset as number;
-		} while (true);
-		const record = JSON.parse(combined);
-		assert.equal(record.source, '// Cookie: [redacted]\nint cookie = 1;\nconst char* header = "Set-Cookie: [redacted]"; int after = cookie;');
-		assert.equal(record.compileMessage, 'Set-Cookie: [redacted]\r\ncompile failed on line 2');
-		assert.equal(combined.includes('fixture-'), false);
+	test('OJ records filter source and compiler credentials before pagination', async () => {
+		const ref = { problem: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' }, id: '1', url: 'https://www.luogu.com.cn/record/1' };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : { producer: 'oj', id: 'one', revision: 1, coverage: { channels: [] }, payload: { kind: 'oj', record: { ref, phase: 'finished', rawStatus: 'CE', sourceVerification: 'not-checked', source: '// Cookie: private=secret\nint cookie = 1;', compileMessage: 'Bearer private-token' } } });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		const result = await tools.execute({ operation: 'record', producer: 'oj', id: 'one', revision: 1 }, signal);
+		assert.equal(result.ok, true); assert.ok(result.contents?.includes('int cookie = 1')); assert.equal(result.contents?.includes('private-token'), false); assert.equal(result.contents?.includes('private=secret'), false);
 	});
-	test('a turn keeps its selected version and distinguishes a prior verified OJ result', async () => {
-		const uri = 'file:///C:/chosen/main.cpp';
-		const source = { id: 'editor', kind: 'text', title: 'main.cpp', uri, version: '2', dirty: true, active: true };
-		const result = { id: 'oj:result', kind: 'oj-record', title: 'WA', version: '1', sourceUri: uri, problemKey: 'atcoder:practice_1', sourceSha256: createHash('sha256').update('V1').digest('hex') };
-		let pages = [source, result];
-		const client = new BeaconContextClient(async (operation, input) => {
-			if (operation === 'context') { return selected(); }
-			if (operation === 'pages') { return pages; }
-			if (operation === 'page') {
-				const page = pages.find(page => page.id === (input as { id: string }).id);
-				return { ...page, contents: page === result ? JSON.stringify({ rawStatus: 'WA' }) : 'V2' };
-			}
-			return [];
-		});
-		await client.refresh();
-		const tools = new ContextTools(client, client.captureScope(), [], [], undefined, { id: 'editor', version: '2' });
-		const signal = new AbortController().signal;
-		const overview = await tools.execute({ operation: 'overview' }, signal);
-		assert.deepEqual(overview.target, source);
-		assert.deepEqual(overview.relatedPages, [result]);
-		await tools.execute({ operation: 'page', id: source.id, version: source.version }, signal);
-		const evidence = await tools.execute({ operation: 'page', id: result.id, version: result.version }, signal);
-		assert.deepEqual(evidence.ojSourceComparison, [{ id: result.id, relation: 'different-source' }]);
-		pages = [{ ...source, version: '3' }, result];
-		assert.equal((await tools.execute({ operation: 'page', id: 'editor', version: '3' }, signal)).code, 'beacon-page-changed');
+
+	test('functional OJ and Notebook pages cannot provide alternative execution evidence', async () => {
+		const pages = [{ id: 'oj:record', kind: 'oj-record', title: 'WA', version: '1' }, { id: 'notebook', kind: 'notebook', title: 'note', version: '1' }]; let reads = 0;
+		const client = new BeaconContextClient(async operation => { if (operation === 'context') { return selected(); } if (operation === 'pages') { return pages; } reads++; return []; });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
+		assert.deepEqual((await tools.execute({ operation: 'pages' }, signal)).pages, []);
+		for (const page of pages) { assert.equal((await tools.execute({ operation: 'page', id: page.id, version: '1' }, signal)).ok, false); }
+		assert.equal(reads, 0);
 	});
+
 	test('OJ pages use only a current, authorized publication', async () => {
 		const page = { id: 'oj:one', kind: 'oj-record' as const, title: 'WA', version: '1', sourceUri: 'file:///C:/chosen/main.cpp' };
 		let pages = [page];
@@ -142,18 +497,15 @@ suite('Beacon native context consumer', () => {
 		assert.equal(typeof source?.capturedAt, 'number'); assert.deepEqual(next.source, source);
 		assert.equal(first.truncated, true); assert.equal(first.redacted, true); assert.equal(JSON.stringify([first, next]).includes('private-token'), false);
 	});
-	test('runtime provenance survives material rereads and distinguishes material hash from source hash', async () => {
-		const sourceHash = 'a'.repeat(64);
-		const record = { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, sequence: 2, code: 'V1', events: [{ type: 'compile-attempt', sourceSnapshot: { originalPath: 'C:\\chosen\\main.cpp', sha256: sourceHash, complete: false } }] };
+	test('runtime returns shared source identity and coverage without conversation material writes', async () => {
+		const record = { producer: 'runner', id: 'run', revision: 3, capturedAt: 1, sourceUri: 'file:///C:/chosen/main.cpp', sourceDigest: { value: 'a'.repeat(64), representation: 'compiler-bytes' }, coverage: { channels: [] }, payload: { kind: 'runtime', code: 'V1', events: [], startedAt: 1, lastEventSequence: 0 } };
 		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : record);
 		await client.refresh(); const tools = new ContextTools(client, client.captureScope()); const signal = new AbortController().signal;
 		const first = await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 3, part: 'code' }, signal);
-		const next = await tools.execute({ operation: 'material', id: record.materialId, part: 'events' }, signal);
-		const source = first.source;
-		assert.equal(source?.kind, 'runtime'); assert.equal(source?.producer, 'runner'); assert.equal(source?.id, 'run'); assert.equal(source?.revision, 3);
-		assert.equal(source?.origin, 'C:\\chosen\\main.cpp'); assert.equal(source?.sourceSha256, sourceHash); assert.equal(source?.partial, true);
-		assert.match(String(source?.contentSha256), /^[a-f0-9]{64}$/); assert.notEqual(source?.contentSha256, sourceHash); assert.deepEqual(next.source, source);
+		assert.equal(first.contents, 'V1'); assert.deepEqual(first.sourceDigest, record.sourceDigest); assert.deepEqual(first.coverage, record.coverage);
+		assert.equal((await tools.execute({ operation: 'material', id: 'runner-run-3' }, signal)).ok, false);
 	});
+
 	test('SDK context failures retain a safe actionable code in activity and saved history', async () => {
 		const connection: Connection = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: 'test', parameters: {}, capabilities: { ...resolveCapabilities('deepseek', 'https://api.deepseek.com/v1', 'deepseek-chat'), tools: true } };
 		let requests = 0; const session = new ChatSession(() => {}, () => 'error');
@@ -171,20 +523,13 @@ suite('Beacon native context consumer', () => {
 		delete (missingActivities.conversations[0].messages[1] as Partial<typeof session.snapshot.messages[number]>).activities;
 		assert.throws(() => readHistory(missingActivities), /invalid-history/);
 	});
-	test('complete source capture does not hide omitted events or claim an unfinished run is complete', async () => {
-		for (const [events, partial] of [
-			[[{ type: 'partial-event', partial: true }], true],
-			[[], undefined],
-			[[{ type: 'finished', coverage: { truncated: false } }], false],
-			[[{ type: 'finished', coverage: { truncated: true } }], true]
-		] as const) {
-			const record = { id: 'run', materialId: 'runner-run-1', revision: 1, startedAt: 1, sequence: 1, code: 'V1', events: [{ type: 'compile-attempt', sourceSnapshot: { complete: true } }, ...events] };
-			const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : record);
-			await client.refresh();
-			const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1 }, new AbortController().signal);
-			assert.equal(result.source?.partial, partial);
-		}
+	test('runtime coverage reflects the producer without inventing completeness', async () => {
+		const coverage = { channels: [], complete: false };
+		const client = new BeaconContextClient(async operation => operation === 'context' ? selected() : { producer: 'runner', id: 'run', revision: 1, coverage, payload: { kind: 'runtime', code: 'V1', events: [], startedAt: 1, lastEventSequence: 0 } });
+		await client.refresh(); const result = await new ContextTools(client, client.captureScope()).execute({ operation: 'record', producer: 'runner', id: 'run', revision: 1 }, new AbortController().signal);
+		assert.deepEqual(result.coverage, coverage);
 	});
+
 	test('late cancelled begin retains a failed cleanup handle until request retirement', async () => {
 		const controller = new AbortController(); const actions: string[] = []; let cancels = 0;
 		const tools = new NotebookTools(async () => ({ edit: async input => {
@@ -299,7 +644,7 @@ suite('Beacon native context consumer', () => {
 		const code = 'large-main-code'.repeat(10000);
 		const client = new BeaconContextClient(async operation => {
 			if (operation === 'context') { return selected(); }
-			if (operation === 'runtimeRead') { return { id: 'run', materialId: 'runner-run-1', revision: 1, startedAt: 1, sequence: 0, code, events: [{ type: 'compile-attempt', sourceSnapshot: { bytesBase64: Buffer.from(code).toString('base64'), sha256: 'captured-hash', complete: true } }, { type: 'stream', phase: 'compiling', stream: 'stderr', bytesBase64: Buffer.from('actual compile error').toString('base64') }] }; }
+			if (operation === 'readRecent') { return recentRuntime({ id: 'run', materialId: 'runner-run-1', revision: 1, startedAt: 1, sequence: 0, code, events: [{ type: 'compile-attempt', sourceSnapshot: { bytesBase64: Buffer.from(code).toString('base64'), sha256: 'captured-hash', complete: true } }, { type: 'stream', phase: 'compiling', stream: 'stderr', bytesBase64: Buffer.from('actual compile error').toString('base64') }] }); }
 			throw new Error('unexpected-operation');
 		});
 		await client.refresh();
@@ -311,7 +656,7 @@ suite('Beacon native context consumer', () => {
 		const record = { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, sequence: 2, code: 'V1 with enough content for pagination', events: [] };
 		const client = new BeaconContextClient(async operation => {
 			if (operation === 'context') { return selected(); }
-			if (operation === 'runtimeRead') { if (++consumes > 1) { throw new Error('beacon-record-changed'); } return record; }
+			if (operation === 'readRecent') { if (++consumes > 1) { throw new Error('beacon-record-changed'); } return recentRuntime(record); }
 			if (operation === 'materialRead') { return record; }
 			throw new Error('unexpected-operation');
 		});
@@ -319,7 +664,7 @@ suite('Beacon native context consumer', () => {
 		const first = await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 3, limit: 8 }, new AbortController().signal);
 		assert.equal(first.ok, true);
 		const next = await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 3, offset: first.nextOffset as number, limit: 8 }, new AbortController().signal);
-		assert.equal(next.ok, true); assert.equal(next.materialId, first.materialId); assert.equal(consumes, 1);
+		assert.equal(next.ok, true); assert.deepEqual(next.ref, first.ref); assert.equal(consumes, 1);
 	});
 	test('credential filtering removes whole private keys and bearer tokens before pagination', () => {
 		const result = redactContext('api_key="a-secret"\nAuthorization: Bearer token-value\n-----BEGIN PRIVATE KEY-----\nsecret-data\n-----END PRIVATE KEY-----');
@@ -386,8 +731,8 @@ suite('Beacon native context consumer', () => {
 		const overview = await tools.execute({ operation: 'overview' }, signal);
 		assert.equal(overview.ok, true);
 		assert.deepEqual(overview.pages, [page]);
-		assert.deepEqual(overview.records, []);
-		assert.equal(overview.runtimeUnavailable, 'blackout');
+		assert.equal(overview.records, undefined);
+		assert.equal(overview.mode, 'blackout');
 		assert.equal((await tools.execute({ operation: 'page', id: 'open', version: '2' }, signal)).contents, 'dirty source');
 		assert.equal(operations.includes('runtimeList'), false);
 	});
@@ -409,39 +754,14 @@ suite('Beacon native context consumer', () => {
 		assert.equal(operations.some(operation => ['runtimeList', 'runtimeRead', 'materialRead'].includes(operation)), false);
 	});
 
-	test('captured complete page and runtime snapshots survive a Blackout fork without source reads', async () => {
-		const snapshots: ContextSnapshot[] = []; const operations: string[] = [];
-		let state = selected(); let pageOpen = true;
-		const client = new BeaconContextClient(async operation => {
-			operations.push(operation);
-			if (operation === 'context') { return state; }
-			if (operation === 'pages') { return pageOpen ? [{ id: 'page', kind: 'text', title: 'main.cpp', version: '2' }] : []; }
-			if (operation === 'page') { return { contents: 'full page api_key=secret', totalCharacters: 24 }; }
-			if (operation === 'runtimeRead') { return { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, code: 'complete captured code', events: [{ type: 'output', text: 'complete observation' }] }; }
-			throw new Error('source no longer exists');
-		});
-		await client.refresh(); const source = new ContextTools(client, client.captureScope(), [], [], snapshot => snapshots.push(snapshot)); const signal = new AbortController().signal;
-		assert.equal((await source.execute({ operation: 'page', id: 'page', version: '2', limit: 4 }, signal)).contents, 'full');
-		assert.equal((await source.execute({ operation: 'record', id: 'run', producer: 'runner', revision: 3, limit: 3 }, signal)).ok, true);
-		assert.equal(snapshots.length, 2);
-		assert.equal(snapshots[0].raw, 'full page api_key=secret');
-		assert.ok(snapshots[1].raw.includes('complete captured code'));
-		await source.execute({ operation: 'page', id: 'page', version: '2' }, signal);
-		assert.equal(snapshots.length, 2);
-		state = { ...state, mode: 'blackout', workspaceState: 'blackout', epoch: 3 }; pageOpen = false;
-		await client.refresh(); const inherited = new ContextTools(client, client.captureScope(), [], structuredClone(snapshots));
-		const overview = await inherited.execute({ operation: 'overview' }, signal);
-		assert.equal(overview.ok, true);
-		assert.deepEqual((overview.materials as { id: string }[]).map(item => item.id), ['page:page:2:', 'material:runner-run-3']);
-		operations.length = 0;
-		const page = await inherited.execute({ operation: 'material', id: 'page:page:2:' }, signal);
-		assert.equal(page.ok, true); assert.equal(page.contents, 'full page api_key=[redacted]');
-		const runtime = await inherited.execute({ operation: 'material', id: 'runner-run-3', part: 'code' }, signal);
-		assert.equal(runtime.contents, 'complete captured code');
-		assert.equal(operations.every(operation => operation === 'context'), true);
-		assert.equal((await inherited.execute({ operation: 'page', id: 'page', version: '2' }, signal)).code, 'beacon-page-closed');
-		state = { ...state, epoch: 4 };
-		assert.equal((await inherited.execute({ operation: 'material', id: 'runner-run-3' }, signal)).code, 'beacon-context-changed');
+	test('Blackout cannot reread even preloaded private persistent context', async () => {
+		const snapshot: ContextSnapshot = { key: 'page:old:1:', raw: 'private old body', metadata: { source: { kind: 'page', id: 'old', version: '1', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'captured' } } };
+		const calls: string[] = []; const client = new BeaconContextClient(async operation => { calls.push(operation); if (operation === 'context') { return { ...selected(), mode: 'blackout', workspaceState: 'blackout' }; } return []; });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope(), [], { privateSnapshots: [snapshot] }); const signal = new AbortController().signal;
+		assert.equal((await tools.execute({ operation: 'material', id: snapshot.key }, signal)).ok, false);
+		assert.equal((await tools.execute({ operation: 'codeSnapshots' }, signal)).ok, false);
+		assert.equal((await tools.execute({ operation: 'records' }, signal)).ok, false);
+		assert.ok(calls.every(operation => operation === 'context'));
 	});
 
 	test('runtime records pin native revision and return immutable own material, with decoded observations', async () => {
@@ -449,16 +769,16 @@ suite('Beacon native context consumer', () => {
 		const client = new BeaconContextClient(async (operation, input) => {
 			operations.push(operation);
 			if (operation === 'context') { return state; }
-			if (operation === 'runtimeRead') {
-				assert.equal((input as { revision: number }).revision, 3);
+			if (operation === 'readRecent') {
+				assert.equal((input as { ref: { revision: number } }).ref.revision, 3);
 				assert.equal((input as { scope: IBeaconContext }).scope.activeId, 'conversation-one');
-				return { id: 'run', materialId: 'runner-run-3', revision: 3, startedAt: 1, sequence: 2, code: 'V1', events: [{ type: 'output', bytesBase64: Buffer.from('actual stderr').toString('base64') }] };
+				return recentRuntime({ id: 'run', revision: 3, startedAt: 1, sequence: 2, code: 'V1', events: [{ type: 'output', bytesBase64: Buffer.from('actual stderr').toString('base64') }] });
 			}
 			throw new Error('unexpected-operation');
 		});
 		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
 		const result = await tools.execute({ operation: 'record', producer: 'runner', id: 'run', revision: 3 }, new AbortController().signal);
-		assert.equal(result.ok, true); assert.equal(result.materialId, 'runner-run-3'); assert.ok(result.contents?.includes('actual stderr'));
+		assert.equal(result.ok, true); assert.deepEqual(result.ref, { producer: 'runner', id: 'run', revision: 3 }); assert.ok(result.contents?.includes('actual stderr'));
 		state = { ...state, activeId: 'conversation-two' };
 		assert.equal((await tools.execute({ operation: 'material', id: 'runner-run-3' }, new AbortController().signal)).ok, false);
 		assert.equal(operations.includes('materialRead'), false);

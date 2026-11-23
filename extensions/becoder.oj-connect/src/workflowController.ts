@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { fileURLToPath } from 'url';
-import { type ISourceSnapshot, type ProblemRef, type LanguageOption, type SubmissionProgress, type SubmissionEvaluation, type SubmissionOutcome, type RecordRef, validateProblemRef, validateRecordRef } from './domain';
+import { type ISourceSnapshot, type ProblemRef, type LanguageOption, type SubmissionProgress, type SubmissionEvaluation, type SubmissionOutcome, type RecordRef, type RecordSnapshot, validateProblemRef, validateRecordRef } from './domain';
 import type { OjAdapter, SubmissionSession } from './adapters/adapter';
 import { resolveProblem } from './problemResolver';
 import type { SiteDirectories, SiteId } from './settings';
 import { OperationError } from './operationError';
 import { defaultLanguage, type OjPreferences } from './preferences';
 import { resolveCompiler } from './compilerCatalogue';
+import type { IBeaconCollectionScope } from 'becoder-beacon';
 
 export interface SubmissionHost {
 	readonly adapters: readonly OjAdapter[];
@@ -20,9 +21,12 @@ export interface SubmissionHost {
 	onLanguages?(problem: ProblemRef, options: readonly LanguageOption[]): void;
 	confirmDraft(fileName: string): Promise<boolean>;
 	runWithProgress<T>(fileName: string, operation: (progress: (value: SubmissionProgress) => void) => Promise<T>): Promise<T>;
-	openRecord(record: RecordRef, sourceUri: string): Promise<void>;
+	openRecord(record: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope): Promise<void>;
 	/** Returning false from finish means the preview owns presentation; do not reopen it later. */
-	beginEvaluation?(value: SubmissionEvaluation, sourceUri: string): { update(value: SubmissionEvaluation): void; finish(outcome?: SubmissionOutcome): boolean | void };
+	beginEvaluation?(value: SubmissionEvaluation, sourceUri: string, scope?: IBeaconCollectionScope): { update(value: SubmissionEvaluation): void; finish(outcome?: SubmissionOutcome): boolean | void };
+	onEvaluation?(attemptId: string, evaluation: SubmissionEvaluation, sourceUri: string, scope: IBeaconCollectionScope | undefined): void;
+	onRecord?(record: RecordSnapshot, sourceUri: string, scope: IBeaconCollectionScope | undefined, attemptId: string): Promise<void>;
+	onEvaluationEnd?(attemptId: string): Promise<void>;
 }
 interface Request { controller: AbortController; session?: SubmissionSession; cancellation?: Promise<void>; cleanup?: Promise<void> }
 
@@ -32,7 +36,7 @@ export class SubmissionController {
 	constructor(private readonly host: SubmissionHost, private readonly preferences: OjPreferences) { }
 	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined { return this.preferences.language(site, family); }
 	async selectLanguage(site: SiteId, family: 'c' | 'cpp', languageId: string): Promise<void> { await this.preferences.selectLanguage(site, family, languageId); }
-	async submit(input: ISourceSnapshot, explicitProblem?: ProblemRef): Promise<SubmissionOutcome | undefined> {
+	async submit(input: ISourceSnapshot, explicitProblem?: ProblemRef, scope?: IBeaconCollectionScope): Promise<SubmissionOutcome | undefined> {
 		if (this.disposed) { throw new OperationError('prepare', 'not-sent', 'OJ Connect is stopped.'); }
 		if (this.active) { throw new OperationError('prepare', 'not-sent', 'A submission is already in progress.'); }
 		const snapshot = Object.freeze({ ...input, source: input.source.replace(/\r\n/g, '\n') });
@@ -41,6 +45,7 @@ export class SubmissionController {
 		const request: Request = { controller: new AbortController() };
 		const signal = request.controller.signal;
 		let evaluation: ReturnType<NonNullable<SubmissionHost['beginEvaluation']>> | undefined;
+		const attempts = new Set<string>();
 		this.active = request;
 		try {
 			const resolution = explicitProblem ? { kind: 'problem' as const, problem: validateProblemRef(explicitProblem) } : resolveProblem(filePath, this.host.directories(), this.host.adapters);
@@ -53,7 +58,7 @@ export class SubmissionController {
 			if (!adapter) { throw new OperationError('prepare', 'not-sent', 'This site is not available: ' + problem.site); }
 			return await this.host.runWithProgress(snapshot.fileName, async progress => {
 				if (problem.site === 'lanqiao') {
-					try { evaluation = this.host.beginEvaluation?.({ problem, phase: 'preparing', codeLength: new TextEncoder().encode(snapshot.source).length + ' B' }, snapshot.uri); }
+					try { evaluation = this.host.beginEvaluation?.({ problem, phase: 'preparing', codeLength: new TextEncoder().encode(snapshot.source).length + ' B' }, snapshot.uri, scope); }
 					catch { /* Submission remains available if its preview cannot open. */ }
 				}
 				request.session = await adapter.prepare(problem, snapshot.uri, progress, signal);
@@ -81,11 +86,21 @@ export class SubmissionController {
 					outcome = await session.send({ snapshot, languageId, replaceDraft }, value => {
 						progress(value);
 						if (signal.aborted || this.disposed || !value.evaluation || value.evaluation.problem.url !== problem.url || value.evaluation.problem.site !== problem.site || value.evaluation.problem.nativeId !== problem.nativeId) { return; }
+						if (value.evaluation.attemptId && value.evaluation.phase !== 'preparing') {
+							attempts.add(value.evaluation.attemptId);
+							try { this.host.onEvaluation?.(value.evaluation.attemptId, value.evaluation, snapshot.uri, scope); } catch { /* Fact observation does not control delivery or presentation. */ }
+						}
 						try {
 							if (evaluation) { evaluation.update(value.evaluation); }
-							else { evaluation = this.host.beginEvaluation?.(value.evaluation, snapshot.uri); }
+							else { evaluation = this.host.beginEvaluation?.(value.evaluation, snapshot.uri, scope); }
 						} catch { /* A preview failure cannot interrupt an already dispatched submission. */ }
 					}, signal);
+					if (outcome.kind === 'record' && outcome.observed) {
+						try {
+							const record = validateRecordRef(outcome.record);
+							if (record.problem.url === problem.url && record.problem.nativeId === problem.nativeId && outcome.observed.snapshot.ref.url === record.url) { await this.host.onRecord?.(outcome.observed.snapshot, snapshot.uri, scope, outcome.observed.attemptId); }
+						} catch { /* Already acquired facts are independent of preview ownership and storage failures. */ }
+					}
 					try { revealRecord = evaluation?.finish(outcome) !== false; } catch { /* The formal receipt remains authoritative if its preview closed. */ }
 					evaluation = undefined;
 				}
@@ -103,7 +118,7 @@ export class SubmissionController {
 					await this.releaseSession(request);
 					if (this.active === request) { this.active = undefined; }
 					if (this.disposed || !revealRecord) { return outcome; }
-					try { await this.host.openRecord(record, snapshot.uri); }
+					try { await this.host.openRecord(record, snapshot.uri, scope); }
 					catch (error) { throw new OperationError('track', 'record', error instanceof Error ? error.message : String(error), record); }
 				} else if (outcome.kind === 'unconfirmed') {
 					if (validateProblemRef(outcome.problem).url !== problem.url || !outcome.attemptId) { throw new OperationError('confirm', 'unconfirmed', 'The submission receipt could not be confirmed.'); }
@@ -115,6 +130,7 @@ export class SubmissionController {
 			if (signal.aborted || this.disposed) { return undefined; }
 			throw error;
 		} finally {
+			for (const attemptId of attempts) { try { await this.host.onEvaluationEnd?.(attemptId); } catch { /* Evidence cleanup cannot change an accepted receipt. */ } }
 			try { evaluation?.finish(); } catch { /* Cleanup must still release the one-use sending session. */ }
 			try {
 				if (request.session) {

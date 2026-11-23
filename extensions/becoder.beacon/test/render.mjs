@@ -62,11 +62,9 @@ try {
 	] }, '*'));
 	await page.getByText('原聊天中的问题', { exact: true }).waitFor();
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', usedTarget: 'solution.cpp' }, '*'));
-	const questionContext = page.getByRole('button', { name: '选择提问对象' });
-	await page.getByText('上轮对象 · solution.cpp', { exact: true }).waitFor();
-	await questionContext.click();
-	assert.equal(await page.evaluate(() => window.messages.some(message => message.type === 'pickTarget')), true);
-	await page.screenshot({ path: path.join(output, 'question-context.png') });
+	assert.equal(await page.getByRole('button', { name: '选择提问对象' }).count(), 0);
+	assert.equal(await page.getByText('上轮对象 · solution.cpp', { exact: true }).count(), 0);
+	await page.screenshot({ path: path.join(output, 'question-context-removed.png') });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', usedTarget: undefined }, '*'));
 	assert.equal(await page.getByRole('separator').count(), 2, 'Both inherited conversation boundaries are visible');
 	await page.getByText('已继承上文，开始临时对话', { exact: true }).waitFor();
@@ -1178,7 +1176,7 @@ try {
 	assert.equal(await page.getByLabel('模型类型', { exact: true }).count(), 0);
 	assert.equal(await page.getByText('手动修正能力', { exact: true }).count(), 0);
 	assert.equal(await page.getByLabel('上下文窗口（Token）', { exact: true }).inputValue(), '1048576');
-	assert.equal(await page.getByLabel('最大输入 Token', { exact: true }).inputValue(), '24576');
+	assert.equal(await page.getByLabel('最大输入 Token', { exact: true }).inputValue(), '1048576');
 	assert.equal(await page.getByLabel('最大输出 Token', { exact: true }).inputValue(), '393216');
 	const toolCapability = page.getByRole('button', { name: '工具', exact: true });
 	assert.equal(await toolCapability.getAttribute('aria-pressed'), 'true');
@@ -1208,7 +1206,7 @@ try {
 	assert.equal(await page.getByRole('combobox', { name: '思考模式', exact: true }).textContent(), '模型默认', 'Re-enabling reasoning does not restore discarded options');
 	await page.getByLabel('最大输入 Token', { exact: true }).fill('12345');
 	await page.getByRole('button', { name: '恢复模型默认', exact: true }).click();
-	assert.equal(await page.getByLabel('最大输入 Token', { exact: true }).inputValue(), '24576');
+	assert.equal(await page.getByLabel('最大输入 Token', { exact: true }).inputValue(), '1048576');
 	await page.getByLabel('最大输入 Token', { exact: true }).fill('12345');
 	await page.getByRole('button', { name: '推理', exact: true }).click();
 	const modelFooter = await page.locator('.model-form .settings-form-actions').boundingBox();

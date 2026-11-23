@@ -65,6 +65,7 @@ suite('Browser problem actions', () => {
 		['luogu', 'https://www.luogu.com.cn/problem/P1001', 'luogu-session'],
 		['nowcoder', 'https://ac.nowcoder.com/acm/problem/18204', 'nowcoder-session'],
 		['atcoder', taskUrl, 'browser-fixture'],
+		['codeforces', 'https://codeforces.com/problemset/problem/1/A', 'browser-fixture'],
 		['lanqiao', 'https://www.lanqiao.cn/problems/254/learning/', 'browser-fixture']
 	]) {
 		test(`${site} Get Problem reads through its owned session and imports the document`, async () => {
@@ -74,7 +75,9 @@ suite('Browser problem actions', () => {
 			assert.deepStrictEqual(f.errors, []);
 			assert.strictEqual(f.serviceCalls.find(call => call.name === 'readOjProblem')?.args[0], session);
 			if (site === 'lanqiao') { assert.deepStrictEqual(f.serviceCalls.find(call => call.name === 'readOjProblem')?.args[3], { family: 'cpp' }); }
-			assert.strictEqual(f.commands[0]?.id, '_becoder.ojConnect.importFromBrowser');
+			assert.strictEqual(f.commands[0]?.id, '_becoder.beacon.context');
+			assert.strictEqual(f.commands[1]?.id, '_becoder.ojConnect.importFromBrowser');
+			assert.deepStrictEqual(f.commands[1]?.args[2], { scope: undefined, trigger: 'get-problem' });
 		});
 	}
 	test('fixed split menu retains disabled Get and independent CPH action', async () => {
@@ -104,7 +107,7 @@ suite('Browser problem actions', () => {
 		const f = fixture(store); await f.settled();
 		const parsed = new DeferredPromise<{ url: string; json: string }>(); f.setParse(() => parsed.p);
 		const run = f.contribution.run('cph'); f.navigate('https://example.com/'); await parsed.complete({ url: taskUrl, json: '{}' }); await run;
-		assert.deepStrictEqual(f.commands, []); assert.deepStrictEqual(f.errors, []);
+		assert.deepStrictEqual(f.commands.map(command => command.id), ['_becoder.beacon.context']); assert.deepStrictEqual(f.errors, []);
 	});
 	test('navigation cancels only the matching pending extension command; concurrent imports are rejected', async () => {
 		const f = fixture(store); await f.settled();
@@ -113,9 +116,22 @@ suite('Browser problem actions', () => {
 		const run = f.contribution.run('get'); await started.p;
 		await f.contribution.run('cph');
 		f.navigate('https://example.com/'); await pending.complete(); await run;
-		assert.deepStrictEqual(f.commands.map(command => command.id), ['_becoder.ojConnect.importFromBrowser', '_becoder.ojConnect.cancelBrowserImport']);
-		assert.strictEqual(f.commands[0].args[1], f.commands[1].args[0]);
+		assert.deepStrictEqual(f.commands.map(command => command.id), ['_becoder.beacon.context', '_becoder.ojConnect.importFromBrowser', '_becoder.ojConnect.cancelBrowserImport']);
+		assert.strictEqual(f.commands[1].args[1], f.commands[2].args[0]);
 		assert.strictEqual(f.context.getContextKeyValue('browserProblemImportBusy'), false);
 		assert.deepStrictEqual(f.errors, []);
+	});
+	test('CPH import preserves the fifth acquisition parameter captured before parsing', async () => {
+		const f = fixture(store); await f.settled();
+		const originalScope = { slot: 'one', root: 'C:/practice', workspaceIdentity: 'root-one', rootSelectionEpoch: 1 };
+		let current: unknown = originalScope;
+		f.setExecute(async id => id === '_becoder.beacon.context' ? current : undefined);
+		f.setParse(async () => { current = undefined; return { url: taskUrl, json: '{}' }; });
+		await f.contribution.run('cph');
+		const imported = f.commands.find(command => command.id === '_becoder.cph.importProblem')!;
+		assert.deepStrictEqual(imported.args.slice(0, 3), ['{}', taskUrl, undefined]);
+		assert.equal(typeof imported.args[3], 'string');
+		assert.deepStrictEqual(imported.args[4], { scope: originalScope, trigger: 'import-cph' });
+		assert.equal(f.commands.filter(command => command.id === '_becoder.beacon.context').length, 1);
 	});
 });

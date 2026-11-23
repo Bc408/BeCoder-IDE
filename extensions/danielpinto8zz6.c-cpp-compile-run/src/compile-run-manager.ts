@@ -112,7 +112,6 @@ export class CompileRunManager implements vscode.Disposable {
 			const panelStartedAt = Date.now();
 			terminal.show(false);
 			const prepared = await prepareActiveSource();
-			if (!request.beaconActivity) { request.beaconActivity = await this.beginBeaconActivity(prepared.source.path); }
 			const panelReadyMs = await pseudoterminal.waitForOpen(panelStartedAt);
 			this.throwIfCancelled(request);
 			if (panelReadyMs === undefined) {
@@ -201,7 +200,10 @@ export class CompileRunManager implements vscode.Disposable {
 
 	private async beginBeaconActivity(source: string | undefined): Promise<string | undefined> {
 		if (!source) { return undefined; }
-		try { return await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source }); }
+		try {
+			const collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope');
+			return await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source, collectionScope });
+		}
 		catch (error) { this.trace.warn('Beacon activity tracking unavailable', error); return undefined; }
 	}
 

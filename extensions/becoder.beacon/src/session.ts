@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ModelMessage } from 'ai';
+import { randomUUID } from 'crypto';
+import { effectiveUnits, selectCompaction, type EffectiveUnit, type BeaconCompaction, type CompactionExpectation } from './compaction';
+import { beaconFingerprint } from './contextBudget';
 import type { FileInput, FileOutput, FileTool } from './fileTools';
-import { replayProtocol, type ProtocolTurn } from './protocol';
+import { replayProtocol, type ProtocolTurn, type ClosedProtocolSnapshot, type CompletedToolFact } from './protocol';
+import type { ProtocolSource } from './protocol';
 import type { WebSource } from './webTools';
 import type { ToolError } from './toolFeedback';
 import { attachmentParts, validAttachments, type Attachment } from './attachments';
@@ -26,7 +30,6 @@ export function fileModelOutput(output: FileOutput) {
 }
 
 export interface Message {
-	target?: { id: string; version: string; title: string; capturedKeys?: string[] };
 	transition?: 'temporary' | 'persistent';
 	failure?: RequestFailure;
 	attachments?: Attachment[];
@@ -44,6 +47,7 @@ export interface Message {
 	sources?: WebSource[];
 	model?: string;
 	provider?: string;
+	baseURL?: string;
 }
 
 export interface ToolActivity {
@@ -62,8 +66,16 @@ export interface Snapshot {
 	stopping?: boolean;
 }
 
-export type Delta = { type: 'text'; text: string; turn?: ProtocolTurn } | { type: 'reasoning'; text: string; turn?: ProtocolTurn } | { type: 'activity'; activity: ToolActivity } | { type: 'tool-result'; result: FileResult } | { type: 'web-result'; sources: WebSource[] } | { type: 'protocol'; turn: ProtocolTurn };
-export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, files: FileTool, progress?: (retry: RequestRetry | undefined) => void) => AsyncIterable<Delta>;
+export type Delta = { type: 'text'; text: string; turn?: ProtocolTurn; sequence?: number } | { type: 'reasoning'; text: string; turn?: ProtocolTurn; sequence?: number } | { type: 'activity'; activity: ToolActivity } | { type: 'tool-result'; result: FileResult } | { type: 'web-result'; sources: WebSource[] } | { type: 'protocol'; turn: ProtocolTurn; sequence?: number };
+export interface GenerationContext {
+	requestId: string; replyId: number; turnIndex: number;
+	acceptClosed(snapshot: ClosedProtocolSnapshot): void;
+	acceptCompletedTool(fact: CompletedToolFact): void;
+	prepare(snapshot: ClosedProtocolSnapshot, signal: AbortSignal): Promise<{ conversationId: string; units: readonly EffectiveUnit[]; checkpoints: readonly BeaconCompaction[] }>;
+	commitCompaction(candidate: BeaconCompaction, expected: CompactionExpectation, signal: AbortSignal): Promise<void>;
+}
+export interface SessionCompactionHost { current(): { conversationId: string; checkpoints: readonly BeaconCompaction[] }; commit(candidate: BeaconCompaction, expected: CompactionExpectation, signal: AbortSignal): Promise<void> }
+export type Generate = (messages: ReadonlyArray<ModelMessage>, signal: AbortSignal, files: FileTool, progress?: (retry: RequestRetry | undefined) => void, context?: GenerationContext) => AsyncIterable<Delta>;
 type ResponseSource = { model: string; provider: string; baseURL?: string };
 
 const unavailableFileTool: FileTool = async input => ({ ok: false, path: input.path, error: 'Local file access is disabled.' });
@@ -76,8 +88,13 @@ export class ChatSession {
 	private error = '';
 	private retry: RequestRetry | undefined;
 	private disposed = false;
+	private requestId: string | undefined;
+	private compaction: BeaconCompaction | undefined;
+	private activeTurn: { messageId: number; turnIndex: number } | undefined;
+	get activeRequestId(): string | undefined { return this.requestId; }
+	effectiveContextUnits(source?: ProtocolSource): EffectiveUnit[] { return effectiveUnits(this.messages, source, this.activeTurn); }
 
-	constructor(private readonly changed: (snapshot: Snapshot) => void, private readonly describeError: (error: unknown) => string) { }
+	constructor(private readonly changed: (snapshot: Snapshot) => void, private readonly describeError: (error: unknown) => string, private readonly compactionHost?: SessionCompactionHost) { }
 
 	get snapshot(): Snapshot {
 		const messages = this.messages.map(message => {
@@ -93,11 +110,11 @@ export class ChatSession {
 		if (!this.disposed) { this.changed(this.snapshot); }
 	}
 
-	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = [], transition?: Message['transition'], target?: Message['target']): Promise<void> {
+	async send(text: string, generate: Generate, source?: ResponseSource, files: FileTool = unavailableFileTool, attachments: Attachment[] = [], transition?: Message['transition']): Promise<void> {
 		if (this.disposed || this.controller) { return; }
 		text = text.trim();
 		if ((!text && !attachments.length) || text.length > 32000 || !validAttachments(attachments)) { return; }
-		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(target ? { target: { id: target.id, version: target.version, title: target.title } } : {}), ...(transition ? { transition } : {}), ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
+		this.messages.push({ id: ++this.sequence, role: 'user', text, ...(transition ? { transition } : {}), ...(attachments.length ? { attachments: structuredClone(attachments) } : {}), activities: [], status: 'complete', createdAt: Date.now() });
 		await this.respond(generate, files, source);
 	}
 
@@ -126,11 +143,12 @@ export class ChatSession {
 	private modelContext(source?: ResponseSource): ModelMessage[] {
 		const context: ModelMessage[] = [];
 		for (const message of this.messages) {
-			if (message.status !== 'complete' && message.status !== 'stopped') { continue; }
+			if (!['complete', 'stopped', 'error'].includes(message.status)) { continue; }
 			if (message.protocol?.length) {
-				for (const turn of message.protocol) { context.push(...replayProtocol(turn, source)); }
+				for (const turn of message.protocol) { context.push(...replayProtocol(turn, source, message.status === 'error' ? 'completed-tools' : 'conversation')); }
 				continue;
 			}
+			if (message.status === 'error') { continue; }
 			if (message.role === 'user' && message.attachments?.length) {
 				context.push({ role: 'user', content: [...(message.text ? [{ type: 'text' as const, text: message.text }] : []), ...attachmentParts(message.attachments)] });
 				continue;
@@ -149,7 +167,14 @@ export class ChatSession {
 		const reply: Message = resumedReply ?? { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', createdAt: startedAt, ...source };
 		const previousDuration = reply.durationMs ?? 0;
 		const previousText = reply.text;
+		if (resumedReply && !reply.protocol?.length && (reply.text || reply.reasoning)) {
+			const content: Exclude<Extract<ModelMessage, { role: 'assistant' }>['content'], string> = [];
+			if (reply.reasoning && reply.provider && reply.baseURL && reply.model) { content.push({ type: 'reasoning', text: reply.reasoning }); }
+			if (reply.text) { content.push({ type: 'text', text: reply.text }); }
+			reply.protocol = [{ provider: reply.provider ?? '', baseURL: reply.baseURL ?? '', model: reply.model ?? '', messages: [{ role: 'assistant', content }] }];
+		}
 		const protocolOffset = reply.protocol?.length ?? 0;
+		this.activeTurn = { messageId: reply.id, turnIndex: protocolOffset };
 		const activityOffset = reply.activities.length;
 		const activityId = (id: string) => activityOffset ? `${id}:${activityOffset}` : id;
 		reply.status = 'streaming';
@@ -162,28 +187,57 @@ export class ChatSession {
 		this.error = '';
 		this.retry = undefined;
 		this.publish();
+		const requestId = randomUUID(); let installedSequence = 0;
+		this.requestId = requestId;
+		const completed = new Map<string, CompletedToolFact>();
+		let raw: ProtocolTurn = { provider: source?.provider ?? '', baseURL: source?.baseURL ?? '', model: source?.model ?? '', messages: [] };
+		const install = () => {
+			const sealedSteps = new Set(raw.stepEnds?.map(step => step.stepId) ?? []);
+			const extra: ModelMessage[] = [];
+			for (const fact of completed.values()) {
+				if (sealedSteps.has(fact.logicalStepId)) { continue; }
+				extra.push({ role: 'assistant', content: [{ type: 'tool-call', toolCallId: fact.toolCallId, toolName: fact.toolName, input: structuredClone(fact.input) }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: fact.toolCallId, toolName: fact.toolName, output: structuredClone(fact.output) }] });
+			}
+			const continuation = resumedReply ? [context.at(-1)!] : [];
+			(reply.protocol ??= [])[protocolOffset] = structuredClone({ ...raw, ...(raw.stepEnds ? { stepEnds: raw.stepEnds.map(step => ({ ...step, end: step.end + continuation.length })) } : {}), messages: [...continuation, ...raw.messages, ...extra] });
+			this.publish();
+		};
+		const generation: GenerationContext = {
+			requestId, replyId: reply.id, turnIndex: protocolOffset,
+			acceptClosed: snapshot => {
+				if (snapshot.requestId !== requestId || snapshot.sequence <= installedSequence || this.controller !== controller) { return; }
+				installedSequence = snapshot.sequence; raw = structuredClone({ ...snapshot.turn, stepEnds: [...snapshot.stepEnds] }); install();
+			},
+			acceptCompletedTool: fact => {
+				if (fact.requestId !== requestId || fact.turnIndex !== protocolOffset || this.controller !== controller) { return; }
+				const key = `${fact.logicalStepId}:${fact.toolCallId}`;
+				if (completed.has(key)) { return; } completed.set(key, structuredClone(fact)); install();
+			},
+			prepare: async (snapshot, signal) => {
+				signal.throwIfAborted(); generation.acceptClosed(snapshot);
+				const host = this.compactionHost?.current();
+				const units = this.effectiveContextUnits({ provider: snapshot.turn.provider, baseURL: snapshot.turn.baseURL, model: snapshot.turn.model });
+				if (resumedReply && !reply.protocol?.[protocolOffset]) { const message = context.at(-1)!; units.push({ key: `${reply.id}:continuation`, messageId: reply.id, unitIndex: Number.MAX_SAFE_INTEGER, messages: [message], fingerprint: beaconFingerprint(message) }); }
+				return { conversationId: host?.conversationId ?? requestId, units, checkpoints: host?.checkpoints ?? (this.compaction ? [this.compaction] : []) };
+			},
+			commitCompaction: async (candidate, expected, signal) => {
+				signal.throwIfAborted();
+				if (expected.requestId !== requestId || this.controller !== controller || !selectCompaction(this.effectiveContextUnits(source?.baseURL ? { ...source, baseURL: source.baseURL } : undefined), [candidate])) { throw new Error('beacon-compaction-stale'); }
+				if (this.compactionHost) { await this.compactionHost.commit(candidate, expected, signal); }
+				else { this.compaction = structuredClone(candidate); }
+			}
+		};
 		try {
-			for await (const delta of generate(context, controller.signal, files, retry => { if (!controller.signal.aborted) { this.retry = retry; this.publish(); } })) {
+			for await (const delta of generate(context, controller.signal, files, retry => { if (!controller.signal.aborted) { this.retry = retry; this.publish(); } }, generation)) {
 				if (controller.signal.aborted) { break; }
 				if ('turn' in delta && delta.turn) {
-					(reply.protocol ??= [])[protocolOffset] = structuredClone({ ...delta.turn, messages: [...(resumedReply ? [context.at(-1)!] : []), ...delta.turn.messages] });
-					const target = this.messages.findLast(message => message.role === 'user')?.target;
-					if (target) {
-						for (const message of delta.turn.messages) {
-							if (message.role !== 'tool') { continue; }
-							for (const result of message.content) {
-								if (result.type !== 'tool-result' || result.toolName !== 'inspectContext' || result.output.type !== 'json') { continue; }
-								const value: unknown = result.output.value;
-								if (!value || typeof value !== 'object' || Array.isArray(value)) { continue; }
-								const output = value as Record<string, unknown>;
-								const source = output.source as Record<string, unknown> | undefined;
-								if (output.ok === true && typeof output.contents === 'string' && source?.kind === 'page' && source.id === target.id && source.version === target.version) {
-									const key = `page:${target.id}:${target.version}:${typeof source.pageNumber === 'number' ? source.pageNumber : ''}`;
-									if (!target.capturedKeys?.includes(key)) { (target.capturedKeys ??= []).push(key); }
-								}
-							}
-						}
+					const sealedSteps = new Set(raw.stepEnds?.map(step => step.stepId) ?? []);
+					const hasUnsealedFacts = [...completed.values()].some(fact => !sealedSteps.has(fact.logicalStepId));
+					if (delta.sequence === undefined || (!hasUnsealedFacts && delta.sequence >= installedSequence && delta.turn.messages.length >= raw.messages.length)) {
+						raw = structuredClone(delta.turn); installedSequence = delta.sequence ?? installedSequence;
+						install();
 					}
+
 				}
 				if (delta.type === 'protocol') { this.publish(); continue; }
 				if (delta.type === 'text') {
@@ -218,6 +272,8 @@ export class ChatSession {
 			reply.durationMs = previousDuration + Math.max(0, Date.now() - startedAt);
 			delete reply.activeStartedAt;
 			this.controller = undefined;
+			this.requestId = undefined;
+			this.activeTurn = undefined;
 			this.retry = undefined;
 			this.publish();
 		}
@@ -239,6 +295,7 @@ export class ChatSession {
 	clear(): void {
 		if (this.controller) { return; }
 		this.messages = [];
+		this.compaction = undefined;
 		this.error = '';
 		this.publish();
 	}

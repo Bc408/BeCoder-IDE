@@ -34,6 +34,7 @@ export function isToolError(value: unknown): value is ToolError { return typeof 
 export function toolErrorMessage(code: ToolError, zh: boolean): string { return messages[code][zh ? 1 : 0]; }
 
 const nativeCodes: Record<string, ToolError> = {
+	'beacon-code-unavailable': 'not-ready', 'beacon-part-unavailable': 'material-missing', 'beacon-notebook-content-owner': 'protected', 'beacon-persisted-evidence-required': 'protected', 'beacon-web-disabled': 'protected', 'notebook-content-unavailable': 'not-ready', 'notebook-execution-part-unavailable': 'protected',
 	'beacon-context-changed': 'context-changed', 'beacon-record-changed': 'record-changed', 'beacon-record-evicted': 'material-missing',
 	'beacon-page-closed': 'page-closed', 'beacon-page-changed': 'page-changed', 'beacon-page-provider-unavailable': 'not-ready', 'beacon-page-not-ready': 'not-ready',
 	'beacon-protected-page': 'protected', 'beacon-conversation-owner': 'owner', 'beacon-workspace-unavailable': 'workspace-unavailable', 'beacon-material-missing': 'material-missing',

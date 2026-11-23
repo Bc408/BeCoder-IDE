@@ -15,7 +15,8 @@
 		"onLanguage:cpp",
 		"onCommand:_becoder.ojConnect.importFromBrowser",
 		"onCommand:_becoder.ojConnect.cancelBrowserImport",
-		"onCommand:_becoder.ojConnect.importTarget"
+		"onCommand:_becoder.ojConnect.importTarget",
+		"onCommand:_becoder.ojConnect.captureImportedProblem"
 	],
 	"contributes": {
 		"keybindings": [

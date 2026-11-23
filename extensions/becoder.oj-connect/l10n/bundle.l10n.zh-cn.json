@@ -1,4 +1,7 @@
 {
+	"The problem was opened, but Beacon could not save its context.": "题目已打开，但 Beacon 未能保存本次上下文。",
+	"Samples were imported, but Beacon could not acquire the full problem statement.": "样例已导入，但 Beacon 未能取得完整题面。",
+	"The submission continues, but Beacon could not save its context.": "提交照常继续，但 Beacon 未能保存本次上下文。",
 	"Sign in to Lanqiao from the OJ Connect sidebar.": "请从 OJ Connect 侧栏登录蓝桥。",
 	"Only accessible public Lanqiao C/C++ standard input/output practice problems are supported.": "仅支持当前账号可访问的蓝桥公开 C/C++ 标准输入输出编程练习。",
 	"The Lanqiao submission is unconfirmed. Continue querying this attempt; no code or report will be sent again.": "蓝桥提交回执尚未确认。可继续查询本次尝试；不会再次发送代码或报告请求。",

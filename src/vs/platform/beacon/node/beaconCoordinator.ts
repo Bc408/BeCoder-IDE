@@ -7,9 +7,11 @@ import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryIte
 import * as path from '../../../base/common/path.js';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { fileURLToPath } from 'url';
+import { hasKey } from '../../../base/common/types.js';
 import { BeaconStore, checkBeaconIdentifier, checkBeaconResume, prepareBeaconWorkspace } from './beaconStore.js';
 import { acquireBeaconLease } from './beaconLease.js';
-import type { BeaconProducer, IBeaconConsumedRecord, IBeaconRuntimeItem } from '../common/beaconContextTypes.js';
+import type { BeaconProducer, IBeaconConsumedRecord, IBeaconRuntimeItem, BeaconRecentProducer, IBeaconCollectionScope, IBeaconProblemCapture, IBeaconOjCapture, IBeaconRecordRef, IBeaconRecentItem, IBeaconRecentRecord, IBeaconRecentWrite, IBeaconCodeObservation, IBeaconCodeSnapshot, IBeaconCodeSave } from '../common/beaconContextTypes.js';
 import { BeaconNotebookResources } from './beaconNotebookResources.js';
 
 const sameWorkspacePath = (left: string, right: string) => {
@@ -32,9 +34,11 @@ interface IWindowContext {
 	store?: BeaconStore;
 	usable: boolean;
 	epoch: number;
+	rootSelectionEpoch: number;
 	busy: boolean;
 	runtimeActivities: Set<string>;
-	activities: Map<string, { source: string; canonical: string; producer?: BeaconProducer }>;
+	activities: Map<string, { source: string; canonical: string; collectionScope: IBeaconCollectionScope; producer?: BeaconProducer }>;
+	ojActivities: Map<string, { collectionScope: IBeaconCollectionScope; attemptId?: string; recordKey?: string }>;
 	writes: number;
 	switching: boolean;
 	tail: Promise<unknown>;
@@ -67,6 +71,7 @@ export class BeaconCoordinator {
 	}
 	private async authorizeNotebook(id: number, file: string, scope: IBeaconContext, creating = false): Promise<{ canonical: string; anchor: string; dev: number; ino: number } | undefined> {
 		if (!scope || !/\.bcnb$/i.test(file) || file.slice(path.parse(file).root.length).includes(':')) { throw new Error('notebook-invalid-target'); }
+		if (file.split(/[\\/]/).some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('notebook-invalid-target'); }
 		await this.checkPageAccess(id, file);
 		return this.serial(id, false, async context => {
 			const store = await this.store(context); this.checkScope(context, scope);
@@ -124,7 +129,7 @@ export class BeaconCoordinator {
 		if (this.disposed || !selection) { throw new Error('beacon-window-closed'); }
 		let context = this.windows.get(id);
 		if (!context) {
-			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, busy: false, runtimeActivities: new Set(), activities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
+			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, rootSelectionEpoch: 0, busy: false, runtimeActivities: new Set(), activities: new Map(), ojActivities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
 			this.windows.set(id, context);
 		}
 		return context;
@@ -142,7 +147,7 @@ export class BeaconCoordinator {
 			} catch { /* Retain the selected root; unavailable roots do not redirect persistence. */ }
 		}
 		if (previous !== context.usable) {
-			context.epoch++;
+			context.epoch++; context.rootSelectionEpoch++;
 			if (!context.usable) { await this.release(context); }
 		}
 	}
@@ -205,7 +210,7 @@ export class BeaconCoordinator {
 				if (context.busy || context.runtimeActivities.size || context.activities.size || context.writes || this.ownsNotebookEdit(context)) { throw new Error('beacon-busy'); }
 				await this.release(context);
 				context.selection = { slot: context.selection.slot, root, mode: context.selection.root ? context.selection.mode : 'spot', identity: binding.identity };
-				context.store = store; context.usable = true; context.epoch++;
+				context.store = store; context.usable = true; context.epoch++; context.rootSelectionEpoch++;
 				this.callbacks.saveSelection(id, context.selection);
 				this.callbacks.saveRecent([root, ...this.callbacks.getRecent().filter(value => !sameWorkspacePath(value, root))]);
 			} finally { context.switching = false; }
@@ -238,7 +243,7 @@ export class BeaconCoordinator {
 				const root = context.selection.root;
 				await this.release(context);
 				context.selection = { slot: context.selection.slot, mode: 'blackout' };
-				context.store = undefined; context.usable = false; context.epoch++;
+				context.store = undefined; context.usable = false; context.epoch++; context.rootSelectionEpoch++;
 				this.callbacks.saveSelection(id, context.selection);
 				if (root) { this.callbacks.saveRecent([root, ...this.callbacks.getRecent().filter(value => !sameWorkspacePath(value, root))]); }
 			} finally { context.switching = false; }
@@ -273,20 +278,49 @@ export class BeaconCoordinator {
 		if (context.runtimeActivities.delete(handle)) { this.callbacks.changed(id); }
 	}
 
-	async beginActivity(id: number, source: string): Promise<string | undefined> {
+	async captureCollectionScope(id: number): Promise<IBeaconCollectionScope | undefined> {
 		return this.serial(id, false, async context => {
 			await this.refresh(context);
-			if (!context.usable || !context.store || !path.isAbsolute(source)) { return undefined; }
+			return context.usable && context.store && context.selection.root ? { slot: context.selection.slot, root: context.selection.root, workspaceIdentity: context.store.binding.identity, rootSelectionEpoch: context.rootSelectionEpoch } : undefined;
+		});
+	}
+
+	private async collectionStore(context: IWindowContext, scope: IBeaconCollectionScope): Promise<BeaconStore> {
+		await this.refresh(context);
+		if (!context.usable || !context.store || !scope || scope.slot !== context.selection.slot || scope.root !== context.selection.root || scope.workspaceIdentity !== context.store.binding.identity || scope.rootSelectionEpoch !== context.rootSelectionEpoch) { throw new Error('beacon-context-changed'); }
+		return context.store;
+	}
+
+	private activeKeys(identity: string, producer: BeaconRecentProducer): Set<string> {
+		const keys = new Set<string>();
+		for (const window of this.windows.values()) {
+			for (const [id, activity] of window.activities) {
+				if (activity.collectionScope.workspaceIdentity === identity && activity.producer === producer) { keys.add(id); }
+			}
+			if (producer === 'oj') { for (const activity of window.ojActivities.values()) { if (activity.collectionScope.workspaceIdentity === identity) { if (activity.attemptId) { keys.add(activity.attemptId); } if (activity.recordKey) { keys.add(activity.recordKey); } } } }
+		}
+		return keys;
+	}
+
+	async beginActivity(id: number, source: string, scope: IBeaconCollectionScope | undefined): Promise<string | undefined> {
+		return this.serial(id, false, async context => {
+			if (!scope) { return undefined; }
+			const store = await this.collectionStore(context, scope);
+			if (!path.isAbsolute(source)) { return undefined; }
 			const real = await fs.realpath(source);
-			const relative = path.relative(context.store.binding.canonicalPath, real);
+			const relative = path.relative(store.binding.canonicalPath, real);
 			if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) { return undefined; }
-			const handle = randomUUID(); context.activities.set(handle, { source: path.normalize(source), canonical: real }); this.callbacks.changed(id);
+			const handle = randomUUID(); context.activities.set(handle, { source: path.normalize(source), canonical: real, collectionScope: structuredClone(scope) }); this.callbacks.changed(id);
 			return handle;
 		});
 	}
 
 	async endActivity(id: number, handle: string): Promise<void> {
-		await this.serial(id, false, async context => { context.activities.delete(handle); this.callbacks.changed(id); });
+		await this.serial(id, false, async context => {
+			const activity = context.activities.get(handle); context.activities.delete(handle);
+			if (activity?.producer) { try { await this.runtimeWrite(context, activity.producer, activity.collectionScope, store => store.trimRecent(activity.producer!, this.activeKeys(store.binding.identity, activity.producer!))); } catch { /* Root retirement does not redirect cleanup. */ } }
+			this.callbacks.changed(id);
+		});
 	}
 
 	async startRuntime(id: number, handle: string, producer: BeaconProducer, source: string, code: string, events: unknown[]): Promise<void> {
@@ -301,8 +335,9 @@ export class BeaconCoordinator {
 			const capture = events[0] as { sourceSnapshot?: { canonicalPath?: string } } | undefined;
 			const canonical = capture?.sourceSnapshot?.canonicalPath;
 			if (typeof canonical !== 'string' || (process.platform === 'win32' ? canonical.toLowerCase() !== activity.canonical.toLowerCase() : canonical !== activity.canonical)) { throw new Error('beacon-invalid-source'); }
-			await this.runtimeWrite(context, producer, store => store.commitRuntimeRecord(producer, { id: handle, code, startedAt: Date.now(), events }));
 			activity.producer = producer;
+			try { await this.runtimeWrite(context, producer, activity.collectionScope, store => store.commitRuntimeRecord(producer, { id: handle, code, startedAt: Date.now(), events }, this.activeKeys(store.binding.identity, producer))); }
+			catch (error) { activity.producer = undefined; throw error; }
 		});
 	}
 
@@ -310,17 +345,83 @@ export class BeaconCoordinator {
 		return this.serial(id, true, async context => {
 			const activity = context.activities.get(handle);
 			if (!activity?.producer) { throw new Error('beacon-invalid-activity'); }
-			return this.runtimeWrite(context, activity.producer, store => store.appendRuntimeEvents(activity.producer!, handle, sequence, events));
+			return this.runtimeWrite(context, activity.producer, activity.collectionScope, store => store.appendRuntimeEvents(activity.producer!, handle, sequence, events, this.activeKeys(store.binding.identity, activity.producer!)));
 		});
 	}
 
-	private async runtimeWrite<T>(context: IWindowContext, producer: BeaconProducer, operation: (store: BeaconStore) => Promise<T>): Promise<T> {
-		const store = await this.store(context);
+	private async runtimeWrite<T>(context: IWindowContext, producer: BeaconRecentProducer, scope: IBeaconCollectionScope, operation: (store: BeaconStore) => Promise<T>): Promise<T> {
+		const store = await this.collectionStore(context, scope);
 		const key = `${store.binding.identity}/${producer}`;
-		const result = (this.runtimeWrites.get(key) ?? Promise.resolve()).then(() => operation(store));
+		const result = (this.runtimeWrites.get(key) ?? Promise.resolve()).then(async () => { await this.collectionStore(context, scope); return operation(store); });
 		const tail = result.then(() => { }, () => { });
 		this.runtimeWrites.set(key, tail);
 		try { return await result; } finally { if (this.runtimeWrites.get(key) === tail) { this.runtimeWrites.delete(key); } }
+	}
+
+	private async collectionSource(context: IWindowContext, scope: IBeaconCollectionScope, sourceUri: string | undefined): Promise<string> {
+		const store = await this.collectionStore(context, scope);
+		if (!sourceUri?.startsWith('file:')) { throw new Error('beacon-invalid-source'); }
+		const real = await fs.realpath(fileURLToPath(sourceUri));
+		const relative = path.relative(store.binding.canonicalPath, real);
+		if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) { throw new Error('beacon-invalid-source'); }
+		return real;
+	}
+
+	async captureProblem(id: number, input: IBeaconProblemCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef> {
+		return this.serial(id, true, async context => {
+			const canonical = await this.collectionSource(context, scope, input.sourceUri);
+			if (!input.document?.ref || !Number.isFinite(input.viewedAt) || !['get-problem', 'import-cph'].includes(input.trigger)) { throw new Error('beacon-invalid-record'); }
+			const sourceUri = process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+			const ref = input.document.ref;
+			return this.runtimeWrite(context, 'problem', scope, store => store.saveRecentRecord('problem', { producer: 'problem', dedupKey: JSON.stringify([ref.site, ref.nativeId, ref.url, sourceUri]), sourceUri: input.sourceUri, problem: ref, capturedAt: input.viewedAt, viewedAt: input.viewedAt, trigger: input.trigger, state: 'available', coverage: { complete: true, channels: [] }, payload: { kind: 'problem', document: input.document } }, new Set(), true));
+		});
+	}
+
+	async captureOj(id: number, input: IBeaconOjCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef> {
+		return this.serial(id, true, async context => {
+			await this.collectionSource(context, scope, input.sourceUri);
+			const record = hasKey(input, { record: true }) ? input.record : undefined;
+			const evaluation = hasKey(input, { evaluation: true }) ? input.evaluation : undefined;
+			const attemptId = input.attemptId;
+			const recordKey = record ? JSON.stringify([record.ref.problem.site, record.ref.id, record.ref.url]) : undefined;
+			if (!record && (!attemptId || !evaluation || evaluation.phase === 'preparing')) { throw new Error('beacon-invalid-record'); }
+			const data: IBeaconRecentWrite = { producer: 'oj', dedupKey: recordKey ?? attemptId!, sourceUri: input.sourceUri, problem: record?.ref.problem ?? evaluation?.problem, capturedAt: Date.now(), submission: { attemptId, recordKey }, state: record?.phase === 'finished' ? 'finished' : record?.phase === 'unknown' ? 'unknown' : 'active', coverage: { channels: [] }, payload: record ? { kind: 'oj', record } : { kind: 'oj-evaluation', attemptId: attemptId!, evaluation: evaluation! } };
+			return this.runtimeWrite(context, 'oj', scope, store => store.saveRecentRecord('oj', data, this.activeKeys(store.binding.identity, 'oj'), false));
+		});
+	}
+
+	async beginOjCaptureActivity(id: number, input: { sourceUri: string; attemptId?: string; recordKey?: string }, scope: IBeaconCollectionScope): Promise<string> {
+		return this.serial(id, false, async context => {
+			await this.collectionSource(context, scope, input.sourceUri);
+			if (!input.attemptId && !input.recordKey) { throw new Error('beacon-invalid-record'); }
+			const handle = randomUUID(); context.ojActivities.set(handle, { collectionScope: structuredClone(scope), attemptId: input.attemptId, recordKey: input.recordKey }); return handle;
+		});
+	}
+
+	async endOjCaptureActivity(id: number, handle: string): Promise<void> {
+		await this.serial(id, false, async context => {
+			const activity = context.ojActivities.get(handle); context.ojActivities.delete(handle);
+			if (activity) { try { await this.runtimeWrite(context, 'oj', activity.collectionScope, store => store.trimRecent('oj', this.activeKeys(store.binding.identity, 'oj'))); } catch { /* Retired roots are not reopened. */ } }
+		});
+	}
+
+	async listRecent(id: number, producer: BeaconRecentProducer, scope: IBeaconContext): Promise<IBeaconRecentItem[]> {
+		return this.serial(id, false, async context => {
+			const { store } = await this.ownedStore(context); this.checkScope(context, scope);
+			return (await store.listRecentRecords(producer)).map(({ payload: _payload, ...item }) => item);
+		});
+	}
+	async readRecent(id: number, ref: IBeaconRecordRef, scope: IBeaconContext): Promise<IBeaconRecentRecord> {
+		return this.serial(id, false, async context => { const { store } = await this.ownedStore(context); this.checkScope(context, scope); return store.readRecentRecord(ref); });
+	}
+	async saveCodeRead(id: number, observation: IBeaconCodeObservation, scope: IBeaconContext): Promise<IBeaconCodeSave> {
+		return this.serial(id, true, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); const result = await store.saveCodeRead(conversationId, observation); this.checkScope(context, scope); return result; });
+	}
+	async listCodeSnapshots(id: number, scope: IBeaconContext): Promise<Omit<IBeaconCodeSnapshot, 'contents'>[]> {
+		return this.serial(id, false, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); return store.listCodeSnapshots(conversationId); });
+	}
+	async readCodeSnapshot(id: number, key: string, scope: IBeaconContext): Promise<IBeaconCodeSnapshot> {
+		return this.serial(id, false, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); return store.readCodeSnapshot(conversationId, key); });
 	}
 
 	private async store(context: IWindowContext): Promise<BeaconStore> {
@@ -357,9 +458,9 @@ export class BeaconCoordinator {
 	async consumeRuntime(id: number, producer: BeaconProducer, recordId: string, revision: number, scope?: IBeaconContext): Promise<IBeaconConsumedRecord> {
 		if (!Number.isSafeInteger(revision) || revision < 1) { throw new Error('beacon-invalid-record'); }
 		return this.serial(id, true, async context => {
-			const { conversationId } = await this.ownedStore(context);
+			const { store, conversationId } = await this.ownedStore(context);
 			this.checkScope(context, scope);
-			return this.runtimeWrite(context, producer, current => current.consumeRuntimeRecord(conversationId, producer, recordId, revision));
+			return store.consumeRuntimeRecord(conversationId, producer, recordId, revision);
 		});
 	}
 
@@ -387,14 +488,9 @@ export class BeaconCoordinator {
 			}
 			for (const target of [file, canonical]) {
 				const parts = target.split(/[\\/]/);
+				if (parts.some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('beacon-protected-page'); }
 				if (parts.some((part, index) => part.toLowerCase() === 'globalstorage' && parts[index + 1]?.toLowerCase() === 'becoder.beacon')) { throw new Error('beacon-protected-page'); }
 				if (parts.some(part => /^(?:\.git|\.ssh|\.aws|\.azure|\.kube|\.gnupg|\.npmrc|\.pypirc|\.netrc|\.htpasswd|id_rsa|id_ed25519|credentials|secrets?|cookies|login data|web data|local state|state\.vscdb(?:.*)|keychains?|vault)(?:$|\.)|^\.env(?:\.|$)|\.(?:pem|key|p12|pfx|p8|kdbx)$/i.test(part))) { throw new Error('beacon-protected-page'); }
-				const assets = parts.findIndex(part => part.toLowerCase() === '.beaconwork');
-				if (assets >= 0 && parts[assets + 1]?.toLowerCase() === 'conversations') {
-					const { store, conversationId } = await this.ownedStore(context);
-					const relative = path.relative(store.binding.assetsPath, canonical);
-					if (parts[assets + 2] !== conversationId || !relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith('..' + path.sep)) { throw new Error('beacon-conversation-owner'); }
-				}
 			}
 		});
 	}
@@ -430,11 +526,12 @@ export class BeaconCoordinator {
 		});
 	}
 
-	async saveConversation(id: number, data: IBeaconConversation, revision: number): Promise<IBeaconStoredConversation> {
+	async saveConversation(id: number, data: IBeaconConversation, revision: number, expectedScope?: IBeaconContext): Promise<IBeaconStoredConversation> {
 		return this.serial(id, true, async context => {
 			const store = await this.store(context);
+			this.checkScope(context, expectedScope);
 			if (context.active?.id !== data.id || context.active.identity !== store.binding.identity) { throw new Error('beacon-conversation-owner'); }
-			const result = await store.saveConversation(data, revision);
+			const result = await store.saveConversation(data, revision, () => this.checkScope(context, expectedScope));
 			this.callbacks.changed(0);
 			return result;
 		});
@@ -502,7 +599,7 @@ export class BeaconCoordinator {
 			await this.notebooks.reset(context.resourceOwner);
 			for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
 			context.resourceOwner = ++this.nextResourceOwner;
-			context.activities.clear(); context.runtimeActivities.clear(); context.busy = false; context.epoch++;
+			context.activities.clear(); context.ojActivities.clear(); context.runtimeActivities.clear(); context.busy = false; context.epoch++; context.rootSelectionEpoch++;
 			await this.release(context);
 		});
 	}

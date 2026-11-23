@@ -17,6 +17,7 @@ export function validateLanqiaoProgress(raw: unknown): ILanqiaoProgress | undefi
 	if (!['sending', 'judging', 'confirming'].includes(String(value.phase))) { throw new Error('oj-connect-invalid-data'); }
 	return {
 		phase: value.phase as ILanqiaoProgress['phase'],
+		...(value.attemptId === undefined ? {} : { attemptId: text(value.attemptId, 100) }),
 		...(value.groups === undefined ? {} : {
 			groups: array(value.groups, 1).map(rawGroup => {
 				const group = object(rawGroup);
@@ -75,7 +76,13 @@ export function validateRecordRef(raw: unknown): RecordRef {
 }
 export function validateOutcome(raw: unknown): SubmissionOutcome {
 	const value = object(raw);
-	if (value.kind === 'record') { return { kind: 'record', record: validateRecordRef(value.record) }; }
+	if (value.kind === 'record') {
+		const record = validateRecordRef(value.record);
+		if (value.observed === undefined) { return { kind: 'record', record }; }
+		const observed = object(value.observed), attemptId = text(observed.attemptId, 100), snapshot = validateRecord(observed.snapshot);
+		if (snapshot.ref.url !== record.url || snapshot.ref.problem.url !== record.problem.url) { throw new Error('oj-connect-invalid-receipt'); }
+		return { kind: 'record', record, observed: { attemptId, snapshot } };
+	}
 	if (value.kind === 'not-sent') { return { kind: 'not-sent', reason: text(value.reason, 2000) }; }
 	if (value.kind === 'rejected') { return { kind: 'rejected', reason: text(value.reason, 2000) }; }
 	if (value.kind === 'unconfirmed') { return { kind: 'unconfirmed', problem: validateProblemRef(value.problem), attemptId: text(value.attemptId, 200), message: text(value.message, 2000) }; }

@@ -6,6 +6,7 @@
 import assert from 'assert';
 import { test, type TestContext } from 'node:test';
 import type { ProblemDocument, RecordRef, SubmissionOutcome } from '../src/domain';
+import type { IBeaconCollectionScope, IBeaconOjCapture } from 'becoder-beacon';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void, reject!: (error: Error) => void;
@@ -13,7 +14,7 @@ function deferred<T>() {
 	return { promise, resolve, reject };
 }
 
-async function fixture(t: TestContext, lanqiao = false) {
+async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeaconCollectionScope; confirmedSend?: boolean; failCapture?: boolean } = {}) {
 	const Module = require('module'), original = Module._load;
 	const commands = new Map<string, () => Promise<void>>();
 	const notices: ReturnType<typeof deferred<string | undefined>>[] = [];
@@ -22,10 +23,16 @@ async function fixture(t: TestContext, lanqiao = false) {
 	const reads: ReturnType<typeof deferred<ProblemDocument>>[] = [], shown: ProblemDocument[] = [];
 	const problem = lanqiao ? { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' } : { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
 	const previews: { closed: boolean; adopted: RecordRef[] }[] = [];
+	const captures: { input: IBeaconOjCapture; scope: IBeaconCollectionScope }[] = [];
+	const captureEnds: string[] = [];
 	let attempts = 0, missingSource = false, failRecordOpen = false;
 	const disposable = () => ({ dispose() { } });
 	const sourcePath = lanqiao ? 'C:/practice/lanqiao/254.cpp' : 'C:/practice/luogu/P1001.cpp';
 	const source = { uri: { scheme: 'file', fsPath: sourcePath, toString: () => 'file:///' + sourcePath }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
+	const record = (id: string): Extract<SubmissionOutcome, { kind: 'record' }> => {
+		const ref = { problem, id, url: lanqiao ? 'https://www.lanqiao.cn/problems/254/submissions/' + id + '/' : 'https://www.luogu.com.cn/record/' + id };
+		return { kind: 'record', record: ref, ...(lanqiao ? { observed: { attemptId: 'attempt-1', snapshot: { ref, phase: 'finished' as const, rawStatus: 'AC', sourceVerification: 'matched' as const } } } : {}) };
+	};
 	const vscode = {
 		ConfigurationTarget: { Global: 1 },
 		EventEmitter: class { event = disposable; fire() { } dispose() { } },
@@ -33,8 +40,15 @@ async function fixture(t: TestContext, lanqiao = false) {
 		Uri: { parse: (value: string) => value }, ViewColumn: { One: 1 },
 		commands: {
 			registerCommand: (id: string, action: () => Promise<void>) => { commands.set(id, action); return disposable(); }, executeCommand: async (id: string, ...args: unknown[]) => {
+				if (id === '_becoder.beacon.context') {
+					if (args[0] === 'captureCollectionScope') { return options.scope; }
+					if (args[0] === 'beginOjCaptureActivity') { return 'capture-handle'; }
+					if (args[0] === 'captureOj') { if (options.failCapture) { throw new Error('disk unavailable'); } captures.push(structuredClone(args[1]) as typeof captures[number]); }
+					if (args[0] === 'endOjCaptureActivity') { captureEnds.push((args[1] as { id: string }).id); }
+					return undefined;
+				}
 				if (id.endsWith('.prepare')) { return { handle: 'prepared', languages: [{ id: lanqiao ? 'cpp' : '27', family: 'cpp', label: lanqiao ? 'C++（g++17）' : 'C++' }], hasDraft: false }; }
-				if (id.endsWith('.send')) { return { kind: 'unconfirmed', problem, attemptId: 'attempt-' + ++attempts, message: 'Connection lost' }; }
+				if (id.endsWith('.send')) { attempts++; if (options.confirmedSend) { previews.at(-1)!.closed = true; return record('a'.repeat(24)); } return { kind: 'unconfirmed', problem, attemptId: 'attempt-' + attempts, message: 'Connection lost' }; }
 				if (id.endsWith('.reconcile')) { const result = deferred<SubmissionOutcome>(); queries.push({ attemptId: String(args[0]), result }); return result.promise; }
 				if (id.endsWith('.readProblem')) { const result = deferred<ProblemDocument>(); reads.push(result); return result.promise; }
 				if (id.endsWith('.loginSummary')) { return { site: id.includes('.luogu.') ? 'luogu' : 'atcoder', state: 'unknown' }; }
@@ -55,13 +69,13 @@ async function fixture(t: TestContext, lanqiao = false) {
 	Module._load = function (id: string, ...args: unknown[]) {
 		if (id === 'vscode') { return vscode; }
 		if (id === './views/recordPanel') { return { RecordPanel: class {
-			constructor(_context: unknown, _adapters: unknown, _link: unknown, _release: unknown, private queryPending: (outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>, sourceUri: string, adopt: (record: RecordRef) => void, isOpen: () => boolean) => () => Promise<void>) { }
+			constructor(_context: unknown, _adapters: unknown, _link: unknown, _release: unknown, private queryPending: (outcome: Extract<SubmissionOutcome, { kind: 'unconfirmed' }>, sourceUri: string, adopt: (record: RecordRef) => void, isOpen: () => boolean, scope?: IBeaconCollectionScope) => () => Promise<void>) { }
 			async open(record: RecordRef, sourceUri: string) { if (failRecordOpen) { failRecordOpen = false; throw new Error('panel-open-failed'); } opened.push({ record, sourceUri }); }
 			dispose() { }
-			beginEvaluation(_value: unknown, sourceUri: string) {
+			beginEvaluation(_value: unknown, sourceUri: string, scope?: IBeaconCollectionScope) {
 				const preview = { closed: false, adopted: [] as RecordRef[] }; previews.push(preview);
 				return { update() { }, finish: (outcome?: SubmissionOutcome) => {
-					if (outcome?.kind === 'unconfirmed') { this.queryPending(outcome, sourceUri, record => { if (!preview.closed) { preview.adopted.push(record); } }, () => !preview.closed); }
+					if (outcome?.kind === 'unconfirmed') { this.queryPending(outcome, sourceUri, record => { if (!preview.closed) { preview.adopted.push(record); } }, () => !preview.closed, scope); }
 					return false;
 				} };
 			}
@@ -73,7 +87,7 @@ async function fixture(t: TestContext, lanqiao = false) {
 	const extension = require('../src/extension'); await extension.activate({ subscriptions, globalState: { get: () => undefined, update: async () => { } } });
 	t.after(async () => { await extension.deactivate(); subscriptions.forEach(value => value.dispose()); Module._load = original; delete require.cache[extensionPath]; });
 	return {
-		queries, opened, notices, previews,
+		queries, opened, notices, previews, captures, captureEnds,
 		removeSource: () => { missingSource = true; },
 		failRecordOpen: () => { failRecordOpen = true; },
 		reads, shown, showProblem: () => commands.get('becoder.ojConnect.showProblem')!(),
@@ -82,9 +96,42 @@ async function fixture(t: TestContext, lanqiao = false) {
 		submit: () => commands.get('becoder.ojConnect.submit')!(),
 		query: () => commands.get('becoder.ojConnect.continueQuery')!(),
 		settle: () => new Promise<void>(resolve => setImmediate(resolve)),
-		record: (id: string): SubmissionOutcome => ({ kind: 'record', record: { problem, id, url: lanqiao ? 'https://www.lanqiao.cn/problems/254/submissions/' + id + '/' : 'https://www.luogu.com.cn/record/' + id } })
+		record
 	};
 }
+
+test('a closed preview still publishes the native receipt with its original collection scope', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'original-root', rootSelectionEpoch: 1 };
+	const f = await fixture(t, true, { scope, confirmedSend: true });
+	await f.submit();
+	assert.deepStrictEqual(f.captures, [{ input: { record: f.record('a'.repeat(24)).observed!.snapshot, sourceUri: 'file:///C:/practice/lanqiao/254.cpp', attemptId: 'attempt-1' }, scope }]);
+	assert.deepStrictEqual(f.captureEnds, ['capture-handle']);
+	assert.deepStrictEqual(f.opened, []);
+	assert.deepStrictEqual(f.queries, []);
+});
+
+test('failed native receipt storage cannot reopen a closed preview or query again', async t => {
+	const f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, confirmedSend: true, failCapture: true });
+	await f.submit();
+	assert.deepStrictEqual(f.captures, []);
+	assert.deepStrictEqual(f.captureEnds, ['capture-handle']);
+	assert.deepStrictEqual(f.opened, []);
+	assert.deepStrictEqual(f.queries, []);
+});
+
+test('a query closed during reconciliation publishes its already acquired snapshot under the original scope', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'original-root', rootSelectionEpoch: 1 };
+	const options = { scope };
+	const f = await fixture(t, true, options);
+	const submitting = f.submit(); await f.settle(); f.notices[0].resolve(undefined); await submitting;
+	const query = f.query(); await f.settle(); f.previews[0].closed = true;
+	options.scope = { ...scope, workspaceIdentity: 'new-root', rootSelectionEpoch: 2 };
+	f.queries[0].result.resolve(f.record('b'.repeat(24))); await query;
+	assert.strictEqual(f.captures.length, 1);
+	assert.deepStrictEqual(f.captures[0].scope, scope);
+	assert.deepStrictEqual(f.opened, []);
+	assert.strictEqual(f.queries.length, 1);
+});
 
 test('a confirmed receipt still opens after its source is removed without another query or send', async t => {
 	const f = await fixture(t);

@@ -28,6 +28,8 @@
 		"webview/**/*.tsx",
 		"test/**/*.ts",
 		"test/**/*.mts",
-		"../../src/vscode-dts/vscode.d.ts"
+		"../../src/vscode-dts/vscode.d.ts",
+		"../../src/typings/becoder-beacon.d.ts",
+		"../../src/typings/becoder-oj-connect.d.ts"
 	]
 }

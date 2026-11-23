@@ -19,6 +19,7 @@ export class NotebookTools implements NotebookAccess {
 	private used = 0;
 	constructor(private readonly getApi: () => Promise<NotebookEditApi>, private readonly scope: IBeaconContext) { }
 	async execute(input: NotebookInput, signal: AbortSignal): Promise<NotebookOutput> {
+		if (input.operation === 'read' && input.part !== undefined && input.part !== 'content') { return { ok: false, error: 'notebook-execution-part-unavailable' }; }
 		if (this.closed || !this.scope.usable || this.scope.mode === 'blackout') { return { ok: false, error: 'notebook-write-denied' }; }
 		if (!['begin', 'create'].includes(input.operation) && (!input.handle || !this.handles.has(input.handle))) { return { ok: false, error: 'notebook-owner' }; }
 		const operation = (async () => {

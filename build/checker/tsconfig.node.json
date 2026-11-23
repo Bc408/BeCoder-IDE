@@ -15,6 +15,7 @@
 		"../../src/**/node/**/*.ts",
 		"../../src/typings/base-common.d.ts",
 		"../../src/typings/becoder-oj-connect.d.ts",
+		"../../src/typings/becoder-beacon.d.ts",
 		"../../src/typings/crypto.d.ts",
 		"../../src/typings/css.d.ts",
 		"../../src/typings/thenable.d.ts",

@@ -14,6 +14,7 @@ import type { FileTool, FilePermission, FileRoot } from './fileTools';
 import { RequestRecoveryError, RequestRejectedError, type RequestDiagnostic } from './requestRecovery';
 
 export function connectionError(error: unknown): string {
+	if (error instanceof Error && (/^beacon-(?:context-capacity|invalid-model-budget|compaction-|step-budget)/.test(error.message) || error instanceof RequestRejectedError && error.code === 'CONTEXT_TOO_LARGE')) { return vscode.l10n.t('The current input could not fit this model after the permitted context preparation. The original conversation and completed tool results are preserved. Reduce the current material or adjust the model capacity.'); }
 	if (error instanceof RequestRejectedError) {
 		if (error.code === 'QUOTA_EXHAUSTED') { return vscode.l10n.t('The provider account has insufficient balance.'); }
 		if (error.code === 'AUTHENTICATION') { return vscode.l10n.t('The provider rejected the API key or access to this model.'); }

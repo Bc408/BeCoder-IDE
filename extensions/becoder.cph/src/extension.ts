@@ -128,7 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(controller);
 	context.subscriptions.push(vscode.commands.registerCommand('_becoder.cph.cancelBrowserImport', (requestId: string) => controller.cancel(requestId)));
-	context.subscriptions.push(vscode.commands.registerCommand(importProblemCommand, async (json: unknown, pageUrl: unknown, destination?: ImportDestination, requestId?: string) => {
+	context.subscriptions.push(vscode.commands.registerCommand(importProblemCommand, async (json: unknown, pageUrl: unknown, destination?: ImportDestination, requestId?: string, acquisition?: { scope: unknown; trigger: 'import-cph' }) => {
 		if (preciseImport) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.isBusy) { throw new Error(vscode.l10n.t('CPH is busy. Stop the current request first.')); }
 		if (judgeView.hasUnsavedEdits) { throw new Error(vscode.l10n.t('Save the edited samples before opening another problem.')); }
@@ -138,7 +138,13 @@ export function activate(context: vscode.ExtensionContext) {
 		if (typeof json !== 'string' || typeof pageUrl !== 'string') {
 			throw new Error(vscode.l10n.t('Invalid problem import request.'));
 		}
-		return controller.import(json, pageUrl, destination, requestId);
+		const captured = acquisition ?? { scope: await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope').then(value => value, () => undefined), trigger: 'import-cph' as const };
+		const result = await controller.import(json, pageUrl, destination, requestId);
+		if (result && captured.scope) {
+			try { await vscode.commands.executeCommand('_becoder.ojConnect.captureImportedProblem', result.problem.srcPath, pageUrl, captured); }
+			catch { void vscode.window.showWarningMessage(vscode.l10n.t('Samples were imported, but Beacon could not acquire the full problem statement.')); }
+		}
+		return result;
 	}));
 	let preciseImport = false;
 	context.subscriptions.push(vscode.commands.registerCommand('_becoder.cph.importSamplesForSource', async (raw: unknown) => {
@@ -157,5 +163,10 @@ export function activate(context: vscode.ExtensionContext) {
 			imported.fire(result); await judgeView.open(result.problem); return result;
 		} finally { preciseImport = false; }
 	}));
-	return { onDidImportProblem: imported.event };
+	return { onDidImportProblem: imported.event, readBeaconAssociation: async (sourceUri: string) => {
+		const uri = vscode.Uri.parse(sourceUri);
+		if (uri.scheme !== 'file') { return undefined; }
+		const current = new ProblemStore(path.dirname(uri.fsPath)).load(uri.fsPath);
+		return current ? { sourceUri, url: current.problem.url, revision: current.revision } : undefined;
+	} };
 }

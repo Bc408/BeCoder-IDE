@@ -125,7 +125,7 @@ suite('Beacon model capabilities', () => {
 	});
 	test('service output budgets and canonical effort survive the installed SDK request body', async () => {
 		let requests = 0;
-		const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'opaque-alias', apiKey: 'fixture', parameters: { maxOutputTokens: 393216 }, capabilities: { ...defaultCapabilities, purpose: 'chat', reasoning: true, maxOutputTokens: 393216, reasoningEfforts: ['low', 'high', 'max'] }, modelSettings: { thinking: 'enabled', effort: 'max' } };
+		const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'opaque-alias', apiKey: 'fixture', parameters: { maxOutputTokens: 393216 }, capabilities: { ...defaultCapabilities, purpose: 'chat', reasoning: true, contextWindow: 1000000, maxInputTokens: 700000, maxOutputTokens: 393216, reasoningEfforts: ['low', 'high', 'max'] }, modelSettings: { thinking: 'enabled', effort: 'max' } };
 		await collect(createGenerator(async () => connection, async (_url, options) => {
 			requests++; const body = JSON.parse(String(options?.body));
 			assert.equal(body.max_tokens, 393216); assert.equal(body.reasoning_effort, 'max');
@@ -239,6 +239,65 @@ suite('Beacon model capabilities', () => {
 });
 
 suite('Beacon durable protocol', () => {
+	for (const mode of ['legacy', 'plain', 'closed'] as const) {
+		test(`resume keeps accepted prose and pairs new tools after continuation (${mode})`, async () => {
+			const withClosedBatch = mode === 'closed';
+			const connection: Connection = { provider: 'deepseek', baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true } };
+			const earlier = withClosedBatch ? [{ role: 'assistant' as const, content: [{ type: 'tool-call' as const, toolCallId: 'old', toolName: 'inspectContext', input: { operation: 'currentCode' } }] }, { role: 'tool' as const, content: [{ type: 'tool-result' as const, toolCallId: 'old', toolName: 'inspectContext', output: { type: 'json' as const, value: { ok: true } } }] }] : [];
+			const history = new ChatHistory({ version: 1, activeId: 'chat', conversations: [{ id: 'chat', title: 'stopped', updatedAt: 1, error: '', workspace: [], messages: [{ id: 1, role: 'user', text: 'question', activities: [], status: 'complete' }, { id: 2, role: 'assistant', text: 'accepted-prefix', activities: [], status: 'stopped', protocol: [{ provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: [...earlier, { role: 'assistant', content: [{ type: 'text', text: 'accepted-prefix' }] }], ...(withClosedBatch ? { stepEnds: [{ stepId: 'old-step', end: 2 }] } : {}) }] }] }] }, async data => data, () => { }, String);
+			if (mode === 'legacy') { const old = history.session.snapshot; delete old.messages[1].protocol; history.session.restore(old); }
+			let calls = 0, executions = 0;
+			await history.session.resume(2, createGenerator(async () => connection, async (_url, init) => {
+				const body = JSON.parse(String(init?.body)); calls++; assert.ok(JSON.stringify(body.messages).includes('accepted-prefix'));
+				return calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'new', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: ' continuation' }]);
+			}, 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: 'actually new' }; } }), connection);
+			assert.equal(history.snapshot.error, ''); assert.equal(calls, 2); assert.equal(executions, 1); assert.equal(history.snapshot.messages[1].text, 'accepted-prefix continuation'); await history.dispose();
+		});
+	}
+	test('actual completed tool survives stop before its result is consumed', async () => {
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true } };
+		let entered!: () => void, release!: () => void, executions = 0, calls = 0;
+		const started = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+		const history = new ChatHistory(undefined, async data => data, () => { }, String);
+		const pending = history.session.send('read now', createGenerator(async () => connection, async () => ++calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'racing', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: 'late prose' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; entered(); await gate; return { ok: true, contents: 'actually completed' }; } }), connection);
+		await started; history.session.stop(); release(); await pending;
+		assert.equal(history.snapshot.messages[1].status, 'stopped'); assert.equal(history.snapshot.messages[1].text, '');
+		assert.ok(JSON.stringify(history.snapshot.messages[1].protocol).includes('actually completed')); assert.equal(executions, 1); assert.equal(calls, 1); await history.dispose();
+	});
+	test('two legitimate SDK steps with the same call id execute twice and retain two pairs', async () => {
+		const connection: Connection = { provider: 'deepseek', baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true } };
+		let calls = 0, executions = 0;
+		const history = new ChatHistory(undefined, async data => data, () => { }, String);
+		await history.session.send('read twice', createGenerator(async () => connection, async () => ++calls < 3 ? response([{ tool_calls: [{ index: 0, id: 'same-id', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: 'done' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: `code ${executions}` }; } }), connection);
+		assert.equal(history.snapshot.error, ''); assert.equal(executions, 2);
+		const results = history.snapshot.messages[1].protocol!.flatMap(turn => turn.messages.flatMap(message => message.role === 'tool' ? message.content.filter(part => part.type === 'tool-result') : []));
+		assert.equal(results.length, 2); assert.ok(JSON.stringify(results).includes('code 1')); assert.ok(JSON.stringify(results).includes('code 2')); await history.dispose();
+	});
+	test('source model changes and unknown sources strip private fields but preserve business json', () => {
+		const turn = { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'old', messages: [{ role: 'assistant' as const, content: [{ type: 'reasoning' as const, text: 'private-thought' }, { type: 'tool-call' as const, toolCallId: 'one', toolName: 'inspectContext', input: { reasoning: 'business input' }, providerOptions: { deepseek: { signature: 'private-signature' } } }] }, { role: 'tool' as const, content: [{ type: 'tool-result' as const, toolCallId: 'one', toolName: 'inspectContext', output: { type: 'json' as const, value: { reasoning: 'business output' } } }] }] };
+		for (const source of [undefined, { provider: turn.provider, baseURL: turn.baseURL, model: 'new' }]) {
+			const replayed = JSON.stringify(replayProtocol(turn, source));
+			assert.ok(!replayed.includes('private-thought')); assert.ok(!replayed.includes('private-signature')); assert.ok(replayed.includes('business input')); assert.ok(replayed.includes('business output'));
+		}
+	});
+	test('failed answer replays completed tool facts after restart without replaying failed prose', async () => {
+		const source = { provider: 'deepseek', baseURL: 'https://api.deepseek.com', model: 'fixture' };
+		let saved: HistoryData | undefined;
+		const history = new ChatHistory(undefined, async data => { saved = structuredClone(data); }, () => { }, () => 'failed');
+		let executions = 0;
+		await history.session.send('read code', async function* () {
+			executions++;
+			yield { type: 'protocol', turn: { ...source, messages: [{ role: 'assistant', content: [{ type: 'text', text: 'failed explanation' }, { type: 'tool-call', toolCallId: 'read', toolName: 'inspectContext', input: { operation: 'currentCode' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'read', toolName: 'inspectContext', output: { type: 'json', value: { ok: true, contents: 'actual code' } } }] }] } };
+			throw new Error('answer failed');
+		}, source);
+		assert.equal(history.snapshot.messages[1].status, 'error'); await history.flush();
+		const restored = new ChatHistory(saved, async () => { }, () => { }, () => 'error');
+		await restored.session.send('continue explaining', async function* (messages) {
+			const text = JSON.stringify(messages); assert.ok(text.includes('actual code')); assert.ok(!text.includes('failed explanation'));
+			yield { type: 'text', text: 'explanation' };
+		}, source);
+		assert.equal(executions, 1); assert.equal(restored.snapshot.error, ''); await history.dispose(); await restored.dispose();
+	});
 	test('actual call IDs, parallel tool groups and reasoning survive disk reload and followup', async () => {
 		let saved: HistoryData | undefined;
 		let requests = 0;
@@ -310,7 +369,7 @@ suite('Beacon durable protocol', () => {
 		recorder.text('text', 't', 'prefix');
 		assert.ok(!JSON.stringify(recorder.messages).includes('unfinished.cpp'));
 		const turn = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-flash', messages: recorder.messages };
-		assert.ok(JSON.stringify(replayProtocol(turn, { provider: 'deepseek', baseURL: turn.baseURL })).includes('private-signature'));
+		assert.ok(JSON.stringify(replayProtocol(turn, { provider: 'deepseek', baseURL: turn.baseURL, model: turn.model })).includes('private-signature'));
 		const projected = JSON.stringify(replayProtocol(turn, { provider: 'deepseek', baseURL: 'https://other.example' }));
 		assert.ok(!projected.includes('private')); assert.ok(projected.includes('prefix'));
 		const invalid = { version: 1, activeId: 'id', conversations: [{ id: 'id', title: 'test', updatedAt: 1, error: '', workspace: [], messages: [{ id: 1, role: 'assistant', status: 'complete', text: '', activities: [], protocol: [{ ...turn, messages: [{ role: 'system', content: 'injected' }] }] }] }] };

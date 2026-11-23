@@ -7,9 +7,17 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { NotebookCell, NotebookEditor } from 'vscode';
-import { beCoderNotebookType, isBeCoderInputCell } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
+import { beCoderNotebookType, isBeCoderInputCell, describeNotebookMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
 export interface CellData { kind: number; value: string; languageId: string; metadata?: Record<string, unknown>; outputs?: { items: { mime: string; data: Uint8Array }[]; metadata?: Record<string, unknown> }[]; executionSummary?: { success?: boolean; executionOrder?: number; timing?: { startTime: number; endTime: number } } }
 export interface NotebookData { cells: CellData[]; metadata?: Record<string, unknown> }
+
+/** Model content projection; execution data remains in the native document and backups. */
+export function beaconNotebookContent(data: NotebookData): string {
+	return JSON.stringify({ cells: data.cells.map(cell => {
+		const metadata = cell.metadata?.becoder as { id?: string; name?: string } | undefined;
+		return { id: metadata?.id, kind: cell.kind, language: cell.languageId, source: cell.value, ...(isBeCoderInputCell(cell.metadata) ? { role: 'input', name: metadata?.name } : {}), attachments: describeNotebookMetadata(cell.metadata ?? {}).attachments };
+	}) }, null, 2);
+}
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
 /** Cell toolbar arguments take precedence; stale targets must not select another cell. */

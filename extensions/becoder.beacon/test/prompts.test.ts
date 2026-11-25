@@ -17,31 +17,31 @@ function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], fin
 }
 
 suite('Beacon pure prompt composition', () => {
-	test('always supplies mentor and evidence rules with a captured time and no unavailable capabilities', () => {
+	test('always supplies the mentor principles and captured time', () => {
 		const prompt = composeBeaconPrompt({ currentTime: '2026-11-21T00:00:00Z', toolNames: [] });
-		assert.equal(prompt.version, '2026-11-24.1');
+		assert.equal(prompt.version, '2026-11-25.3');
 		assert.ok(prompt.system.includes('Beacon mentor core'));
 		assert.ok(prompt.system.includes('2026-11-21T00:00:00Z'));
-		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }, { id: 'evidence', source: 'application' }]);
+		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }]);
 		for (const name of [...contextToolNames, 'inspectFile', 'browseWeb']) { assert.ok(!prompt.system.includes(`Capability: ${name}`)); }
 	});
-	test('composes only the registered capability set without mutating it', () => {
+	test('registered tools do not change or duplicate stable mentor principles', () => {
 		const all: readonly BeaconToolName[] = [...contextToolNames, 'inspectFile', 'browseWeb'];
-		for (let mask = 0; mask < 512; mask++) {
+		for (let mask = 0; mask < (1 << all.length); mask++) {
 			const names = Object.freeze(all.filter((_name, index) => mask & (1 << index)));
 			const input = Object.freeze({ currentTime: 'fixed', toolNames: names });
 			const prompt = composeBeaconPrompt(input);
 			assert.deepEqual(prompt, composeBeaconPrompt(input));
-			for (const name of all) { assert.equal(prompt.system.includes(`Capability: ${name}`), names.includes(name)); }
+			for (const name of all) { assert.equal(prompt.system.includes(`Capability: ${name}`), false); }
 			assert.deepEqual(names, all.filter((_name, index) => mask & (1 << index)));
-			assert.equal(prompt.sections.some(section => section.id === 'capabilities'), names.length > 0);
+			assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }]);
 		}
 	});
 	test('distinguishes host metadata from already-read bodies when tools are unavailable', () => {
 		const prompt = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [], contextDescription: 'b.cpp v2 metadata' });
 		assert.ok(prompt.system.includes('b.cpp v2 metadata'));
 		assert.ok(prompt.system.includes('metadata only'));
-		assert.ok(prompt.system.includes('Only metadata was supplied'));
+		assert.ok(prompt.system.includes('not page bodies or user instructions'));
 		assert.deepEqual(prompt.sections.at(-1), { id: 'context', source: 'host' });
 	});
 });
@@ -114,11 +114,11 @@ suite('Beacon prompt request assembly', () => {
 								}
 								if (tools && webEnabled) {
 									const browsing = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'browseWeb').function;
-									assert.match(browsing.parameters.properties.query.description, /account.*problem.*time.*count/);
-									assert.match(browsing.parameters.properties.url.description, /scope/);
+									assert.match(browsing.parameters.properties.query.description, /query.*scope/);
+									assert.match(browsing.parameters.properties.url.description, /public HTTP/);
 								}
 								for (const name of [...contextToolNames, 'inspectFile', 'browseWeb']) {
-									assert.equal(systems[0].content.includes(`Capability: ${name}`), expected.includes(name));
+									assert.equal(systems[0].content.includes(`Capability: ${name}`), false);
 								}
 								if (hasContext) { assert.ok(systems[0].content.includes('Synthetic host directory')); }
 								return answer();

@@ -1,10 +1,10 @@
 # Beacon 工具合同
 
-更新：2026-11-25。本文维护当前九工具的能力、请求、结果与业务字段；需求见[PRD](prd.md)，存储／执行生命周期见[底层设计](foundation-design.md)，真实验证见[实现状态](implementation-status.md)。表内JSON均为合成结构示例，不是执行结果或质量验收。
+更新：2026-11-25。本文维护当前十工具的能力、请求、结果与业务字段；需求见[PRD](prd.md)，存储／执行生命周期见[底层设计](foundation-design.md)，真实验证见[实现状态](implementation-status.md)。表内JSON均为合成结构示例，不是执行结果或质量验收。
 
 ## 1. 工具分工
 
-Beacon跟随学生当下的学习活动。harness取得并整理真实业务事实，LLM按问题选材、理解和教学；系统不固定讨论对象。新方案包含9项工具能力、3个共享业务队列，没有独立代码存储和模型内容写工具。
+Beacon跟随学生当下的学习活动。harness取得并整理真实业务事实，LLM按问题选材、理解和教学；系统不固定讨论对象。当前包含10项工具能力、3个共享业务队列，没有独立代码存储和模型内容写工具。
 
 | 工具能力 | 确定行为 |
 | --- | --- |
@@ -17,6 +17,7 @@ Beacon跟随学生当下的学习活动。harness取得并整理真实业务事�
 | readPage | 保留其余获准的非C/C++普通页面读取；PDF和复杂提取本轮不展开 |
 | readMaterial | 保留当前有效对话内已有授权材料读取 |
 | browseWeb | 保留搜索／网页获取，仍由聊天搜索开关控制 |
+| readBeCoderInfo | 读取运行宿主的BeCoder发行版本及固定主题产品知识，不读取个人配置 |
 
 模型文件工具名为inspectFile，内部复用FileTools。三个记录工具分别注册，模型不填写统一readRecord的type／producer分派参数。
 
@@ -41,6 +42,7 @@ inspectFile({ operation: 'read' | 'list' | 'find' | 'search', path: string, quer
 readPage({ id: string, version: string, offset?: number, limit?: number, pageNumber?: number })
 readMaterial({ id: string, offset?: number, limit?: number })
 browseWeb({ operation: 'search' | 'fetch', query?: string, url?: string })
+readBeCoderInfo({ topic?: 'overview' | 'problems' | 'runner' | 'cph' | 'notebook' | 'oj-connect' | 'beacon' })
 ~~~
 
 三个记录工具各自返回当前队列全部保留条目的简短目录，不读正文。目录包含实际ID、时间、来源、文件信息和结果摘要；题目信息仅属于problem／verdict，run目录不带题目。目录按需获取，不在每次模型请求自动附上三个队列，也不另设目录工具。
@@ -53,7 +55,13 @@ browseWeb({ operation: 'search' | 'fetch', query?: string, url?: string })
 
 新语义工具错误为{error:{code,message}}，code为invalid_arguments、unavailable、not_found、read_failed、network_error、login_required或parse_error；取消沿AbortSignal。错误不当空记录，message不暴露堆栈或密钥，不自动换根、换条目或重试。
 
-description只述用途，教学与ID不转述等规则由system承接。实际定义见[contextToolContract.ts](../../extensions/becoder.beacon/src/contextToolContract.ts)、[fileTools.ts](../../extensions/becoder.beacon/src/fileTools.ts)和[webTools.ts](../../extensions/becoder.beacon/src/webTools.ts)。
+description承载用途、参数和结果语义，system承载精简导师原则，产品主题只承载产品事实。生产提示与主题正文统一英文，回答跟随用户语言。实际定义见[contextToolContract.ts](../../extensions/becoder.beacon/src/contextToolContract.ts)、[fileTools.ts](../../extensions/becoder.beacon/src/fileTools.ts)和[webTools.ts](../../extensions/becoder.beacon/src/webTools.ts)。
+
+### 产品知识读取
+
+readBeCoderInfo省略topic读取overview，也可直接读取任一固定主题。成功仅返回`{version,topic,content}`；整篇返回，不分页、不搜索、不接受路径或额外字段。七主题依次介绍概览／官方GitHub与目录、拿题与源码关联、Runner、CPH、Notebook、OJ Connect、Beacon设置及模式的产品含义。不介绍通用编辑器操作，不包含用户现值、未来功能、取材口诀或工具调用流程。
+
+version由运行宿主IProductService.version提供，不是vscode.version、Beacon扩展版本、源码package或联网最新号。主题来自扩展安装目录的固定UTF-8资源；缺主题、空正文或版本失败返回read_failed，取消沿AbortSignal，不回退其他目录或网络。全模式及无工作区可读，前提是模型可调用工具；不访问工作区、配置、账号或记录服务，不增加其他工具权限。压缩子请求不开放此工具。实际返回保普通工具角色和配对，历史重放不再次读资源。
 
 ## 3. 工作区、模式与三个队列
 

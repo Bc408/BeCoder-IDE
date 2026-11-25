@@ -108,6 +108,13 @@ export class BeaconContextClient {
 	}
 
 	async refresh(): Promise<IBeaconContext> { return this.accept(await this.call('context')); }
+	async productVersion(signal: AbortSignal): Promise<string> {
+		signal.throwIfAborted();
+		const version = await this.call<unknown>('productVersion');
+		signal.throwIfAborted();
+		if (typeof version !== 'string' || !version.trim()) { throw new Error('product-info-version-unavailable'); }
+		return version;
+	}
 	async refreshForRequest(): Promise<void> {
 		await this.refresh();
 		if (this.state.runtimeBusy) { throw new Error('beacon-runtime-busy'); }

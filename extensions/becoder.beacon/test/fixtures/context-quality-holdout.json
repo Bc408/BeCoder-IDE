@@ -1,0 +1,923 @@
+[
+  {
+    "id": "H01",
+    "turns": [
+      {
+        "question": "我写lower_bound找首个>=x的位置，读取当前代码找出错误，保留左闭右开写法。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int lower(int*a,int n,int x){int l=0,r=n;while(l<r){int m=(l+r)/2;if(a[m]>=x)l=m+1;else r=m;}return l;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "方向分支正确",
+          "保持原框架"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H02",
+    "turns": [
+      {
+        "question": "历史提交A+B通过了，我现在改成乘法。请比对真实提交稿与当前稿，哪些事实经过线上验证？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a*b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "observedAt": "2026-11-25T08:00:00+08:00",
+              "submission": {
+                "id": "10001",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a+b;}",
+                "sourceVerification": "mismatch",
+                "language": "C++"
+              },
+              "result": {
+                "rawStatus": "Accepted",
+                "score": "100",
+                "time": "4 ms"
+              }
+            }
+          ],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "旧AC只验证加法稿",
+          "当前乘法不称已验证"
+        ],
+        "evidenceNeeds": [
+          "current-code",
+          "verdict"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H03",
+    "turns": [
+      {
+        "question": "A.cpp对应的是五站外的CPH题，去.cph里找对应元数据的URL，再联网读题意。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": [
+            {
+              "title": "Synthetic sum",
+              "url": "https://example.org/synthetic-sum",
+              "text": "Given two integers a and b, output their sum. Synthetic fixture."
+            }
+          ],
+          "localFiles": {
+            ".cph/A.prob": "{\"name\": \"Synthetic sum\", \"url\": \"https://example.org/synthetic-sum\", \"tests\": [{\"input\": \"2 3\", \"output\": \"5\"}]}"
+          }
+        },
+        "criteria": [
+          "读取真实元数据及网页",
+          "不伪造五站身份"
+        ],
+        "evidenceNeeds": [
+          "statement"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H04",
+    "turns": [
+      {
+        "question": "聊天搜索已关闭，获取AtCoder abc300/abc300_a题面，解释样例。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": false,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "atcoder",
+                "problemId": "abc300/abc300_a"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "atcoder/abc300/abc300_a": {
+              "ref": {
+                "site": "atcoder",
+                "nativeId": "abc300/abc300_a",
+                "url": "https://atcoder.jp/contests/abc300/tasks/abc300_a"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "fetch不依赖搜索开关"
+        ],
+        "evidenceNeeds": [
+          "statement"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H05",
+    "turns": [
+      {
+        "question": "没有选择工作区，当前Blackout。直接获取洛谷P1001题面，说明题意。",
+        "fixture": {
+          "mode": "blackout",
+          "workspaceUsable": false,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "luogu/P1001": {
+              "ref": {
+                "site": "luogu",
+                "nativeId": "P1001",
+                "url": "https://www.luogu.com.cn/problem/P1001"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "无根Blackout仍可fetch",
+          "不读持久记录"
+        ],
+        "evidenceNeeds": [
+          "statement"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H06",
+    "turns": [
+      {
+        "question": "OJ Connect现在支持哪些OJ？我在别的站import to cph了，它也能直接交题吗？怎么交题？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "读取产品支持范围",
+          "区分CPH导入与OJ Connect交题"
+        ],
+        "evidenceNeeds": [
+          "product-info"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H07",
+    "turns": [
+      {
+        "question": "Notebook必须先配置Beacon并选工作区才能新建和运行吗？我想手动用代码块和input学习。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "Notebook独立",
+          "具体使用方法有产品依据"
+        ],
+        "evidenceNeeds": [
+          "product-info"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "H08",
+    "turns": [
+      {
+        "question": "请确认当前BeCoder发行版本并介绍这个版本的CPH操作入口；不确定时别猜。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": [],
+          "productInfoFailure": true
+        },
+        "criteria": [
+          "读取失败如实",
+          "不把API兼容版本当发行号"
+        ],
+        "evidenceNeeds": [
+          "product-info"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "HT01",
+    "turns": [
+      {
+        "question": "求a+b，a和b绝对值都不超过10^4。先只给一点提示。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "换成一道新题：已给有序数组，我要理解二分lower_bound。完整解释，不沿用上一题只给提示的限制。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "我问的是首个不小于，不是首个大于。基于这个定义重新解释相等时往哪走。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "题意已经够了，只用数组[1,3,3,7]查3，跟踪一次正确二分，不要取软件或网页资料。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "HT02",
+    "capacityOverride": {
+      "contextWindow": 42000,
+      "maxInputTokens": 33000,
+      "maxOutputTokens": 4096
+    },
+    "historyPrefix": [
+      {
+        "role": "user",
+        "text": "早先合成讨论，只作为压缩负载。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新"
+      },
+      {
+        "role": "assistant",
+        "text": "先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前"
+      },
+      {
+        "role": "user",
+        "text": "早先合成讨论，只作为压缩负载。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新"
+      },
+      {
+        "role": "assistant",
+        "text": "先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前"
+      },
+      {
+        "role": "user",
+        "text": "早先合成讨论，只作为压缩负载。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新"
+      },
+      {
+        "role": "assistant",
+        "text": "先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前"
+      },
+      {
+        "role": "user",
+        "text": "早先合成讨论，只作为压缩负载。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新"
+      },
+      {
+        "role": "assistant",
+        "text": "先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前"
+      },
+      {
+        "role": "user",
+        "text": "早先合成讨论，只作为压缩负载。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新约束。历史示例中没有新"
+      },
+      {
+        "role": "assistant",
+        "text": "先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前解释。先前"
+      }
+    ],
+    "turns": [
+      {
+        "question": "稍后讨论当前运行，先记住我希望保留原C++结构，讲清原理。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "现在看最新运行记录，为什么输入2 3输出-1？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "runner",
+              "operation": "run-with-input",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "merged": "-1\n"
+                  }
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": [
+          "run"
+        ]
+      },
+      {
+        "question": "接着解释为什么改为加法能解决这处错误，不需要新运行。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "runner",
+              "operation": "run-with-input",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "merged": "-1\n"
+                  }
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "刚才已读的实际输入、输出、代码运算符是什么？与建议改法分开，不称已经重测通过。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "runner",
+              "operation": "run-with-input",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "merged": "-1\n"
+                  }
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  }
+]

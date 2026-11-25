@@ -31,6 +31,10 @@ await build({ ...shared, entryPoints: ['test/providerTests.test.ts'], outfile: '
 await build({ ...shared, entryPoints: ['test/promptEvaluation.test.ts'], outfile: 'dist-test/promptEvaluation.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/prompt-evaluation.ts'], outfile: 'dist-test/prompt-evaluation.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/prompts.test.ts'], outfile: 'dist-test/prompts.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/contextQuality.test.ts'], outfile: 'dist-test/contextQuality.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, external: ['esbuild'] });
+await build({ ...shared, entryPoints: ['test/productInfo.test.ts'], outfile: 'dist-test/productInfo.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/promptQuality.test.ts'], outfile: 'dist-test/promptQuality.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/context-quality-evaluation.ts'], outfile: 'dist-test/context-quality-evaluation.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false, external: ['esbuild'] });
 
 // Distribute full dependency licenses alongside the bundled code, including transitive packages.
 const packages = new Map();

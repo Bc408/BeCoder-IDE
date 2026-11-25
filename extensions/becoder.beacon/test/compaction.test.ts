@@ -46,12 +46,12 @@ test('summary projection leaves raw messages untouched and retains current quest
 
 for (const needsCompaction of [false, true]) {
 	test(`resuming a compacted answer retains the original question and attachment (${needsCompaction ? 'another compaction' : 'saved summary'})`, async () => {
-		const connection = { provider: 'deepseek' as const, baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true } };
+		const connection = { provider: 'deepseek' as const, baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true, contextWindow: 40000, maxInputTokens: 30000, maxOutputTokens: 8192 } };
 		const question = 'Explain why the loop at line 17 skips the final element.';
 		const attachment = 'User requirement: preserve the existing loop structure.';
 		const protocol: ModelMessage[] = [];
 		for (let index = 0; index < 2; index++) {
-			protocol.push({ role: 'assistant', content: [{ type: 'tool-call', toolCallId: `read-${index}`, toolName: 'inspectContext', input: { operation: 'currentCode' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: `read-${index}`, toolName: 'inspectContext', output: { type: 'json', value: { ok: true, contents: index === 1 ? 'retained-tail-code:' + 'x'.repeat(needsCompaction ? 18000 : 20) : 'earlier code' } } }] });
+			protocol.push({ role: 'assistant', content: [{ type: 'tool-call', toolCallId: `read-${index}`, toolName: 'inspectContext', input: { operation: 'currentCode' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: `read-${index}`, toolName: 'inspectContext', output: { type: 'json', value: { ok: true, contents: index === 1 ? 'retained-tail-code:' + 'x'.repeat(needsCompaction ? 26000 : 20) : 'earlier code' } } }] });
 		}
 		protocol.push({ role: 'assistant', content: [{ type: 'text', text: 'accepted prefix' }] });
 		const raw: Message[] = [

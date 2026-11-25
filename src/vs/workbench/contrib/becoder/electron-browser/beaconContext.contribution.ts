@@ -19,11 +19,13 @@ import { BeaconWorkbenchPages } from './beaconPages.js';
 import type { IBeaconContext, IBeaconResume, IBeaconCollectionScope, BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite } from '../../../../platform/beacon/common/beaconContextTypes.js';
 import { INotebookService } from '../../notebook/common/notebookService.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
+import { IProductService } from '../../../../platform/product/common/productService.js';
 
 let pageProvider: BeaconWorkbenchPages | undefined;
 
 /** The window identifier comes from this workbench, never from model or webview arguments. */
 CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unknown, input: unknown) => {
+	if (operation === 'productVersion') { return accessor.get(IProductService).version; }
 	const service = ProxyChannel.toService<IBeaconContextService>(accessor.get(IMainProcessService).getChannel(beaconContextChannel));
 	const windowId = mainWindow.vscodeWindowId;
 	const recent = input as { collectionScope?: IBeaconCollectionScope } | undefined;

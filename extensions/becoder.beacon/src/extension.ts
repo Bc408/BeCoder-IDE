@@ -14,6 +14,7 @@ import { createFileTools } from './workspaceFiles';
 import { BeaconContextClient, withPdfPages, type PdfPageApi, type BeaconHistoryBinding } from './context';
 import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
 import { ContextTools, redactContext } from './contextTools';
+import { createBeCoderInfoReader } from './productInfo';
 import { isFilePermission, type FilePermission } from './fileTools';
 import { AttachmentError, attachmentBudget, captureClipboardImages, checkAttachmentSource, readAttachments, type Attachment, type AttachmentSource } from './attachments';
 import { ModelCapabilityError } from './models';
@@ -123,6 +124,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		};
 
 		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], {
+			readBeCoderInfo: createBeCoderInfoReader(path.join(context.extensionUri.fsPath, 'resources', 'product-info'), signal => native.productVersion(signal)),
 			privateSnapshots: privateContext.snapshots, allowedPrivateKeys: privateContext.keys, capturePrivate: snapshot => requestHistory.captureContext(snapshot),
 			authorizeLocal: (file, signal) => fileTools.authorize(file, signal),
 			resolveProblemId: async (ojName, problemId) => (await oj()).resolveBeaconProblemId(ojName, problemId),

@@ -1,0 +1,1393 @@
+[
+  {
+    "id": "D01",
+    "turns": [
+      {
+        "question": "这是求n个数之和的函数，结果少一项。读取当前代码，只给一点提示，不要给修正代码。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n-1;i++)s+=a[i];return s;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "取得当前代码",
+          "只给有效观察，不直接泄露修正条件"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D02",
+    "turns": [
+      {
+        "question": "我懂二分的代码了，但不懂为什么用左闭右开的区间时while(l<r)就能终止。用一个小例子讲清保持了什么。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "解释不变式和终止",
+          "不读取无关软件信息"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "D03",
+    "turns": [
+      {
+        "question": "无权无向图n≤10^5,m≤2*10^5，节点编号1到n，求1到n最少边数，不可达输出-1。请给BFS完整思路、复杂度和C++代码。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "完整解答及复杂度准确",
+          "不必获取题号或产品介绍"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "D04",
+    "turns": [
+      {
+        "question": "A+B之前写成了减法，我刚改好了。读取现在的代码，确认这一处改动解决了吗？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a+b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "读最新dirty稿",
+          "可以静态确认局部，不称OJ通过"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D05",
+    "turns": [
+      {
+        "question": "A.cpp和B.cpp都在分屏里，我说的“另一份”哪里错了？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            },
+            {
+              "id": "code-b",
+              "kind": "text",
+              "title": "B.cpp",
+              "uri": "file:///$ROOT/B.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": false
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n-1;i++)s+=a[i];return s;}"
+            },
+            {
+              "fileName": "B.cpp",
+              "filePath": "$ROOT/B.cpp",
+              "isDirty": false,
+              "code": "int identity(int n){return n;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "歧义无法确定时澄清，不任意诊断某文件"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "D06",
+    "turns": [
+      {
+        "question": "我把旧稿的a+b改成b+a，旧提交记录是AC。比较提交代码与现在代码，能说这份新稿已经有自己的AC评测记录了吗？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<b+a;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "observedAt": "2026-11-25T08:00:00+08:00",
+              "submission": {
+                "id": "10001",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a+b;}",
+                "sourceVerification": "matched",
+                "language": "C++"
+              },
+              "result": {
+                "rawStatus": "Accepted",
+                "score": "100",
+                "time": "4 ms"
+              }
+            }
+          ],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "区分历史提交与当前稿",
+          "旧AC不转移到新稿"
+        ],
+        "evidenceNeeds": [
+          "current-code",
+          "verdict"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D07",
+    "turns": [
+      {
+        "question": "获取洛谷P1001的题面，讲清输入输出和解题思路。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "luogu/P1001": {
+              "ref": {
+                "site": "luogu",
+                "nativeId": "P1001",
+                "url": "https://www.luogu.com.cn/problem/P1001"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "实际fetch题面",
+          "不靠预训练记忆补题意"
+        ],
+        "evidenceNeeds": [
+          "statement"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D08",
+    "turns": [
+      {
+        "question": "题目完整信息：读入两个绝对值≤10^6的整数，输出它们的和。输入一行a b，样例2 3输出5。只解释为什么int足够，不要读我的代码。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "luogu/P1001": {
+              "ref": {
+                "site": "luogu",
+                "nativeId": "P1001",
+                "url": "https://www.luogu.com.cn/problem/P1001"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "范围推理准确",
+          "不额外读代码或题面"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "D09",
+    "turns": [
+      {
+        "question": "现在重新获取洛谷P1001题面，不要沿用之前的记忆，告诉我这次取得的约束。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "luogu/P1001": {
+              "ref": {
+                "site": "luogu",
+                "nativeId": "P1001",
+                "url": "https://www.luogu.com.cn/problem/P1001"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "新fetch观测",
+          "准确述约束"
+        ],
+        "evidenceNeeds": [
+          "statement"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D10",
+    "turns": [
+      {
+        "question": "接着已给题意解释：两个-10^9到10^9的整数求和。为什么不需要循环？这轮不需要读任何软件材料。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [
+            {
+              "problem": {
+                "oj": "luogu",
+                "problemId": "P1001"
+              },
+              "filePath": "$ROOT/A.cpp",
+              "viewedAt": "2026-11-25T08:00:00+08:00"
+            }
+          ],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {
+            "luogu/P1001": {
+              "ref": {
+                "site": "luogu",
+                "nativeId": "P1001",
+                "url": "https://www.luogu.com.cn/problem/P1001"
+              },
+              "title": "Synthetic integer sum",
+              "interactive": false,
+              "bodies": [
+                {
+                  "locale": "zh-CN",
+                  "sections": [
+                    {
+                      "format": "markdown",
+                      "content": "本测试为合成题面：输入两个整数a,b，输出a+b，-10^9≤a,b≤10^9。",
+                      "heading": "题目描述"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行两个整数",
+                      "heading": "输入"
+                    },
+                    {
+                      "format": "markdown",
+                      "content": "一行整数和",
+                      "heading": "输出"
+                    }
+                  ]
+                }
+              ],
+              "samples": [
+                {
+                  "input": "2 3\n",
+                  "output": "5\n"
+                }
+              ],
+              "limits": []
+            }
+          },
+          "webSources": []
+        },
+        "criteria": [
+          "直接解释",
+          "无不必要工具"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "D11",
+    "turns": [
+      {
+        "question": "刚才Runner交互运行显示2 3和-1，记录能确定实际输入的数字吗？只根据运行记录判断。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "runner",
+              "operation": "run",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "interactive",
+                    "text": null
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "merged": "2 3\n-1\n"
+                  }
+                }
+              ],
+              "gaps": [
+                "Reliable stdin unavailable; terminal echo is not reliable input."
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "读取运行正文",
+          "不把回显当可靠stdin"
+        ],
+        "evidenceNeeds": [
+          "run"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D12",
+    "turns": [
+      {
+        "question": "CPH这次是我程序超时，还是答案检查超时？请看记录区分，不猜检查器源码。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "cph",
+              "operation": "test-all",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "stdout": "-1\n",
+                    "stderr": ""
+                  },
+                  "testCaseNumber": 1,
+                  "expectedOutput": "5\n",
+                  "check": "time-limit"
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "程序completed exit0与check=time-limit不矛盾",
+          "保留真实check，不改判WA"
+        ],
+        "evidenceNeeds": [
+          "run"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D13",
+    "turns": [
+      {
+        "question": "刚才CPH测试全部测了几组，分别哪组没过？从运行记录说明即可。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "cph",
+              "operation": "test-all",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/A.cpp",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "completed",
+                  "durationMs": 1,
+                  "exitCode": 0,
+                  "output": {
+                    "stdout": "-1\n",
+                    "stderr": ""
+                  },
+                  "testCaseNumber": 1,
+                  "expectedOutput": "5\n",
+                  "check": "wrong-answer"
+                },
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "0 0\n"
+                  },
+                  "status": "completed",
+                  "exitCode": 0,
+                  "output": {
+                    "stdout": "0\n",
+                    "stderr": ""
+                  },
+                  "testCaseNumber": 2,
+                  "expectedOutput": "0\n",
+                  "check": "passed"
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "两组",
+          "一错一对，非OJ判词"
+        ],
+        "evidenceNeeds": [
+          "run"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D14",
+    "turns": [
+      {
+        "question": "Notebook代码块2两份input分别怎样？第一份失败以后第二份有没有运行？请查看记录。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [
+            {
+              "source": "notebook",
+              "operation": "run-inputs",
+              "startedAt": "2026-11-25T08:00:00+08:00",
+              "endedAt": "2026-11-25T08:00:00+08:00",
+              "status": "completed",
+              "program": {
+                "filePath": "$ROOT/study.bcnb",
+                "language": "cpp",
+                "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;if(a==2&&b==3){std::cout<<a-b;return 2;}std::cout<<a+b;}",
+                "codeBlockNumber": 2
+              },
+              "compile": {
+                "status": "succeeded",
+                "durationMs": 12,
+                "exitCode": 0
+              },
+              "runs": [
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "2 3\n"
+                  },
+                  "status": "runtime-error",
+                  "durationMs": 1,
+                  "exitCode": 2,
+                  "output": {
+                    "merged": "-1\n"
+                  },
+                  "inputCellNumber": 4,
+                  "inputName": "first"
+                },
+                {
+                  "input": {
+                    "mode": "text",
+                    "text": "1 2\n"
+                  },
+                  "status": "completed",
+                  "exitCode": 0,
+                  "output": {
+                    "merged": "3\n"
+                  },
+                  "inputCellNumber": 5,
+                  "inputName": "second"
+                }
+              ]
+            }
+          ],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "两个input实际执行",
+          "非零退出与后续独立进程区分"
+        ],
+        "evidenceNeeds": [
+          "run"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D15",
+    "turns": [
+      {
+        "question": "读取当前代码。假设只删掉return 2;这一句，输出会是什么？不要把代码其他地方一起改掉。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){int a=2,b=3;std::cout<<a-b;return 2;std::cout<<a+b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "前面-1仍输出，随后5拼接为-15",
+          "说明是静态推导"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "D16",
+    "turns": [
+      {
+        "question": "两个任意有符号64位整数相加，改用long long就一定不会溢出吗？解释清楚，别读代码或题面。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "不能保证",
+          "举真实范围反例，不泛化"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "DT01",
+    "turns": [
+      {
+        "question": "请看当前求和函数，只给一点找错方向，不要给改法。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n-1;i++)s+=a[i];return s;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      },
+      {
+        "question": "我明白少了一项了，只解释循环结束时下标是多少，不用重新读文件。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n-1;i++)s+=a[i];return s;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "我已修改条件，请读最新稿，只判断这一处是否修好。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n;i++)s+=a[i];return s;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": [
+          "current-code"
+        ]
+      },
+      {
+        "question": "现在给完整C++实现，保留数组求和思路。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "int sum(const int*a,int n){int s=0;for(int i=0;i<n;i++)s+=a[i];return s;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  },
+  {
+    "id": "DT02",
+    "turns": [
+      {
+        "question": "介绍我正在使用的BeCoder版本、特色功能，并给官方GitHub地址，不用读学生代码。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "CPH怎样导入测试数据，单点测试与测试全部有什么区别？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "Runner的Run With Input怎么用？输入文件放在哪？",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      },
+      {
+        "question": "软件用法明白了。只解释为什么前缀和能O(1)查询区间和，这轮无需软件材料。",
+        "fixture": {
+          "mode": "spot",
+          "workspaceUsable": true,
+          "webEnabled": true,
+          "pages": [
+            {
+              "id": "code-a",
+              "kind": "text",
+              "title": "A.cpp",
+              "uri": "file:///$ROOT/A.cpp",
+              "version": "1",
+              "languageId": "cpp",
+              "active": true
+            }
+          ],
+          "files": [
+            {
+              "fileName": "A.cpp",
+              "filePath": "$ROOT/A.cpp",
+              "isDirty": true,
+              "code": "#include <iostream>\nint main(){long long a,b;std::cin>>a>>b;std::cout<<a-b;}"
+            }
+          ],
+          "problemRecords": [],
+          "runRecords": [],
+          "verdictRecords": [],
+          "statements": {},
+          "webSources": []
+        },
+        "criteria": [
+          "准确回应所问，不编造事实，不作无关扩展"
+        ],
+        "evidenceNeeds": []
+      }
+    ]
+  }
+]

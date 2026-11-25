@@ -56,7 +56,8 @@ for (const oversized of [false, true]) {
 	test(`complete record exchange is retained before ${oversized ? 'capacity failure' : 'one compaction'} without repeat execution`, async () => {
 		const history = new ChatHistory(undefined, async data => data, () => {}, String);
 		for (let index = 0; index < 4; index++) { await history.session.send('Q' + 'x'.repeat(1000), async function* () { yield { type: 'text', text: 'A' + 'y'.repeat(1000) }; }); }
-		const contents = 'FULL-BEGIN' + 'z'.repeat(oversized ? 200000 : 22000) + 'FULL-END';
+		// Keep the result-driven trigger above 90% after removing the old long system prompt.
+		const contents = 'FULL-BEGIN' + 'z'.repeat(oversized ? 200000 : 26000) + 'FULL-END';
 		let calls = 0, reads = 0, summaries = 0;
 		const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://provider.invalid', model: 'fixture', apiKey: 'synthetic', parameters: { maxOutputTokens: 4096 }, capabilities: { ...defaultCapabilities, contextWindow: 65536, maxInputTokens: 38000, maxOutputTokens: 8192 } }), async (_url, init) => {
 			const body = JSON.parse(String(init?.body)); calls++;

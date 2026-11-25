@@ -11,6 +11,7 @@ import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
 import type { BeaconContextClient, BeaconPage } from './context';
 import { isProtectedFilePath } from './fileTools';
 import { contextToolNames, contextInputValid, type BeaconContextToolName, type BeaconToolInputs } from './contextToolContract';
+import type { BeCoderInfoReader } from './productInfo';
 
 export interface ContextSource { kind: 'page' | 'runtime'; id: string; origin?: string; version?: string; pageNumber?: number; revision?: number; producer?: 'runner' | 'cph' | 'notebook'; capturedAt: number; contentSha256: string; sourceSha256?: string; partial?: boolean; representation: string }
 export interface ContextOutput { ok?: boolean; contents?: string; error?: string | { code: string; message: string }; source?: ContextSource; [key: string]: unknown }
@@ -22,6 +23,7 @@ export interface ContextAccess {
 }
 export interface ContextSnapshot { key: string; raw: string; metadata: Record<string, unknown> }
 export interface ContextToolOptions {
+	readBeCoderInfo?: BeCoderInfoReader;
 	privateSnapshots?: readonly ContextSnapshot[]; allowedPrivateKeys?: readonly string[]; capturePrivate?: (snapshot: ContextSnapshot) => void;
 	authorizeLocal?: (path: string, signal: AbortSignal) => Promise<string>;
 	resolveProblemId?: (oj: BeaconToolInputs['fetchProblem']['oj'], problemId: string) => Promise<ProblemRef>;
@@ -87,7 +89,7 @@ export class ContextTools implements ContextAccess {
 	}
 	get names(): readonly BeaconContextToolName[] {
 		if (this.compacting) { return this.scope.usable && this.scope.mode !== 'blackout' ? ['readProblemRecord', 'readRunRecord', 'readVerdictRecord', 'readMaterial'] : []; }
-		return contextToolNames.filter(name => !recordKinds[name] && name !== 'readMaterial' || this.scope.usable && this.scope.mode !== 'blackout');
+		return contextToolNames.filter(name => name === 'readBeCoderInfo' ? !!this.options.readBeCoderInfo : !recordKinds[name] && name !== 'readMaterial' || this.scope.usable && this.scope.mode !== 'blackout');
 	}
 	compactionView(): ContextAccess {
 		const view = new ContextTools(this.client, this.scope, this.protectedRoots, this.options); view.compacting = true;
@@ -114,6 +116,10 @@ export class ContextTools implements ContextAccess {
 		signal.throwIfAborted();
 		if (!contextToolNames.includes(name) || !contextInputValid(name, input)) { return failure('invalid_arguments', 'Use only the parameters declared for this tool.'); }
 		if (!this.names.includes(name)) { return failure('unavailable', 'This source is unavailable in the current Beacon mode.'); }
+		if (name === 'readBeCoderInfo') {
+			try { return { ...await this.options.readBeCoderInfo!(input.topic as BeaconToolInputs['readBeCoderInfo']['topic'] ?? 'overview', signal) }; }
+			catch { signal.throwIfAborted(); return failure('read_failed', 'The bundled BeCoder product information could not be read.'); }
+		}
 		try {
 			const kind = recordKinds[name];
 			if (kind) {

@@ -64,7 +64,9 @@ Runner、CPH、Notebook 运行、必要清理及证据收尾期间，输入区�
 
 工作区决定软件采集，模式决定Beacon消费：必须已选择正常可用的Beacon根，Get Problem及Runner／CPH／Notebook／OJ用户行为材料才采集落盘。有效根下Blackout仍持续采集，Beacon不能列举或读取这些持久记录；无根或根异常不采集，不改投其他根、不后补。
 
-九项模型工具为readCurrentCode、readProblemRecord、readRunRecord、readVerdictRecord、fetchProblem、inspectFile、readPage、readMaterial、browseWeb。工具按当前模式和模型能力开放，工具目录不代替正文读取，讨论对象由模型结合问题、对话和实际观测判断；没有“上轮对象”或宿主固定题目。
+十项模型工具为readCurrentCode、readProblemRecord、readRunRecord、readVerdictRecord、fetchProblem、inspectFile、readPage、readMaterial、browseWeb、readBeCoderInfo。工具按当前模式和模型能力开放，工具目录不代替正文读取，讨论对象由模型结合问题、对话和实际观测判断；没有“上轮对象”或宿主固定题目。
+
+readBeCoderInfo按overview、problems、runner、cph、notebook、oj-connect、beacon七个固定主题读取随包产品说明和实际运行的BeCoder发行版本。它在三模式及无工作区可用，不读取个人设置，不增加执行或写入权限；省略主题读概览，也可直接读具体主题。
 
 三个队列在当前`.beaconWork`跨对话共享：problem保13条，只存五站用户Get Problem／Import的oj、problemId、代码路径和查看时间；同题同路径删除旧项，以新ID与时间入尾，不保存题面。run为Runner／CPH／Notebook共30条，一份实际编译程序及其多组input形成一条终态记录，不去重；无题目绑定、运行限制配置或检查器细节，CPH只保check结果。verdict保20条完整最终OJ结果，同站同题可靠提交代码完全相同替换旧结果；缺提交代码仍保存但不去重。CPH仅编译不形成run，测试请求编译失败会记录。
 
@@ -84,7 +86,7 @@ PDF 使用已加载 PDF.js 文档按物理页提取文字；扫描页可能为�
 
 ## 对话与连接恢复
 
-每次正式请求固定带入算法导师规则，与联网开关、工具支持和 Notebook 无关。工具说明按本次实际可用能力加入；用户原话保留原角色，网页及工具结果作为材料。教学目标包括保留所要求的语言/结构、分清已改与未改、按最新要求从提示切换完整解答，以及从用户尚未理解的步骤继续讲解。历史模型对照只代表当时实现；后续[验证边界](../../docs/beacon/implementation-status.md)区分确定性装配与教学体验，不将旧报告当新阶段基线。
+每次正式请求固定带入精简算法导师核心，与联网开关、工具支持和Notebook无关。system、工具用途／参数说明和产品主题正文统一英文，回答跟随用户语言。工具说明按本次实际可用能力加入，system不重复逐工具能力清单；产品主题按需读取，不强制先查概览。用户原话保留原角色，网页及工具结果作为材料。教学示例和好坏回答只在评测侧；[本轮模型对照](../../docs/beacon/evaluation/2026-11-25-prompt-quality-report.md)与[验证边界](../../docs/beacon/implementation-status.md)区分确定性装配、模型观察和负责人教学验收。
 
 支持流式多轮、代码高亮/复制/换行、公式、默认折叠思考、活动提示和滚动跟随。正文与 OJ Connect 共用内容解析和增量代码展示，代码使用固定 One Monokai 配色；新增原文先显示，语法资源从本地按需加载，流式解析与动画分离。暂停保留已输出内容；继续以已有上下文发起新请求接到同一回答；重新回答按原问题重建后续分支。已完成工具结果进入会话协议，后续不重复冒充新读取。
 
@@ -108,6 +110,6 @@ Each window selects an independent Beacon workspace. Blackout keeps temporary ch
 
 Message Markdown and incremental code rendering share the OJ Connect content core. Code uses fixed One Monokai colors; source appears before local grammar loading and syntax coloring. Streaming parsing is separate from text animation.
 
-The model has nine read-only tools: readCurrentCode, readProblemRecord, readRunRecord, readVerdictRecord, fetchProblem, inspectFile, readPage, readMaterial and browseWeb. There is no model Notebook writer. Native Notebook editing, backups and running remain available. A healthy selected root collects user activity in all modes; Blackout cannot consume persistent sources. Shared queues retain13 problem identities,30 combined Runner/CPH/Notebook program runs and20 final OJ verdicts. Problem identity plus file path deduplicates viewing; reliable identical submitted code deduplicates verdicts within one OJ/problem. Runs are not deduplicated. Code reads return complete current visible C/C++ drafts without a snapshot store. Supported statements use the OJ parser independently of web search and are not persisted. Full record results enter ordinary same-model compaction without dynamic truncation. Native Notebook batches compile each program once and run each input independently. Automatic Notebook context excludes execution fields; original outputs/backups remain host owned.
+The model has ten read-only tools: readCurrentCode, readProblemRecord, readRunRecord, readVerdictRecord, fetchProblem, inspectFile, readPage, readMaterial, browseWeb and readBeCoderInfo. The last tool reads one of seven bundled product topics and the running application's release version in any mode, including without a workspace; it does not inspect personal settings. Production system text, tool descriptions and product knowledge are English; replies follow the user's language. There is no model Notebook writer. Native Notebook editing, backups and running remain available. A healthy selected root collects user activity in all modes; Blackout cannot consume persistent sources. Shared queues retain13 problem identities,30 combined Runner/CPH/Notebook program runs and20 final OJ verdicts. Problem identity plus file path deduplicates viewing; reliable identical submitted code deduplicates verdicts within one OJ/problem. Runs are not deduplicated. Code reads return complete current visible C/C++ drafts without a snapshot store. Supported statements use the OJ parser independently of web search and are not persisted. Full record results enter ordinary same-model compaction without dynamic truncation. Native Notebook batches compile each program once and run each input independently. Automatic Notebook context excludes execution fields; original outputs/backups remain host owned.
 
 The model chooses the discussed problem and code from the user's question, conversation and tool observations. There is no host discussion-object picker, pin or last-object badge. Live-code calls read all visible C/C++ panes at call time, including unsaved text and untitled drafts. The current model performs synchronous input compaction with explicit capacity checks, a single repair per pending ordinary step and 20 shared model steps. A discovered context window is used when an input limit is not separately supplied; the unrelated default input ceiling is not retained. Only confirmed summary saves become projections; raw history and completed tool pairs remain intact. Unknown image estimates retain the image. Memory/dream and full visual support remain future work. See [implementation status](../../docs/beacon/implementation-status.md) for validation and owner-acceptance boundaries.

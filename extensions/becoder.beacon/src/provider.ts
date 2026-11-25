@@ -211,8 +211,8 @@ const webSchema = jsonSchema<WebInput>({
 	type: 'object',
 	properties: {
 		operation: { type: 'string', enum: ['search', 'fetch'] },
-		query: { type: 'string', maxLength: 500, description: 'For search: a focused public query. For personal information, preserve the authorized account, problem, time and count; never broaden to a profile or all problems. Never include credentials or private file contents.' },
-		url: { type: 'string', maxLength: 2048, description: 'For fetch: one public HTTP(S) page URL from search results or supplied by the user, within the authorized scope and lookup count. A profile or all-submission list is outside a single-problem scope.' }
+		query: { type: 'string', maxLength: 500, description: 'For search: a public query within the user-requested scope.' },
+		url: { type: 'string', maxLength: 2048, description: 'For fetch: one public HTTP(S) page URL from search results or supplied by the user.' }
 	},
 	required: ['operation'],
 	additionalProperties: false
@@ -284,7 +284,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				})])) : {}),
 				...(permission === 'none' ? {} : {
 					inspectFile: tool<FileInput, FileOutput, Record<string, unknown>>({
-					description: `Read-only file inspection (${permission}). Authorized workspace folders: ${JSON.stringify(roots)}. Use only for the current question; never scan the whole computer or request private/credential files. list lists one directory; find/search inspect at most 2000 entries, returning at most 200 results. search checks the first 128 KiB of each text file. read returns up to 128 KiB text, 8 KiB binary as hex, or a PNG/JPEG/WebP/GIF image up to 4 MiB. Continue large reads with nextOffset. Open editor documents include unsaved edits. Results are limited to 8 MiB per response. Images require a vision-capable model.`,
+						description: `Read files, list directories, find files or search text in the authorized scope. Open text documents include unsaved edits; long reads return nextOffset. File scope: ${permission}; workspace folders: ${JSON.stringify(roots)}.`,
 					inputSchema: fileSchema,
 					toModelOutput: ({ output }) => fileModelOutput(output),
 					execute: async (input, options): Promise<FileOutput> => {
@@ -301,7 +301,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				}),
 				...(webAvailable ? {
 					browseWeb: tool<WebInput, WebOutput, Record<string, unknown>>({
-						description: 'Search public information or read one public webpage through Exa, without a search API key. Up to 6 lookups and 32000 source characters per response; searches return at most 5 excerpts, pages return at most 8000 characters. Use only for the current question. Returns source titles, URLs, excerpts, timestamps and truncation flags. Sources may be incomplete. Errors are not evidence; report failed verification honestly. This tool cannot access local files or private network addresses.',
+						description: 'Search public information or read a supplied webpage. Returns source links and text; cite relevant source links when using them. kind distinguishes search excerpts from page text; truncated marks incomplete text. Up to 6 lookups and 32000 characters per answer. No local files or private networks.',
 						inputSchema: webSchema,
 						toModelOutput: ({ output }) => webModelOutput(output),
 						execute: (input, options) => { recovery.commit(); return web(input, options.abortSignal ?? signal); }

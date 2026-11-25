@@ -72,7 +72,7 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 			view.receive({ type: 'send', text: '我这份代码写对了吗' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
 			assert.equal(snapshot().error, ''); assert.equal(requests.length, 2);
-			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'fetchProblem', 'inspectFile', 'readCurrentCode', 'readMaterial', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
+			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'fetchProblem', 'inspectFile', 'readBeCoderInfo', 'readCurrentCode', 'readMaterial', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
 			assert.equal(reads, 1); assert.equal(saves, 0); assert.ok(requests[1].includes('int main(){return 0;}'));
 			assert.equal(snapshot().messages[1].text, '已读取当前代码');
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }

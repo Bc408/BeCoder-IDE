@@ -24,7 +24,7 @@ AtCoder 题面首次默认英文，主动选择的日／英偏好跨题、跨重
 
 题面上的 CPH 图标将结构化样例关联到该题面绑定的源码。两种 CPH 入口复用同一文件，已有源码和未保存稿保留，仅新建源码执行 CPH 模板；替换已有样例仍需确认。缺失限制会在 CPH 明示使用本地默认限制，不伪造网站数据。
 
-Beacon协作将用户Get Problem／支持的CPH导入／提交事实与模型只读取材分开：正常所选Beacon根内三档持续采集，Blackout仅禁Beacon消费。用户题面记录保存完整正文与取得时间；OJ真实评测按既有owner事件交接，不额外查询或重交。Beacon不再读取打开题面／判题页作备用证据，模型取题只转现有解析器及adapter只读接口，不获得登录、提交、建源码或导入副作用。见[实现状态](../../docs/beacon/implementation-status.md)，本扩展原有用户流程保留。
+Beacon协作将用户Get Problem／支持的CPH导入／提交事实与模型只读取材分开：正常所选Beacon根内三档持续采集，Blackout仅禁Beacon消费。problem队列只保存五站oj／problemId、关联代码路径与查看时间，不保存题面正文；模型通过fetchProblem联网取得题面，与聊天搜索开关互不影响。OJ真实评测完整终态进入verdict队列，同站同题可靠提交代码严格相同则替换旧项；采集不额外查询或重交。Beacon不读取打开题面／判题页作备用证据，模型取题复用现有解析器及adapter只读接口，不获得登录、提交、建源码或导入副作用。见[实现状态](../../docs/beacon/implementation-status.md)，本扩展原有用户流程保留。
 
 `becoder.ojConnect.directories` 默认 `luogu`、`codeforces`、`atcoder`、`lanqiao`、`nowcoder`，设置修改不会移动已有文件。直接父目录优先，再猜文件名；失配提示输入，不建持久绑定库。例：`luogu/P1001.cpp`、`codeforces/4_a.cpp`、`atcoder/abc086_a.cpp`、`lanqiao/254.cpp`、`nowcoder/18204.cpp`、`nowcoder/5657_A.cpp`；牛客保留公开题库／比赛身份，无站点目录时不从纯数字或通用比赛文件名猜测牛客，目录外纯数字文件名也不认领蓝桥；显式上下文例 `P1001@123.cpp`、`tenka1-2019-beginner@tenka1_2019_a.cpp`。CF 身份 `4/A` 对应 `codeforces/4_a.cpp`，真实题号后缀保留为 `4_a1.cpp`；站点内支持 `4/A`、`4_a` 和普通官网 contest／problemset URL，通用下划线文件名不在目录外自动猜成 CF。无目录的 `AT_abc086_a.cpp` 有歧义时提示，不静默选站。
 
@@ -45,7 +45,7 @@ AtCoder、CF 题面先显示，编译器目录后台只读各自官方提交页�
 
 独立 OJ Connect 活动栏入口提供五站登录摘要，与内置浏览器共用登录。CF 摘要读取当前持久 Session 的官方账号；蓝桥读取主站 basic，名称动作固定打开已采证 Passport 登录入口，不猜个人主页。无法可靠读取时显示未知；退出登录在官网页面完成。没有题库、比赛、社交或专栏入口。
 
-AtCoder／CF 快捷键看题使用当前存储范围的真实 Session，对固定官方题页作一次只读 GET；在断网、无账户的本地沙箱中解析原始 HTML，不创建或导航官网题页。浏览器 Get 保留该网页自己的 Session，包括临时会话；普通网页和 Import to CPH 保持原行为。取消、窗口关闭或存储范围改变后不交付迟到题面。题面读取本身没有额外持久缓存或自动重试；用户Get成功可由Beacon近期队列保存，模型只读刷新不写该队列。CF同题重开仍重新读取官网文档。性能对照与限制见[本轮结果](../../docs/oj-connect/statement-optimization-2026-11-19.md)。
+AtCoder／CF 快捷键看题使用当前存储范围的真实 Session，对固定官方题页作一次只读 GET；在断网、无账户的本地沙箱中解析原始 HTML，不创建或导航官网题页。浏览器 Get 保留该网页自己的 Session，包括临时会话；普通网页和 Import to CPH 保持原行为。取消、窗口关闭或存储范围改变后不交付迟到题面。题面读取本身没有额外持久缓存或自动重试；用户Get成功可在Beacon读题队列记录身份、文件与时间，不保存正文，模型只读取题不写该队列。CF同题重开仍重新读取官网文档。性能对照与限制见[本轮结果](../../docs/oj-connect/statement-optimization-2026-11-19.md)。
 
 牛客普通 Cookie 补设／轮换只触发账号校验，确认真实 userId 改变或退出后才使旧提交／记录失效，避免首次请求取消自身。
 

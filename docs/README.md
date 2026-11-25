@@ -17,7 +17,7 @@
 ## 开发与维护
 
 - [开发指南](development.md)：工程入口、检查和构建。
-- [Beacon 需求与架构入口](beacon/README.md)：完整能力、架构、底层阶段、代码队列、同步压缩和下一阶段候选计划；[实现状态](beacon/implementation-status.md)单列源码差距与验收边界。
+- [Beacon 需求与架构入口](beacon/README.md)：完整能力、架构、九工具合同、三个业务队列与同步压缩；[实现状态](beacon/implementation-status.md)单列源码差距与验收边界。
 - [OJ Connect 产品与开发入口](oj-connect/README.md)：已确认的快捷键刷题流程、目录规则、内置扩展方向和当前实现状态；[技术架构](oj-connect/architecture.md)说明职责与迁移验收。
 - [OJ 接入技术可行性审查](oj-connect-feasibility.md)：候选路线、源码接点、证据范围和真实账号验证缺口；不代表已实现。
 - [AtCoder MVP 过程与验收](oj-connect-basic-flow.md)：早期核心侧增量、失败修正与真实旅程证据，按各节时点阅读。

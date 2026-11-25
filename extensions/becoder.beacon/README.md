@@ -2,7 +2,7 @@
 
 BeCoder 内置的算法与编程学习助手。点击编辑器右上角 Beacon 按钮，或运行 **Beacon: 打开/关闭 Beacon 侧边栏**；聊天设置按钮、**Beacon: 打开设置**和扩展“功能”页打开同一个独立设置标签页。
 
-本说明面向2026-11-24的上下文工具重构候选源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
+本说明对应2026-11-25的当前源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
 
 ## 模型连接与设置
 
@@ -48,11 +48,11 @@ Ollama 本地同步和测试无需密钥，代理服务可选填。回环地址�
 
 | 档位 | 当前范围 |
 | --- | --- |
-| Blackout | 可用主动材料、合法打开页和普通已加载上文；临时聊天／草稿只在内存，Beacon不使用持久上下文。正常所选根的软件用户行为采集持续 |
-| Spot | 菜单说明“只工作在当前Beacon工作区”；文件及允许的学习资产写入限所选根 |
-| Flood | 菜单说明“可自由访问本机文件”；扩大允许的文件位置，仍排除凭据、内部会话资产和其他受保护路径，不扩大资产种类或执行权限 |
+| Blackout | 可用主动材料、获准页面、已加载上文和五站fetchProblem；临时聊天／草稿只在内存，Beacon不读持久来源。有效所选根的软件采集持续 |
+| Spot | 菜单说明“只工作在当前Beacon工作区”；普通文件读取限所选根，当前没有模型资产写入工具 |
+| Flood | 菜单说明“可自由访问本机文件”；扩大允许读取的文件位置，仍排除凭据、内部会话资产和其他受保护路径，不扩大执行权限 |
 
-三档均可按需读取打开代码（含未保存与根外内容）的正文、文件名和路径，以及普通文本、网页和PDF文字；Notebook功能页及OJ题面／判题功能页不作自动取材入口；页面读权不允许从 backing file 补正文、导航或读取相关/隐藏文件。凭据过滤和其他会话隔离继续生效。主动添加外部单文件只提供该次快照，不授权目录或持续追读。
+三档均可按需读取当前可见C/C++分屏的完整代码（含未保存与根外内容）、文件名和路径，不读后台标签；普通文本、网页和PDF文字沿原页面权限读取。Notebook功能页及OJ题面／判题功能页不作自动取材入口；页面读权不允许从 backing file 补正文、导航或读取相关/隐藏文件。凭据过滤和其他会话隔离继续生效。主动添加外部单文件只提供该次快照，不授权目录或持续追读。
 
 工作区聊天和草稿归 `.beaconWork` 中对应对话，同根窗口共享列表，同一对话只允许单窗口打开。空主页不创建记录；首次输入/附件可建立隐藏草稿，首次发送转为历史聊天。返回主页保留详情草稿，主页“新聊天”清空主页草稿。真正关窗发布最后关闭窗口的页面和输入状态，显式空白覆盖旧草稿，恢复遇占用静默回主页。
 
@@ -90,7 +90,7 @@ PDF 使用已加载 PDF.js 文档按物理页提取文字；扫描页可能为�
 
 尚未交付文字、思考或工具活动时，临时网络/限流/过载可自动恢复，整轮至多两次重试、累计等待不超过 10 秒，保留原模型和三分钟期限；停止取消请求及等待。鉴权、余额、参数、证书等错误不自动重试；已输出内容或完成工具不自动重放。最终故障保留手动重试。连接诊断仅记服务商/随机请求标识、分类、次数与耗时，不记提示词、图片、密钥、地址或响应正文。
 
-每次实际模型步骤均检查最终规则、工具定义、消息及媒体预算：`B=min(I,C−O)`，90%主动整理，目标60%。同一模型同步生成摘要投影，保留原始聊天与完整工具协议；候选保存确认后才使用。覆盖前缀被编辑时摘要失效，尾部修改或追加不自动废弃合法前缀。同一普通待发步骤最多整理修复一次，普通和整理共用20步及原期限，整理不递归、不改变业务队列。无法可靠估算图片token时保留图片并标明未知，不静默丢图或换模型。
+每次实际模型步骤均检查最终规则、工具定义、消息及媒体预算：`B=min(I,C−O)`，90%主动整理。已确认设计目标为60%；当前已计算该目标，尚未用于引导摘要生成，发布只检查严格缩短、低于90%及硬容量，差距见实现状态。同一模型同步生成摘要投影，保留原始聊天与完整工具协议；候选保存确认后才使用。覆盖前缀被编辑时摘要失效，尾部修改或追加不自动废弃合法前缀。同一普通待发步骤最多整理修复一次，普通和整理共用20步及原期限，整理不递归、不改变业务队列。无法可靠估算图片token时保留图片并标明未知，不静默丢图或换模型。
 
 回答失败保留实际完成的工具调用／结果；失败正文不投影给后续模型。停止保留已接收文字及兼容思考，拒绝迟到正文；不补造未完成工具结果。切换供应商、端点或模型后过滤私有思考字段，业务JSON保留。
 
@@ -104,7 +104,7 @@ Beacon is BeCoder's programming tutor. Open it from the upper-right editor butto
 
 Model capabilities are boolean and default to supported unless explicitly denied; missing capacities use editable defaults of 32768 context, 24576 input and 8192 output tokens. These defaults do not verify a model's actual abilities. Confirmation replaces membership/capabilities, clears manual capability corrections and retains same-ID names/generation settings. Invalid retained parameters block the next request; active replies keep their original configuration snapshot.
 
-Each window selects an independent Beacon workspace. Blackout keeps temporary chat in memory and reads only provided/open-page/already-loaded material; Spot confines file and learning-asset access to the selected root; Flood broadens allowed file locations while preserving credential, conversation and write restrictions. Mode changes preserve the composer and create independent inherited snapshots on the first accepted cross-category send. Execution activities disable sending without queuing or replay. Open-page access never grants backing-file or hidden-record access.
+Each window selects an independent Beacon workspace. Blackout keeps temporary chat in memory and can use supplied material, authorized pages, loaded conversation and fetchProblem; persistent-source reads are unavailable. All modes can read complete current visible C/C++ panes, including unsaved text, without reading background tabs. Spot confines ordinary file reads to the selected root; Flood broadens allowed file locations while preserving credential and conversation restrictions. There is no model asset writer. fetchProblem is independent of the search switch; browseWeb follows it. Mode changes preserve the composer and create independent inherited snapshots on the first accepted cross-category send. Execution activities disable sending without queuing or replay. Open-page access never grants backing-file or hidden-record access.
 
 Message Markdown and incremental code rendering share the OJ Connect content core. Code uses fixed One Monokai colors; source appears before local grammar loading and syntax coloring. Streaming parsing is separate from text animation.
 

@@ -12,7 +12,7 @@
 
 </div>
 
-BeCoder 将看题、写代码、本地样例测试、交题和查看评测结果整合在一个编辑环境中。安装后即可编写和运行 C/C++；OJ Connect 连接五个常用 OJ，可选的 AI 助手 Beacon 用于讲题、分析代码和整理学习笔记。
+BeCoder 将看题、写代码、本地样例测试、交题和查看评测结果整合在一个编辑环境中。安装后即可编写和运行 C/C++；OJ Connect 连接五个常用 OJ，可选的 AI 助手 Beacon 用于讲题、分析代码和生成学习笔记内容。
 
 ## 主要功能
 
@@ -47,7 +47,7 @@ Beacon 需要自行配置模型服务；模型与网络能力取决于服务商�
 
 - [使用指南](docs/getting-started.md)：安装、题目导入、运行、布局和数据管理。
 - [开发指南](docs/development.md)：依赖、源码检查、构建与贡献。
-- [Beacon 需求与架构](docs/beacon/README.md)：统一能力需求、下一阶段底层设计与当前实现差距；设计不等于已交付。
+- [Beacon 需求与架构](docs/beacon/README.md)：完整能力需求、现行工具合同、底层架构与实现／验证状态；后续目标不等于已交付。
 - [产品方向](VISION.md)：体验目标、模块职责与长期边界。
 - [文档目录](docs/README.md)：功能说明、正式需求与当前实现状态。
 - [问题反馈](https://github.com/Bc408/BeCoder-IDE/issues) · [安全问题](SECURITY.md)。

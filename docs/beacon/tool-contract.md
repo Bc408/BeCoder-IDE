@@ -1,12 +1,8 @@
-# Beacon 工具设计：业务能力与记录底座
+# Beacon 工具合同
 
-修订：2026-11-24。版本：设计基线0.4；负责人已允许方案收敛，进入实施筹划。
+更新：2026-11-25。本文维护当前九工具的能力、请求、结果与业务字段；需求见[PRD](prd.md)，存储／执行生命周期见[底层设计](foundation-design.md)，真实验证见[实现状态](implementation-status.md)。表内JSON均为合成结构示例，不是执行结果或质量验收。
 
-**状态：本轮业务与字段方案已允许收敛；已形成[新实施计划](../plans/2026-11-24-beacon-context-tools-rebuild.md)，补齐九工具工程接口、旧数据策略、任务与验证范围；负责人已确认Native实施，候选源码与实际验证见实现状态。** 保留原文件名以维持引用；旧版本从Git备份74d09ef4追溯，不能覆盖本稿。
-
-[需求](../../beacon/prd.md) · [架构](../../beacon/architecture.md) · [阶段设计](../../beacon/foundation-design.md) · [代码读取](../../beacon/code-reading.md) · [队列决定](../../beacon/decisions/context-queues.md) · [压缩](../../beacon/context-compaction.md) · [实现差距](../../beacon/implementation-status.md)
-
-## 1. 本轮已收敛的方案
+## 1. 工具分工
 
 Beacon跟随学生当下的学习活动。harness取得并整理真实业务事实，LLM按问题选材、理解和教学；系统不固定讨论对象。新方案包含9项工具能力、3个共享业务队列，没有独立代码存储和模型内容写工具。
 
@@ -22,13 +18,13 @@ Beacon跟随学生当下的学习活动。harness取得并整理真实业务事�
 | readMaterial | 保留当前有效对话内已有授权材料读取 |
 | browseWeb | 保留搜索／网页获取，仍由聊天搜索开关控制 |
 
-文件工具在当前源码叫inspectFiles，本稿沿负责人称呼inspectFile；最终名称接线不代表文件能力重做。readProblemRecord／readRunRecord／readVerdictRecord分别注册，不再有统一readRecord的type／producer分派参数。
+模型文件工具名为inspectFile，内部复用FileTools。三个记录工具分别注册，模型不填写统一readRecord的type／producer分派参数。
 
 codesnap全部撤回：没有独立正文、保存、队列、目录、历史回读、去重、晋升或淘汰。移除editNotebook，模型输出内容写入后续另行设计；Notebook的独立用户功能保留。
 
 ## 2. LLM实际使用的入口
 
-以下是已经收敛的调用语义。工具参数为JSON对象，函数空参写法只用于说明省略参数的含义。
+参数均为JSON对象。以下伪TypeScript只用于说明字段；实际schema和执行校验由contextToolContract.ts及文件／网页工具维护。
 
 ~~~ts
 readCurrentCode({})
@@ -40,14 +36,24 @@ readRunRecord({ id: string })
 readVerdictRecord({})
 readVerdictRecord({ id: string })
 
-fetchProblem({ oj, problemId })
+fetchProblem({ oj: 'luogu' | 'codeforces' | 'atcoder' | 'nowcoder' | 'lanqiao', problemId: string })
+inspectFile({ operation: 'read' | 'list' | 'find' | 'search', path: string, query?: string, offset?: number, limit?: number })
+readPage({ id: string, version: string, offset?: number, limit?: number, pageNumber?: number })
+readMaterial({ id: string, offset?: number, limit?: number })
+browseWeb({ operation: 'search' | 'fetch', query?: string, url?: string })
 ~~~
 
 三个记录工具各自返回当前队列全部保留条目的简短目录，不读正文。目录包含实际ID、时间、来源、文件信息和结果摘要；题目信息仅属于problem／verdict，run目录不带题目。目录按需获取，不在每次模型请求自动附上三个队列，也不另设目录工具。
 
 指定ID后，默认返回该条完整、已整理的持久记录。模型不再填写producer、revision、part、sampleIndex或stream来拼装事实。内部身份、权限和同版读取由harness负责；列目录不固定讨论对象，不等于读过正文。
 
-打开页面和主动材料保留既有安全元数据入口，不因此增加统一资源库或工具发现服务。最终错误码及JSON外壳仍是后续工程审阅内容，不在本稿偷偷冻结。
+打开页面和主动材料保留既有安全元数据入口，不增加统一资源库或工具发现服务。新语义工具拒绝多余字段，ID不接受null或空串。readPage的PDF pageNumber为从1计数的物理页，offset／limit沿原范围语义；不新增OCR或复杂提取能力。
+
+成功返回：当前代码为{files:[{fileName,filePath,isDirty,code}]}，记录为{records:[目录项]}或{record:完整记录}，fetchProblem为{problem,document,retrievedAt}。document包括title、bodies、samples、limits、interactive及可得difficulty／tags。文件／网页保自身结果结构；readPage／readMaterial保ok、contents和范围／来源元数据。
+
+新语义工具错误为{error:{code,message}}，code为invalid_arguments、unavailable、not_found、read_failed、network_error、login_required或parse_error；取消沿AbortSignal。错误不当空记录，message不暴露堆栈或密钥，不自动换根、换条目或重试。
+
+description只述用途，教学与ID不转述等规则由system承接。实际定义见[contextToolContract.ts](../../extensions/becoder.beacon/src/contextToolContract.ts)、[fileTools.ts](../../extensions/becoder.beacon/src/fileTools.ts)和[webTools.ts](../../extensions/becoder.beacon/src/webTools.ts)。
 
 ## 3. 工作区、模式与三个队列
 
@@ -65,9 +71,9 @@ fetchProblem({ oj, problemId })
 
 readCurrentCode一次读取所有当前可见分屏中的C/C++代码页面，每页取得整份正文，包括屏幕滚动区域外的代码和未保存修改。它不读后台未显示标签，不因焦点不在代码上而改读某份上轮文件。
 
-返回按页面分别组织代码、文件名和路径；未命名可见C/C++页面也读取，filePath为null，不要求先保存。此前字段候选为files数组，每项fileName／filePath／isDirty／code；本轮确认未命名页面范围和null路径，完整schema继续审阅。无可见代码应明确为空，读取错误不冒充无页面。readCurrentCode不需要模型先列代码页、抄pageId或选择版本。没有可读代码时如实表示，无权读取的内容按原敏感过滤处理。
+返回按页面分别组织代码、文件名和路径；未命名可见C/C++页面也读取，filePath为null，不要求先保存。结果为files数组，每项fileName／filePath／isDirty／code。无可见代码应明确为空，读取错误不冒充无页面。readCurrentCode不需要模型先列代码页、抄pageId或选择版本。没有可读代码时如实表示，无权读取的内容按原敏感过滤处理；页面读取不授backing file、邻近文件或其他会话权限。没有跨调用全文缓存，旧快照文件保留隔离，不自动迁移或删除。
 
-新的调用可取得修改后的代码，当前读取不要求先保存。工具没有代码持久化副作用；发送、继续、重答或协议回放不捕获代码。旧快照256KiB保存限制不再适用。
+新的调用可取得修改后的代码，当前读取不要求先保存。工具没有代码持久化副作用；发送、继续、重答或协议回放不捕获代码。没有独立代码保存上限；完整结果仍受模型输入容量约束。
 
 ## 5. problem和五站题面
 
@@ -75,7 +81,7 @@ problem表达用户在何文件上、何时取得哪道题；题目身份为oj�
 
 fetchProblem是五站正式题面唯一专用入口。复用OJ Connect Get Problem核心解析，返回实际题面、样例、限制及来源提供的信息。五站ID需要能够唯一识别站内题目，不丢比赛／题集身份；已确认复用OJ Connect规范标识：luogu为P1001或P1001@12345，codeforces为2026/A，atcoder为abc300/abc300_a，nowcoder为problem/12345或contest/12345/A，lanqiao为12345；均为字符串。harness负责转换、校验及可往返适配，不让模型同时重复填写URL、站点和原生ID。
 
-fetchProblem与搜索开关互不影响：关闭或打开聊天搜索不改变取题能力；取题也不改变browseWeb开关。browseWeb仍保默认开启和独立文件权限要求，免额外搜索密钥为方向，具体服务可用性另验。
+fetchProblem与搜索开关互不影响：关闭或打开聊天搜索不改变取题能力；取题也不改变browseWeb开关。browseWeb默认开启，联网开关和本地文件权限分别判断；免额外搜索密钥是方向，具体服务可用性另验。
 
 模型取题只进入普通上下文，无专门缓存／队列，不更新用户看题时间，不创建源码、不导入CPH、不打开或切换面板、不登录或交题。认证、网络、解析错误按实际来源返回，不回读旧题面冒充新观测。
 
@@ -94,13 +100,13 @@ fetchProblem与搜索开关互不影响：关闭或打开聊天搜索不改变�
 | Notebook同一代码块运行多个input | 一条 | 该代码块、一份编译信息、多组input与结果 |
 | Notebook运行全部涉及N个代码块 | 对实际开始编译的代码块分别形成记录 | 每条对应一份代码及其input，不将整个Notebook点击压成一条 |
 
-**最新粒度覆盖此前“Notebook一次运行全部只入队一条”的中间选择。** 单点／全部操作等权占位，不按测试点数增加队列元素。独立运行即使代码和输入相同仍分别保留。
+单点／全部操作等权占位，不按测试点数增加队列元素。Notebook多程序分别成条；独立运行即使代码和输入相同仍分别保留。
 
 对应程序的输入运行结束或该程序尝试失败／取消后才入队，不在持久队列中维护运行中的占位和进度。编译失败仍按此前已确认的失败尝试保留一条，关联input标为未执行；尚未开始编译的后续程序不凭空生成尝试。用户停止后保留已经实际发生的内容。
 
 ### 6.2 共同字段与来源差异
 
-每条记录按“一份程序及编译信息＋输入结果列表”组织。harness统一共同概念，来源未提供的项保持缺失；下列业务含义已定，字段候选见6.3—6.6，仍须整体审阅。
+每条记录按“一份程序及编译信息＋输入结果列表”组织。harness统一共同概念，来源未提供的项保持缺失；下列业务含义已定，字段见6.3—6.5。
 
 | 内容 | 需要保存的事实 |
 | --- | --- |
@@ -118,7 +124,7 @@ harness完成事件归并、字节解码、流整理、过滤及最终记录表�
 
 ### 6.3 run字段基线：三来源统一表达
 
-本节及6.4—6.6构成本轮收敛的run字段基线，包含负责人随后要求的删减。其余工具的具体工程接线统一进入新实施计划审阅，不继续逐字段重问。以下完整示例均为合成数据，不是实际运行、源码验证或模型验收。三类来源共用一份记录结构；不新增统一资源库、事件存储层或引用版本协议。
+本节及6.4—6.5维护run字段合同。以下完整示例均为合成数据，不是实际运行、源码验证或模型验收。三类来源共用一份记录结构；不新增统一资源库、事件存储层或引用版本协议。
 
 #### 6.3.1 完整记录外层
 
@@ -186,7 +192,7 @@ Runner交互输入必须来源于执行层能够可靠提供的实际输入正�
 
 Notebook程序输出与辅助进程报错保持来源区别：辅助程序的错误不能放进学生程序的stderr来冒充分流。执行owner实际报告的简短失败原因可以进入error；采集适配器不从终端页面或Notebook已渲染outputs补证，不据此改动原生结果界面。
 
-CPH的check候选保留现有结果名：passed、wrong-answer、runtime-error、time-limit、cancelled、output-limit。只承接CPH本次实际结果，不由Beacon重判。Python特判同样仅保check值，不保存检查器类型、配置、路径、正文、命令或诊断。没有产生最终check时省略，不编造passed。
+CPH的check使用现有结果名：passed、wrong-answer、runtime-error、time-limit、cancelled、output-limit。只承接CPH本次实际结果，不由Beacon重判。Python特判同样仅保check值，不保存检查器类型、配置、路径、正文、命令或诊断。没有产生最终check时省略，不编造passed。
 
 check与程序status是不同事实：学生程序正常退出时，CPH仍可能给出wrong-answer；检查过程的time-limit不能据此说学生程序超时。本稿不新增检查器详情。检查器代码沉淀登记为后续开发事项，排期另定；对拍检查器与随机生成器能力继续待设计。
 
@@ -208,7 +214,7 @@ check与程序status是不同事实：学生程序正常退出时，CPH仍可能
 
 omittedBytes只计Beacon的8KiB规则从已取得、已解码整理的UTF-8正文中省去的准确字节。若执行层先发生可确认的输出丢失，同一对象另给sourceOmittedBytesAtLeast，表示上游已观察但未取得正文的字节下界；未知数量只在gaps解释，不造0或准确总量。头尾指已取得正文的头尾，不在源头已截断时冒充整个程序全程输出的头尾。
 
-随实施计划批准的8KiB跨流分配算法：先汇总编译和所有input的实际程序输出流；总量不超8192则原样保存。超出时，在非空流间均分正文额度，短流剩余额度继续分给长流；固定按编译流、runs顺序及流名分配余数，单流超出额度则各取约一半头尾并退回UTF-8字符边界。保留所有input身份／状态和真实省略量，即使某流没有正文额度也不删该项。结构和省略说明不计入8192正文字节；不靠裁掉输入／源码／期望输出满足额度，不在工具读取时再分配模型动态预算。
+8KiB跨流分配算法：先汇总编译和所有input的实际程序输出流；总量不超8192则原样保存。超出时，在非空流间均分正文额度，短流剩余额度继续分给长流；按采集器固定的通道顺序分配余数，单流超出额度则各取约一半头尾并退回UTF-8字符边界。保留所有input身份／状态和真实省略量，即使某流没有正文额度也不删该项。结构和省略说明不计入8192正文字节；不靠裁掉输入／源码／期望输出满足额度，不在工具读取时再分配模型动态预算。
 
 #### 6.3.5 状态与失败
 
@@ -411,7 +417,7 @@ failed、start-failed等只从执行owner的真实结果转换，不能用模型
 }
 ~~~
 
-Notebook一次编译多input及执行／采集解耦是本轮待实施优化，不由该JSON证明已实现。inputCellNumber与codeBlockNumber计数范围不同，均指执行时位置，不作为回写或永久绑定键。
+Notebook一次编译多input及执行／采集解耦已接入源码；该JSON仅说明结构，验证见实现状态。inputCellNumber与codeBlockNumber计数范围不同，均指执行时位置，不作为回写或永久绑定键。
 
 #### 6.4.4 Runner交互输入缺口示例
 
@@ -467,7 +473,7 @@ Notebook一次编译多input及执行／采集解耦是本轮待实施优化，�
 }
 ~~~
 
-该例表达“已取得终端合流输出，但未取得可靠stdin正文”，不是声称交互输入天然不可采集。示例中的回显不能拿来补input.text；后续实施必须单独核实可提供的输入边界。
+该例表达“已取得终端合流输出，但未取得可靠stdin正文”，不是声称交互输入天然不可采集。示例中的回显不能拿来补input.text；当前无法可靠取得的交互stdin仍按null＋gaps表达，增强能力未交付。
 
 #### 6.4.5 其余已定操作怎样表达
 
@@ -482,7 +488,7 @@ Notebook一次编译多input及执行／采集解耦是本轮待实施优化，�
 
 ### 6.5 readRunRecord请求与返回
 
-工具说明仅建议为：List recent runs, or read one complete run record by ID. 参数schema：
+工具说明为：List recent runs, or read one complete run record by ID. 参数schema：
 
 ~~~json
 {
@@ -499,7 +505,7 @@ Notebook一次编译多input及执行／采集解耦是本轮待实施优化，�
 
 没有id时列目录；id:null、空字符串或多余参数报参数错误，不回退为空参。合法ID可直接读取，不强制先列目录。没有producer／revision／part／stream／测试点参数。
 
-空参返回全部仍保留的简短目录，建议按最新入队在前展示；内部队列仍以尾部为新。summary由harness根据实际字段确定性生成，不调用模型，也不加入题目推断：
+空参返回全部仍保留的简短目录，按最新入队在前展示；内部队列仍以尾部为新。summary由harness根据实际字段确定性生成，不调用模型，也不加入题目推断：
 
 ~~~json
 {
@@ -552,13 +558,7 @@ readRunRecord({"id":"22222222-2222-4222-8222-222222222222"})
 → {"record": 上述完整CPH记录}
 ~~~
 
-空目录是{"records":[]}。失败不冒充空目录／空记录；候选错误外壳为{"error":{"code":"not_found","message":"该运行记录当前不可读取。"}}。invalid_arguments表示参数不合法；unavailable表示根或模式不允许；not_found表示本根当前无此ID；read_failed表示实际读取失败。被淘汰和从未存在不靠新建墓碑区分。错误命名与外壳仍待九工具整体验证，不新增重试、自动换根或偷偷改读其他条目。
-
-### 6.6 本字段稿的审阅边界
-
-负责人已允许方案收敛；6.3—6.5连同本轮明确删减作为新实施计划的字段基线。错误外壳、输出适配及剩余工具接线统一随计划整体把关，不将已定业务重新当成开放问题。当前只修改设计与计划文档，没有工具实现、Notebook执行优化、API评测或构建。
-
-负责人已明确：CPH“仅编译”不形成run记录，无论编译成功、失败或取消，均不入队、不占位；operation不增加compile-only。用户点击运行单测试点／全部测试点所触发的编译失败，仍保存该次运行请求的失败记录，两种操作不能混淆。原CPH“仅编译”用户功能保留。Notebook共享编译耗时如何真实呈现及其执行接点，留实施方案单列；不以字段稿代替该优化。
+空目录是{"records":[]}。失败不冒充空目录／空记录；错误外壳例如{"error":{"code":"not_found","message":"该运行记录当前不可读取。"}}。invalid_arguments表示参数不合法；unavailable表示根或模式不允许；not_found表示本根当前无此ID；read_failed表示实际读取失败。被淘汰和从未存在不靠新建墓碑区分。不自动重试、换根或改读其他条目。
 
 ## 7. Notebook执行优化与采集解耦
 
@@ -570,7 +570,7 @@ Notebook编译运行业务优化明确纳入本轮工具层重构。运行全部
 
 某代码块编译失败，跳过它对应input并明确未执行，继续其他代码块。单个input运行错误／超时／输出超限，保实际结果并继续后续input；用户主动停止则结束整个批次，不再启动剩余内容。
 
-Notebook既有输入关联、顺序、原生结果展示和运行限制保留，具体共享编译耗时如何呈现在每个input旁边另审，不能把复用结果计作新的编译。
+Notebook既有输入关联、顺序、原生结果展示和运行限制保留，每个input显示本次共享编译耗时，不能把复用结果计作新的编译。
 
 ### 7.2 模块边界
 
@@ -582,7 +582,7 @@ Notebook既有输入关联、顺序、原生结果展示和运行限制保留，
 
 可沿已有模块建立小型结果／回调接点，无需通用事件总线。没有Beacon工作区、采集不可用或落盘失败时，Notebook照常执行；更换执行实现不要求重写记录工具，存储策略也不改编译运行逻辑。
 
-该优化已纳入本次实施并接入候选源码；分项执行证据及最终验收边界见实现状态。
+该优化的源码与验证边界见[实现状态](implementation-status.md)。
 
 ## 8. 输出保存上限与模型容量
 
@@ -597,6 +597,10 @@ readRunRecord按ID返回完整已保存记录，包括这些保留片段和省�
 压缩不改磁盘记录，不提供模型保存／删除代码的职责。8KiB是run采集输出规则，不擅自推广到verdict详情或fetchProblem题面。
 
 ## 9. verdict的终态与去重
+
+完整problem记录只有id、problem:{oj,problemId}、filePath:string|null和viewedAt。完整verdict记录为id、problem:{oj,problemId}、filePath:string|null、observedAt、submission和result。
+
+submission承接可得id、url、submittedAt、language、code、codeLength、sourceVerification；sourceVerification为matched／mismatch／unavailable／not-checked。result承接必有rawStatus及可得score、time、memory、compileMessage、compileSucceeded、testCaseSummary和groups。testCaseSummary为passed／total，groups为{name,rows:string[][]}列表；站点字符串、单位和19位整数文本不转成Number，缺项省略，不补隐藏测试。verdict目录只给ID、题目、文件、时间、原判词及可得分数，不注入源码或逐点正文。
 
 仅在OJ Connect完全取得最终评测结果后考虑入队。排队、评测中和自动轮询中间态不占持久队列；无法确认最终结果时不伪造终态。没有提交代码不影响保存已经取得的最终判词。
 
@@ -622,31 +626,14 @@ system承接导师定位、教学深度、按问题取材、当前稿与历史�
 
 ## 11. 历史与压缩权限
 
-原工具调用／结果保真实名字与配对，重放不执行，新请求不通过旧入口恢复快照或写工具。有效分支约束消息、普通工具返回、材料和许可；无独立代码队列例外。旧磁盘数据处理、队列迁移和提供方旧工具历史兼容另随实施计划审阅，本轮不删除数据。
+原工具调用／结果保真实名字与配对，重放不执行，新请求不通过旧入口恢复快照或写工具。有效分支约束消息、普通工具返回、材料和许可；无独立代码队列例外。旧磁盘数据不自动迁移／删除；新队列从后续真实行为形成，不为旧工具加隐藏执行别名，见底层设计。
 
 压缩阶段只读本回答已合法固定的记录及已有授权材料，不读新代码、不首次消费队列、不重新联网或写资产；新工具仅作受限适配，不另改压缩算法或引入额外模型。
 
-## 12. 实施承接与整体审阅
+## 12. 工程入口与后续范围
 
-以下内容已由[新实施计划](../plans/2026-11-24-beacon-context-tools-rebuild.md)承接；计划及执行方式待整体审阅，已经确定的配额、目录／整读、可见页面和生命周期不再重复列为未决：
+- [工具schema／description](../../extensions/becoder.beacon/src/contextToolContract.ts)、[执行层](../../extensions/becoder.beacon/src/contextTools.ts)、[装配](../../extensions/becoder.beacon/src/provider.ts)与[系统提示](../../extensions/becoder.beacon/src/prompts.ts)。
+- [记录类型](../../src/typings/becoder-beacon.d.ts)、[队列验证](../../src/vs/platform/beacon/common/beaconRecords.ts)、[Coordinator](../../src/vs/platform/beacon/node/beaconCoordinator.ts)与[Store](../../src/vs/platform/beacon/node/beaconStore.ts)。
+- [页面](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)、[Notebook](../../extensions/becoder.notebook/src/extension.ts)、[程序组执行](../../extensions/danielpinto8zz6.c-cpp-compile-run/src/notebookProcess.ts)、[CPH](../../extensions/becoder.cph/src/execution.ts)与[OJ](../../extensions/becoder.oj-connect/src/extension.ts)。
 
-| 项目 | 后续交付 |
-| --- | --- |
-| 最终JSON与schema | run三来源字段基线见6.3—6.6；九工具请求与工程外壳见新计划§2，系统提示在Task6承接 |
-| 五站题目ID | 规范标识已确认；实现时核对解析器接线与往返能力，不重问格式选择 |
-| 边界适配 | 8KiB跨字段保留算法及真实省略表示、整体过大后的既定压缩接线，不回引分页／二次裁剪 |
-| 实施计划 | Notebook编译复用与采集解耦、工具替换、旧数据／历史兼容、回归及停止条件 |
-| 系统提示与界面 | 对已定工具语义作简短承接，共享编译耗时真实展示，完整工具可视化仍后续 |
-
-按收敛设计审阅新的具体实施计划，选择执行方式后再开始产品代码。真实模型观察与stage范围以新计划为准，不沿用旧测试／开发授权，文档收敛不冒充源码验收。
-
-## 13. 后续验证方向与当前状态
-
-验证应覆盖：可见分屏整稿而非后台标签；代码零额外存储；三个工具按需目录和ID整读；13／30／20及两类不同去重；CPH单点／全部等权、仅编译不入队、运行请求编译失败仍保留；Notebook多程序分条、一次编译多input、点击时固定、失败继续与用户停止；采集失败不影响执行；8192字节合计与头尾；完整记录触发同步压缩而非再裁剪／分页；搜索与fetchProblem互不影响；Blackout采集／消费隔离及通用兜底。
-
-最近提交备份仍为Beacon_Next@74d09ef4；本轮候选改动在工作区，旧五producer入口、代码快照和模型editNotebook已退出。文档、源码、真实模型、stage与负责人体验分别验收；实际进度见实现状态。本轮未授权Git提交或发行。
-
-- [工具装配](../../../extensions/becoder.beacon/src/provider.ts)、[ContextTools](../../../extensions/becoder.beacon/src/contextTools.ts)、[提示](../../../extensions/becoder.beacon/src/prompts.ts)、[压缩](../../../extensions/becoder.beacon/src/compaction.ts)。
-- [原生类型](../../../src/typings/becoder-beacon.d.ts)、[页面owner](../../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)、[Coordinator](../../../src/vs/platform/beacon/node/beaconCoordinator.ts)、[Store](../../../src/vs/platform/beacon/node/beaconStore.ts)。
-- [Notebook入口](../../../extensions/becoder.notebook/src/extension.ts)、[运行内核](../../../extensions/danielpinto8zz6.c-cpp-compile-run/src/notebookProcess.ts)、[CPH执行](../../../extensions/becoder.cph/src/execution.ts)、[CPH元数据](../../../extensions/becoder.cph/src/problemStore.ts)、[OJ类型](../../../src/typings/becoder-oj-connect.d.ts)。
-- [前轮报告](../../beacon/evaluation/2026-11-23-tool-information-flow-report.md)和[固定版本研究](../../beacon/research/2026-11-22-compaction-comparison.md)解释历史，不证明新方案有效。
+代码读取没有快照持久化或跨分支回读例外。readPage现有PDF文本能力保留，复杂提取不在本合同新增。资产写入、完整工具可视化、检查器代码沉淀及对拍能力留PRD后续范围。源码、模型、stage与负责人体验分别验收，实际结果集中在实现状态。

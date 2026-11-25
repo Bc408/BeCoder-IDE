@@ -1,72 +1,46 @@
-# Beacon 实施候选与验证边界
+# Beacon 实现状态与验证边界
 
-更新：2026-11-25。本轮实施已获负责人确认，源码基于Beacon_Next@74d09ef4继续开发；工具重构、复审修复和fetchProblem活动显示调整纳入本次正式归档。下列为本轮状态，后文前轮证据仅供追溯。源码、有限模型观察、stage构建和负责人真实体验分别验收。
+更新：2026-11-25。当前功能基线为 `Beacon_Next@dadbec9ddb183513a0838ef4e66f4afe9eda6e34`，已提交并同步到origin/Beacon_Next。本页集中维护源码、验证和缺口；文档清洗不构成新增产品测试或负责人验收。
 
-[统一入口](README.md) · [阶段设计](foundation-design.md) · [实施计划](../superpowers/plans/2026-11-24-beacon-context-tools-rebuild.md)
+[统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
-## 本轮候选源码
+## 当前实现
 
-九工具已接入真实Provider和系统提示2026-11-24.1；inspectContext操作并集、代码快照读写和editNotebook模型入口退出。当前代码工具读调用时所有可见C/C++整稿，含dirty及未命名页面；无额外代码持久化。problem13／run30／verdict20共用当前.beaconWork，按设计去重／终态入队；读题只存身份，题面统一fetchProblem，独立搜索开关。CPH仅编译不记录，检查器只保check；每条run的编译与程序输出总额8192 UTF-8字节，整条读取不二次裁剪。
+| 范围 | 源码事实 |
+| --- | --- |
+| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、readMaterial、browseWeb已接入Provider；提示版本2026-11-24.1 |
+| 现场代码 | 读取调用时全部可见C/C++分屏整稿，含dirty／未命名页；无后台标签读取或独立快照存储 |
+| 业务记录 | 当前.beaconWork共享problem13／run30／verdict20，按现行去重／终态规则发布；只启用cache/context三个文件 |
+| 题面 | problem仅存读题身份；fetchProblem按五站规范ID取题，与搜索开关互不影响；活动显示“已读取 fetchProblem”，普通browseWeb保持原文案 |
+| 执行记录 | CPH仅编译不入队、仅保check；run无题目绑定／runtimeLimits／检查器实现，编译与程序输出总计8192 UTF-8正文字节 |
+| Notebook | 点击时固定程序组、每代码块本次一次编译、input独立进程；失败继续，Stop结束批次，删除／调序不改计划，关闭仍取消；采集与执行解耦 |
+| 模式与工作区 | 有效根在Blackout也采集，模型持久来源关闭；无根／异常不采集、不补采 |
+| 历史与容量 | 完成工具交换保身份且不重演，代码／记录整读不二次裁剪；同模型同步摘要、有效前缀和一步一次恢复已接入 |
+| 退出能力 | inspectContext操作并集、codesnap及editNotebook模型入口已退出；旧磁盘数据不自动迁移／删除，Notebook独立用户功能保留 |
 
-Notebook已接入点击时固定的程序组计划，同程序本批一次编译、input独立进程；普通执行观察与Beacon采集分离。原用户编辑、备份、输出和运行功能保留。新队列只用cache/context三文件，旧数据不迁移／删除；历史已完成交换保原名与结果，不能重新执行旧入口。Blackout仍由软件采集有效根业务记录，模型不能列／读持久来源。
+## 已有验证
 
-第二轮复审修复了运行记录发布与工作区刷新竞态、OJ结果再次观测被旧指纹拦截、Notebook删除误停批次及启动失败／编译取消状态失真；补充复审又修复Stop后删除输入吞掉停止的边界。最终Beacon264、OJ171、Runner123、Notebook38、CPH87、原生Beacon51及Notebook浏览器13项通过，合计747项无跳过；分层、各拥有者类型／构建、Beacon独立lint通过。整仓ESLint因既有及生成文件诊断失败，本轮变更源码差分新增诊断为0，不能称整仓通过。有效36回合DeepSeek Flash观察完成，74次工具执行无错误，人工核心语义32/36；本次复审没有重跑模型，检查器状态理解和推理仍有明确错误。详见[能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md)及[问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md)。修复候选的客户端／OI最终检查通过；完整stage命令达到300秒期限后，官方min-ci入口使用本轮新编译输出重新组装，2026-11-25 00:26:58退出0，137.49秒，产物位于`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/`。随后按负责人要求将取题活动显示为fetchProblem，普通browseWeb文案保持原样；这次显示调整的检查／构建另记于同一台账，不沿用前一产物作为新显示证明。负责人桌面验收未完成，未作Setup。完整命令和失败／修正过程见本机`.superpowers/sdd/2026-11-24-beacon-context-tools-rebuild/checks.jsonl`。
+以下为功能基线已有证据，不是本次文档整理重新运行所得。
 
-## 前轮实现与验证记录（截至2026-11-23）
+| 层次 | 已验证内容与限制 |
+| --- | --- |
+| 自动回归 | 747项，无跳过：Beacon264、Runner123、CPH87、Notebook38、OJ171、原生Beacon51、Notebook浏览器13；复审后完成相关重跑 |
+| 类型／构建／分层 | 客户端及各拥有者类型检查、OI统一编译、分层、Beacon独立lint通过；整仓ESLint有既有／生成文件失败，变更源码差分新增为0，不能称整仓lint通过 |
+| 有限模型观察 | 2026-11-24 DeepSeek Flash有效36回合；工具执行74/74成功、66/74非空，31/31需新来源回合取得非空证据；人工核心语义32/36。合成网站／编辑器边界，不是生产成功概率 |
+| 最新stage | 2026-11-25 10:44:03（Asia/Shanghai），完整 `npm run gulp vscode-win32-x64-min` 退出0，210.26秒；此前typecheck与OI编译通过。构建后的提交钩子仅作格式修正，语法树核对和受影响类型检查通过 |
+| 桌面／发布 | 未做本次真实五站账号流程、安装版／GUI验收或Setup；Git云端备份不是Release |
 
-以下保留旧候选及测试证据的原时点含义；“本轮”“已接通”和批准状态均指前轮，不代表新架构已开发或验收。
+stage启动文件：`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/BeCoder.exe`。早前完整stage超时及min-ci恢复仍保留在[能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md)，不覆盖最新完整构建成绩。本机命令／失败台账为 `.superpowers/sdd/2026-11-24-beacon-context-tools-rebuild/checks.jsonl`。
 
-## 上下文效果测试与工具调整
+## 已知缺口与待验收
 
-后续工具信息流专项已获负责人确认，见[专项设计](../superpowers/specs/2026-11-23-beacon-tool-information-flow-design.md)与[执行计划](../superpowers/plans/2026-11-23-beacon-tool-information-flow.md)。当前候选新增字段级参数错误反馈、snapshotSave身份、选择范围／可读部分／同源续读参数、指定CPH样例组合视图、原样例号目录、题目线索matched/no-match及同回答并行首读合并。导师提示2026-11-23.3减少工程汇报并明确按问题取材；旧协议不改写。独立审阅发现的CPH组合大字节输出解码／脱敏遗漏和未完成样例流遗漏已修正，组合与单独选择统一沿解码后过滤，相关中间模型批次停止并保留为未通过审阅证据。最新拥有者回归304项通过，客户端类型检查和原生57项已有通过证据；最终候选重新编译、DeepSeek新旧对照和旧保护集的结果分别以台账及报告为准，不能据源码回归宣称模型稳定性已达标。摘要格式／恢复策略未改变。
+- **模型理解和教学尚不稳定。** 有检查器time-limit与学生程序正常退出混淆、反事实执行推导及64位范围错误；另有过度取材、内部字段搬运、无关扩展。工具机械成功不等于有价值取材或正确回答，见[报告与样本](evaluation/2026-11-24-context-tools-rebuild-report.md)。readPage／readMaterial未在这批云观察中被调用，只有离线覆盖。
+- **压缩保留瓶颈与实现差距。** 同步摘要已有实现；本轮3次成功不推翻前轮复杂长对话中的结构化摘要失败与语义连续性问题。执行层已拒绝整理阶段列目录／首次读取，但schema仍复用普通可选ID形态，未限定已固定ID。预算已计算60%目标，尚未传给摘要生成；当前发布只检查严格缩短、低于90%和硬容量。设计目标继续保留，不能写成全部完成或全场景稳定。
+- **Runner交互输入存在缺口。** 不能可靠还原的stdin为null并标gaps，合流输出或回显不当完整输入。
+- **执行观察类型仍可收窄。** metadata／event／outcome含unknown，当前依赖适配与运行校验；尚不是计划曾建议的有限类型联合。
+- **后续能力仍保留。** 资产写入、tips/status、dream、完整视觉、本人同题历史增强及完整工具可视化未由本轮工具底座交付；CPH检查器代码沉淀、对拍检查器和随机生成器另行设计。
+- **负责人体验待验收。** 按真实拿题→CPH单点／全部→dirty改稿→Runner／Notebook→OJ→Beacon验证材料依据、失败提示和模式裁切。提示词优化专项尚未实施。
 
-该专项[正式统计](evaluation/2026-11-23-tool-information-flow-report.md)已齐备：600个新场景配对槽位、48条新连续轨迹、640次旧场景及36条旧轨迹，合计1324。排除每版5个安全停止槽位后，新场景语义基线265/295、候选261/295；新轨迹全轮完成22/24→24/24、辅助语义18/24→21/24。单场景未显示整体质量提升；快照／分页及题目线索等分组仍未达目标。候选的新场景和新轨迹重复无效参数调用为0，首次非法参数及错误取材仍存在，不能换算为全面tool正确。22项无效／缺失裁判单次修复后仍有2项无效，原答／原判保留；14项独立抽审另列，自动误判不静默翻分。旧压缩专项15次结构失败及中途失败继续冻结，未将模型瓶颈伪装成已修复。最终stage结果单独交付，负责人真实流程验收未由本批模型统计替代。
+## 历史证据
 
-2026-11-23效果测试以当前生产Store／Coordinator／ContextTools／History／Provider和真实DeepSeek Flash为对象，编辑器、网站返回与用户行为凭证使用合成边界。补充128个独立场景各5次、12条连续轨迹各3次及图片兼容观察；原始尝试、服务故障后的补测、辅助裁判和独立语义审阅分别保留。完整结果及未达标能力见[能力报告](evaluation/2026-11-23-context-foundation-report.md)，不能用非空回答或构建成功替代质量验收。
-
-余额补充后的固定槽位已全部执行：场景630/640完成、轨迹35/36完成；11次未完成均为结构化摘要格式失败。有效辅助评分分别580/622和28/35通过，不能据整体比率覆盖分组差距或独立审阅指出的误判。压缩输出格式、分支历史的语义判断及长对话质量继续列为冻结瓶颈，未宣称全能力通过。
-
-本轮修正工具结果余量过度受90%主动整理线限制的问题，改为在输入硬容量内分配有界结果，并在完整工具批次后的下一步骤继续检查整理；同时移除整理输入中与保留尾部重复的当前问题。近期目录按各来源最新在前展示顺序，仍由模型判断讨论对象。提示版本为2026-11-23.2，进一步区分题意、历史稿和当前稿的取材范围。上述差异不改变队列配额、来源权限或学生源码保护。
-
-最终源码回归289项、原生基础设施57项、类型及相关lint／分层检查已有通过证据；统一扩展编译与本轮干净staged应用的实际结果另以执行台账、构建结果文件和交付说明为准。服务限流／余额不足与真实模型质量问题分开，Ollama4B校准不并入DeepSeek验收。
-
-## 负责人使用后发现的P0与修正
-
-前一候选通过源码回归，但负责人实测首问即被容量整理错误拦截，不能据旧测试／构建宣称运行验收。根因是服务给出C=1048576、O=393216而未单列I时，解析仍使用缺省I=24576；完整工具定义、近期目录及10份快照元数据即可触发，空目录测试没有覆盖。
-
-现已改为有明确C时用C约束缺失I，B仍按min(I,C−O)计算，显式I和无容量信息时缺省值保持。新增真实扩展装配、完整13／20近期队列、10份代码目录和全部四类工具的红灯／绿灯回归，确认首问能发出、读取代码并保存同次快照、接工具结果完成回答。真实已授权API只使用合成材料，验证两次请求、一次读存和非空回答。
-
-负责人同时撤回讨论对象的harness绑定。已移除“上轮对象”、对象选择器、下一问／会话固定、发送时捕获及会话绑定字段。旧绑定只在历史读取的脱离副本中忽略，不改用户原始输入。目录仅提供页面／活动编辑器的观测信息，由LLM结合提问选择；代码工具每次指定页面ID或读取调用当下活动代码页。最新完整Beacon源码回归289项通过，生产Webview渲染已核对无旧显示，输入容量字段与恢复默认也按新规则通过；最终源码检查和重建结果见执行台账。
-
-## 已接通的候选源码
-
-| 所有者 | 本轮行为 | 入口 |
-| --- | --- | --- |
-| 原生Store／Coordinator | 采集与消费scope分开；Get Problem13条、四执行来源各20条、真实活动保护；v1只读兼容，真实写入才迁v2 | [Store](../../src/vs/platform/beacon/node/beaconStore.ts)、[Coordinator](../../src/vs/platform/beacon/node/beaconCoordinator.ts) |
-| Get／Import／OJ | 用户取得完整题面后按原scope交接；native attempt和正式记录各守身份，展示不控制事实观察，不新增提交或查询 | [OJ入口](../../extensions/becoder.oj-connect/src/extension.ts)、[提交owner](../../extensions/becoder.oj-connect/src/workflowController.ts) |
-| Runner／CPH／Notebook | 真实主编译开始后供证，保原编译稿、终态和字段结构；通道保头尾，磁盘替换旧尾而不累计，区分进程字节与已观测文本 | [执行凭证](../../extensions/danielpinto8zz6.c-cpp-compile-run/src/beaconEvidence.ts)、[CPH](../../extensions/becoder.cph/src/execution.ts) |
-| 实时代码 | 按本次工具页面ID或调用当下活动代码页读最新dirty稿，同次完整观测保存本对话10份／256KiB队列；无讨论对象绑定，发送不捕获，历史读不晋升，失败不伪造ID | [页面owner](../../src/vs/workbench/contrib/becoder/electron-browser/beaconPages.ts)、[ContextTools](../../extensions/becoder.beacon/src/contextTools.ts) |
-| 题目与共享消费 | Get／CPH／路径独立提供线索，由模型选题；保存题面与无专门持久化的只读联网分开；共享首次精确读在本回答固定revision，不整条复制到对话 | [ContextTools](../../extensions/becoder.beacon/src/contextTools.ts) |
-| 唯一执行事实来源 | 不使用OJ／Notebook功能页或笔记运行字段；普通笔记／备份文件先由owner投影内容，失败不回raw JSON；真实输出和完整备份保留 | [Notebook owner](../../extensions/becoder.notebook/src/editApi.ts)、[文件工具](../../extensions/becoder.beacon/src/fileTools.ts) |
-| 协议与分支 | 同步seal和请求绑定完成sink；error只投影完成工具，stopped保已接收文字；完整模型来源隔离私有字段，普通私有材料查有效前缀，代码队列归整段对话 | [协议](../../extensions/becoder.beacon/src/protocol.ts)、[会话](../../extensions/becoder.beacon/src/session.ts)、[历史](../../extensions/becoder.beacon/src/history.ts) |
-| 预算与摘要 | prepare／middleware／最终fetch检查，实际O一致，保留未知图片；同模型同步摘要，候选确认保存后发布，前缀校验、一次修复、20步共用、不递归、不删除代码 | [预算](../../extensions/becoder.beacon/src/contextBudget.ts)、[整理](../../extensions/becoder.beacon/src/compaction.ts)、[provider](../../extensions/becoder.beacon/src/provider.ts) |
-
-初始目录每来源最多展示最近3项和总数，显式`records`仍能列出全部保留条目；队列容量未变。工具正文分页受剩余输入额度约束，完整保存与实际返回片段分别标明。
-
-Blackout关闭Beacon持久来源目录／读取／模型落盘，仍可读普通打开代码正文、文件名和路径，以及OJ只读联网题面。正常所选根的软件用户行为采集持续；无根或根失效不写替代位置、不后补。内部`.beaconWork`不借普通页面绕过owner或分支检查。
-
-## 验证与待验收
-
-本轮用真实Store／Coordinator、ContextTools、ChatHistory、AI SDK及适配器作确定性回归，网站与模型端可由合成材料／mock替代。精确命令、失败修正、退出码保存在本地执行台账；旧提示评估或旧构建不作本轮证据。
-
-强模型只使用合成案例，观察换题、旧判词、指定样例、未知覆盖、完成工具断线、分支代码、换模型、保存失败、只读题面和实际摘要。完整链路返回不等于教学语义全部达标；历史代码解释仍可能出现未经新读的“当前未变”措辞，记录为后续提示质量观察。4B模型不作为教学能力上限。
-
-独立只读审阅已完成，报告的重要问题已修复并通过定向回归。负责人随后要求增量复查，再修复9项问题：样例文本被JSON解析导致64位整数及换行失真；代码保存异常丢弃已读正文；Notebook代码选择器绕过身份校验；联网题面忽略选择器；续答压缩遗漏原问题及附件；无工具能力模型在压缩时收到工具定义；通道重新分配丢失已采集尾部；蓝桥关闭预览后遗漏已确认结果；继续／重答仍提示发送时版本锁定。已取得的蓝桥结果沿现有桥接传递，不追加网站查询，不重开已关闭预览。
-
-增量复查后的Beacon扩展289项、Runner118项、OJ167项、蓝桥Session与bridge合计19项测试通过。此前原生基础设施57项、五站浏览器接入11项、Notebook30项、CPH26项通过／1项跳过（本机生成的gch缓存用例，发行工具链不携带）；这些未改所有者的证据与本轮增量回归分别保留。客户端与扩展类型检查、相关lint通过；最终分层检查、统一扩展编译和staged构建结果以本地执行台账及交付说明为准。
-
-候选交付门包括统一OI扩展编译及staged应用构建；实际完成情况单独以执行台账和交付说明为准。负责人再按五站正常流程验收关联、讲解依据和失败提示。本候选未宣称Setup、真实网站登录／交题、安装版运行或负责人体验通过。
-
-## 后续范围
-
-PRD仍保留141个稳定需求ID，九项底层任务不等于全部能力已交付。完整工具可视化UI、tips/status、记忆／dream、完整视觉和本人同题历史查询增强继续保留后续；Notebook独立功能、草稿与主动材料是保护范围。现行需求以本目录为准，历史文档仅供追溯。
+[最新报告](evaluation/2026-11-24-context-tools-rebuild-report.md)和[问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md)保留样本、失败和构建过程；[前轮基础报告](evaluation/2026-11-23-context-foundation-report.md)、[旧工具专项报告](evaluation/2026-11-23-tool-information-flow-report.md)及[结论](evaluation/2026-11-23-tool-information-flow-conclusions.md)只代表旧实现。旧快照合同、执行计划和回迁过程可按[来源索引](sources.md)从固定Git版本追溯，不再作为当前工作待办。

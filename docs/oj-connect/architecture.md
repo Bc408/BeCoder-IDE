@@ -1,6 +1,6 @@
 # OJ Connect 技术架构
 
-Beacon材料接入的现行合同见[Beacon架构](../beacon/architecture.md)及[实现差距](../beacon/implementation-status.md)。下一阶段沿本扩展真实Get／Import／交题结果owner供证，并复用五站只读题面解析；模型取材不重放用户动作、不回写看题行为、不获得登录／提交权限。正常所选Beacon根的生产与模式消费分别校验，Blackout仍允许软件采集。本文既有站点用户流程与历史验收不因此变成Beacon新链路的通过证据。
+Beacon材料接入的现行合同见[Beacon架构](../beacon/architecture.md)及[实现状态](../beacon/implementation-status.md)。当前源码沿本扩展真实Get／Import／最终评测结果供证，并复用五站只读题面解析；problem仅存看题身份、文件与时间，题面由fetchProblem读入。模型取材不重放用户动作、不回写看题行为、不获得登录／提交权限。正常所选Beacon根的采集与模式消费分别校验，Blackout仍允许软件采集。本文既有站点用户流程与历史验收不自动成为Beacon新链路的真实流程验收。
 
 [产品与开发入口](README.md) · [开发指南](../development.md)
 

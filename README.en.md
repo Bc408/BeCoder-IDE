@@ -12,7 +12,7 @@ A Windows programming environment for OI / ICPC and everyday C/C++ practice.
 
 </div>
 
-BeCoder brings problem reading, coding, local sample testing, submission and judge results into one editing environment. Start writing and running C/C++ after installation. OJ Connect links the editor to five popular online judges; Beacon, the optional AI companion, helps explain problems, discuss code and prepare learning notes.
+BeCoder brings problem reading, coding, local sample testing, submission and judge results into one editing environment. Start writing and running C/C++ after installation. OJ Connect links the editor to five popular online judges; Beacon, the optional AI companion, helps explain problems, discuss code and generate content for learning notes.
 
 ## Features
 
@@ -47,7 +47,7 @@ Reinstallation deletes and replaces the entire existing installation directory, 
 
 - [User guide (Chinese)](docs/getting-started.md): installation, importing problems, running code, layout and data management.
 - [Development guide (Chinese)](docs/development.md): dependencies, source checks, builds and contributions.
-- [Beacon requirements and architecture (Chinese)](docs/beacon/README.md): unified capability requirements, the next foundation stage and current implementation gaps; designs are not delivered features.
+- [Beacon requirements and architecture (Chinese)](docs/beacon/README.md): capability requirements, current tool contracts, foundation architecture and implementation/validation status; future requirements are not delivered features.
 - [Product direction (Chinese)](VISION.md): experience goals, module responsibilities and long-term boundaries.
 - [Documentation index (Chinese)](docs/README.md): feature references, confirmed requirements and implementation status.
 - [GitHub Issues](https://github.com/Bc408/BeCoder-IDE/issues) · [Security policy](SECURITY.md).

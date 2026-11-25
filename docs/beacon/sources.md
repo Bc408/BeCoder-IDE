@@ -1,10 +1,31 @@
 # Beacon 历史来源索引
 
-更新：2026-11-24。本索引只用于追溯。现行规则从[统一入口](README.md)读取；历史标题中的“正式”“当前”“已通过”仅表示当时状态，不能覆盖负责人后续决定。
+更新：2026-11-25。本索引只用于追溯，并解释PRD来源代号。现行规则从[统一入口](README.md)读取；历史标题中的“正式”“当前”“已通过”仅表示当时状态。
 
-## 本轮清洗前备份
+## Git恢复点与本次清理
 
-Git提交74d09ef4e784fb29607569bb297131d739742ef4保存旧工具审阅稿、旧队列合同和代码快照文档。2026-11-24已用三类业务队列和代码只读设计替换现行正文；原代码快照文档撤下，改读[实时代码读取](code-reading.md)。旧计划和评估只保历史身份，不授权继续旧实现。原文从该提交读取，不将整份旧稿恢复到现行目录。
+| 固定提交 | 用途 |
+| --- | --- |
+| e28ac79c490921aee8e27e92c589648c129607b0 | 下文P／N／B等原始来源及其行号 |
+| 74d09ef4e784fb29607569bb297131d739742ef4 | 三队列重构前的旧工具、队列与代码快照合同 |
+| dadbec9ddb183513a0838ef4e66f4afe9eda6e34 | 已完成工具重构、复审与显示调整，也是2026-11-25文档清理前版本 |
+
+本次移除以下冗余文件，仍有效内容先合入现行文档。历史原稿可用 `git show dadbec9d:下表路径` 只读恢复；不将旧稿整体恢复为现行规则。
+
+| 原路径 | 当前去向／身份 |
+| --- | --- |
+| docs/superpowers/specs/2026-11-23-beacon-tool-interface-simplification-design.md | 迁为[工具合同](tool-contract.md)，承接已实现接口及字段 |
+| docs/beacon/code-reading.md | 合入工具合同§4 |
+| docs/beacon/decisions/context-queues.md | 合入[底层设计](foundation-design.md) |
+| docs/superpowers/specs/2026-11-23-beacon-tool-information-flow-design.md | 已被九工具合同替代，历史追溯 |
+| docs/superpowers/plans/2026-11-22-beacon-foundation-implementation.md | 旧架构执行计划，历史追溯 |
+| docs/superpowers/plans/2026-11-23-beacon-context-effect-evaluation.md | 已完成评测计划，结果保留在evaluation |
+| docs/superpowers/plans/2026-11-23-beacon-tool-information-flow.md | 已完成旧工具专项计划，结果保留在evaluation |
+| docs/superpowers/plans/2026-11-24-beacon-context-tools-rebuild.md | 已完成重构计划；接口／兼容／失败规则合入合同与底层设计，实绩见实现状态和报告 |
+| docs/beacon/review/2026-11-22-document-return.md | 已完成文档回迁过程，历史追溯 |
+| docs/beacon/review/2026-11-23-implementation-planning.md | 旧方案筹划过程，图片预算决定已保留在压缩合同与LONG04 |
+
+独立模型评测、问答、源码研究和输出质量清单保留。忽略目录 `.superpowers/sdd/` 中引用旧路径的历史整理脚本只作执行证据，不再用于生成现行文档。
 
 ## 固定恢复点
 
@@ -14,7 +35,7 @@ Git提交74d09ef4e784fb29607569bb297131d739742ef4保存旧工具审阅稿、旧�
 git show e28ac79c490921aee8e27e92c589648c129607b0:docs/beacon/prd.md
 ```
 
-将冒号后的路径换为下表对应路径即可。原文行号仅相对该固定版本；不要用当前同名文件核对历史行号。SHA-256针对原样副本字节，Git正文可能因LF／CRLF转换有不同字节哈希，核对正文时需统一换行。119份原样副本仍由原整理工作包保存，本轮没有改写它们，项目正常阅读不依赖本机桌面目录。
+将冒号后的路径换为下列原路径即可。原文行号仅相对该固定版本，不用当前同名文件核对。SHA-256是原整理时原样副本的记录值，Git正文可能因LF／CRLF转换有不同字节哈希；本次未重新核验外部副本，不据这些值声称当前外部文件完整。项目阅读和历史恢复不依赖本机桌面目录。
 
 ### P
 
@@ -114,7 +135,7 @@ SHA-256：`31d7b425fbdc66fd336048ddccebde51c9bea1259a32fa4ca9eaf842033de5fc`。
 
 ## Review history
 
-需求提取审计和就绪性复审留原整理工作包，属于过程记录。旧保存来源、永久绑定及模型删除建议已失效；[现行队列决定](decisions/context-queues.md)以2026-11-24三类业务记录、fetchProblem和无独立代码存储为准。真实提交身份、摘要有效前缀和有界恢复保留，新接口／实施待审；旧回执不批准后续修订。
+需求提取审计与就绪性复审原件由原外部整理工作包保存，Git只能恢复其来源索引，不能据此承诺恢复外部原件；本次未核验该工作包。已跟踪的回迁／筹划记录可从dadbec9d恢复。旧保存来源、永久绑定及模型删除建议已失效。当前工具与队列已实施，真实提交身份、摘要有效前缀和有界恢复继续保留；源码差距、模型瓶颈及负责人验收见实现状态，不从旧批准记录推断新阶段授权。
 
 ## 证据边界
 

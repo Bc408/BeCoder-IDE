@@ -6,7 +6,7 @@
 
 使用方式见[扩展说明](../../extensions/becoder.oj-connect/README.md)，蓝桥设计、协议采证及各轮性能工作见下方[开发文档与证据](#开发文档与证据)。
 
-Beacon协作按[现行Beacon架构](../beacon/architecture.md)和[实现差距](../beacon/implementation-status.md)推进：用户行为生产共享事实，模型只读取材不重放用户Get／Import／提交；只有正常所选Beacon根才采集，Blackout不停止软件采集。该接入属于下一阶段，不由五站已有用户闭环验收推定Beacon新链路也已通过。
+Beacon协作已接入当前源码，规则与验证分别见[Beacon架构](../beacon/architecture.md)和[实现状态](../beacon/implementation-status.md)：用户行为形成problem／verdict共享事实，problem不存题面，模型通过fetchProblem读题且独立搜索开关。模型取材不重放用户Get／Import／提交；只有正常所选Beacon根才采集，Blackout不停止软件采集。五站已有用户闭环验收不自动证明Beacon新链路的真实体验已通过。
 
 主要流程与扩展／宿主职责最初于 2026-11-12 确认，后续站点与交互按负责人决定迭代。本页说明现行范围和职责；文末按日期保留阶段证据，不将旧候选状态当作当前缺口。
 

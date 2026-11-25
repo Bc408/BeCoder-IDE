@@ -4,170 +4,109 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CompilationSourceSnapshot } from './compilationSnapshot';
+import type { ExecutionObserver } from './executionResults';
+import type { IBeaconOutput, IBeaconRecordWrite, IBeaconRunInput } from 'becoder-beacon';
+import { ObservedOutput, retainRunOutput, type OutputTarget } from './runRecordAdapter';
+export type RuntimeEvidence = ExecutionObserver;
 
-export interface RuntimeEvidence {
-	start(snapshot: CompilationSourceSnapshot, metadata: unknown): void;
-	event(value: unknown): void;
-	finish(outcome: unknown): Promise<void>;
+interface Facts {
+	type?: string; status?: string; phase?: string; stream?: string; index?: number;
+	compileOnly?: boolean; input?: { text?: string; bytesBase64?: string; source?: string; name?: string };
+	inputs?: { input?: string; text?: string; output?: string; name?: string; cellNumber?: number }[];
+	sampleNumbers?: number[]; operation?: IBeaconRecordWrite<'run'>['operation']; language?: 'c' | 'cpp'; codeNumber?: number;
+	compiler?: string; args?: string[]; compilerCwd?: string; runtimeCwd?: string; cwd?: string; command?: string;
+	text?: string; bytesBase64?: string; sourceOmittedBytes?: number;
+	cancelled?: boolean; timedOut?: boolean; outputLimitExceeded?: boolean; launchError?: string; error?: string; message?: string;
+	exitCode?: number; signal?: string; compileMs?: number; durationMs?: number; runMs?: number; programRuntimeMs?: number;
+	stdout?: string; stderr?: string; output?: string; result?: Facts; verdict?: IBeaconRunInput['check'];
 }
+const facts = (value: unknown): Facts => value && typeof value === 'object' ? value as Facts : {};
+const iso = (value = Date.now()) => new Date(value).toISOString();
+const runtimeStatus = (value: Facts): IBeaconRunInput['status'] => value.cancelled || value.status === 'cancelled' ? 'cancelled'
+	: value.timedOut || value.status === 'timed-out' ? 'timed-out' : value.outputLimitExceeded || value.status === 'output-limit' ? 'output-limit'
+		: value.launchError || ['unable-to-start', 'runner-error', 'executable-creation-error', 'failed'].includes(value.status ?? '') ? 'start-failed' : value.signal || value.exitCode !== undefined && value.exitCode !== null && value.exitCode !== 0 || value.status === 'runtime-error' ? 'runtime-error' : 'completed';
 
-interface EvidenceChannel {
-	key: string; phase: string; stream: string; sampleId?: string; blockId?: string; inputId?: string;
-	byteRepresentation: 'process-bytes' | 'utf8-observed-text'; observedBytes: number; sourceOmittedBytes: number;
-	head: Buffer; tail: Buffer; sequence: number;
-}
-
-/** Retain field structure and byte ranges; never serialize a broken JSON prefix. */
-function boundedFields(value: unknown, allowance: number): unknown {
-	const lengths: number[] = [];
-	const visit = (item: unknown): void => {
-		if (typeof item === 'string') { lengths.push(Buffer.byteLength(item)); }
-		else if (item && typeof item === 'object') { Object.values(item).forEach(visit); }
-	};
-	visit(value);
-	const perField = Math.max(16, Math.floor(allowance / Math.max(1, lengths.length) / 6));
-	const trim = (item: unknown): unknown => {
-		if (typeof item === 'string') {
-			const bytes = Buffer.from(item);
-			if (bytes.length <= perField) { return item; }
-			const half = Math.floor(perField / 2);
-			return { partial: true, byteRepresentation: 'utf8-observed-text', observedBytes: bytes.length, ranges: [{ offset: 0, bytesBase64: bytes.subarray(0, half).toString('base64') }, { offset: bytes.length - half, bytesBase64: bytes.subarray(-half).toString('base64') }] };
-		}
-		if (Array.isArray(item)) { return item.map(trim); }
-		if (item && typeof item === 'object') { return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, trim(child)])); }
-		return item;
-	};
-	return trim(value);
-}
-
-/** Observes user execution only; cache failures never control the user's program. */
-export class BeaconEvidence implements RuntimeEvidence {
-	private tail: Promise<void> = Promise.resolve();
-	private pending: unknown[] = [];
-	private pendingBytes = 0;
-	private timer: NodeJS.Timeout | undefined;
-	private started = false;
-	private disabled: boolean;
-	private sequence = 0;
-	private remaining: number;
-	private omittedEvents = 0;
-	private omittedBytes = 0;
-	private readonly channels = new Map<string, EvidenceChannel>();
-	private channelSequence = 0;
-	private channelDirty = false;
-	private streamCapacity = 0;
-
-	constructor(
-		private readonly handle: string | undefined,
-		private readonly producer: 'runner' | 'cph' | 'notebook',
-		private readonly invoke: (operation: string, input: unknown) => PromiseLike<unknown>,
-		private readonly failed: (error: unknown) => void,
-		private readonly capacity = 8 * 1024 * 1024
-	) { this.disabled = !handle; this.remaining = capacity; }
-
-	start(snapshot: CompilationSourceSnapshot, metadata: unknown): void {
-		if (this.disabled || this.started) { return; }
-		this.started = true;
-		const bytes = Buffer.from(snapshot.bytesBase64, 'base64');
-		// Leave room for JSON escaping, the byte copy and the final status.
-		const saved = bytes.subarray(0, Math.min(2 * 1024 * 1024, Math.floor(this.capacity / 8)));
-		if (saved.length < bytes.length) { this.omittedEvents++; this.omittedBytes += bytes.length - saved.length; }
-		const code = saved.toString('utf8');
-		const sourceSnapshot = { ...snapshot, bytesBase64: saved.toString('base64'), storedBytes: saved.length, complete: saved.length === bytes.length };
-		this.remaining -= Buffer.byteLength(JSON.stringify({ code, sourceSnapshot })) + 512;
-		const details = boundedFields(metadata, Math.max(128, Math.floor(this.capacity / 6)));
-		this.remaining -= Buffer.byteLength(JSON.stringify(details));
-		this.streamCapacity = Math.max(0, Math.min(Math.floor(this.capacity / 8), Math.floor(this.remaining / 4)));
-		this.remaining -= this.streamCapacity * 2 + Math.min(65536, Math.floor(this.capacity / 8));
-		const events = [{ type: 'compile-attempt', at: Date.now(), sourceSnapshot, details }];
-		this.send('startRuntime', { handle: this.handle, producer: this.producer, source: snapshot.originalPath, code, events });
+/** Collects only actual execution facts; publishes one semantic record after retirement. */
+export class BeaconEvidence implements ExecutionObserver {
+	private record: IBeaconRecordWrite<'run'> | undefined;
+	private readonly channels = new Map<string, OutputTarget>();
+	private done = false;
+	constructor(private readonly handle: string | undefined, private readonly producer: 'runner' | 'cph' | 'notebook', private readonly invoke: (operation: string, input: unknown) => PromiseLike<unknown>, private readonly failed: (error: unknown) => void, private readonly capacity = 8192) { }
+	start(snapshot: CompilationSourceSnapshot, value: unknown): void {
+		if (!this.handle || this.record || this.done) { return; }
+		try {
+			const meta = structuredClone(facts(value));
+			if (meta.compileOnly) { this.done = true; return; }
+			const input = meta.input ?? {}, tests = meta.inputs;
+			const inputText = typeof input.text === 'string' ? input.text : typeof input.bytesBase64 === 'string' ? Buffer.from(input.bytesBase64, 'base64').toString('utf8') : null;
+			const fileInput = this.producer === 'runner' && input.source && input.source !== 'interactive';
+			const runs: IBeaconRunInput[] = tests ? tests.map((test, index) => ({ input: { mode: 'text', text: String(test.input ?? test.text ?? '') }, status: 'not-run', skipReason: 'failed', ...(this.producer === 'cph' ? { testCaseNumber: Number(meta.sampleNumbers?.[index] ?? index + 1), expectedOutput: String(test.output ?? '') } : { inputName: test.name ?? '', inputCellNumber: test.cellNumber }) }))
+				: [{ input: { mode: fileInput ? 'file' : this.producer === 'runner' ? 'interactive' : 'text', text: inputText, ...(fileInput ? { filePath: input.source } : {}) }, status: 'not-run', skipReason: 'failed', ...(this.producer === 'notebook' ? { inputName: input.name ?? '' } : {}) }];
+			this.record = {
+				source: this.producer, operation: this.producer === 'runner' ? fileInput ? 'run-with-input' : 'run' : this.producer === 'cph' ? meta.operation ?? (tests?.length === 1 ? 'test-one' : 'test-all') : 'run-inputs',
+				startedAt: iso(), endedAt: iso(), status: 'failed',
+				program: { filePath: snapshot.originalPath, language: meta.language ?? (/\.c$/i.test(snapshot.originalPath) ? 'c' : 'cpp'), code: Buffer.from(snapshot.bytesBase64, 'base64').toString('utf8'), ...(this.producer === 'notebook' ? { codeBlockNumber: meta.codeNumber } : {}) },
+				compile: { status: 'start-failed', ...(meta.compiler ? { compiler: meta.compiler } : {}), ...(Array.isArray(meta.args) ? { args: [...meta.args] } : {}), ...(meta.compilerCwd ?? meta.cwd ? { workingDirectory: meta.compilerCwd ?? meta.cwd } : {}), output: { stdout: '', stderr: '' } },
+				runs, ...(meta.runtimeCwd ?? meta.cwd ? { workingDirectory: meta.runtimeCwd ?? meta.cwd } : {}), ...(meta.command ? { command: meta.command } : {}),
+				...(inputText === null && !tests ? { gaps: ['Reliable input text was not available; terminal echo is not stdin.'] } : {})
+			};
+		} catch (error) { this.fail(error); }
 	}
-
 	event(value: unknown): void {
-		if (!this.started || this.disabled) { return; }
-		const event = value as Record<string, unknown> | undefined;
-		if (event?.type === 'stream' && typeof event.phase === 'string' && typeof event.stream === 'string' && (typeof event.bytesBase64 === 'string' || typeof event.text === 'string')) {
-			this.stream(event); return;
-		}
-		const accepted = this.bound(value);
-		if (accepted === undefined) { return; }
-		this.pending.push(accepted); this.pendingBytes += Buffer.byteLength(JSON.stringify(accepted));
-		if (this.pendingBytes >= 64 * 1024) { this.flush(); }
-		else if (!this.timer) { this.timer = setTimeout(() => this.flush(), 250); this.timer.unref(); }
+		if (!this.record || this.done) { return; }
+		try {
+			const event = facts(value);
+			if (event.type === 'stream') {
+				const index = Number(event.index ?? 0), compiling = event.phase === 'compiling';
+				if (!compiling && this.producer === 'notebook' && event.stream === 'stderr') { return; }
+				const output = compiling ? this.record.compile.output! : this.record.runs[index]?.output ?? (this.record.runs[index] ? this.record.runs[index].output = {} : undefined);
+				if (!output) { return; }
+				const stream: keyof IBeaconOutput = !compiling && this.producer !== 'cph' ? 'merged' : event.stream === 'stderr' ? 'stderr' : 'stdout';
+				const key = `${compiling ? 'compile' : index}:${stream}`;
+				let channel = this.channels.get(key);
+				if (!channel) { channel = { output, stream, observed: new ObservedOutput() }; this.channels.set(key, channel); }
+				channel.observed.append(typeof event.bytesBase64 === 'string' ? Buffer.from(event.bytesBase64, 'base64') : Buffer.from(event.text ?? ''), Number(event.sourceOmittedBytes ?? 0));
+			} else if (event.type === 'compiled') {
+				const result = this.record.compile;
+				result.status = event.cancelled ? 'cancelled' : event.timedOut ? 'timed-out' : event.outputLimitExceeded ? 'output-limit' : event.launchError || event.error ? 'start-failed' : event.exitCode === 0 ? 'succeeded' : 'failed';
+				if (Number.isInteger(event.exitCode)) { result.exitCode = event.exitCode; }
+				if (Number.isFinite(event.compileMs ?? event.durationMs)) { result.durationMs = event.compileMs ?? event.durationMs; }
+				if (event.launchError ?? event.error) { result.error = String(event.launchError ?? event.error); }
+			} else if (event.type === 'sample-started' || event.type === 'input-started') {
+				const item = this.record.runs[Number(event.index ?? 0)]; if (item) { delete item.skipReason; item.status = 'cancelled'; }
+			} else if (event.type === 'sample-executed' || event.type === 'sample-finished' || event.type === 'input-finished') {
+				const index = Number(event.index ?? 0), item = this.record.runs[index]; if (!item) { return; }
+				const result = facts(event.result); this.applyResult(item, result);
+				if (this.producer === 'cph' && typeof event.verdict === 'string') { item.check = event.verdict as IBeaconRunInput['check']; }
+				for (const stream of this.producer === 'cph' ? ['stdout', 'stderr'] as const : ['merged'] as const) {
+					if (!this.channels.has(`${index}:${stream}`)) { this.event({ type: 'stream', phase: 'running', index, stream, text: result[stream === 'merged' ? 'output' : stream] ?? '' }); }
+				}
+			}
+		} catch (error) { this.fail(error); }
 	}
-
-	async finish(outcome: unknown): Promise<void> {
-		if (this.started && !this.disabled) {
-			const omittedChannels = [...this.channels.values()].filter(channel => channel.observedBytes > channel.head.length + channel.tail.length || channel.sourceOmittedBytes > 0);
-			this.pending.push({ type: 'finished', at: Date.now(), outcome: boundedFields(outcome, 32768), coverage: { truncated: this.omittedEvents > 0 || omittedChannels.length > 0, omittedEvents: this.omittedEvents + omittedChannels.length, omittedBytes: this.omittedBytes + omittedChannels.reduce((total, channel) => total + channel.observedBytes - channel.head.length - channel.tail.length, 0) } });
-		}
-		this.flush(); await this.tail; this.disabled = true; this.channels.clear();
+	private applyResult(item: IBeaconRunInput, result: Facts): void {
+		delete item.skipReason; item.status = runtimeStatus(result);
+		if (Number.isInteger(result.exitCode)) { item.exitCode = result.exitCode; }
+		if (Number.isFinite(result.durationMs ?? result.runMs ?? result.programRuntimeMs)) { item.durationMs = result.durationMs ?? result.runMs ?? result.programRuntimeMs; }
+		if (result.signal) { item.signal = String(result.signal); }
+		if (result.error ?? result.launchError ?? result.message) { item.error = String(result.error ?? result.launchError ?? result.message); }
 	}
-
-	private bound(value: unknown): unknown {
-		const bytes = Buffer.from(JSON.stringify(value) ?? 'null');
-		if (bytes.length <= this.remaining) { this.remaining -= bytes.length; return JSON.parse(bytes.toString('utf8')); }
-		this.omittedEvents++; this.omittedBytes += bytes.length;
-		if (this.remaining < 512) { return undefined; }
-		const partial = boundedFields(value, this.remaining - 256);
-		this.remaining -= Buffer.byteLength(JSON.stringify(partial));
-		return partial;
+	async finish(value: unknown): Promise<void> {
+		if (this.done || !this.record) { return; } this.done = true;
+		try {
+			const outcome = structuredClone(facts(value)), record = this.record;
+			record.endedAt = iso();
+			if (Number.isFinite(outcome.compileMs)) { record.compile.durationMs = outcome.compileMs; }
+			record.status = outcome.status === 'cancelled' ? 'cancelled' : record.compile.status !== 'succeeded' ? 'compile-failed' : ['completed', 'runtime-error', 'timed-out', 'output-limit'].includes(outcome.status ?? '') ? 'completed' : 'failed';
+			if (this.producer !== 'cph' && record.runs.length === 1 && record.compile.status === 'succeeded' && record.runs[0].status === 'not-run') { this.applyResult(record.runs[0], outcome); }
+			for (const item of record.runs) {
+				if (item.status === 'not-run') { delete item.output; item.skipReason = record.status === 'compile-failed' ? 'compile-failed' : record.status === 'cancelled' ? 'cancelled' : 'failed'; }
+			}
+			for (const channel of this.channels.values()) { channel.observed.finish(); }
+			retainRunOutput(record, [...this.channels.values()], Math.min(this.capacity, 8192));
+			await this.invoke('captureRun', { handle: this.handle, record });
+		} catch (error) { this.fail(error); }
+		finally { this.record = undefined; this.channels.clear(); }
 	}
-
-	private stream(event: Record<string, unknown>): void {
-		const key = JSON.stringify([event.phase, event.stream, event.sampleId, event.blockId, event.inputId]);
-		const representation = typeof event.bytesBase64 === 'string' ? 'process-bytes' : 'utf8-observed-text';
-		let channel = this.channels.get(key);
-		if (!channel) {
-			if (this.channels.size >= 256) { this.omittedEvents++; return; }
-			channel = { key, phase: event.phase as string, stream: event.stream as string, ...(typeof event.sampleId === 'string' ? { sampleId: event.sampleId } : {}), ...(typeof event.blockId === 'string' ? { blockId: event.blockId } : {}), ...(typeof event.inputId === 'string' ? { inputId: event.inputId } : {}), byteRepresentation: representation, observedBytes: 0, sourceOmittedBytes: 0, head: Buffer.alloc(0), tail: Buffer.alloc(0), sequence: 0 };
-			this.channels.set(key, channel);
-		}
-		const half = Math.max(1, Math.floor(this.streamCapacity / this.channels.size / 2));
-		for (const existing of this.channels.values()) {
-			const tailLength = Math.min(half, Math.max(0, existing.observedBytes - half));
-			// A short stream can still have its latest bytes only in the old head.
-			existing.tail = tailLength ? (existing.tail.length >= tailLength ? existing.tail : Buffer.concat([existing.head, existing.tail])).subarray(-tailLength) : Buffer.alloc(0);
-			existing.head = existing.head.subarray(0, half);
-		}
-		const bytes = typeof event.bytesBase64 === 'string' ? Buffer.from(event.bytesBase64, 'base64') : Buffer.from(event.text as string);
-		const oldTotal = channel.observedBytes;
-		if (oldTotal < half) { channel.head = Buffer.concat([channel.head, bytes.subarray(0, half - oldTotal)]); }
-		const tailLength = Math.min(half, Math.max(0, oldTotal + bytes.length - channel.head.length));
-		channel.tail = tailLength ? Buffer.concat([channel.tail, bytes]).subarray(-tailLength) : Buffer.alloc(0);
-		channel.observedBytes += bytes.length; channel.sequence = ++this.channelSequence;
-		if (Number.isSafeInteger(event.sourceOmittedBytes) && Number(event.sourceOmittedBytes) > 0) { channel.sourceOmittedBytes += Number(event.sourceOmittedBytes); }
-		this.channelDirty = true; this.pendingBytes += bytes.length;
-		if (this.pendingBytes >= 64 * 1024) { this.flush(); }
-		else if (!this.timer) { this.timer = setTimeout(() => this.flush(), 250); this.timer.unref(); }
-	}
-
-	private flush(): void {
-		if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
-		if (this.channelDirty && !this.disabled) {
-			const streams = [...this.channels.values()].map(channel => {
-				const { head, tail, key, ...metadata } = channel;
-				const ranges = [{ offset: 0, bytesBase64: head.toString('base64') }, ...(tail.length ? [{ offset: channel.observedBytes - tail.length, bytesBase64: tail.toString('base64') }] : [])];
-				return { type: 'stream', channelId: key, ...metadata, ranges, sourceTruncated: channel.sourceOmittedBytes > 0 };
-			});
-			const finished = this.pending.findIndex(value => (value as { type?: string })?.type === 'finished');
-			this.pending.splice(finished < 0 ? this.pending.length : finished, 0, ...streams);
-			this.channelDirty = false;
-		}
-		if (this.disabled || !this.pending.length) { this.pending = []; return; }
-		const events = this.pending; this.pending = []; this.pendingBytes = 0;
-		this.send('appendRuntime', { handle: this.handle, sequence: ++this.sequence, events });
-	}
-
-	private send(operation: string, input: unknown): void {
-		this.tail = this.tail.then(async () => {
-			if (this.disabled) { return; }
-			if (await this.invoke(operation, input) === false) { this.disabled = true; }
-		}).catch(error => {
-			this.disabled = true;
-			if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
-			this.pending = [];
-			try { this.failed(error); } catch { /* Observation never interrupts execution. */ }
-		});
-	}
+	private fail(error: unknown): void { this.done = true; try { this.failed(error); } catch { /* Observation cannot control execution. */ } }
 }

@@ -5,7 +5,9 @@
 
 // Plain transport DTOs: bundled consumers need no platform services or model SDK.
 // eslint-disable-next-line local/code-import-patterns -- Internal bundled extension DTOs, type-only and without runtime imports.
-export type { BeaconRecentProducer, IBeaconCollectionScope, IBeaconRecordRef, IBeaconDigest, IBeaconCoverage, IBeaconRecentItem, IBeaconRecentRecord, IBeaconRecentWrite, IBeaconCodeObservation, IBeaconCodeSnapshot, IBeaconCodeSave, IBeaconProblemHint, IBeaconAcquisition, IBeaconProblemCapture, IBeaconOjCapture } from 'becoder-beacon';
+export type { IBeaconCollectionScope, IBeaconAcquisition, IBeaconOjCapture } from 'becoder-beacon';
+// eslint-disable-next-line local/code-import-patterns -- Internal type-only transport.
+export type { BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite, IBeaconProblemRecord, IBeaconRunRecord, IBeaconVerdictRecord, IBeaconCurrentCodeFile } from 'becoder-beacon';
 export type BeaconMode = 'blackout' | 'spot' | 'flood';
 export type BeaconWorkspaceState = 'none' | 'ready' | 'blackout' | 'unavailable';
 export interface IBeaconWindowSelection { slot: string; root?: string; mode: BeaconMode; identity?: string }
@@ -35,10 +37,6 @@ export interface IBeaconConversation {
 export interface IBeaconResume { screen: 'home' | 'conversation'; id?: string; homeId?: string }
 export interface IBeaconStoredConversation { revision: number; data: IBeaconConversation }
 export interface IBeaconHistoryItem { id: string; title: string; updatedAt: number; revision: number; workspace: { name: string; path: string }[] }
-export type BeaconProducer = 'runner' | 'cph' | 'notebook';
-export interface IBeaconRuntimeRecord { id: string; code: string; startedAt: number; events: unknown[]; revision: number; sequence: number }
-export interface IBeaconConsumedRecord extends IBeaconRuntimeRecord { materialId: string }
-export interface IBeaconRuntimeItem { id: string; producer: BeaconProducer; revision: number; startedAt: number; source?: string; sha256?: string; finished: boolean }
 export interface IBeaconPage { id: string; kind: 'text' | 'browser' | 'notebook' | 'unsupported'; title: string; uri?: string; version: string; languageId?: string; dirty?: boolean; reason?: string; active?: boolean }
 export interface IBeaconPageRead extends IBeaconPage { contents: string; nextOffset?: number; totalCharacters: number }
 export const beaconContextChannel = 'becoderBeaconContext';

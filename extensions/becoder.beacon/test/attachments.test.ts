@@ -12,7 +12,7 @@ import { AttachmentError, attachmentBudget, captureClipboardImages, readAttachme
 import { FileTools } from '../src/fileTools';
 import { ChatSession, type Generate, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
-import type { ContextInput, ContextOutput } from '../src/contextTools';
+import type { ContextOutput } from '../src/contextTools';
 import { createGenerator } from '../src/provider';
 import { providers, secretName } from '../src/connection';
 import { defaultCapabilities } from '../src/models';
@@ -20,6 +20,7 @@ import { WebviewResourceDrag } from '../../../src/vs/workbench/contrib/webview/c
 import { activate, deactivate } from '../src/extension';
 import * as mock from './vscodeMock';
 
+type ContextInput = { operation: 'page' | 'material' | 'currentCode'; id?: string; version?: string; limit?: number };
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dwAAAABJRU5ErkJggg==';
 const signal = new AbortController().signal;
 async function fixture(run: (directory: string) => Promise<void>) {
@@ -32,7 +33,7 @@ function response(text = 'answer') {
 	return new Response('data: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 function contextResponse(input: ContextInput, id = 'context-call') {
-	return new Response('data: ' + JSON.stringify({ id: 'context', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id, type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify(input) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+	return new Response('data: ' + JSON.stringify({ id: 'context', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id, type: 'function', function: { name: input.operation === 'currentCode' ? 'readCurrentCode' : input.operation === 'material' ? 'readMaterial' : 'readPage', arguments: JSON.stringify({ ...input, operation: undefined }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 async function until(condition: () => boolean, label = '') {
 	for (let i = 0; i < 200; i++) { if (condition()) { return; } await new Promise(resolve => setTimeout(resolve, 10)); }
@@ -59,7 +60,7 @@ suite('Beacon attachments', () => {
 			if (operation === 'pages') { return [{ id: 'code-a', kind: 'text', title: 'abc485_b.cpp', uri: 'file:///C:/chosen/abc485_b.cpp', version: '1', languageId: 'cpp', active: true }]; }
 			if (operation === 'listRecent') { const { producer } = input as { producer: string }; return Array.from({ length: producer === 'problem' ? 13 : 20 }, (_, index) => ({ producer, id: `record-${producer}-${index}`, revision: 1, capturedAt: 1795401000000 + index, viewedAt: 1795401000000 + index, sourceUri: `file:///C:/practice/atcoder/abc485/abc485_${index}.cpp`, state: 'finished', problem: { site: 'atcoder', nativeId: `abc485/abc485_${index}`, url: `https://atcoder.jp/contests/abc485/tasks/abc485_${index}` } })); }
 			if (operation === 'listCodeSnapshots') { return Array.from({ length: 10 }, (_, index) => ({ id: `code-${index}`, fileName: 'abc485_b.cpp', sourceUri: 'file:///C:/practice/atcoder/abc485/abc485_b.cpp', version: String(index), capturedAt: 1795401000000 + index, lastObservedAt: 1795401000000 + index })); }
-			if (operation === 'currentCode') { reads++; return { pageId: 'code-a', sourceUri: 'file:///C:/chosen/abc485_b.cpp', fileName: 'abc485_b.cpp', version: '1', languageId: 'cpp', observedAt: 1, contents: 'int main(){return 0;}' }; }
+			if (operation === 'visibleCurrentCode') { reads++; return [{ fileName: 'abc485_b.cpp', filePath: 'C:/chosen/abc485_b.cpp', isDirty: false, code: 'int main(){return 0;}' }]; }
 			if (operation === 'saveCodeRead') { saves++; return { state: 'saved', id: 'code-one', reused: false }; }
 			return native(operation, input);
 		});
@@ -71,8 +72,8 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 			view.receive({ type: 'send', text: '我这份代码写对了吗' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
 			assert.equal(snapshot().error, ''); assert.equal(requests.length, 2);
-			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'editNotebook', 'inspectContext', 'inspectFiles']);
-			assert.equal(reads, 1); assert.equal(saves, 1); assert.ok(requests[1].includes('int main(){return 0;}'));
+			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'fetchProblem', 'inspectFile', 'readCurrentCode', 'readMaterial', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
+			assert.equal(reads, 1); assert.equal(saves, 0); assert.ok(requests[1].includes('int main(){return 0;}'));
 			assert.equal(snapshot().messages[1].text, '已读取当前代码');
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
@@ -140,11 +141,11 @@ suite('Beacon attachments', () => {
 				requested = { operation: 'page', id: 'a', version: '1' };
 				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
 				assert.equal(requestTarget(requests[cursor])?.version, undefined, 'ordinary text without a code language is not the live code target');
-				assert.equal(outputs.at(-1)?.code, 'beacon-page-' + change);
+				assert.equal((outputs.at(-1)?.error as { code: string })?.code, change === 'closed' ? 'not_found' : 'read_failed');
 				assert.equal(snapshot().requestNotice, undefined, 'The host does not claim a send-time version lock or missing code snapshot');
 				cursor = requests.length; requested = { operation: 'material', id: 'page:a:1:' };
 				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
-				assert.equal(outputs.at(-1)?.ok, false); assert.equal(outputs.at(-1)?.code, 'beacon-material-missing');
+				assert.ok(outputs.at(-1)?.error); assert.equal((outputs.at(-1)?.error as { code: string })?.code, 'not_found');
 				if (change === 'changed') {
 					cursor = requests.length; view.receive({ type: 'send', text: 'Now V2' }); await until(() => requests.length === cursor + 1 && !snapshot().busy);
 					assert.equal(requestTarget(requests[cursor])?.version, undefined);
@@ -217,13 +218,14 @@ suite('Beacon attachments', () => {
 		try {
 			await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 			view.receive({ type: 'send', text: 'A conceptual question without reading A' }); await until(() => requests.length === 1 && !snapshot().busy);
 			requested = { operation: 'page', id: 'a', version: '1' };
 			view.receive({ type: 'send', text: 'Read A only now' }); await until(() => requests.length === 3 && !snapshot().busy);
 			open = false; requested = { operation: 'material', id: 'page:a:1:' };
 			view.receive({ type: 'edit', id: snapshot().messages[0].id, text: 'Revise the first conceptual question' }); await until(() => requests.length === 5 && !snapshot().busy);
 			assert.equal(/page:a:1:/.test(requestSystem(requests[3])), false, 'A target reference is not consumption of its body');
-			assert.equal(outputs.at(-1)?.ok, false);
+			assert.ok(outputs.at(-1)?.error);
 			assert.equal(snapshot().requestNotice, undefined, 'Material access is reported by the tool without obsolete snapshot claims');
 			view.receive({ type: 'send', text: 'Another conceptual question' }); await until(() => requests.length === 6 && !snapshot().busy);
 			assert.equal(/page:a:1:/.test(requestSystem(requests[5])), false);
@@ -365,7 +367,7 @@ suite('Beacon attachments', () => {
 		let requests = 0;
 		globalThis.fetch = async () => {
 			if (requests++ === 0) {
-				return new Response('data: ' + JSON.stringify({ id: 'capture', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'page-capture', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: 'page-one', version: 'v1', limit: 3 }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+				return new Response('data: ' + JSON.stringify({ id: 'capture', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'page-capture', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: 'page-one', version: 'v1', limit: 3 }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 			}
 			return response();
 		};

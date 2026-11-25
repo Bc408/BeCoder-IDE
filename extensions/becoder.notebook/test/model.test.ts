@@ -28,6 +28,7 @@ test('Notebook output heading uses actual phase timings and English states', () 
 	assert.equal(formatBeCoderRunHeading({ status: 'output-limit', compileMs: 500, runMs: 12 }), 'OLE | compile 500 ms | run 12 ms');
 	assert.equal(formatBeCoderRunHeading({ status: 'cancelled' }), 'Stopped');
 	assert.equal(formatBeCoderRunHeading({ status: 'running' }), 'Running');
+	assert.equal(formatBeCoderRunHeading({ status: 'not-run' }), 'Not run');
 });
 
 test('Notebook accepts only complete supported cell types and registers input identity', () => {
@@ -72,6 +73,23 @@ test('input run numbers only preceding C/C++ program blocks', () => {
 		{ kind: 2, languageId: 'becoder-input', value: '2' }
 	] }));
 	assert.equal((notebookModel.captureInputRun(data, 5) as { codeNumber?: number }).codeNumber, 2);
+});
+
+test('batch plan freezes dirty programs and inputs once and groups each actual program separately', () => {
+	const capture = Reflect.get(notebookModel, 'captureNotebookRunPlan') as (data: NotebookData, selected: readonly number[]) => { programs: { code: string; codeNumber: number; inputs: { text: string; cellNumber: number }[] }[] };
+	assert.equal(typeof capture, 'function');
+	const data = decodeNotebook(encodeNotebook({ cells: [
+		{ kind: 2, languageId: 'cpp', value: 'same code' },
+		{ kind: 2, languageId: 'becoder-input', value: 'first' },
+		{ kind: 1, languageId: 'markdown', value: 'notes' },
+		{ kind: 2, languageId: 'becoder-input', value: 'second' },
+		{ kind: 2, languageId: 'cpp', value: 'same code' },
+		{ kind: 2, languageId: 'becoder-input', value: 'third' }
+	] }));
+	const plan = capture(data, [1, 3, 5]); data.cells[0].value = 'edited'; data.cells[1].value = 'edited input'; data.cells.reverse();
+	assert.deepEqual(plan.programs.map(program => [program.code, program.codeNumber, program.inputs.map(input => [input.text, input.cellNumber])]), [
+		['same code', 1, [['first', 2], ['second', 4]]], ['same code', 2, [['third', 6]]]
+	]);
 });
 
 test('creation resolves source association from opened roots and asks for the parent folder before creating nested assets', async () => {

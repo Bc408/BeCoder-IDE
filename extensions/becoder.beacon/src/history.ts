@@ -146,7 +146,7 @@ export class ChatHistory {
 				for (const part of turn.messages) {
 					if (part.role !== 'tool') { continue; }
 					for (const result of part.content) {
-						if (result.type !== 'tool-result' || result.toolName !== 'inspectContext' || result.output.type !== 'json') { continue; }
+						if (result.type !== 'tool-result' || !['readPage', 'inspectContext'].includes(result.toolName) || result.output.type !== 'json') { continue; }
 						const value: unknown = result.output.value;
 						if (!value || typeof value !== 'object' || Array.isArray(value)) { continue; }
 						const output = value as Record<string, unknown>;

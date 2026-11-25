@@ -1,8 +1,20 @@
 # Beacon 实施候选与验证边界
 
-更新：2026-11-23。负责人已批准底层方案并选择Native连续实施。候选代码在`Beacon_Next`本地工作树，备份基线仍为`c54e9e4970c59fb1553b38581dc951fc3fb9d8fa`，本轮未提交或推送。源码检查、模型观察、staged应用和负责人运行验收分别成立。
+更新：2026-11-25。本轮实施已获负责人确认，源码基于Beacon_Next@74d09ef4继续开发；工具重构、复审修复和fetchProblem活动显示调整纳入本次正式归档。下列为本轮状态，后文前轮证据仅供追溯。源码、有限模型观察、stage构建和负责人真实体验分别验收。
 
-[统一入口](README.md) · [阶段设计](foundation-design.md) · [执行计划](../superpowers/plans/2026-11-22-beacon-foundation-implementation.md)
+[统一入口](README.md) · [阶段设计](foundation-design.md) · [实施计划](../superpowers/plans/2026-11-24-beacon-context-tools-rebuild.md)
+
+## 本轮候选源码
+
+九工具已接入真实Provider和系统提示2026-11-24.1；inspectContext操作并集、代码快照读写和editNotebook模型入口退出。当前代码工具读调用时所有可见C/C++整稿，含dirty及未命名页面；无额外代码持久化。problem13／run30／verdict20共用当前.beaconWork，按设计去重／终态入队；读题只存身份，题面统一fetchProblem，独立搜索开关。CPH仅编译不记录，检查器只保check；每条run的编译与程序输出总额8192 UTF-8字节，整条读取不二次裁剪。
+
+Notebook已接入点击时固定的程序组计划，同程序本批一次编译、input独立进程；普通执行观察与Beacon采集分离。原用户编辑、备份、输出和运行功能保留。新队列只用cache/context三文件，旧数据不迁移／删除；历史已完成交换保原名与结果，不能重新执行旧入口。Blackout仍由软件采集有效根业务记录，模型不能列／读持久来源。
+
+第二轮复审修复了运行记录发布与工作区刷新竞态、OJ结果再次观测被旧指纹拦截、Notebook删除误停批次及启动失败／编译取消状态失真；补充复审又修复Stop后删除输入吞掉停止的边界。最终Beacon264、OJ171、Runner123、Notebook38、CPH87、原生Beacon51及Notebook浏览器13项通过，合计747项无跳过；分层、各拥有者类型／构建、Beacon独立lint通过。整仓ESLint因既有及生成文件诊断失败，本轮变更源码差分新增诊断为0，不能称整仓通过。有效36回合DeepSeek Flash观察完成，74次工具执行无错误，人工核心语义32/36；本次复审没有重跑模型，检查器状态理解和推理仍有明确错误。详见[能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md)及[问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md)。修复候选的客户端／OI最终检查通过；完整stage命令达到300秒期限后，官方min-ci入口使用本轮新编译输出重新组装，2026-11-25 00:26:58退出0，137.49秒，产物位于`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/`。随后按负责人要求将取题活动显示为fetchProblem，普通browseWeb文案保持原样；这次显示调整的检查／构建另记于同一台账，不沿用前一产物作为新显示证明。负责人桌面验收未完成，未作Setup。完整命令和失败／修正过程见本机`.superpowers/sdd/2026-11-24-beacon-context-tools-rebuild/checks.jsonl`。
+
+## 前轮实现与验证记录（截至2026-11-23）
+
+以下保留旧候选及测试证据的原时点含义；“本轮”“已接通”和批准状态均指前轮，不代表新架构已开发或验收。
 
 ## 上下文效果测试与工具调整
 

@@ -159,7 +159,7 @@ export default defineConfig(
 	{
 		files: [
 			'src/vs/platform/beacon/**/*.ts',
-			'extensions/danielpinto8zz6.c-cpp-compile-run/src/{beaconEvidence,compilationSnapshot,notebookProcess}.ts',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/src/{beaconEvidence,compilationSnapshot,notebookProcess,executionResults,runRecordAdapter}.ts',
 			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{beaconEvidence,compilationSnapshot,notebookProcess}.test.ts',
 			'extensions/becoder.notebook/**/*.ts',
 			'extensions/becoder.notebook/build.mjs',

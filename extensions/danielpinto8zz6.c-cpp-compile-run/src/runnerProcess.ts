@@ -20,7 +20,7 @@ import { RunnerPhase } from './runnerLifecycle';
 import { Osc633Filter } from './terminalVisuals';
 import { RunnerPtyProcess } from './runnerPtyProcess';
 import { RunnerInputControl } from './runnerInputControl';
-import type { RuntimeEvidence } from './beaconEvidence';
+import { safeExecutionObserver, type ExecutionObserver as RuntimeEvidence } from './executionResults';
 
 export type RunnerTimings = {
 	readonly panelReadyMs: number;
@@ -148,6 +148,7 @@ export class RunnerExecutor {
 			throw new Error('RunnerExecutor accepts only one active request.');
 		}
 		this.executing = true;
+		callbacks = { ...callbacks, evidence: safeExecutionObserver(callbacks.evidence) };
 		this.activeEvidence = callbacks.evidence;
 		this.cancellationRequested = false;
 		const requestRoot = path.join(this.sessionRoot, 'runner-sessions', crypto.randomUUID());
@@ -203,9 +204,11 @@ export class RunnerExecutor {
 			const compilerArguments = buildCompilerArguments({ ...request.source, path: sourceSnapshot.path, originalPath: sourceSnapshot.originalPath }, request.settings, temporaryExecutable);
 			runnerPreparationMs = Date.now() - runnerPreparationStartedAt;
 			callbacks.setPhase('compiling');
-			callbacks.evidence?.start(sourceSnapshot, { compiler: request.compilerPath, args: compilerArguments, cwd: request.source.directory,
+			callbacks.evidence?.start(sourceSnapshot, {
+				compiler: request.compilerPath, args: compilerArguments, cwd: request.source.directory,
 				input: inputData ? { source: request.inputPath, bytesBase64: inputData.toString('base64'), byteLength: inputData.length } : { source: 'interactive' },
-				programStream: request.ptyDimensions ? 'merged-pty' : 'separate-pipes', localHeadersSnapshotted: false });
+				programStream: request.ptyDimensions ? 'merged-pty' : 'separate-pipes', localHeadersSnapshotted: false
+			});
 			const compileRequestedAt = Date.now();
 			const compilerResult = await this.runChild(
 				request.compilerPath,

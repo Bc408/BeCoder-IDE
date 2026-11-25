@@ -15,7 +15,7 @@ import { bundledCompiler, runnerSettings, toolchainRoot } from './compiler';
 import { buildCompilerArguments, buildPrecompiledHeaderArguments, buildPrecompiledHeaderProbeArguments, privateRunnerEnvironment } from './compilation';
 import { captureCompilationSource, CompilationSourceSnapshot } from './compilationSnapshot';
 import { BeaconEvidence, RuntimeEvidence } from './beaconEvidence';
-import { runNotebookProgram, NotebookRunRequest, NotebookRunCallbacks, NotebookRunResult } from './notebookProcess';
+import { runNotebookProgram, runNotebookProgramGroup, NotebookRunRequest, NotebookRunCallbacks, NotebookRunResult, type NotebookProgramGroupRequest, type NotebookProgramCallbacks, type IExecutionProgramResult } from './notebookProcess';
 
 export interface CompilationPlan {
 	readonly compiler: string;
@@ -25,6 +25,7 @@ export interface CompilationPlan {
 
 export interface RunnerCompilerApi {
 	runNotebook(request: NotebookRunRequest, signal: AbortSignal, callbacks: NotebookRunCallbacks): Promise<NotebookRunResult>;
+	runNotebookProgramGroup(request: NotebookProgramGroupRequest, signal: AbortSignal, callbacks: NotebookProgramCallbacks): Promise<IExecutionProgramResult>;
 	prepareCompilation(source: string, output: string, session: string): CompilationPlan;
 	prepareCapturedCompilation(source: string, output: string, session: string): Promise<CompilationPlan & { readonly sourceSnapshot: CompilationSourceSnapshot }>;
 	createEvidence(handle: string, producer: 'runner' | 'cph' | 'notebook', failed: (error: unknown) => void): RuntimeEvidence;
@@ -72,6 +73,13 @@ export function activate(context: vscode.ExtensionContext): RunnerCompilerApi {
 		};
 	}));
 	return {
+		runNotebookProgramGroup(request, signal, callbacks) {
+			const settings = runnerSettings();
+			return runNotebookProgramGroup(request, signal, callbacks, path.join(context.extensionPath, 'dist', 'runner-input.exe'), (source, output, session, language, cwd) => {
+				const compiler = bundledCompiler(context, language);
+				return { compiler, args: buildCompilerArguments({ path: source, originalPath: path.join(cwd, path.basename(source)), language }, settings, output), environment: privateRunnerEnvironment(session, compiler) };
+			});
+		},
 		runNotebook(request, signal, callbacks) {
 			const settings = runnerSettings();
 			return runNotebookProgram(request, signal, callbacks, path.join(context.extensionPath, 'dist', 'runner-input.exe'), (source, output, session, language, cwd) => {

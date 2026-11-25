@@ -6,14 +6,13 @@
 import * as path from '../../../base/common/path.js';
 import * as fs from 'fs/promises';
 import { constants, type BigIntStats } from 'fs';
-import { createHash, randomUUID } from 'crypto';
-import { pathToFileURL } from 'url';
+import { randomUUID } from 'crypto';
 import type { IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconResume } from '../common/beaconContext.js';
 import { acquireBeaconLease } from './beaconLease.js';
+import { appendBeaconRecord, validateBeaconRecord } from '../common/beaconRecords.js';
+import type { BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite } from '../common/beaconContextTypes.js';
 
 export interface IBeaconWorkspaceBinding { path: string; canonicalPath: string; assetsPath: string; identity: string; rootIdentity: string; assetsIdentity: string }
-import type { BeaconProducer, IBeaconRuntimeRecord, IBeaconConsumedRecord, BeaconRecentProducer, IBeaconRecordRef, IBeaconRecentRecord, IBeaconRecentWrite, IBeaconCodeObservation, IBeaconCodeSnapshot, IBeaconCodeSave } from '../common/beaconContextTypes.js';
-export type { BeaconProducer, IBeaconRuntimeRecord, IBeaconConsumedRecord } from '../common/beaconContextTypes.js';
 
 const fileIdentity = (stat: BigIntStats) => `${stat.dev}:${stat.ino}`;
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
@@ -49,6 +48,33 @@ export async function prepareBeaconWorkspace(root: string, create: boolean): Pro
 
 export class BeaconStore {
 	constructor(readonly binding: IBeaconWorkspaceBinding, private readonly publication: Pick<typeof fs, 'rename' | 'unlink'> & Partial<Pick<typeof fs, 'rm'>> = fs) { }
+	async listRecords<K extends BeaconRecordKind>(kind: K): Promise<IBeaconRecordByKind[K][]> {
+		if (!['problem', 'run', 'verdict'].includes(kind)) { throw new Error('beacon-invalid-record'); }
+		try {
+			const directory = await this.directory(['cache', 'context'], false);
+			const value = await this.readJson(path.join(directory, `${kind}.json`)) as { version?: unknown; records?: unknown };
+			if (value?.version !== 1 || !Array.isArray(value.records)) { throw new Error('beacon-unreadable-queue'); }
+			const ids = new Set<string>();
+			for (const record of value.records) { validateBeaconRecord(kind, record); if (ids.has(record.id)) { throw new Error('beacon-unreadable-queue'); } ids.add(record.id); }
+			if (value.records.length > ({ problem: 13, run: 30, verdict: 20 }[kind])) { throw new Error('beacon-unreadable-queue'); }
+			return value.records as IBeaconRecordByKind[K][];
+		} catch (error) { if (missing(error)) { return []; } throw error; }
+	}
+	async readRecord<K extends BeaconRecordKind>(kind: K, id: string): Promise<IBeaconRecordByKind[K]> {
+		checkBeaconIdentifier(id);
+		const record = (await this.listRecords(kind)).find(record => record.id === id);
+		if (!record) { throw new Error('beacon-record-not-found'); }
+		return record;
+	}
+	async appendRecord<K extends BeaconRecordKind>(kind: K, input: IBeaconRecordWrite<K>): Promise<string> {
+		if (!['problem', 'run', 'verdict'].includes(kind)) { throw new Error('beacon-invalid-record'); }
+		const release = await acquireBeaconLease(this.binding.identity, `context:${kind}`);
+		try {
+			const id = randomUUID(), records = appendBeaconRecord(kind, await this.listRecords(kind), input, id);
+			await this.writeJson(['cache', 'context'], `${kind}.json`, { version: 1, records });
+			return id;
+		} finally { await release(); }
+	}
 
 	async validate(): Promise<void> {
 		let current: IBeaconWorkspaceBinding;
@@ -221,209 +247,4 @@ export class BeaconStore {
 		} finally { await release(); }
 	}
 
-	private producer(value: BeaconProducer): void {
-		if (value !== 'runner' && value !== 'cph' && value !== 'notebook') { throw new Error('beacon-invalid-producer'); }
-	}
-
-	private recentProducer(value: BeaconRecentProducer): void {
-		if (!['runner', 'cph', 'notebook', 'problem', 'oj'].includes(value)) { throw new Error('beacon-invalid-producer'); }
-	}
-
-	async listRecentRecords(producer: BeaconRecentProducer): Promise<IBeaconRecentRecord[]> {
-		this.recentProducer(producer);
-		try {
-			const directory = await this.directory(['cache', producer], false);
-			const value = await this.readJson(path.join(directory, 'records.json')) as { version?: number; records?: unknown[] };
-			if (!value || !Array.isArray(value.records)) { throw new Error('beacon-unreadable-queue'); }
-			if (value.version === 1 && ['runner', 'cph', 'notebook'].includes(producer)) {
-				return value.records.map((raw, index) => {
-					const record = raw as IBeaconRuntimeRecord;
-					if (!record || typeof record.code !== 'string' || !Array.isArray(record.events) || !Number.isFinite(record.startedAt) || !Number.isSafeInteger(record.revision) || record.revision < 1 || !Number.isSafeInteger(record.sequence) || record.sequence < 0) { throw new Error('beacon-unreadable-queue'); }
-					checkBeaconIdentifier(record.id);
-					const capture = (record.events[0] as { sourceSnapshot?: { originalPath?: string; sha256?: string } } | undefined)?.sourceSnapshot;
-					return { producer, id: record.id, revision: record.revision, sequence: index + 1, dedupKey: record.id, capturedAt: record.startedAt,
-						...(capture?.originalPath ? { sourceUri: pathToFileURL(capture.originalPath).href } : {}), ...(capture?.sha256 ? { sourceDigest: { value: capture.sha256, representation: 'compiler-bytes' as const } } : {}),
-						state: record.events.some(event => (event as { type?: string })?.type === 'finished') ? 'finished' as const : 'unknown' as const, coverage: { channels: [] },
-						payload: { kind: 'runtime' as const, activityId: record.id, code: record.code, events: record.events, startedAt: record.startedAt, lastEventSequence: record.sequence } };
-				});
-			}
-			if (value.version !== 2) { throw new Error('beacon-unreadable-queue'); }
-			const records = value.records as IBeaconRecentRecord[];
-			const ids = new Set<string>();
-			for (const record of records) {
-				if (!record || record.producer !== producer || typeof record.dedupKey !== 'string' || !record.dedupKey || !Number.isFinite(record.capturedAt) || !Number.isSafeInteger(record.sequence) || record.sequence < 1 || !Number.isSafeInteger(record.revision) || record.revision < 1 || !record.payload || !['runtime', 'problem', 'oj', 'oj-evaluation'].includes(record.payload.kind) || !record.coverage || !Array.isArray(record.coverage.channels) || !['available', 'active', 'finished', 'unknown'].includes(record.state) || ids.has(record.id)) { throw new Error('beacon-unreadable-queue'); }
-				checkBeaconIdentifier(record.id); ids.add(record.id);
-				if (record.payload.kind === 'runtime' && (typeof record.payload.code !== 'string' || !Array.isArray(record.payload.events) || typeof record.payload.activityId !== 'string' || !Number.isSafeInteger(record.payload.lastEventSequence))) { throw new Error('beacon-unreadable-queue'); }
-			}
-			return records;
-		} catch (error) {
-			if (missing(error)) { return []; }
-			if (error instanceof SyntaxError) { throw new Error('beacon-unreadable-queue', { cause: error }); }
-			throw error;
-		}
-	}
-
-	async readRecentRecord(ref: IBeaconRecordRef): Promise<IBeaconRecentRecord> {
-		checkBeaconIdentifier(ref.id);
-		const record = (await this.listRecentRecords(ref.producer)).find(record => record.id === ref.id);
-		if (!record) { throw new Error('beacon-record-evicted'); }
-		if (!Number.isSafeInteger(ref.revision) || record.revision !== ref.revision) { throw new Error('beacon-record-changed'); }
-		return record;
-	}
-
-	private retained(records: IBeaconRecentRecord[], producer: BeaconRecentProducer, activeKeys: ReadonlySet<string>): IBeaconRecentRecord[] {
-		const recent = new Set(records.slice(producer === 'problem' ? -13 : -20).map(record => record.id));
-		return records.filter(record => recent.has(record.id) || activeKeys.has(record.dedupKey) || (record.payload.kind === 'runtime' && activeKeys.has(record.payload.activityId)) || (!!record.submission?.attemptId && activeKeys.has(record.submission.attemptId)) || (!!record.submission?.recordKey && activeKeys.has(record.submission.recordKey)));
-	}
-
-	async saveRecentRecord(producer: BeaconRecentProducer, input: IBeaconRecentWrite, activeKeys: ReadonlySet<string>, promote: boolean): Promise<IBeaconRecordRef> {
-		this.recentProducer(producer);
-		if (!input || input.producer !== producer || typeof input.dedupKey !== 'string' || !input.dedupKey || !Number.isFinite(input.capturedAt) || Buffer.byteLength(JSON.stringify(input), 'utf8') > 8 * 1024 * 1024 - 512) { throw new Error('beacon-invalid-record'); }
-		const release = await acquireBeaconLease(this.binding.identity, `queue:${producer}`);
-		try {
-			const records = await this.listRecentRecords(producer);
-			const previous = records.find(record => record.dedupKey === input.dedupKey || (!!input.submission?.attemptId && record.submission?.attemptId === input.submission.attemptId) || (!!input.submission?.recordKey && record.submission?.recordKey === input.submission.recordKey));
-			const next: IBeaconRecentRecord = { ...structuredClone(input), id: previous?.id ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, sequence: promote || !previous ? Math.max(0, ...records.map(record => record.sequence)) + 1 : previous.sequence };
-			if (previous) { records.splice(records.indexOf(previous), 1, next); } else { records.push(next); }
-			records.sort((a, b) => a.sequence - b.sequence);
-			await this.writeJson(['cache', producer], 'records.json', { version: 2, records: this.retained(records, producer, activeKeys) });
-			return { producer, id: next.id, revision: next.revision };
-		} finally { await release(); }
-	}
-
-	async trimRecent(producer: BeaconRecentProducer, activeKeys: ReadonlySet<string>): Promise<void> {
-		const release = await acquireBeaconLease(this.binding.identity, `queue:${producer}`);
-		try {
-			const records = await this.listRecentRecords(producer); const retained = this.retained(records, producer, activeKeys);
-			if (retained.length !== records.length) { await this.writeJson(['cache', producer], 'records.json', { version: 2, records: retained }); }
-		} finally { await release(); }
-	}
-
-	async listCodeSnapshots(conversationId: string): Promise<Omit<IBeaconCodeSnapshot, 'contents'>[]> {
-		return (await this.codeSnapshots(conversationId)).map(({ contents: _contents, ...metadata }) => metadata);
-	}
-
-	private async codeSnapshots(conversationId: string): Promise<IBeaconCodeSnapshot[]> {
-		checkBeaconIdentifier(conversationId);
-		if (!await this.readConversation(conversationId)) { throw new Error('beacon-missing-conversation'); }
-		try {
-			const directory = await this.directory(['conversations', conversationId], false);
-			const value = await this.readJson(path.join(directory, 'code-snapshots.json')) as { version?: number; records?: IBeaconCodeSnapshot[] };
-			if (value?.version !== 1 || !Array.isArray(value.records) || value.records.length > 10 || value.records.some(record => !record || typeof record.contents !== 'string' || Buffer.byteLength(record.contents, 'utf8') > 262144 || record.contentSha256 !== createHash('sha256').update(record.contents, 'utf8').digest('hex') || typeof record.sourceUri !== 'string' || !Number.isFinite(record.capturedAt))) { throw new Error('beacon-unreadable-queue'); }
-			for (const record of value.records) { checkBeaconIdentifier(record.id); }
-			return value.records;
-		} catch (error) { if (missing(error)) { return []; } throw error; }
-	}
-
-	async readCodeSnapshot(conversationId: string, id: string): Promise<IBeaconCodeSnapshot> {
-		checkBeaconIdentifier(id);
-		const record = (await this.codeSnapshots(conversationId)).find(record => record.id === id);
-		if (!record) { throw new Error('beacon-record-evicted'); }
-		return record;
-	}
-
-	async saveCodeRead(conversationId: string, observation: IBeaconCodeObservation): Promise<IBeaconCodeSave> {
-		checkBeaconIdentifier(conversationId);
-		if (!observation || typeof observation.contents !== 'string' || typeof observation.sourceUri !== 'string' || !['c', 'cpp'].includes(observation.languageId) || !Number.isFinite(observation.observedAt) || observation.contentSha256 !== createHash('sha256').update(observation.contents, 'utf8').digest('hex')) { throw new Error('beacon-invalid-code'); }
-		if (Buffer.byteLength(observation.contents, 'utf8') > 262144) { return { state: 'not-saved', reason: 'too-large' }; }
-		const release = await acquireBeaconLease(this.binding.identity, `write:${conversationId}`);
-		try {
-			const records = await this.codeSnapshots(conversationId);
-			const sameUri = (uri: string) => process.platform === 'win32' ? uri.toLowerCase() === observation.sourceUri.toLowerCase() : uri === observation.sourceUri;
-			const previous = records.find(record => sameUri(record.sourceUri) && record.contents === observation.contents);
-			if (previous) { records.splice(records.indexOf(previous), 1); }
-			const next: IBeaconCodeSnapshot = previous ? { ...previous, lastObservedAt: observation.observedAt, lastObservedVersion: observation.version } : { ...structuredClone(observation), id: randomUUID(), capturedAt: Date.now(), lastObservedAt: observation.observedAt, lastObservedVersion: observation.version };
-			records.push(next);
-			await this.writeJson(['conversations', conversationId], 'code-snapshots.json', { version: 1, records: records.slice(-10) });
-			return { state: 'saved', id: next.id, reused: !!previous };
-		} catch (error) {
-			await this.validate();
-			if (!await this.readConversation(conversationId)) { throw new Error('beacon-missing-conversation'); }
-			return { state: 'not-saved', reason: 'save-failed' };
-		} finally { await release(); }
-	}
-
-	async listRuntimeRecords(producer: BeaconProducer): Promise<IBeaconRuntimeRecord[]> {
-		this.producer(producer);
-		return (await this.listRecentRecords(producer)).flatMap(record => record.payload.kind === 'runtime' ? [{ id: record.payload.activityId, code: record.payload.code, startedAt: record.payload.startedAt, events: record.payload.events, revision: record.revision, sequence: record.payload.lastEventSequence }] : []);
-	}
-
-	/** Call only after captured code enters the real compilation start; producers are wired separately. */
-	async commitRuntimeRecord(producer: BeaconProducer, input: Omit<IBeaconRuntimeRecord, 'revision' | 'sequence'>, activeKeys: ReadonlySet<string> = new Set()): Promise<void> {
-		this.producer(producer); checkBeaconIdentifier(input.id);
-		if (typeof input.code !== 'string' || !Number.isFinite(input.startedAt) || !Array.isArray(input.events)) { throw new Error('beacon-invalid-record'); }
-		if ((await this.listRuntimeRecords(producer)).some(record => record.id === input.id)) { return; }
-		const capture = (input.events[0] as { sourceSnapshot?: { originalPath?: string; sha256?: string }; details?: { problem?: { url?: string } } } | undefined)?.sourceSnapshot;
-		await this.saveRecentRecord(producer, { producer, dedupKey: input.id, capturedAt: input.startedAt, ...(capture?.originalPath ? { sourceUri: pathToFileURL(capture.originalPath).href } : {}), ...(capture?.sha256 ? { sourceDigest: { value: capture.sha256, representation: 'compiler-bytes' } } : {}), state: 'active', coverage: { channels: [] }, payload: { kind: 'runtime', activityId: input.id, code: input.code, events: input.events, startedAt: input.startedAt, lastEventSequence: 0 } }, activeKeys, true);
-	}
-
-	async appendRuntimeEvents(producer: BeaconProducer, id: string, sequence: number, events: unknown[], activeKeys: ReadonlySet<string> = new Set()): Promise<boolean> {
-		this.producer(producer); checkBeaconIdentifier(id);
-		if (!Number.isSafeInteger(sequence) || sequence < 1 || !Array.isArray(events)) { throw new Error('beacon-invalid-record'); }
-		const release = await acquireBeaconLease(this.binding.identity, `queue:${producer}`);
-		try {
-			const records = await this.listRecentRecords(producer);
-			const current = records.find(record => record.payload.kind === 'runtime' && record.payload.activityId === id);
-			if (!current || current.payload.kind !== 'runtime' || sequence <= current.payload.lastEventSequence) { return false; }
-			for (const event of structuredClone(events)) {
-				const channel = event as { type?: string; channelId?: string; phase: string; stream: string; sampleId?: string; blockId?: string; byteRepresentation: 'process-bytes' | 'utf8-observed-text'; observedBytes: number; sourceOmittedBytes?: number; ranges?: { offset: number; bytesBase64: string }[]; sourceTruncated: boolean };
-				if (channel?.type === 'stream' && typeof channel.channelId === 'string' && Array.isArray(channel.ranges)) {
-					const retainedRanges: [number, number][] = []; let cursor = 0;
-					const omittedRanges: [number, number][] = [];
-					if (!Number.isSafeInteger(channel.observedBytes) || channel.observedBytes < 0 || !['process-bytes', 'utf8-observed-text'].includes(channel.byteRepresentation)) { throw new Error('beacon-invalid-record'); }
-					for (const range of channel.ranges) {
-						const end = range.offset + Buffer.byteLength(range.bytesBase64, 'base64');
-						if (!Number.isSafeInteger(range.offset) || range.offset < cursor || end > channel.observedBytes) { throw new Error('beacon-invalid-record'); }
-						if (cursor < range.offset) { omittedRanges.push([cursor, range.offset]); }
-						retainedRanges.push([range.offset, end]); cursor = end;
-					}
-					if (cursor < channel.observedBytes) { omittedRanges.push([cursor, channel.observedBytes]); }
-					const old = current.payload.events.findIndex(value => (value as { channelId?: string })?.channelId === channel.channelId);
-					if (old >= 0) { current.payload.events.splice(old, 1); }
-					const coverage = { phase: channel.phase, stream: channel.stream, sampleId: channel.sampleId, blockId: channel.blockId, byteRepresentation: channel.byteRepresentation, observedBytes: channel.observedBytes, sourceOmittedBytes: channel.sourceOmittedBytes, retainedRanges, omittedRanges, sourceTruncated: channel.sourceTruncated };
-					const prior = current.coverage.channels.findIndex(value => value.phase === channel.phase && value.stream === channel.stream && value.sampleId === channel.sampleId && value.blockId === channel.blockId);
-					if (prior >= 0) { current.coverage.channels.splice(prior, 1); } current.coverage.channels.push(coverage);
-				}
-				current.payload.events.push(event);
-			}
-			current.revision++; current.payload.lastEventSequence = sequence;
-			if (events.some(event => (event as { type?: string })?.type === 'finished')) { current.state = 'finished'; }
-			if (Buffer.byteLength(JSON.stringify(current), 'utf8') > 8 * 1024 * 1024) { throw new Error('beacon-invalid-record'); }
-			await this.writeJson(['cache', producer], 'records.json', { version: 2, records: this.retained(records, producer, activeKeys) });
-			return true;
-		} finally { await release(); }
-	}
-
-	async consumeRuntimeRecord(conversationId: string, producer: BeaconProducer, id: string, revision?: number): Promise<IBeaconConsumedRecord> {
-		checkBeaconIdentifier(conversationId); this.producer(producer); checkBeaconIdentifier(id);
-		const release = await acquireBeaconLease(this.binding.identity, `queue:${producer}`);
-		try {
-			const record = (await this.listRuntimeRecords(producer)).find(record => record.id === id);
-			if (!record) { throw new Error('beacon-record-evicted'); }
-			if (revision !== undefined && record.revision !== revision) { throw new Error('beacon-record-changed'); }
-			const releaseConversation = await acquireBeaconLease(this.binding.identity, `write:${conversationId}`);
-			try {
-				if (!await this.readConversation(conversationId)) { throw new Error('beacon-missing-conversation'); }
-				const result = { ...record, materialId: `${producer}-${id}-${record.revision}` };
-				const previous = await this.readMaterial(conversationId, result.materialId);
-				if (previous) {
-					if (JSON.stringify(previous) !== JSON.stringify(result)) { throw new Error('beacon-material-conflict'); }
-				} else { await this.writeJson(['conversations', conversationId, 'materials'], `${result.materialId}.json`, result); }
-				return result;
-			} finally { await releaseConversation(); }
-		} finally { await release(); }
-	}
-
-	async readMaterial(conversationId: string, materialId: string): Promise<IBeaconConsumedRecord | undefined> {
-		checkBeaconIdentifier(conversationId);
-		const match = typeof materialId === 'string' ? /^(runner|cph|notebook)-([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})-([1-9][0-9]{0,15})$/.exec(materialId) : null;
-		if (!match || !Number.isSafeInteger(Number(match[3]))) { throw new Error('beacon-invalid-id'); }
-		if (!await this.readConversation(conversationId)) { throw new Error('beacon-missing-conversation'); }
-		try {
-			const directory = await this.directory(['conversations', conversationId, 'materials'], false);
-			const record = await this.readJson(path.join(directory, `${materialId}.json`)) as IBeaconConsumedRecord;
-			if (record?.materialId !== materialId || record.id !== match[2] || record.revision !== Number(match[3]) || typeof record.code !== 'string' || !Array.isArray(record.events)) { throw new Error('beacon-unreadable-material'); }
-			return record;
-		} catch (error) { if (missing(error)) { return undefined; } throw error; }
-	}
 }

@@ -13,10 +13,12 @@ export interface NotebookData { cells: CellData[]; metadata?: Record<string, unk
 
 /** Model content projection; execution data remains in the native document and backups. */
 export function beaconNotebookContent(data: NotebookData): string {
-	return JSON.stringify({ cells: data.cells.map(cell => {
-		const metadata = cell.metadata?.becoder as { id?: string; name?: string } | undefined;
-		return { id: metadata?.id, kind: cell.kind, language: cell.languageId, source: cell.value, ...(isBeCoderInputCell(cell.metadata) ? { role: 'input', name: metadata?.name } : {}), attachments: describeNotebookMetadata(cell.metadata ?? {}).attachments };
-	}) }, null, 2);
+	return JSON.stringify({
+		cells: data.cells.map(cell => {
+			const metadata = cell.metadata?.becoder as { id?: string; name?: string } | undefined;
+			return { id: metadata?.id, kind: cell.kind, language: cell.languageId, source: cell.value, ...(isBeCoderInputCell(cell.metadata) ? { role: 'input', name: metadata?.name } : {}), attachments: describeNotebookMetadata(cell.metadata ?? {}).attachments };
+		})
+	}, null, 2);
 }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
@@ -42,10 +44,12 @@ export function decodeNotebook(bytes: Uint8Array): NotebookData {
 		if (!cell || ![1, 2].includes(cell.kind) || typeof cell.value !== 'string' || typeof cell.languageId !== 'string' || (cell.metadata !== undefined && !object(cell.metadata)) || (cell.outputs !== undefined && !Array.isArray(cell.outputs))) { throw new Error('Invalid Notebook cell.'); }
 		const outputs = (cell.outputs ?? []).map(output => {
 			if (!output || !Array.isArray(output.items) || (output.metadata !== undefined && !object(output.metadata))) { throw new Error('Invalid Notebook output.'); }
-			return { ...output, items: output.items.map(item => {
-				if (typeof item.mime !== 'string' || typeof item.data !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(item.data)) { throw new Error('Invalid Notebook output bytes.'); }
-				return { mime: item.mime, data: new Uint8Array(Buffer.from(item.data, 'base64')) };
-			}) };
+			return {
+				...output, items: output.items.map(item => {
+					if (typeof item.mime !== 'string' || typeof item.data !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(item.data)) { throw new Error('Invalid Notebook output bytes.'); }
+					return { mime: item.mime, data: new Uint8Array(Buffer.from(item.data, 'base64')) };
+				})
+			};
 		});
 		return { ...cell, outputs };
 	});
@@ -79,6 +83,20 @@ export function captureInputRun(data: NotebookData, index: number): { code: stri
 		}
 	}
 	throw new Error('notebook-no-program-above');
+}
+
+export interface INotebookRunPlan {
+	programs: { code: string; language: 'c' | 'cpp'; codeIndex: number; codeNumber: number; codeCellId: string; inputs: { text: string; name: string; cellId: string; cellNumber: number; inputIndex: number }[] }[];
+}
+export function captureNotebookRunPlan(data: NotebookData, selectedInputIndexes: readonly number[]): INotebookRunPlan {
+	const programs = new Map<number, INotebookRunPlan['programs'][number]>();
+	for (const index of [...new Set(selectedInputIndexes)].sort((a, b) => a - b)) {
+		const captured = captureInputRun(data, index);
+		let program = programs.get(captured.codeIndex);
+		if (!program) { program = { code: captured.code, language: captured.language, codeIndex: captured.codeIndex, codeNumber: captured.codeNumber, codeCellId: captured.codeCellId, inputs: [] }; programs.set(captured.codeIndex, program); }
+		program.inputs.push({ text: captured.input, name: captured.inputName, cellId: captured.inputCellId, cellNumber: index + 1, inputIndex: index });
+	}
+	return { programs: [...programs.values()] };
 }
 
 export function associatedNotebook(root: string, source: string): string | undefined {

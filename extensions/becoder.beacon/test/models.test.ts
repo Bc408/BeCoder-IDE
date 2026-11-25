@@ -226,7 +226,7 @@ suite('Beacon model capabilities', () => {
 			requests++;
 			const body = JSON.parse(String(options?.body));
 			assert.ok(!JSON.stringify(body).includes('private-image-data'));
-			if (requests === 1) { return response([{ tool_calls: [{ index: 0, id: 'image-call', type: 'function', function: { name: 'inspectFiles', arguments: '{"operation":"read","path":"image.png"}' } }] }], 'tool_calls'); }
+			if (requests === 1) { return response([{ tool_calls: [{ index: 0, id: 'image-call', type: 'function', function: { name: 'inspectFile', arguments: '{"operation":"read","path":"image.png"}' } }] }], 'tool_calls'); }
 			assert.ok(JSON.stringify(body.messages).includes('does not support image input'));
 			return response([{ content: 'Select a vision model.' }]);
 		}, 'workspace'));
@@ -249,7 +249,7 @@ suite('Beacon durable protocol', () => {
 			let calls = 0, executions = 0;
 			await history.session.resume(2, createGenerator(async () => connection, async (_url, init) => {
 				const body = JSON.parse(String(init?.body)); calls++; assert.ok(JSON.stringify(body.messages).includes('accepted-prefix'));
-				return calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'new', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: ' continuation' }]);
+				return calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'new', type: 'function', function: { name: 'readCurrentCode', arguments: '{}' } }] }], 'tool_calls') : response([{ content: ' continuation' }]);
 			}, 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: 'actually new' }; } }), connection);
 			assert.equal(history.snapshot.error, ''); assert.equal(calls, 2); assert.equal(executions, 1); assert.equal(history.snapshot.messages[1].text, 'accepted-prefix continuation'); await history.dispose();
 		});
@@ -259,7 +259,7 @@ suite('Beacon durable protocol', () => {
 		let entered!: () => void, release!: () => void, executions = 0, calls = 0;
 		const started = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
 		const history = new ChatHistory(undefined, async data => data, () => { }, String);
-		const pending = history.session.send('read now', createGenerator(async () => connection, async () => ++calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'racing', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: 'late prose' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; entered(); await gate; return { ok: true, contents: 'actually completed' }; } }), connection);
+		const pending = history.session.send('read now', createGenerator(async () => connection, async () => ++calls === 1 ? response([{ tool_calls: [{ index: 0, id: 'racing', type: 'function', function: { name: 'readCurrentCode', arguments: '{}' } }] }], 'tool_calls') : response([{ content: 'late prose' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; entered(); await gate; return { ok: true, contents: 'actually completed' }; } }), connection);
 		await started; history.session.stop(); release(); await pending;
 		assert.equal(history.snapshot.messages[1].status, 'stopped'); assert.equal(history.snapshot.messages[1].text, '');
 		assert.ok(JSON.stringify(history.snapshot.messages[1].protocol).includes('actually completed')); assert.equal(executions, 1); assert.equal(calls, 1); await history.dispose();
@@ -268,7 +268,7 @@ suite('Beacon durable protocol', () => {
 		const connection: Connection = { provider: 'deepseek', baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: true } };
 		let calls = 0, executions = 0;
 		const history = new ChatHistory(undefined, async data => data, () => { }, String);
-		await history.session.send('read twice', createGenerator(async () => connection, async () => ++calls < 3 ? response([{ tool_calls: [{ index: 0, id: 'same-id', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }], 'tool_calls') : response([{ content: 'done' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: `code ${executions}` }; } }), connection);
+		await history.session.send('read twice', createGenerator(async () => connection, async () => ++calls < 3 ? response([{ tool_calls: [{ index: 0, id: 'same-id', type: 'function', function: { name: 'readCurrentCode', arguments: '{}' } }] }], 'tool_calls') : response([{ content: 'done' }]), 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: `code ${executions}` }; } }), connection);
 		assert.equal(history.snapshot.error, ''); assert.equal(executions, 2);
 		const results = history.snapshot.messages[1].protocol!.flatMap(turn => turn.messages.flatMap(message => message.role === 'tool' ? message.content.filter(part => part.type === 'tool-result') : []));
 		assert.equal(results.length, 2); assert.ok(JSON.stringify(results).includes('code 1')); assert.ok(JSON.stringify(results).includes('code 2')); await history.dispose();
@@ -307,7 +307,7 @@ suite('Beacon durable protocol', () => {
 			requests++;
 			const body = JSON.parse(String(options?.body));
 			if (requests === 1) {
-				return response([{ reasoning_content: 'inspect both files' }, { content: 'I will read them.' }, { tool_calls: ['left', 'right'].map((id, index) => ({ index, id, type: 'function', function: { name: 'inspectFiles', arguments: JSON.stringify({ operation: 'read', path: `${id}.cpp` }) } })) }], 'tool_calls');
+				return response([{ reasoning_content: 'inspect both files' }, { content: 'I will read them.' }, { tool_calls: ['left', 'right'].map((id, index) => ({ index, id, type: 'function', function: { name: 'inspectFile', arguments: JSON.stringify({ operation: 'read', path: `${id}.cpp` }) } })) }], 'tool_calls');
 			}
 			const tools = body.messages.filter((message: { role: string }) => message.role === 'tool');
 			assert.deepStrictEqual(tools.map((message: { tool_call_id: string }) => message.tool_call_id), ['left', 'right']);
@@ -365,7 +365,7 @@ suite('Beacon durable protocol', () => {
 	test('unfinished calls are omitted; endpoint changes strip private reasoning metadata; invalid protocol is rejected', () => {
 		const recorder = new ProtocolRecorder();
 		recorder.text('reasoning', 'r', 'private', { deepseek: { signature: 'private-signature' } });
-		recorder.call({ type: 'tool-call', toolCallId: 'pending', toolName: 'inspectFiles', input: { operation: 'read', path: 'unfinished.cpp' } });
+		recorder.call({ type: 'tool-call', toolCallId: 'pending', toolName: 'inspectFile', input: { operation: 'read', path: 'unfinished.cpp' } });
 		recorder.text('text', 't', 'prefix');
 		assert.ok(!JSON.stringify(recorder.messages).includes('unfinished.cpp'));
 		const turn = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-flash', messages: recorder.messages };

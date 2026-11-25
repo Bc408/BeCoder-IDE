@@ -15,9 +15,8 @@ import { ProtocolRecorder } from './protocol';
 import { createWebTool, webModelOutput, type WebInput, type WebOutput } from './webTools';
 import { toolErrorCode, type ToolError } from './toolFeedback';
 import { RequestRecovery, RequestRejectedError, type RecoveryOptions } from './requestRecovery';
-import type { ContextAccess, ContextInput, ContextOutput } from './contextTools';
-import { contextToolSchema } from './contextToolContract';
-import type { NotebookAccess, NotebookInput, NotebookOutput } from './notebookTools';
+import type { ContextAccess, ContextOutput } from './contextTools';
+import { contextToolSchema, contextToolNames, contextToolDescriptions, type BeaconContextToolName } from './contextToolContract';
 import { composeBeaconPrompt, type BeaconToolName } from './prompts';
 import { measureBeaconRequest, beaconFingerprint, beaconMedia, type PreparedBeaconRequest, type BeaconUsageAnchor } from './contextBudget';
 import { compactBeaconContext, coveredCount, prefixFingerprint, projectCompaction, selectCompaction, type BeaconCompaction, type EffectiveUnit } from './compaction';
@@ -219,17 +218,11 @@ const webSchema = jsonSchema<WebInput>({
 	additionalProperties: false
 });
 
-const notebookSchema = jsonSchema<NotebookInput>({ type: 'object', properties: {
-	operation: { type: 'string', enum: ['create', 'begin', 'read', 'apply', 'finish', 'cancel'] }, path: { type: 'string' }, sourcePath: { type: 'string' }, handle: { type: 'string' }, revision: { type: 'integer', minimum: 0 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 131072 }, cellId: { type: 'string' }, part: { type: 'string', enum: ['content'] },
-	cells: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, kind: { type: 'integer', enum: [1, 2] }, source: { type: 'string' }, language: { type: 'string', enum: ['c', 'cpp', 'becoder-input'] }, name: { type: 'string' } }, required: ['kind'], additionalProperties: false } }
-}, required: ['operation'], additionalProperties: false });
-
-function toolActivity(id: string, input: unknown, status: ToolActivity['status'], name = 'inspectFiles', error?: ToolError): ToolActivity {
+function toolActivity(id: string, input: unknown, status: ToolActivity['status'], name = 'inspectFile', error?: ToolError): ToolActivity {
 	const feedback = error ? { error } : {};
-	if (name === 'editNotebook') { const value = input as Partial<NotebookInput> | undefined; return { id, type: value?.operation === 'read' ? 'read' : 'notebook-edit', path: value?.path ?? value?.handle ?? value?.operation ?? '', status, ...feedback }; }
-	if (name === 'inspectContext') {
-		const value = input as Partial<ContextInput> | undefined;
-		return { id, type: ['overview', 'pages', 'records'].includes(value?.operation ?? '') ? 'list' : 'read', path: value?.id ?? value?.operation ?? '', status, ...feedback };
+	if (contextToolNames.includes(name as BeaconContextToolName)) {
+		const value = input as Record<string, unknown> | undefined;
+		return { id, type: name.endsWith('Record') && !value?.id ? 'list' : 'read', path: String(value?.id ?? name), status, ...feedback };
 	}
 	if (name === 'browseWeb') {
 		const value = input as Partial<WebInput> | undefined;
@@ -249,7 +242,7 @@ function fileMessages(messages: ModelMessage[], vision: boolean): ModelMessage[]
 		if (message.role !== 'tool') { return [message]; }
 		const images: FilePart[] = [];
 		const content = message.content.map(part => {
-			if (part.type !== 'tool-result' || part.toolName !== 'inspectFiles' || part.output.type !== 'content') { return part; }
+			if (part.type !== 'tool-result' || !['inspectFile', 'inspectFiles'].includes(part.toolName) || part.output.type !== 'content') { return part; }
 			const value = part.output.value.filter(item => {
 				if (item.type !== 'file' || !item.mediaType.startsWith('image/') || item.data.type !== 'data') { return true; }
 				if (!vision) { throw new ModelCapabilityError('vision'); }
@@ -262,7 +255,7 @@ function fileMessages(messages: ModelMessage[], vision: boolean): ModelMessage[]
 	});
 }
 
-export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch, permission: FilePermission = 'none', roots: FileRoot[] = [], webEnabled = true, webRequest: typeof fetch = fetchImplementation, recoveryOptions: Omit<RecoveryOptions, 'progress'> = {}, context?: ContextAccess, notebooks?: NotebookAccess): Generate {
+export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch, permission: FilePermission = 'none', roots: FileRoot[] = [], webEnabled = true, webRequest: typeof fetch = fetchImplementation, recoveryOptions: Omit<RecoveryOptions, 'progress'> = {}, context?: ContextAccess): Generate {
 	return async function* (messages, signal, files, progress, generation) {
 		const connection = await readConnection();
 		if (connection.provider !== 'ollama' && !connection.apiKey) { throw new Error('missing-key'); }
@@ -283,17 +276,14 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			const web = createWebTool(webRequest);
 			const webAvailable = webEnabled && capabilities.tools;
 			const tools = !capabilities.tools ? {} : {
-				...(notebooks && permission !== 'none' ? { editNotebook: tool({ description: 'Only explicitly requested Notebook creation or edits. create(path, cells) creates a new complete .bcnb; alternatively create(sourcePath, cells) uses the editor-root association path. Use exactly one target form. It requires an opened folder and refuses existing files or open models; no automatic overwrite, fallback name, execution or first-create backup. begin(path) backs up the latest complete native document and returns handle/revision. read(handle, offset, limit) reads that captured version; attachments remain host-owned metadata. apply(handle, revision, cells) applies one full ordered candidate; omit ids only for new cells, use kind 1 Markdown, or kind 2 with c/cpp program text or becoder-input input. Each input runs the nearest preceding C/C++ block only when the user runs it. Keep existing attachment references on their original cell id. No output, attempt, metadata or execution fields. finish saves only this target and returns actual applied/saved/dirty state. cancel releases without undoing applied edits. A busy, inaccessible, stale or failed backup target is not replaced by another target.', inputSchema: notebookSchema, execute: (input, options): Promise<NotebookOutput> => { recovery.commit(); return notebooks.execute(input, options.abortSignal ?? signal); } }) } : {}),
-				...(context ? {
-					inspectContext: tool({
-						description: 'Read authorized context on demand. Choose the source needed for the question: currentCode for latest code, codeSnapshot for retained history, record for actual execution/verdict facts. Always include operation. record requires listed producer/id/revision, fixed for this answer; CPH sampleIndex + all includes that sample input, expected and observed result. selection and availableParts describe returned scope; pagination is separate from source omissions. Copy continuation verbatim when needed. snapshotSave refers only to conversation code, never saving the student file. problemHints gives independent candidates; problem reads an exact saved statement or readonly network statement; refresh explicitly fetches a new observation without persistence. Blackout excludes persistent operations. page reads other authorized pages and physical PDF pageNumber. No source edits, execution, import, login or submission.',
-						inputSchema: contextToolSchema(context.operations),
-						toModelOutput: ({ output }) => ({ type: 'json' as const, value: JSON.parse(JSON.stringify(output)) }),
-						execute: (input, options): Promise<ContextOutput> => { recovery.commit(); return context.execute(input, options.abortSignal ?? signal); }
-					})
-				} : {}),
+				...(context ? Object.fromEntries((context.names ?? contextToolNames).map(name => [name, tool({
+					description: contextToolDescriptions[name],
+					inputSchema: contextToolSchema(name),
+					toModelOutput: ({ output }) => ({ type: 'json' as const, value: JSON.parse(JSON.stringify(output)) }),
+					execute: (input, options): Promise<ContextOutput> => { recovery.commit(); return context.execute(name, input, options.abortSignal ?? signal); }
+				})])) : {}),
 				...(permission === 'none' ? {} : {
-					inspectFiles: tool<FileInput, FileOutput, Record<string, unknown>>({
+					inspectFile: tool<FileInput, FileOutput, Record<string, unknown>>({
 					description: `Read-only file inspection (${permission}). Authorized workspace folders: ${JSON.stringify(roots)}. Use only for the current question; never scan the whole computer or request private/credential files. list lists one directory; find/search inspect at most 2000 entries, returning at most 200 results. search checks the first 128 KiB of each text file. read returns up to 128 KiB text, 8 KiB binary as hex, or a PNG/JPEG/WebP/GIF image up to 4 MiB. Continue large reads with nextOffset. Open editor documents include unsaved edits. Results are limited to 8 MiB per response. Images require a vision-capable model.`,
 					inputSchema: fileSchema,
 					toModelOutput: ({ output }) => fileModelOutput(output),
@@ -323,7 +313,6 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			let requestPhase: 'answer' | 'compaction' = 'answer', repairUsed = false, stepStarted = false;
 			const steps = { remaining: 20 };
 			let installedSummary: BeaconCompaction | undefined;
-			let remainingToolBytes = Number.POSITIVE_INFINITY;
 			let requestMessages = fileMessages([...messages], vision);
 			let usageAnchor: BeaconUsageAnchor | undefined, lastPrepared: PreparedBeaconRequest | undefined;
 			const anchors = new Map<string, BeaconUsageAnchor>(), measuredRequests = new Map<string, PreparedBeaconRequest>();
@@ -356,10 +345,8 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				let projection = fileMessages(projectCompaction(state.units, old), vision);
 				const input = prepared(prompt.system, projection, declarations), measured = measureBeaconRequest(input, anchors.get(input.contractFingerprint));
 				measuredRequests.set(input.contractFingerprint, input);
-				// A completed tool result may cross the proactive line; the next closed
-				// step performs compaction. Keep its bounded result inside hard capacity.
-				const resultBudget = (estimate: number) => { remainingToolBytes = Math.max(0, Math.floor((measured.budget - estimate - 512) * 0.8)); context?.setResultBudget?.(remainingToolBytes); };
-				if (!force && measured.estimatedInput < measured.trigger) { resultBudget(measured.estimatedInput); return projection; }
+				// Keep complete tool exchanges. Compact only before the next request.
+				if (!force && measured.estimatedInput < measured.trigger) { return projection; }
 				if (repairUsed || stepStarted) { throw new BeaconPreparationError(); } repairUsed = true;
 				const count = state.units.length - 1, already = old ? coveredCount(state.units, old) : 0;
 				if (count <= already || count < 1) { throw new BeaconPreparationError(); }
@@ -375,7 +362,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				const after = measureBeaconRequest(prepared(prompt.system, projection, declarations));
 				if (after.estimatedInput >= measured.estimatedInput || after.estimatedInput >= measured.trigger || after.estimatedInput > after.budget) { throw new Error('beacon-compaction-no-gain'); }
 				if (generation) { await generation.commitCompaction(candidate, { conversationId: state.conversationId, requestId: generation.requestId, prefixSha256: candidate.prefixSha256 }, requestSignal); }
-				installedSummary = candidate; usageAnchor = undefined; anchors.clear(); measuredRequests.clear(); resultBudget(after.estimatedInput); return projection;
+				installedSummary = candidate; usageAnchor = undefined; anchors.clear(); measuredRequests.clear(); return projection;
 			};
 			while (true) {
 				const checkpoint = () => ({ type: 'protocol' as const, sequence: protocol.consumedSequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.messages, stepEnds: protocol.stepEnds.slice(0, protocol.consumedSequence) } });
@@ -408,7 +395,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						try {
 							const name = event.toolCall.toolName, result = event.toolOutput;
 							if (result.type === 'tool-error' && requestSignal.aborted && (result.error === requestSignal.reason || result.error instanceof Error && ['AbortError', 'TimeoutError'].includes(result.error.name))) { return; }
-							const output = result.type === 'tool-error' ? { type: 'error-text' as const, value: 'Tool execution failed.' } : name === 'inspectFiles' ? fileModelOutput(result.output as FileOutput) : name === 'browseWeb' ? webModelOutput(result.output as WebOutput) : { type: 'json' as const, value: JSON.parse(JSON.stringify(result.output)) };
+							const output = result.type === 'tool-error' ? { type: 'error-text' as const, value: 'Tool execution failed.' } : name === 'inspectFile' ? fileModelOutput(result.output as FileOutput) : name === 'browseWeb' ? webModelOutput(result.output as WebOutput) : { type: 'json' as const, value: JSON.parse(JSON.stringify(result.output)) };
 							generation.acceptCompletedTool({ requestId: generation.requestId, turnIndex: generation.turnIndex, logicalStepId: logicalStepId(), toolCallId: event.toolCall.toolCallId, toolName: name, input: event.toolCall.input, output });
 						} catch (error) { observerError = error; }
 					},
@@ -437,11 +424,11 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						}
 						if (part.type === 'text-end' || part.type === 'reasoning-end') { protocol.text(part.type === 'text-end' ? 'text' : 'reasoning', part.id, '', part.providerMetadata); yield checkpoint(); }
 						if (part.type === 'finish') { protocol.finishStep(); yield checkpoint(); }
-						if (part.type === 'tool-call' && ['inspectFiles', 'browseWeb', 'inspectContext', 'editNotebook'].includes(part.toolName)) {
+						if (part.type === 'tool-call' && Object.hasOwn(tools, part.toolName)) {
 							protocol.call({ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input, providerOptions: part.providerMetadata });
 							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'running', part.toolName) };
 						}
-						if (part.type === 'tool-result' && part.toolName === 'inspectFiles') {
+						if (part.type === 'tool-result' && part.toolName === 'inspectFile') {
 							const output = part.output as FileOutput;
 							protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: fileModelOutput(output), providerOptions: part.providerMetadata });
 							yield checkpoint();
@@ -455,16 +442,13 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 							if (output.ok) { yield { type: 'web-result', sources: output.sources }; }
 							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, output.ok ? 'complete' : 'error', part.toolName, output.ok ? undefined : output.error) };
 						}
-						if (part.type === 'tool-result' && part.toolName === 'inspectContext') {
+						if (part.type === 'tool-result' && contextToolNames.includes(part.toolName as BeaconContextToolName)) {
 							const output = part.output as ContextOutput;
 							protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: { type: 'json', value: JSON.parse(JSON.stringify(output)) }, providerOptions: part.providerMetadata });
 							yield checkpoint();
-							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, output.ok ? 'complete' : 'error', part.toolName, output.ok ? undefined : toolErrorCode(output.code)) };
+							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, !output.error ? 'complete' : 'error', part.toolName, !output.error ? undefined : toolErrorCode(typeof output.error === 'object' ? output.error.code : output.error)) };
 						}
-						if (part.type === 'tool-result' && part.toolName === 'editNotebook') {
-							const output = part.output as NotebookOutput; protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: { type: 'json', value: JSON.parse(JSON.stringify(output)) }, providerOptions: part.providerMetadata }); yield checkpoint(); yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, output.ok ? 'complete' : 'error', part.toolName, output.ok ? undefined : output.applied && output.saved === false ? 'save-failed' : output.released === false ? 'release-failed' : toolErrorCode(output.error)) };
-						}
-						if (part.type === 'tool-error' && ['inspectFiles', 'browseWeb', 'inspectContext', 'editNotebook'].includes(part.toolName)) { yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'error', part.toolName, InvalidToolInputError.isInstance(part.error) ? 'invalid-input' : 'unavailable') }; }
+						if (part.type === 'tool-error' && Object.hasOwn(tools, part.toolName)) { yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'error', part.toolName, InvalidToolInputError.isInstance(part.error) ? 'invalid-input' : 'unavailable') }; }
 						if (part.type === 'error') { throw part.error; }
 						if (part.type === 'finish' && part.finishReason !== 'stop') { throw new Error('incomplete-response'); }
 					}
@@ -478,6 +462,6 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				break;
 			}
 		} catch (error) { throw recovery.wrap(error); }
-		finally { try { await notebooks?.close(); } finally { progress?.(undefined); } }
+		finally { progress?.(undefined); }
 	};
 }

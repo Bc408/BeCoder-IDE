@@ -12,10 +12,8 @@ import { isProvider } from './connection';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
 import { BeaconContextClient, withPdfPages, type PdfPageApi, type BeaconHistoryBinding } from './context';
-import type { ProblemRef, ProblemDocument, ProblemResolution } from 'becoder-oj-connect';
+import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
 import { ContextTools, redactContext } from './contextTools';
-import { NotebookTools } from './notebookTools';
-import type { NotebookEditApi } from '../../becoder.notebook/src/editApi';
 import { isFilePermission, type FilePermission } from './fileTools';
 import { AttachmentError, attachmentBudget, captureClipboardImages, checkAttachmentSource, readAttachments, type Attachment, type AttachmentSource } from './attachments';
 import { ModelCapabilityError } from './models';
@@ -120,18 +118,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const fileTools = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] });
 		const files = fileTools.execute;
 		const oj = async () => {
-			const extension = vscode.extensions.getExtension<{ resolveBeaconProblem(sourceUri: string): ProblemResolution; resolveBeaconUrl(url: string): ProblemRef | undefined; readBeaconProblem(ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }): Promise<ProblemDocument> }>('becoder.oj-connect');
+			const extension = vscode.extensions.getExtension<{ resolveBeaconProblemId(oj: import('becoder-beacon').IBeaconProblemIdentity['oj'], problemId: string): ProblemRef; readBeaconProblem(ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }): Promise<ProblemDocument> }>('becoder.oj-connect');
 			if (!extension) { throw new Error('beacon-page-provider-unavailable'); } return extension.activate();
 		};
-		const notebooks = permission === 'none' ? undefined : new NotebookTools(async () => { const extension = vscode.extensions.getExtension<NotebookEditApi>('becoder.notebook'); if (!extension) { throw new Error('notebook-extension-unavailable'); } return extension.activate(); }, scope);
+
 		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], {
 			privateSnapshots: privateContext.snapshots, allowedPrivateKeys: privateContext.keys, capturePrivate: snapshot => requestHistory.captureContext(snapshot),
 			authorizeLocal: (file, signal) => fileTools.authorize(file, signal),
-			resolveProblem: async sourceUri => (await oj()).resolveBeaconProblem(sourceUri),
-			resolveUrl: async url => (await oj()).resolveBeaconUrl(url),
-			readAssociation: async sourceUri => { const extension = vscode.extensions.getExtension<{ readBeaconAssociation(sourceUri: string): Promise<{ sourceUri: string; url: string; revision: string } | undefined> }>('becoder.cph'); return (await extension?.activate())?.readBeaconAssociation(sourceUri); },
-			readProblem: async (ref, signal, options) => { if (!webEnabled) { throw new Error('beacon-web-disabled'); } return (await oj()).readBeaconProblem(ref, signal, options); }
-		}), notebooks);
+			resolveProblemId: async (ojName, problemId) => (await oj()).resolveBeaconProblemId(ojName, problemId),
+			readProblem: async (ref, signal, options) => (await oj()).readBeaconProblem(ref, signal, options)
+		}));
 		const generate = next.generate;
 		next.generate = (messages, signal, files, progress, generation) => generate(messages, signal, files, progress, generation ? {
 			...generation,

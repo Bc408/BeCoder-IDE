@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { generateUuid } from '../../../base/common/uuid.js';
-import type { IBeaconPage, IBeaconPageRead } from './beaconContextTypes.js';
+import type { IBeaconPage, IBeaconPageRead, IBeaconCurrentCodeFile } from './beaconContextTypes.js';
+import { URI } from '../../../base/common/uri.js';
 
 export interface IBeaconPageSource {
 	key: object;
@@ -15,6 +16,7 @@ export interface IBeaconPageSource {
 	languageId?: string;
 	dirty?: boolean;
 	active?: boolean;
+	visible?: boolean;
 	reason?: string;
 	read(): Promise<string>;
 }
@@ -24,6 +26,21 @@ export class BeaconPages {
 	constructor(private readonly sources: () => IBeaconPageSource[]) { }
 	reset(): void { this.handles.clear(); }
 	forget(key: object): void { this.handles.delete(key); }
+	async readVisibleCurrentCode(): Promise<IBeaconCurrentCodeFile[]> {
+		const isCode = (source: IBeaconPageSource) => source.visible && source.kind === 'text' && (['c', 'cpp'].includes(source.languageId ?? '') || !source.languageId && /\.(?:c|cpp|cc|cxx)$/i.test(source.uri ?? source.title));
+		const selected = this.sources().filter(isCode);
+		const files: IBeaconCurrentCodeFile[] = [];
+		for (const source of selected) {
+			if (source.reason || !source.uri) { throw new Error(source.reason ?? 'beacon-code-unavailable'); }
+			const uri = URI.parse(source.uri), code = await source.read();
+			const current = this.sources().find(item => item.key === source.key && item.visible);
+			if (!current || current.version !== source.version || current.uri !== source.uri || current.languageId !== source.languageId) { throw new Error('beacon-page-changed'); }
+			files.push({ fileName: uri.path.split('/').at(-1) || source.title, filePath: uri.scheme === 'file' ? uri.fsPath : null, isDirty: source.dirty === true, code });
+		}
+		const current = this.sources().filter(isCode);
+		if (current.length !== selected.length || selected.some(source => !current.some(item => item.key === source.key && item.version === source.version && item.uri === source.uri))) { throw new Error('beacon-page-changed'); }
+		return files;
+	}
 	list(): IBeaconPage[] {
 		const sources = this.sources();
 		for (const key of this.handles.keys()) { if (!sources.some(source => source.key === key)) { this.handles.delete(key); } }

@@ -1,5 +1,7 @@
 # Beacon 实施筹划核对记录
 
+> 历史审阅（2026-11-24标记）：当时批准只对应旧底层方案，不适用于三类记录和无codesnap的新架构。当前见[工具设计](../../superpowers/specs/2026-11-23-beacon-tool-interface-simplification-design.md)，新实施计划尚未批准。
+
 日期：2026-11-23。起点为干净的`Beacon_Next@c54e9e4970c59fb1553b38581dc951fc3fb9d8fa`。负责人已通过现行方案并授权实施筹划与落盘；本轮改[执行计划](../../superpowers/plans/2026-11-22-beacon-foundation-implementation.md)、统一入口、实现状态和本记录，并将其新确认的图片预算准入同步到需求LONG04和压缩规范。产品源码、构建、模型请求、真实账号与Git提交未进入本轮。
 
 ## 筹划结果与来源

@@ -5,32 +5,39 @@
 
 /** Internal transport contracts, with no runtime dependency on a bundled extension. */
 declare module 'becoder-beacon' {
-	import type { ProblemRef, ProblemDocument, RecordSnapshot, SubmissionEvaluation } from 'becoder-oj-connect';
-	export type BeaconRecentProducer = 'runner' | 'cph' | 'notebook' | 'oj' | 'problem';
+	import type { ProblemRef, RecordSnapshot, SubmissionEvaluation } from 'becoder-oj-connect';
+	export type BeaconRecordKind = 'problem' | 'run' | 'verdict';
+	export interface IBeaconProblemIdentity { oj: ProblemRef['site']; problemId: string }
+	export interface IBeaconProblemRecord { id: string; problem: IBeaconProblemIdentity; filePath: string | null; viewedAt: string }
+	export type BeaconOutputText = string | { head: string; tail: string; omittedBytes: number; sourceOmittedBytesAtLeast?: number };
+	export interface IBeaconOutput { stdout?: BeaconOutputText; stderr?: BeaconOutputText; merged?: BeaconOutputText }
+	export interface IBeaconCompile {
+		status: 'succeeded' | 'failed' | 'timed-out' | 'output-limit' | 'cancelled' | 'start-failed';
+		compiler?: string; args?: string[]; workingDirectory?: string; durationMs?: number; exitCode?: number; signal?: string; output?: IBeaconOutput; error?: string;
+	}
+	export interface IBeaconRunInput {
+		input: { mode: 'interactive' | 'file' | 'text'; text: string | null; filePath?: string };
+		testCaseNumber?: number; inputCellNumber?: number; inputName?: string; expectedOutput?: string;
+		status: 'completed' | 'runtime-error' | 'timed-out' | 'output-limit' | 'cancelled' | 'start-failed' | 'not-run';
+		durationMs?: number; exitCode?: number; signal?: string; output?: IBeaconOutput;
+		check?: 'passed' | 'wrong-answer' | 'runtime-error' | 'time-limit' | 'cancelled' | 'output-limit';
+		skipReason?: 'compile-failed' | 'cancelled' | 'failed'; error?: string;
+	}
+	export interface IBeaconRunRecord {
+		id: string; source: 'runner' | 'cph' | 'notebook'; operation: 'run' | 'run-with-input' | 'test-one' | 'test-all' | 'run-inputs';
+		startedAt: string; endedAt: string; status: 'completed' | 'compile-failed' | 'cancelled' | 'failed'; workingDirectory?: string; command?: string;
+		program: { filePath: string; language: 'c' | 'cpp'; code: string; codeBlockNumber?: number };
+		compile: IBeaconCompile; runs: IBeaconRunInput[]; error?: string; gaps?: string[];
+	}
+	export interface IBeaconVerdictRecord {
+		id: string; problem: IBeaconProblemIdentity; filePath: string | null; observedAt: string;
+		submission: { id?: string; url?: string; submittedAt?: string; language?: string; code?: string; codeLength?: string; sourceVerification?: RecordSnapshot['sourceVerification'] };
+		result: { rawStatus: string; score?: string; time?: string; memory?: string; compileMessage?: string; compileSucceeded?: boolean; testCaseSummary?: RecordSnapshot['testCaseSummary']; groups?: RecordSnapshot['groups'] };
+	}
+	export interface IBeaconRecordByKind { problem: IBeaconProblemRecord; run: IBeaconRunRecord; verdict: IBeaconVerdictRecord }
+	export type IBeaconRecordWrite<K extends BeaconRecordKind> = Omit<IBeaconRecordByKind[K], 'id'>;
+	export interface IBeaconCurrentCodeFile { fileName: string; filePath: string | null; isDirty: boolean; code: string }
 	export interface IBeaconCollectionScope { slot: string; root: string; workspaceIdentity: string; rootSelectionEpoch: number }
-	export interface IBeaconRecordRef { producer: BeaconRecentProducer; id: string; revision: number }
-	export interface IBeaconDigest { value: string; representation: 'compiler-bytes' | 'utf8-text-lf' }
-	export interface IBeaconCoverage {
-		complete?: boolean;
-		channels: { phase: string; stream: string; sampleId?: string; blockId?: string; byteRepresentation: 'process-bytes' | 'utf8-observed-text'; observedBytes?: number; sourceOmittedBytes?: number; retainedRanges: [number, number][]; omittedRanges: [number, number][]; sourceTruncated: boolean }[];
-	}
-	export interface IBeaconRecentItem extends IBeaconRecordRef {
-		dedupKey: string; sequence: number; capturedAt: number; sourceVersion?: string; sourceUri?: string;
-		problem?: ProblemRef; sourceDigest?: IBeaconDigest; submission?: { attemptId?: string; recordKey?: string };
-		state: 'available' | 'active' | 'finished' | 'unknown'; viewedAt?: number; trigger?: 'get-problem' | 'import-cph'; coverage: IBeaconCoverage;
-	}
-	export type BeaconRecentPayload = { kind: 'runtime'; activityId: string; lastEventSequence: number; code: string; startedAt: number; events: unknown[] }
-		| { kind: 'problem'; document: ProblemDocument } | { kind: 'oj'; record: RecordSnapshot }
-		| { kind: 'oj-evaluation'; attemptId: string; evaluation: SubmissionEvaluation };
-	export interface IBeaconRecentRecord extends IBeaconRecentItem { payload: BeaconRecentPayload }
-	export type IBeaconRecentWrite = Omit<IBeaconRecentRecord, 'id' | 'revision' | 'sequence'>;
-	export interface IBeaconCodeObservation {
-		sourceUri: string; fileName: string; filePath?: string; pageId: string; version: string; languageId: 'c' | 'cpp'; observedAt: number; contents: string; contentSha256: string;
-	}
-	export interface IBeaconCodeSnapshot extends IBeaconCodeObservation { id: string; capturedAt: number; lastObservedAt: number; lastObservedVersion: string }
-	export type IBeaconCodeSave = { state: 'saved'; id: string; reused: boolean } | { state: 'disabled'; reason: 'blackout' } | { state: 'not-saved'; reason: 'too-large' | 'save-failed' };
-	export interface IBeaconProblemHint { kind: 'get-problem' | 'cph' | 'path'; sourceUri: string; problem: ProblemRef; observedAt: number; viewedAt?: number; record?: IBeaconRecordRef; basis: string }
 	export interface IBeaconAcquisition { scope: IBeaconCollectionScope | undefined; trigger: 'get-problem' | 'import-cph' }
-	export interface IBeaconProblemCapture { document: ProblemDocument; sourceUri: string; viewedAt: number; trigger: 'get-problem' | 'import-cph' }
 	export type IBeaconOjCapture = { record: RecordSnapshot; sourceUri?: string; attemptId?: string } | { attemptId: string; evaluation: SubmissionEvaluation; sourceUri?: string };
 }

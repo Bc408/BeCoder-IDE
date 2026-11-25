@@ -198,7 +198,7 @@ suite('Beacon request recovery', () => {
 		let requests = 0; let tools = 0;
 		const session = new ChatSession(() => {}, () => 'connection failed');
 		await session.send('question', createGenerator(async () => ({ ...connection, capabilities: { ...connection.capabilities!, tools: true } }), async () => {
-			if (++requests === 1) { return new Response(chunk({ tool_calls: [{ index: 0, id: 'read-once', type: 'function', function: { name: 'inspectFiles', arguments: '{"operation":"read","path":"main.cpp"}' } }] }) + chunk({}, 'tool_calls') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }); }
+			if (++requests === 1) { return new Response(chunk({ tool_calls: [{ index: 0, id: 'read-once', type: 'function', function: { name: 'inspectFile', arguments: '{"operation":"read","path":"main.cpp"}' } }] }) + chunk({}, 'tool_calls') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }); }
 			throw networkError();
 		}, 'workspace', [], false, undefined, { wait: async () => { assert.fail('Tool round was retried'); } }), undefined, async input => { tools++; return { ok: true, path: input.path, contents: 'code', kind: 'text' }; });
 		assert.equal(requests, 2); assert.equal(tools, 1); assert.equal(session.snapshot.messages[1].toolResults?.length, 1);

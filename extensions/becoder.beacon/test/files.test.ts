@@ -141,7 +141,7 @@ suite('Beacon read-only permissions', () => {
 			const output = await execute(input, requestSignal);
 			assert.equal(output.ok, true);
 			yield { type: 'tool-result', result: { id: 'read', path: 'note.txt', input, output } };
-			yield { type: 'protocol', turn: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'read', toolName: 'inspectFiles', input }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'read', toolName: 'inspectFiles', output: fileModelOutput(output) }] }, { role: 'assistant', content: 'answer keeps streaming' }] } };
+			yield { type: 'protocol', turn: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'read', toolName: 'inspectFile', input }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'read', toolName: 'inspectFile', output: fileModelOutput(output) }] }, { role: 'assistant', content: 'answer keeps streaming' }] } };
 			yield { type: 'text', text: 'answer keeps streaming' };
 		};
 		await session.send('read', generate, undefined, files.execute);
@@ -172,7 +172,7 @@ suite('Beacon read-only permissions', () => {
 					assert.deepStrictEqual(images.map((part: { image_url: { url: string } }) => part.image_url.url), [`data:image/png;base64,${image}`]);
 					assert.ok(body.messages.filter((message: { role: string }) => message.role === 'tool').every((message: { content: string }) => !message.content.includes(image)));
 				}
-				const delta = requests < 3 ? { tool_calls: [{ index: 0, id: `call-${requests}`, type: 'function', function: { name: 'inspectFiles', arguments: JSON.stringify({ operation: 'read', path: requests === 1 ? 'pixel.png' : 'note.txt' }) } }] } : { content: 'image answer' };
+				const delta = requests < 3 ? { tool_calls: [{ index: 0, id: `call-${requests}`, type: 'function', function: { name: 'inspectFile', arguments: JSON.stringify({ operation: 'read', path: requests === 1 ? 'pixel.png' : 'note.txt' }) } }] } : { content: 'image answer' };
 				const chunks = [delta, {}].map((value, index) => 'data: ' + JSON.stringify({ id: 'image-test', object: 'chat.completion.chunk', choices: [{ index: 0, delta: value, finish_reason: index === 1 ? (requests < 3 ? 'tool_calls' : 'stop') : null }] }) + '\n\n');
 				return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 			};

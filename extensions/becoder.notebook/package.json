@@ -139,7 +139,7 @@
 	"scripts": {
 		"typecheck": "node ../../node_modules/typescript/bin/tsc6 -p tsconfig.json",
 		"build": "node build.mjs",
-		"test": "node --test dist-test/model.test.cjs",
+		"test": "node --test dist-test/model.test.cjs dist-test/execution.test.cjs",
 		"vscode:prepublish": "npm run typecheck && npm run build"
 	}
 }

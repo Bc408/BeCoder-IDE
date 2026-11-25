@@ -6,7 +6,7 @@ import type { ModelCapabilities } from '../src/models';
 import { createGenerator } from '../src/provider';
 import { ChatSession } from '../src/session';
 import { readHistory } from '../src/history';
-import { ContextTools, type ContextInput } from '../src/contextTools';
+import { ContextTools } from '../src/contextTools';
 import { BeaconContextClient } from '../src/context';
 import { createHash } from 'node:crypto';
 import type { RequestDiagnostic } from '../src/requestRecovery';
@@ -197,7 +197,7 @@ async function fixtureContext(turn: PromptEvaluationTurn) {
 		if (operation === 'context') { return { slot: 'synthetic', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] }; }
 		if (operation === 'pages') { return overview.pages; }
 		if (operation === 'page') {
-			const request = input as ContextInput;
+			const request = input as { id: string; version: string };
 			const page = pages.find(page => page.id === request.id && page.version === request.version);
 			if (!page) { throw new Error('beacon-page-closed'); }
 			if (!page.ok) { throw new Error(typeof page.code === 'string' ? page.code : 'beacon-context-unavailable'); }

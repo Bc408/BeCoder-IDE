@@ -7,11 +7,10 @@ import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryIte
 import * as path from '../../../base/common/path.js';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { fileURLToPath } from 'url';
-import { hasKey } from '../../../base/common/types.js';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { BeaconStore, checkBeaconIdentifier, checkBeaconResume, prepareBeaconWorkspace } from './beaconStore.js';
 import { acquireBeaconLease } from './beaconLease.js';
-import type { BeaconProducer, IBeaconConsumedRecord, IBeaconRuntimeItem, BeaconRecentProducer, IBeaconCollectionScope, IBeaconProblemCapture, IBeaconOjCapture, IBeaconRecordRef, IBeaconRecentItem, IBeaconRecentRecord, IBeaconRecentWrite, IBeaconCodeObservation, IBeaconCodeSnapshot, IBeaconCodeSave } from '../common/beaconContextTypes.js';
+import type { IBeaconCollectionScope, BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite } from '../common/beaconContextTypes.js';
 import { BeaconNotebookResources } from './beaconNotebookResources.js';
 
 const sameWorkspacePath = (left: string, right: string) => {
@@ -37,8 +36,8 @@ interface IWindowContext {
 	rootSelectionEpoch: number;
 	busy: boolean;
 	runtimeActivities: Set<string>;
-	activities: Map<string, { source: string; canonical: string; collectionScope: IBeaconCollectionScope; producer?: BeaconProducer }>;
-	ojActivities: Map<string, { collectionScope: IBeaconCollectionScope; attemptId?: string; recordKey?: string }>;
+	activities: Map<string, { source: string; canonical: string; collectionScope: IBeaconCollectionScope; publication?: Promise<string> }>;
+
 	writes: number;
 	switching: boolean;
 	tail: Promise<unknown>;
@@ -129,23 +128,27 @@ export class BeaconCoordinator {
 		if (this.disposed || !selection) { throw new Error('beacon-window-closed'); }
 		let context = this.windows.get(id);
 		if (!context) {
-			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, rootSelectionEpoch: 0, busy: false, runtimeActivities: new Set(), activities: new Map(), ojActivities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
+			context = { resourceOwner: ++this.nextResourceOwner, selection: { ...selection }, usable: false, epoch: 0, rootSelectionEpoch: 0, busy: false, runtimeActivities: new Set(), activities: new Map(), writes: 0, switching: false, tail: Promise.resolve() };
 			this.windows.set(id, context);
 		}
 		return context;
 	}
 
 	private async refresh(context: IWindowContext): Promise<void> {
-		const previous = context.usable;
-		context.usable = false; context.store = undefined;
-		if (context.selection.root) {
+		const selection = context.selection, rootSelectionEpoch = context.rootSelectionEpoch;
+		let store: BeaconStore | undefined;
+		if (selection.root) {
 			try {
-				const binding = await prepareBeaconWorkspace(context.selection.root, false);
-				if (context.selection.identity && context.selection.identity !== binding.identity) { throw new Error('beacon-workspace-changed'); }
-				context.store = new BeaconStore(binding);
-				context.usable = true;
+				const binding = await prepareBeaconWorkspace(selection.root, false);
+				if (selection.identity && selection.identity !== binding.identity) { throw new Error('beacon-workspace-changed'); }
+				store = new BeaconStore(binding);
 			} catch { /* Retain the selected root; unavailable roots do not redirect persistence. */ }
 		}
+		// Detached publication may validate concurrently; publish one complete state
+		// only if this probe still belongs to the same selected root.
+		if (context.selection !== selection || context.rootSelectionEpoch !== rootSelectionEpoch) { return; }
+		const previous = context.usable;
+		context.store = store; context.usable = store !== undefined;
 		if (previous !== context.usable) {
 			context.epoch++; context.rootSelectionEpoch++;
 			if (!context.usable) { await this.release(context); }
@@ -155,8 +158,10 @@ export class BeaconCoordinator {
 	private snapshot(context: IWindowContext): IBeaconContext {
 		const mode = context.usable ? context.selection.mode : 'blackout';
 		const workspaceState = !context.selection.root ? 'none' : !context.usable ? 'unavailable' : mode === 'blackout' ? 'blackout' : 'ready';
-		return { slot: context.selection.slot, root: context.selection.root, usable: context.usable, workspaceState, mode, epoch: context.epoch,
-			runtimeBusy: context.runtimeActivities.size > 0, busy: context.busy || context.runtimeActivities.size > 0 || context.activities.size > 0 || context.writes > 0 || context.switching || this.ownsNotebookEdit(context), activeId: context.active?.id, recent: [...this.callbacks.getRecent()] };
+		return {
+			slot: context.selection.slot, root: context.selection.root, usable: context.usable, workspaceState, mode, epoch: context.epoch,
+			runtimeBusy: context.runtimeActivities.size > 0, busy: context.busy || context.runtimeActivities.size > 0 || context.activities.size > 0 || context.writes > 0 || context.switching || this.ownsNotebookEdit(context), activeId: context.active?.id, recent: [...this.callbacks.getRecent()]
+		};
 	}
 	private ownsNotebookEdit(context: IWindowContext): boolean { return [...this.notebookOwners].some(([handle, value]) => value.owner === context.resourceOwner && this.notebookScopes.has(handle)); }
 
@@ -291,17 +296,6 @@ export class BeaconCoordinator {
 		return context.store;
 	}
 
-	private activeKeys(identity: string, producer: BeaconRecentProducer): Set<string> {
-		const keys = new Set<string>();
-		for (const window of this.windows.values()) {
-			for (const [id, activity] of window.activities) {
-				if (activity.collectionScope.workspaceIdentity === identity && activity.producer === producer) { keys.add(id); }
-			}
-			if (producer === 'oj') { for (const activity of window.ojActivities.values()) { if (activity.collectionScope.workspaceIdentity === identity) { if (activity.attemptId) { keys.add(activity.attemptId); } if (activity.recordKey) { keys.add(activity.recordKey); } } } }
-		}
-		return keys;
-	}
-
 	async beginActivity(id: number, source: string, scope: IBeaconCollectionScope | undefined): Promise<string | undefined> {
 		return this.serial(id, false, async context => {
 			if (!scope) { return undefined; }
@@ -317,45 +311,10 @@ export class BeaconCoordinator {
 
 	async endActivity(id: number, handle: string): Promise<void> {
 		await this.serial(id, false, async context => {
-			const activity = context.activities.get(handle); context.activities.delete(handle);
-			if (activity?.producer) { try { await this.runtimeWrite(context, activity.producer, activity.collectionScope, store => store.trimRecent(activity.producer!, this.activeKeys(store.binding.identity, activity.producer!))); } catch { /* Root retirement does not redirect cleanup. */ } }
+			context.activities.delete(handle);
+
 			this.callbacks.changed(id);
 		});
-	}
-
-	async startRuntime(id: number, handle: string, producer: BeaconProducer, source: string, code: string, events: unknown[]): Promise<void> {
-		await this.serial(id, true, async context => {
-			const activity = context.activities.get(handle);
-			if (!activity) { throw new Error('beacon-invalid-activity'); }
-			const normalized = path.normalize(source);
-			if ((process.platform === 'win32' ? normalized.toLowerCase() !== activity.source.toLowerCase() : normalized !== activity.source)) { throw new Error('beacon-invalid-source'); }
-			if (producer !== 'runner' && producer !== 'cph' && producer !== 'notebook') { throw new Error('beacon-invalid-producer'); }
-			if (activity.producer && activity.producer !== producer) { throw new Error('beacon-invalid-producer'); }
-			if (activity.producer) { return; }
-			const capture = events[0] as { sourceSnapshot?: { canonicalPath?: string } } | undefined;
-			const canonical = capture?.sourceSnapshot?.canonicalPath;
-			if (typeof canonical !== 'string' || (process.platform === 'win32' ? canonical.toLowerCase() !== activity.canonical.toLowerCase() : canonical !== activity.canonical)) { throw new Error('beacon-invalid-source'); }
-			activity.producer = producer;
-			try { await this.runtimeWrite(context, producer, activity.collectionScope, store => store.commitRuntimeRecord(producer, { id: handle, code, startedAt: Date.now(), events }, this.activeKeys(store.binding.identity, producer))); }
-			catch (error) { activity.producer = undefined; throw error; }
-		});
-	}
-
-	async appendRuntime(id: number, handle: string, sequence: number, events: unknown[]): Promise<boolean> {
-		return this.serial(id, true, async context => {
-			const activity = context.activities.get(handle);
-			if (!activity?.producer) { throw new Error('beacon-invalid-activity'); }
-			return this.runtimeWrite(context, activity.producer, activity.collectionScope, store => store.appendRuntimeEvents(activity.producer!, handle, sequence, events, this.activeKeys(store.binding.identity, activity.producer!)));
-		});
-	}
-
-	private async runtimeWrite<T>(context: IWindowContext, producer: BeaconRecentProducer, scope: IBeaconCollectionScope, operation: (store: BeaconStore) => Promise<T>): Promise<T> {
-		const store = await this.collectionStore(context, scope);
-		const key = `${store.binding.identity}/${producer}`;
-		const result = (this.runtimeWrites.get(key) ?? Promise.resolve()).then(async () => { await this.collectionStore(context, scope); return operation(store); });
-		const tail = result.then(() => { }, () => { });
-		this.runtimeWrites.set(key, tail);
-		try { return await result; } finally { if (this.runtimeWrites.get(key) === tail) { this.runtimeWrites.delete(key); } }
 	}
 
 	private async collectionSource(context: IWindowContext, scope: IBeaconCollectionScope, sourceUri: string | undefined): Promise<string> {
@@ -366,62 +325,39 @@ export class BeaconCoordinator {
 		if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) { throw new Error('beacon-invalid-source'); }
 		return real;
 	}
-
-	async captureProblem(id: number, input: IBeaconProblemCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef> {
+	private async semanticWrite<K extends BeaconRecordKind>(context: IWindowContext, scope: IBeaconCollectionScope, kind: K, input: IBeaconRecordWrite<K>): Promise<string> {
+		const store = await this.collectionStore(context, scope), key = `${store.binding.identity}/context:${kind}`;
+		const result = (this.runtimeWrites.get(key) ?? Promise.resolve()).then(async () => { await this.collectionStore(context, scope); return store.appendRecord(kind, input); });
+		const tail = result.then(() => { }, () => { }); this.runtimeWrites.set(key, tail);
+		try { return await result; } finally { if (this.runtimeWrites.get(key) === tail) { this.runtimeWrites.delete(key); } }
+	}
+	async captureProblemRecord(id: number, input: IBeaconRecordWrite<'problem'>, scope: IBeaconCollectionScope): Promise<string> {
 		return this.serial(id, true, async context => {
-			const canonical = await this.collectionSource(context, scope, input.sourceUri);
-			if (!input.document?.ref || !Number.isFinite(input.viewedAt) || !['get-problem', 'import-cph'].includes(input.trigger)) { throw new Error('beacon-invalid-record'); }
-			const sourceUri = process.platform === 'win32' ? canonical.toLowerCase() : canonical;
-			const ref = input.document.ref;
-			return this.runtimeWrite(context, 'problem', scope, store => store.saveRecentRecord('problem', { producer: 'problem', dedupKey: JSON.stringify([ref.site, ref.nativeId, ref.url, sourceUri]), sourceUri: input.sourceUri, problem: ref, capturedAt: input.viewedAt, viewedAt: input.viewedAt, trigger: input.trigger, state: 'available', coverage: { complete: true, channels: [] }, payload: { kind: 'problem', document: input.document } }, new Set(), true));
+			if (input.filePath !== null) { await this.collectionSource(context, scope, pathToFileURL(input.filePath).href); }
+			return this.semanticWrite(context, scope, 'problem', input);
 		});
 	}
-
-	async captureOj(id: number, input: IBeaconOjCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef> {
+	async captureVerdict(id: number, input: IBeaconRecordWrite<'verdict'>, scope: IBeaconCollectionScope): Promise<string> {
 		return this.serial(id, true, async context => {
-			await this.collectionSource(context, scope, input.sourceUri);
-			const record = hasKey(input, { record: true }) ? input.record : undefined;
-			const evaluation = hasKey(input, { evaluation: true }) ? input.evaluation : undefined;
-			const attemptId = input.attemptId;
-			const recordKey = record ? JSON.stringify([record.ref.problem.site, record.ref.id, record.ref.url]) : undefined;
-			if (!record && (!attemptId || !evaluation || evaluation.phase === 'preparing')) { throw new Error('beacon-invalid-record'); }
-			const data: IBeaconRecentWrite = { producer: 'oj', dedupKey: recordKey ?? attemptId!, sourceUri: input.sourceUri, problem: record?.ref.problem ?? evaluation?.problem, capturedAt: Date.now(), submission: { attemptId, recordKey }, state: record?.phase === 'finished' ? 'finished' : record?.phase === 'unknown' ? 'unknown' : 'active', coverage: { channels: [] }, payload: record ? { kind: 'oj', record } : { kind: 'oj-evaluation', attemptId: attemptId!, evaluation: evaluation! } };
-			return this.runtimeWrite(context, 'oj', scope, store => store.saveRecentRecord('oj', data, this.activeKeys(store.binding.identity, 'oj'), false));
+			if (input.filePath !== null) { await this.collectionSource(context, scope, pathToFileURL(input.filePath).href); }
+			return this.semanticWrite(context, scope, 'verdict', input);
 		});
 	}
-
-	async beginOjCaptureActivity(id: number, input: { sourceUri: string; attemptId?: string; recordKey?: string }, scope: IBeaconCollectionScope): Promise<string> {
-		return this.serial(id, false, async context => {
-			await this.collectionSource(context, scope, input.sourceUri);
-			if (!input.attemptId && !input.recordKey) { throw new Error('beacon-invalid-record'); }
-			const handle = randomUUID(); context.ojActivities.set(handle, { collectionScope: structuredClone(scope), attemptId: input.attemptId, recordKey: input.recordKey }); return handle;
+	async captureRun(id: number, handle: string, input: IBeaconRecordWrite<'run'>): Promise<string> {
+		const accepted = await this.serial(id, false, async context => {
+			const activity = context.activities.get(handle);
+			if (!activity || !sameWorkspacePath(input.program.filePath, activity.source)) { throw new Error('beacon-invalid-activity'); }
+			// Publication owns this captured scope, not the execution's retirement tail.
+			activity.publication ??= this.semanticWrite(context, activity.collectionScope, 'run', structuredClone(input));
+			return { publication: activity.publication };
 		});
+		return accepted.publication;
 	}
-
-	async endOjCaptureActivity(id: number, handle: string): Promise<void> {
-		await this.serial(id, false, async context => {
-			const activity = context.ojActivities.get(handle); context.ojActivities.delete(handle);
-			if (activity) { try { await this.runtimeWrite(context, 'oj', activity.collectionScope, store => store.trimRecent('oj', this.activeKeys(store.binding.identity, 'oj'))); } catch { /* Retired roots are not reopened. */ } }
-		});
+	async listRecords<K extends BeaconRecordKind>(id: number, kind: K, scope: IBeaconContext): Promise<IBeaconRecordByKind[K][]> {
+		return this.serial(id, false, async context => { const { store } = await this.ownedStore(context); this.checkScope(context, scope); return store.listRecords(kind); });
 	}
-
-	async listRecent(id: number, producer: BeaconRecentProducer, scope: IBeaconContext): Promise<IBeaconRecentItem[]> {
-		return this.serial(id, false, async context => {
-			const { store } = await this.ownedStore(context); this.checkScope(context, scope);
-			return (await store.listRecentRecords(producer)).map(({ payload: _payload, ...item }) => item);
-		});
-	}
-	async readRecent(id: number, ref: IBeaconRecordRef, scope: IBeaconContext): Promise<IBeaconRecentRecord> {
-		return this.serial(id, false, async context => { const { store } = await this.ownedStore(context); this.checkScope(context, scope); return store.readRecentRecord(ref); });
-	}
-	async saveCodeRead(id: number, observation: IBeaconCodeObservation, scope: IBeaconContext): Promise<IBeaconCodeSave> {
-		return this.serial(id, true, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); const result = await store.saveCodeRead(conversationId, observation); this.checkScope(context, scope); return result; });
-	}
-	async listCodeSnapshots(id: number, scope: IBeaconContext): Promise<Omit<IBeaconCodeSnapshot, 'contents'>[]> {
-		return this.serial(id, false, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); return store.listCodeSnapshots(conversationId); });
-	}
-	async readCodeSnapshot(id: number, key: string, scope: IBeaconContext): Promise<IBeaconCodeSnapshot> {
-		return this.serial(id, false, async context => { const { store, conversationId } = await this.ownedStore(context); this.checkScope(context, scope); return store.readCodeSnapshot(conversationId, key); });
+	async readRecord<K extends BeaconRecordKind>(id: number, kind: K, key: string, scope: IBeaconContext): Promise<IBeaconRecordByKind[K]> {
+		return this.serial(id, false, async context => { const { store } = await this.ownedStore(context); this.checkScope(context, scope); return store.readRecord(kind, key); });
 	}
 
 	private async store(context: IWindowContext): Promise<BeaconStore> {
@@ -439,37 +375,6 @@ export class BeaconCoordinator {
 	private checkScope(context: IWindowContext, scope?: IBeaconContext): void {
 		const current = this.snapshot(context);
 		if (scope && (['slot', 'root', 'usable', 'mode', 'epoch', 'activeId'] as const).some(key => current[key] !== scope[key])) { throw new Error('beacon-context-changed'); }
-	}
-
-	async listRuntime(id: number, producer: BeaconProducer, scope?: IBeaconContext): Promise<IBeaconRuntimeItem[]> {
-		return this.serial(id, false, async context => {
-			const { store } = await this.ownedStore(context);
-			this.checkScope(context, scope);
-			return (await store.listRuntimeRecords(producer)).map(record => {
-				const snapshot = (record.events[0] as { sourceSnapshot?: { originalPath?: unknown; sha256?: unknown } } | undefined)?.sourceSnapshot;
-				return { id: record.id, producer, revision: record.revision, startedAt: record.startedAt,
-					source: typeof snapshot?.originalPath === 'string' ? snapshot.originalPath : undefined,
-					sha256: typeof snapshot?.sha256 === 'string' ? snapshot.sha256 : undefined,
-					finished: record.events.some(event => (event as { type?: string } | null)?.type === 'finished') };
-			});
-		});
-	}
-
-	async consumeRuntime(id: number, producer: BeaconProducer, recordId: string, revision: number, scope?: IBeaconContext): Promise<IBeaconConsumedRecord> {
-		if (!Number.isSafeInteger(revision) || revision < 1) { throw new Error('beacon-invalid-record'); }
-		return this.serial(id, true, async context => {
-			const { store, conversationId } = await this.ownedStore(context);
-			this.checkScope(context, scope);
-			return store.consumeRuntimeRecord(conversationId, producer, recordId, revision);
-		});
-	}
-
-	async readConsumed(id: number, materialId: string, scope?: IBeaconContext): Promise<IBeaconConsumedRecord | undefined> {
-		return this.serial(id, false, async context => {
-			const { store, conversationId } = await this.ownedStore(context);
-			this.checkScope(context, scope);
-			return store.readMaterial(conversationId, materialId);
-		});
 	}
 
 	/** Checks only metadata of a known open page; never reads its backing content. */
@@ -599,7 +504,7 @@ export class BeaconCoordinator {
 			await this.notebooks.reset(context.resourceOwner);
 			for (const [handle, owner] of this.notebookOwners) { if (owner.owner === context.resourceOwner) { this.notebookOwners.delete(handle); this.notebookScopes.delete(handle); } }
 			context.resourceOwner = ++this.nextResourceOwner;
-			context.activities.clear(); context.ojActivities.clear(); context.runtimeActivities.clear(); context.busy = false; context.epoch++; context.rootSelectionEpoch++;
+			context.activities.clear(); context.runtimeActivities.clear(); context.busy = false; context.epoch++; context.rootSelectionEpoch++;
 			await this.release(context);
 		});
 	}

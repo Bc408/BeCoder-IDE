@@ -327,7 +327,7 @@ suite('Beacon window session', () => {
 			assert.deepStrictEqual(body.messages.filter((message: { role: string }) => message.role !== 'system'), [{ role: 'user', content: 'hello' }]);
 			assert.equal(body.messages.filter((message: { role: string }) => message.role === 'system').length, 1);
 			assert.ok(body.messages[0].content.includes('Beacon mentor core'));
-			assert.deepStrictEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['inspectFiles']);
+			assert.deepStrictEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['inspectFile']);
 			assert.equal(body.temperature, 0.7);
 			assert.equal(body.top_p, 0.9);
 			assert.equal(body.max_tokens, 4096);
@@ -349,7 +349,7 @@ suite('Beacon window session', () => {
 			requestCount++;
 			if (requestCount === 1) {
 				const chunks = [
-					{ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'inspectFiles', arguments: '' } }] },
+					{ tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'inspectFile', arguments: '' } }] },
 					{ tool_calls: [{ index: 0, function: { arguments: '{"operation":"read","path":"src/main.ts"}' } }] },
 					{}
 				].map((delta, index) => 'data: ' + JSON.stringify({ id: 'tool-test', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: index === 2 ? 'tool_calls' : null }] }) + '\n\n');
@@ -492,7 +492,7 @@ suite('Beacon window session', () => {
 			yield { type: 'tool-result', result: { id: 'call', path: 'main.cpp', input: { operation: 'read', path: 'main.cpp' }, output: { ok: true, path: 'main.cpp', contents: 'int main() {}' } } };
 			yield { type: 'activity', activity: { id: 'unfinished', type: 'read', path: 'other.cpp', status: 'running' } };
 			yield { type: 'reasoning', text: 'private reasoning' };
-			yield { type: 'protocol', turn: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call', toolName: 'inspectFiles', input: { operation: 'read', path: 'main.cpp' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call', toolName: 'inspectFiles', output: { type: 'json', value: { ok: true, contents: 'int main() {}' } } }] }, { role: 'assistant', content: 'This file' }] } };
+			yield { type: 'protocol', turn: { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call', toolName: 'inspectFile', input: { operation: 'read', path: 'main.cpp' } }] }, { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call', toolName: 'inspectFile', output: { type: 'json', value: { ok: true, contents: 'int main() {}' } } }] }, { role: 'assistant', content: 'This file' }] } };
 			yield { type: 'text', text: 'This file' };
 			history.session.stop();
 		});

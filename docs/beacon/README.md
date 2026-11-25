@@ -1,55 +1,61 @@
 # Beacon 文档入口
 
-更新：2026-11-23。本目录统一维护Beacon需求、架构、底层设计与实施状态。负责人已批准方案并选择Native连续实施，代码正在Beacon_Next本地工作树形成候选；最近备份仍为c54e9e49，本轮未提交或推送。设计要求、源码检查、模型观察及负责人验收分别记录。
+更新：2026-11-24。负责人允许工具设计0.4收敛，现已形成[新实施计划](../superpowers/plans/2026-11-24-beacon-context-tools-rebuild.md)，补齐九工具工程接线、三个队列、Notebook优化、旧数据和验证范围；负责人已确认本会话实施，当前候选源码及分项结果见实现状态；设计、源码、模型与桌面验收分别记录。
 
-2026-11-23最新修订：讨论对象完全由LLM根据提问、对话和工具观测判断；不再提供“上轮对象”、下一问选择、会话固定或发送时对象绑定。打开页面目录和每次代码工具调用的页面ID只是取材手段。早期执行计划中与此冲突的targetSelection／pinnedTarget描述不再执行。
-
-本轮[上下文能力报告](evaluation/2026-11-23-context-foundation-report.md)单独记录真实DeepSeek合成效果测试、工具调整、服务故障、独立审阅及暂缓项；模型链路完成、教学质量和负责人真实五站验收分别成立。
-
-[输出质量优化要点](review/2026-11-23-output-quality-improvements.md)合并负责人初步审阅与测试复核，列出教学表达、取材理解、工具和压缩的具体问题、处理手段及验收方向，作为下一阶段输入；尚非实施计划或修复声明。
-
-[工具接口与信息流专项方案](../superpowers/specs/2026-11-23-beacon-tool-information-flow-design.md)已获负责人确认，按[专项实施计划](../superpowers/plans/2026-11-23-beacon-tool-information-flow.md)迭代参数、返回范围、组合读取、错误纠正与模型按需取材；DeepSeek对照结果和实际交付另行记录。
-
-[专项结果报告](evaluation/2026-11-23-tool-information-flow-report.md)记录1324个正式槽位、分组新旧对照、原保护集、评分修复与独立审阅。候选的部分连续取材／纠错表现改善，单场景整体语义未优于基线；未宣称全部质量目标通过。
-
-先读[专项结论](evaluation/2026-11-23-tool-information-flow-conclusions.md)，再按需检查完整统计与原始证据。
-
-负责人已采纳下一轮“工具层减法”方向，并要求提高本人参与和把关程度。[工具接口详细设计审阅稿](../superpowers/specs/2026-11-23-beacon-tool-interface-simplification-design.md)列出逐工具输入、返回、错误、模式和压缩权限，以及R01–R06六项审阅决定。该稿尚待负责人书面审阅；本轮仅设计文档，不代表新接口已经批准、实施或取得效果验证，也不沿用上一轮实施授权自动开发。
+**本轮审阅主文：[工具设计：业务能力与记录底座](../superpowers/specs/2026-11-23-beacon-tool-interface-simplification-design.md)。** 文件名保留原日期，正文按2026-11-24决定重写。旧操作并集、快照和R01–R06退出；新稿已承接三个独立记录工具、可见分屏整稿、按程序入队、终态去重及8KiB输出。
 
 ## 阅读顺序
 
 | 顺序 | 文档 | 职责 |
 | --- | --- | --- |
-| 使用 | [Beacon 使用说明](../../extensions/becoder.beacon/README.md) | 当前源码已有能力与限制 |
-| 1 | [完整能力需求](prd.md) | 能力主文与141个稳定验收条目，区分建设、保护、后续和候选 |
-| 2 | [总体架构](architecture.md) | 所有者、数据归属、模型取材与请求链 |
-| 3 | [底层阶段设计](foundation-design.md) | 本轮底层范围、存储、失败、隔离及验收 |
-| 4 | [代码工具与快照](code-snapshots.md) | 同次读存、10份／256KiB、去重、淘汰与分支边界 |
-| 5 | [模型输入压缩](context-compaction.md) | 同步摘要、实际预算、有效前缀与有界恢复 |
-| 6 | [实现状态与差距](implementation-status.md) | 当前源码、验证证据与未验收事项 |
-| 7 | [九项执行计划](../superpowers/plans/2026-11-22-beacon-foundation-implementation.md) | 已批准的九项实施切片、接口、测试与交付门；执行方式为Native |
-| 追溯 | [队列决策](decisions/context-queues.md) · [三项目源码研究](research/2026-11-22-compaction-comparison.md) · [历史来源](sources.md) | 已定取舍、固定版本证据及旧稿身份 |
+| 1 | [工具设计审阅稿](../superpowers/specs/2026-11-23-beacon-tool-interface-simplification-design.md) | 本轮已批准的业务能力、记录底座与工程接口 |
+| 2 | [总体架构](architecture.md) | harness／模型分工、所有者和数据流 |
+| 3 | [底层阶段设计](foundation-design.md) | 本轮建设范围与工程承接 |
+| 4 | [完整能力需求](prd.md) | 产品主文、稳定验收ID及后续能力 |
+| 5 | [实时代码读取](code-reading.md) | 当前代码只读，独立快照已撤回 |
+| 6 | [模型输入压缩](context-compaction.md) | 同步摘要、预算、有效分支与有界恢复 |
+| 7 | [实现状态与差距](implementation-status.md) | 当前候选与新设计的差距 |
+| 8 | [本轮实施计划](../superpowers/plans/2026-11-24-beacon-context-tools-rebuild.md) | 已收敛设计的工程任务、兼容策略、验证与停止条件；已获实施批准 |
+| 使用 | [Beacon使用说明](../../extensions/becoder.beacon/README.md) | 当前源码，不作为新架构已实施证明 |
+| 本轮结果 | [实施与能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md) · [问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md) | 源码、有限模型观察与明确缺陷分别记录 |
+| 追溯 | [队列决定](decisions/context-queues.md) · [历史来源](sources.md) · [固定版本研究](research/2026-11-22-compaction-comparison.md) | 最新决定与历史证据身份 |
 
-先完整阅读根目录[仓库规则](../../AGENTS.md)与[产品方向](../../VISION.md)，再按本表阅读。负责人最新决定优先；同名旧文档、历史评估、旧构建和文档检查均不构成下一阶段完成证据。
+先读根目录[仓库规则](../../AGENTS.md)与[产品方向](../../VISION.md)。负责人最新决定优先。
+
+## 当前设计
+
+| 能力／数据 | 当前决定 |
+| --- | --- |
+| 当前代码 | readCurrentCode取得所有当前可见分屏C/C++页面的完整正文、文件名和路径，含dirty与未命名页面；未命名路径为null，不读后台标签、不额外存副本 |
+| problem | 当前.beaconWork共享13条，记录五站读题行为；按problem（oj＋problemId）与filePath共同去重，相同则删除旧项、新ID和新viewedAt入队尾；不同路径分别占位 |
+| run | 三来源共用30条，每份程序一次编译及关联input为一条，结束后入队不去重；编译与程序输出合计8KiB；目录和正文不带题目 |
+| verdict | 最终完整结果20条，同站同题实际提交代码完全相同替换旧结果入队尾；缺代码照常保存并跳过去重 |
+| 题面 | fetchProblem按oj＋problemId联网取五站题面，独立聊天搜索开关，不新增专门持久化 |
+| 通用能力 | inspectFile、readPage、readMaterial、browseWeb保留；不足时沿原权限兜底 |
+| 输出内容写入 | editNotebook退出模型工具，后续另行设计，不影响Notebook独立使用 |
+
+三个独立记录工具readProblemRecord／readRunRecord／readVerdictRecord已确定：空参按需列简短目录，带ID读完整持久记录，不另设目录工具，不增加part／分页参数。记录加入后超模型容量走既定同步压缩，不再次缩短结果。
+
+codesnap全部撤回，普通历史、运行稿与提交稿保各自身份。工具能力共9项；五站规范题号和run字段基线已收敛，其余工程表达随新实施计划整体审阅。run不保存运行限制配置，CPH仅编译不记录。
+
+Notebook执行优化独立于Beacon采集：点击批量时固定本次代码和input，同代码块编译一次、input各自独立进程；失败继续其他input／代码块，用户停止才结束批次。程序块从1计数，仅数C/C++；涉及N个程序形成各自run记录，覆盖此前整个点击只入一条的中间约定。采集适配器消费执行事实，不控制执行或清理。
 
 ## 工作区与模式
 
-**工作区决定BeCoder是否采集用户行为；模式决定Beacon能否消费持久来源。** 以下是已确认的目标契约，当前实现差距另列，不能作为已交付能力宣传。
+**工作区决定软件是否采集，模式决定Beacon能否消费持久来源。**
 
-| 状态 | BeCoder用户行为采集和落盘 | Beacon持久上下文能力 |
+| 状态 | 软件采集problem／run／verdict | Beacon消费持久来源 |
 | --- | --- | --- |
-| 未选Beacon工作区／根异常 | 不采集，不写替代位置，之后选根不补采 | 不可用 |
-| 有效根＋Blackout | Get Problem及四类执行／测评记录持续采集 | 目录、读取和模型调用写入均关闭 |
-| 有效根＋Spot／Flood | 持续采集，归属始终限所选根 | 按权限读取；Flood不扩大生产根 |
+| 未选根／根异常 | 不采集、不写替代位置、之后不补采 | 不可用 |
+| 有效根＋Blackout | 持续 | 关闭目录和读取，不建镜像队列 |
+| 有效根＋Spot／Flood | 持续，始终归当前合法根 | 按权限可读 |
 
-切回Spot／Flood可读队列仍保留的Blackout期间记录。Blackout代码工具仅返回当前打开代码的正文、文件名和路径，不保存快照；题面由OJ Connect只读联网获取。聊天、代码工具和模型联网活动不因软件采集持续而增加持久化。
+各模式按页面权限读取当前代码；fetchProblem独立搜索开关，browseWeb依该开关。讨论对象由LLM结合用户提问和实际材料判断，没有发送时绑定或上轮对象。
 
-## 材料与下一阶段
+## 当前实现与历史
 
-- Get Problem：当前`.beaconWork`共享13条，保存题面、题目、对应代码文件和真实查看时间，按题目＋文件去重。
-- Runner、CPH、Notebook、OJ：各20条，平权保留原生结构，真实活动记录额外保护；执行／判题事实只消费持久记录，不通过对应页面或笔记输出旁路读取。
-- 代码快照：LLM主动读取编辑器时，Spot／Flood的harness保存同次完整原稿；当前对话默认10份，每份最多262144个UTF-8正文字节。发送不捕获，历史读不晋升，队列独立自动淘汰。
-- 模型联网题面：只入上下文，无专门持久化，不改用户Get Problem记录。模型依据多来源线索判断讨论对象。
-- 压缩：当前模型同步生成输入摘要；`B=min(I,C−O)`，90%触发、约60%目标；保原始历史和工具事实，不参与代码队列删除。
+本轮基于本地备份74d09ef4完成九工具和三队列，并完成复审修复；旧代码快照及模型写入口已退出。fetchProblem活动使用工具名显示，普通browseWeb保留原文案；源码、模型与桌面验收的实际边界见[实现状态](implementation-status.md)。旧[底层计划](../superpowers/plans/2026-11-22-beacon-foundation-implementation.md)与[工具专项计划](../superpowers/plans/2026-11-23-beacon-tool-information-flow.md)仅保留历史身份，不能继续执行为本轮方案。
 
-Notebook保持独立学习文档地位。tips/status、dream、完整视觉、本人同题历史查询增强和完整工具可视化UI继续保留后续，不能由本阶段接口接通推定已交付。本阶段须分别取得源码检查、合成强模型观察、五站正常流程和负责人体验证据；Ollama4B仅作兼容冒烟。
+[前轮结论](evaluation/2026-11-23-tool-information-flow-conclusions.md)、[完整报告](evaluation/2026-11-23-tool-information-flow-report.md)和[基础报告](evaluation/2026-11-23-context-foundation-report.md)保原始统计与局限，不改写成新设计验证。[输出质量要点](review/2026-11-23-output-quality-improvements.md)中的教学表达和事实理解仍可参考，快照相关建议已失效。
+
+负责人已确认Native实施；源码、设计与评测材料纳入本次正式归档，具体提交以Git历史为准。负责人真实流程验收另行记录；提示词优化专项尚未实施。

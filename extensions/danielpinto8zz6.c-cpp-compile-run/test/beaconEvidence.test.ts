@@ -7,101 +7,98 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { BeaconEvidence } from '../src/beaconEvidence';
 
-const snapshot = { originalPath: 'C:\\project\\main.cpp', canonicalPath: 'C:\\project\\main.cpp', path: 'C:\\private\\main.cpp', capturedAt: 1, bytesBase64: Buffer.from('V1').toString('base64'), byteLength: 2, sha256: 'captured-hash' };
+const snapshot = { originalPath: 'C:\\project\\main.cpp', canonicalPath: 'C:\\project\\main.cpp', path: 'C:\\private\\main.cpp', capturedAt: 1, bytesBase64: Buffer.from('int main(){}').toString('base64'), byteLength: 12, sha256: 'captured-hash' };
 
-test('evidence freezes observed values, batches in order and drains before finish', async () => {
+test('publishes one complete record only at finish and keeps observed values', async () => {
 	const calls: { operation: string; input: any }[] = [];
-	const evidence = new BeaconEvidence('handle', 'runner', async (operation, input) => { calls.push({ operation, input }); }, () => assert.fail('unexpected observation failure'));
-	const metadata = { compiler: 'GCC V1' };
-	const event = { type: 'stream', text: 'observed V1' };
-	const outcome = { status: 'completed' };
-	evidence.start(snapshot, metadata); evidence.event(event);
-	metadata.compiler = 'GCC V2'; event.text = 'later V2';
-	const finishing = evidence.finish(outcome); outcome.status = 'mutated';
-	await finishing;
-	assert.deepStrictEqual(calls.map(call => call.operation), ['startRuntime', 'appendRuntime']);
-	assert.strictEqual(calls[0].input.code, 'V1');
-	assert.strictEqual(calls[0].input.events[0].details.compiler, 'GCC V1');
-	assert.strictEqual(calls[1].input.sequence, 1);
-	assert.strictEqual(calls[1].input.events[0].text, 'observed V1');
-	assert.strictEqual(calls[1].input.events.at(-1).outcome.status, 'completed');
-	evidence.event({ type: 'late' }); await evidence.finish({ status: 'late' });
-	assert.strictEqual(calls.length, 2);
+	const evidence = new BeaconEvidence('handle', 'runner', async (operation, input) => { calls.push({ operation, input }); }, () => assert.fail('unexpected failure'));
+	const metadata = { compiler: 'GCC V1', input: { source: 'C:/project/input', bytesBase64: Buffer.from('2 3\n').toString('base64') } };
+	evidence.start(snapshot, metadata); metadata.compiler = 'changed';
+	evidence.event({ type: 'compiled', exitCode: 0, compileMs: 15 });
+	evidence.event({ type: 'stream', phase: 'running', stream: 'merged-pty', text: '5\n' });
+	assert.strictEqual(calls.length, 0, 'no active queue placeholder');
+	await evidence.finish({ status: 'completed', exitCode: 0, programRuntimeMs: 2 });
+	assert.deepStrictEqual(calls.map(call => call.operation), ['captureRun']);
+	const record = calls[0].input.record;
+	assert.strictEqual(record.program.code, 'int main(){}'); assert.strictEqual(record.compile.compiler, 'GCC V1');
+	assert.strictEqual(record.runs[0].input.text, '2 3\n'); assert.strictEqual(record.runs[0].output.merged, '5\n');
+	assert.strictEqual(record.operation, 'run-with-input'); assert.strictEqual(record.compile.durationMs, 15);
+	evidence.event({ type: 'late' }); await evidence.finish({ status: 'late' }); assert.strictEqual(calls.length, 1);
 });
 
-test('no workspace or no compile attempt creates no runtime queue entry', async () => {
-	let calls = 0;
-	for (const handle of [undefined, 'prepared-only']) {
-		const evidence = new BeaconEvidence(handle, 'cph', async () => { calls++; }, () => assert.fail('unexpected error'));
-		if (!handle) { evidence.start(snapshot, {}); }
-		evidence.event({ type: 'preparation' }); await evidence.finish({ status: 'failed-before-compile' });
-	}
-	assert.strictEqual(calls, 0);
-});
-
-test('cache failure and eviction do not reject execution or reinsert late events', async () => {
-	for (const failure of [true, false]) {
-		const calls: string[] = [];
-		const errors: unknown[] = [];
-		const evidence = new BeaconEvidence('handle', 'runner', async operation => {
-			calls.push(operation);
-			if (failure) { throw new Error('disk unavailable'); }
-			return operation === 'appendRuntime' ? false : undefined;
-		}, error => errors.push(error));
-		evidence.start(snapshot, {}); evidence.event({ type: 'output' });
-		await evidence.finish({ status: 'completed' });
-		evidence.event({ type: 'late' }); await evidence.finish({ status: 'late' });
-		assert.deepStrictEqual(calls, failure ? ['startRuntime'] : ['startRuntime', 'appendRuntime']);
-		assert.strictEqual(errors.length, failure ? 1 : 0);
-	}
-});
-
-test('bounded cache explicitly marks partial evidence and preserves the final status', async () => {
-	const calls: any[] = [];
-	const evidence = new BeaconEvidence('handle', 'cph', async (_operation, input) => { calls.push(input); }, () => assert.fail('unexpected failure'), 2048);
-	evidence.start(snapshot, { config: 'actual' });
-	for (let index = 0; index < 10; index++) { evidence.event({ type: 'stream', phase: 'running', stream: 'stdout', text: 'x'.repeat(4096) }); }
+test('CPH keeps source sample ordinal, empty expected and check, strips problem and checker details', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'cph', async (_op, input: any) => { record = input.record; }, () => assert.fail('unexpected failure'));
+	evidence.start(snapshot, { compiler: 'GCC', inputs: [{ input: '', output: '' }], sampleNumbers: [5], problem: { url: 'secret-topic', customCheckerPath: 'checker.py' }, timeout: 3000 });
+	evidence.event({ type: 'compiled', exitCode: 0, durationMs: 7 });
+	evidence.event({ type: 'sample-finished', index: 0, sampleId: '5', result: { stdout: '', stderr: '', exitCode: 0, durationMs: 1 }, verdict: 'time-limit', checkerRun: { stderr: 'checker diagnostic' } });
 	await evidence.finish({ status: 'completed' });
-	const events = calls.flatMap(call => call.events);
-	assert.ok(events.some(event => event.partial === true || event.text?.partial === true || event.ranges?.length));
-	assert.strictEqual(events.at(-1).outcome.status, 'completed');
-	assert.strictEqual(events.at(-1).coverage.truncated, true);
-	assert.ok(events.at(-1).coverage.omittedEvents > 0);
-	assert.ok(Buffer.byteLength(JSON.stringify(calls)) < 4096);
+	assert.strictEqual(record.runs[0].testCaseNumber, 5); assert.strictEqual(record.runs[0].expectedOutput, '');
+	assert.strictEqual(record.runs[0].check, 'time-limit'); assert.strictEqual(record.runs[0].status, 'completed');
+	assert.strictEqual(/secret-topic|checker|timeout|runtimeLimits|events/.test(JSON.stringify(record)), false);
 });
 
-test('structured stream keeps the first and latest bytes in separate ranges', async () => {
-	const calls: any[] = [];
-	const evidence = new BeaconEvidence('handle', 'runner', async (_operation, input) => { calls.push(input); }, () => assert.fail('unexpected failure'), 4096);
-	evidence.start(snapshot, { compiler: 'actual' });
-	evidence.event({ type: 'stream', phase: 'running', stream: 'stdout', text: 'HEAD' + 'a'.repeat(5000) });
-	evidence.event({ type: 'stream', phase: 'running', stream: 'stdout', text: 'b'.repeat(5000) + 'TAIL' });
-	await evidence.finish({ status: 'completed' });
-	const stream = calls.flatMap(call => call.events).filter(event => event.type === 'stream').at(-1);
-	assert.equal(stream.byteRepresentation, 'utf8-observed-text');
-	assert.equal(stream.observedBytes, 10008);
-	assert.ok(Buffer.from(stream.ranges[0].bytesBase64, 'base64').toString().startsWith('HEAD'));
-	assert.ok(Buffer.from(stream.ranges.at(-1).bytesBase64, 'base64').toString().endsWith('TAIL'));
-	assert.ok(stream.ranges[0].offset + Buffer.from(stream.ranges[0].bytesBase64, 'base64').length < stream.ranges[1].offset);
-	assert.equal(JSON.stringify(calls).includes('jsonPrefix'), false);
-});
-
-test('new output channels preserve the previously retained diagnostic tail', async () => {
-	for (const [length, expectedRanges] of [
-		[300000, [[0, 262144], [262144, 37856]]],
-		[600000, [[0, 262144], [337856, 262144]]]
-	] as const) {
-		const calls: any[] = [];
-		const evidence = new BeaconEvidence('handle', 'notebook', async (_operation, input) => { calls.push(input); }, () => assert.fail('unexpected failure'));
-		evidence.start(snapshot, {});
-		evidence.event({ type: 'stream', phase: 'compiling', stream: 'stderr', bytesBase64: Buffer.from('HEAD' + 'x'.repeat(length - 8) + 'TAIL').toString('base64') });
-		evidence.event({ type: 'compiled', exitCode: 0 });
-		evidence.event({ type: 'stream', phase: 'running', stream: 'merged', text: 'ok' });
-		await evidence.finish({ status: 'completed' });
-		const diagnostic = calls.flatMap(call => call.events).filter(event => event.type === 'stream' && event.phase === 'compiling').at(-1);
-		assert.equal(diagnostic.observedBytes, length);
-		assert.deepStrictEqual(diagnostic.ranges.map((range: { offset: number; bytesBase64: string }) => [range.offset, Buffer.from(range.bytesBase64, 'base64').length]), expectedRanges);
-		assert.ok(Buffer.from(diagnostic.ranges[0].bytesBase64, 'base64').toString().startsWith('HEAD'));
-		assert.ok(Buffer.from(diagnostic.ranges.at(-1).bytesBase64, 'base64').toString().endsWith('TAIL'));
+test('only-compile and missing workspace do not publish; publication failure cannot reject execution', async () => {
+	for (const [handle, compileOnly] of [[undefined, false], ['handle', true]] as const) {
+		let calls = 0;
+		const evidence = new BeaconEvidence(handle, 'cph', async () => { calls++; }, () => assert.fail('unexpected failure'));
+		evidence.start(snapshot, { compileOnly }); await evidence.finish({ status: 'compile-only' }); assert.strictEqual(calls, 0);
 	}
+	let errors = 0;
+	const evidence = new BeaconEvidence('handle', 'runner', async () => { throw new Error('disk failed'); }, () => { errors++; });
+	evidence.start(snapshot, {}); await evidence.finish({ status: 'compile-error' }); assert.strictEqual(errors, 1);
+});
+
+test('retains bounded UTF-8 output head and tail, while preserving code and input', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'runner', async (_op, input: any) => { record = input.record; }, () => assert.fail('unexpected failure'));
+	evidence.start(snapshot, {}); evidence.event({ type: 'compiled', exitCode: 0 });
+	evidence.event({ type: 'stream', phase: 'running', stream: 'merged-pty', text: 'HEAD' + '中😀'.repeat(5000) + 'TAIL' });
+	await evidence.finish({ status: 'completed', exitCode: 0 });
+	const output = record.runs[0].output.merged;
+	assert.ok(output.head.startsWith('HEAD')); assert.ok(output.tail.endsWith('TAIL'));
+	assert.ok(Buffer.byteLength(output.head + output.tail) <= 8192);
+	assert.strictEqual(output.head.includes('\uFFFD') || output.tail.includes('\uFFFD'), false);
+	assert.strictEqual(output.omittedBytes, 35008 - Buffer.byteLength(output.head + output.tail));
+	assert.strictEqual(record.runs[0].input.text, null); assert.ok(record.gaps.length);
+});
+
+test('several compile and input streams share exactly one output quota and preserve source omissions', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'cph', async (_op, input: any) => { record = input.record; }, () => assert.fail('unexpected failure'));
+	evidence.start(snapshot, { inputs: [{ input: '9223372036854775807\n', output: '' }, { input: '', output: 'ok' }], operation: 'test-all' });
+	evidence.event({ type: 'stream', phase: 'compiling', stream: 'stderr', text: 'short' });
+	evidence.event({ type: 'compiled', exitCode: 0 });
+	for (const index of [0, 1]) {
+		for (const stream of ['stdout', 'stderr']) {
+			evidence.event({ type: 'stream', phase: 'running', stream, index, text: 'H' + 'x'.repeat(10000) + 'T', sourceOmittedBytes: index === 1 ? 11 : 0 });
+		}
+		evidence.event({ type: 'sample-finished', index, verdict: 'passed', result: { exitCode: 0 } });
+	}
+	await evidence.finish({ status: 'completed' });
+	const streams = [record.compile.output.stderr, ...record.runs.flatMap((run: any) => Object.values(run.output))];
+	const bytes = streams.reduce((sum: number, value: any) => sum + Buffer.byteLength(typeof value === 'string' ? value : value.head + value.tail), 0);
+	assert.strictEqual(bytes, 8192); assert.strictEqual(record.compile.output.stderr, 'short');
+	assert.strictEqual(record.runs[0].input.text, '9223372036854775807\n');
+	assert.strictEqual(record.runs[1].output.stderr.sourceOmittedBytesAtLeast, 11);
+});
+
+test('Runner owner errors after compilation never fabricate a completed input', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'runner', async (_op, input: any) => { record = input.record; }, () => assert.fail('unexpected failure'));
+	evidence.start(snapshot, {}); evidence.event({ type: 'compiled', exitCode: 0 });
+	await evidence.finish({ status: 'runner-error', message: 'Helper could not start.' });
+	assert.strictEqual(record.status, 'failed'); assert.strictEqual(record.runs[0].status, 'start-failed');
+	assert.strictEqual(record.runs[0].exitCode, undefined); assert.strictEqual(record.runs[0].error, 'Helper could not start.');
+});
+
+test('CPH preserves program completion before a checker exception without inventing a check', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'cph', async (_op, input: any) => { record = input.record; }, () => assert.fail('unexpected failure'));
+	evidence.start(snapshot, { inputs: [{ input: '1', output: '1' }], operation: 'test-one' }); evidence.event({ type: 'compiled', exitCode: 0 });
+	evidence.event({ type: 'sample-started', index: 0 });
+	evidence.event({ type: 'sample-executed', index: 0, result: { stdout: '1', stderr: '', exitCode: 0, durationMs: 2 } });
+	await evidence.finish({ status: 'failed' });
+	assert.strictEqual(record.runs[0].status, 'completed'); assert.strictEqual(record.runs[0].exitCode, 0);
+	assert.strictEqual(record.runs[0].durationMs, 2); assert.strictEqual(record.runs[0].check, undefined);
 });

@@ -9,7 +9,7 @@ import { replayProtocol, type ProtocolSource } from './protocol';
 import { attachmentParts } from './attachments';
 import { beaconFingerprint, beaconMedia, measureBeaconRequest, type PreparedBeaconRequest } from './contextBudget';
 import type { ContextAccess } from './contextTools';
-import { contextToolParameters, contextToolSchema } from './contextToolContract';
+import { contextToolParameters, contextToolSchema, contextToolNames, contextToolDescriptions } from './contextToolContract';
 export interface EffectiveUnit { key: string; messageId: number; turnIndex?: number; unitIndex: number; isUserQuestion?: boolean; messages: readonly ModelMessage[]; fingerprint: string }
 export interface BeaconCompaction { schemaVersion: 1; coveredThrough: { messageId: number; unit: number }; prefixSha256: string; summary: string; createdAt: number; inputCompaction?: { prefixSha256: string; summarySha256: string } }
 export interface CompactionExpectation { conversationId: string; requestId: string; prefixSha256: string; scope?: import('../../../src/vs/platform/beacon/common/beaconContextTypes').IBeaconContext; persist?: boolean }
@@ -65,8 +65,9 @@ export async function compactBeaconContext(input: BeaconCompactionInput, signal:
 	signal.throwIfAborted();
 	if (input.steps.remaining < 2) { throw new Error('beacon-step-budget'); }
 	const context = input.context;
-	const definitions = context ? [{ name: 'inspectContext', definition: { description: 'Read only already authorized retained historical code or already fixed records, without live capture, new evidence fixation, network or writes.', parameters: contextToolParameters(context.operations ?? [], 8192) } }] : [];
-	const tools = context ? { inspectContext: tool({ description: definitions[0].definition.description, inputSchema: contextToolSchema(context.operations ?? [], 8192), execute: (value, options) => context.execute(value, options.abortSignal ?? signal) }) } : undefined;
+	const names = context ? context.names ?? contextToolNames : [];
+	const definitions = names.map(name => ({ name, definition: { description: contextToolDescriptions[name], parameters: contextToolParameters(name) } }));
+	const tools = context ? Object.fromEntries(names.map(name => [name, tool({ description: contextToolDescriptions[name], inputSchema: contextToolSchema(name), execute: (value, options) => context.execute(name, value, options.abortSignal ?? signal) })])) : undefined;
 	const messages: ModelMessage[] = [
 		...(input.old ? [{ role: 'user' as const, content: `Previous valid summary (reference only): ${input.old.summary}` }] : []),
 		// The current question can be covered by the prefix while retained verbatim

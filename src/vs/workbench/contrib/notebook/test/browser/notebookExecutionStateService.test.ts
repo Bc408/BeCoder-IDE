@@ -15,6 +15,7 @@ import { PLAINTEXT_LANGUAGE_ID } from '../../../../../editor/common/languages/mo
 import { IMenu, IMenuService } from '../../../../../platform/actions/common/actions.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
+import { beCoderNotebookType } from '../../../becoder/common/beCoderNotebook.js';
 import { insertCellAtIndex } from '../../browser/controller/cellOperations.js';
 import { NotebookExecutionService } from '../../browser/services/notebookExecutionServiceImpl.js';
 import { NotebookExecutionStateService } from '../../browser/services/notebookExecutionStateServiceImpl.js';
@@ -67,6 +68,7 @@ suite('NotebookExecutionStateService', () => {
 			}
 		});
 		instantiationService.stub(INotebookLoggingService, new class extends mock<INotebookLoggingService>() {
+			override trace(category: string, output: string): void { }
 			override debug(category: string, output: string): void {
 				//
 			}
@@ -132,6 +134,46 @@ suite('NotebookExecutionStateService', () => {
 
 	test('cancel execution when cell is deleted in interrupt-type kernel', async function () {
 		return testCancelOnDelete(1, true);
+	});
+
+	for (const implementsInterrupt of [false, true]) {
+		test(`BeCoder deletion preserves frozen executions and deleted cells can complete (interrupt: ${implementsInterrupt})`, () => {
+			const notebook = disposables.add(instantiationService.createInstance(NotebookTextModel, beCoderNotebookType, URI.parse('test://becoder-deletion'), [0, 1, 2].map(index => ({ source: String(index), language: 'becoder-input', mime: undefined, cellKind: CellKind.Code, outputs: [], metadata: { becoder: { role: 'input' } } })), {}, { transientCellMetadata: {}, transientDocumentMetadata: {}, cellContentMetadata: {}, transientOutputs: false }));
+			testNotebookModel = notebook;
+			let cancels = 0, completed = 0;
+			const kernel = new class extends TestNotebookKernel {
+				implementsInterrupt = implementsInterrupt;
+				override async cancelNotebookCellExecution(_uri: URI, handles: number[]): Promise<void> { cancels += handles.length; }
+			};
+			disposables.add(kernelService.registerKernel(kernel)); kernelService.selectKernelForNotebook(kernel, notebook);
+			const service = instantiationService.get(INotebookExecutionStateService);
+			const executions = notebook.cells.map(cell => service.createCellExecution(notebook.uri, cell.handle));
+			executions[0].confirm(); executions[0].update([{ editType: CellExecutionUpdateType.ExecutionState, executionOrder: 1 }]);
+			executions[1].confirm();
+			disposables.add(service.onDidChangeExecution(event => { if (event.type === NotebookExecutionType.cell && !event.changed) { completed++; } }));
+			notebook.applyEdits([{ editType: CellEditType.Replace, index: 0, count: 3, cells: [] }], true, undefined, () => undefined, undefined, false);
+			assert.strictEqual(cancels, 0, 'Deleting a BeCoder output destination is not an execution stop');
+			assert.strictEqual(service.getCellExecutionsForNotebook(notebook.uri).length, 3);
+			for (const execution of executions) { execution.complete({}); }
+			assert.strictEqual(completed, 3);
+			assert.deepStrictEqual(service.getCellExecutionsForNotebook(notebook.uri), []);
+		});
+	}
+
+	test('closing BeCoder Notebook still cancels its frozen executions', () => {
+		const notebook = disposables.add(instantiationService.createInstance(NotebookTextModel, beCoderNotebookType, URI.parse('test://becoder-close'), [{ source: '', language: 'becoder-input', mime: undefined, cellKind: CellKind.Code, outputs: [], metadata: { becoder: { role: 'input' } } }], {}, { transientCellMetadata: {}, transientDocumentMetadata: {}, cellContentMetadata: {}, transientOutputs: false }));
+		testNotebookModel = notebook;
+		let cancelled: number[] = [];
+		const kernel = new class extends TestNotebookKernel {
+			override async cancelNotebookCellExecution(_uri: URI, handles: number[]): Promise<void> { cancelled = handles; }
+		};
+		disposables.add(kernelService.registerKernel(kernel)); kernelService.selectKernelForNotebook(kernel, notebook);
+		const service = instantiationService.get(INotebookExecutionStateService), handle = notebook.cells[0].handle;
+		const execution = service.createCellExecution(notebook.uri, handle); execution.confirm();
+		notebook.dispose();
+		assert.deepStrictEqual(cancelled, [handle]);
+		execution.complete({});
+		assert.deepStrictEqual(service.getCellExecutionsForNotebook(notebook.uri), []);
 	});
 
 	test('fires onDidChangeCellExecution when cell is completed while deleted', async function () {

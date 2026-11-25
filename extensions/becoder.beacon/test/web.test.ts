@@ -124,20 +124,15 @@ suite('Beacon keyless web lookup', () => {
 });
 
 suite('Beacon web conversation lifecycle', () => {
-	test('Notebook tools require file mode and confirmed tool support; real SDK results preserve edit feedback and cleanup', async () => {
+	test('model Notebook writes are never offered in either file mode', async () => {
 		for (const permission of ['none', 'workspace'] as const) {
-			for (const support of [true, false]) {
-				let calls = 0; let edits = 0; let closed = false;
-				const session = new ChatSession(() => {}, error => String(error));
-				await session.send('Modify C:\\chosen\\note.bcnb', createGenerator(async () => ({ ...connection, capabilities: { ...resolveCapabilities(connection.provider, connection.baseURL, connection.model), tools: support } }), async (_url, init) => {
-					const body = JSON.parse(String(init?.body)); const offered = body.tools?.some((tool: { function: { name: string } }) => tool.function.name === 'editNotebook'); assert.equal(!!offered, permission !== 'none' && support);
-					if (offered && calls++ === 0) { const schema = body.tools.find((tool: { function: { name: string } }) => tool.function.name === 'editNotebook').function.parameters; assert.equal(schema.properties.cells.items.additionalProperties, false); assert.equal(schema.properties.cells.items.properties.outputs, undefined); return modelStream([{ tool_calls: [{ index: 0, id: 'edit-one', type: 'function', function: { name: 'editNotebook', arguments: JSON.stringify({ operation: 'begin', path: 'C:\\chosen\\note.bcnb' }) } }] }], 'tool_calls'); }
-					if (offered) { assert.ok(JSON.stringify(body.messages).includes('dirty')); }
-					return modelStream([{ content: 'Actual state reported.' }]);
-				}, permission, [], false, fetch, {}, undefined, { execute: async () => { edits++; return { ok: true, applied: false, saved: false, dirty: true }; }, close: async () => { closed = true; } }));
-				assert.equal(session.snapshot.error, ''); assert.equal(edits, permission !== 'none' && support ? 1 : 0); assert.equal(closed, true);
-				if (edits) { assert.ok(session.snapshot.messages[1].activities.some(activity => activity.type === 'notebook-edit')); assert.ok(session.snapshot.messages[1].protocol?.some(turn => JSON.stringify(turn).includes('editNotebook'))); readHistory({ version: 1, activeId: 'one', conversations: [{ id: 'one', title: 'note', updatedAt: 1, messages: session.snapshot.messages, error: '', workspace: [] }] }); }
-			}
+			const session = new ChatSession(() => {}, String);
+			await session.send('Create a Notebook.', createGenerator(async () => connection, async (_url, init) => {
+				const body = JSON.parse(String(init?.body));
+				assert.equal(body.tools?.some((item: { function: { name: string } }) => item.function.name === 'editNotebook') ?? false, false);
+				return modelStream([{ content: 'No write tool is available.' }]);
+			}, permission, [], false));
+			assert.equal(session.snapshot.error, '');
 		}
 	});
 	test('default web access is independent of file access and only confirmed tool models register it', async () => {

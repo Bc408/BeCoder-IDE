@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CompilationSourceSnapshot } from './compilationSnapshot';
-import type { RuntimeEvidence } from './beaconEvidence';
+import { safeExecutionObserver, type ExecutionObserver as RuntimeEvidence } from './executionResults';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { tmpdir } from 'os';
@@ -15,14 +15,21 @@ import { RunnerInputControl } from './runnerInputControl';
 import { terminateProcessTree } from './runnerProcess';
 export interface NotebookRunRequest { code: string; language: 'c' | 'cpp'; input: string; inputName: string; cellId: string; codeNumber: number; inputCellId?: string; cwd: string; notebookPath?: string; notebookName?: string }
 export interface NotebookRunCallbacks { phase(phase: 'compiling' | 'running'): void; output(phase: 'compiling' | 'running', stream: 'stdout' | 'stderr' | 'merged', text: string): void; evidence?: RuntimeEvidence }
-export interface NotebookRunResult { status: 'completed' | 'compile-error' | 'runtime-error' | 'timed-out' | 'output-limit' | 'cancelled' | 'unable-to-start'; code: string; input: string; inputName: string; compileStdout: string; compileStderr: string; output: string; helperStderr: string; compileMs?: number; runMs?: number; runtimeLimitMs: number; outputLimitBytes: number; exitCode?: number; error?: string; truncated: boolean; omittedBytes: number; startedAt: number; endedAt: number; sourceSnapshot?: CompilationSourceSnapshot; cleanupError?: string }
+export interface NotebookRunResult { status: 'completed' | 'compile-error' | 'runtime-error' | 'timed-out' | 'output-limit' | 'cancelled' | 'unable-to-start'; code: string; input: string; inputName: string; compileStdout: string; compileStderr: string; output: string; helperStderr: string; compileMs?: number; compileShared?: boolean; runMs?: number; runtimeLimitMs: number; outputLimitBytes: number; exitCode?: number; error?: string; truncated: boolean; omittedBytes: number; startedAt: number; endedAt: number; sourceSnapshot?: CompilationSourceSnapshot; cleanupError?: string }
 export interface NotebookRunLimits { maxRuntimeMs: number; maxOutputBytes: number }
 const defaultLimits: NotebookRunLimits = { maxRuntimeMs: 2000, maxOutputBytes: 262144 };
 export interface NotebookPlan { compiler: string; args: readonly string[]; environment: Record<string, string> }
-export async function runNotebookProgram(request: NotebookRunRequest, signal: AbortSignal, callbacks: NotebookRunCallbacks, helper: string, prepare: (source: string, output: string, session: string, language: 'c' | 'cpp', cwd: string) => NotebookPlan, limits: NotebookRunLimits = defaultLimits): Promise<NotebookRunResult> {
+type PrepareNotebook = (source: string, output: string, session: string, language: 'c' | 'cpp', cwd: string) => NotebookPlan;
+type CompiledNotebook = { code: number | null; stdout: string; stderr: string; error?: string; duration?: number };
+interface NotebookCompilationSession { directory: string; plan?: NotebookPlan; compiled?: CompiledNotebook }
+export interface NotebookProgramGroupRequest extends Omit<NotebookRunRequest, 'input' | 'inputName' | 'inputCellId'> { inputs: { text: string; name: string; cellNumber: number; cellId?: string }[] }
+export interface NotebookProgramCallbacks { phase(index: number, phase: 'compiling' | 'running'): void; output(index: number, phase: 'compiling' | 'running', stream: 'stdout' | 'stderr' | 'merged', text: string): void; finished(index: number, result: NotebookRunResult): void; evidence?: RuntimeEvidence }
+export interface IExecutionProgramResult { results: NotebookRunResult[]; status: 'completed' | 'compile-error' | 'cancelled' | 'failed'; cleanupError?: string }
+export async function runNotebookProgram(request: NotebookRunRequest, signal: AbortSignal, callbacks: NotebookRunCallbacks, helper: string, prepare: PrepareNotebook, limits: NotebookRunLimits = defaultLimits, reuse?: NotebookCompilationSession): Promise<NotebookRunResult> {
 	const captured = structuredClone(request);
+	callbacks = { ...callbacks, evidence: safeExecutionObserver(callbacks.evidence) };
 	const result: NotebookRunResult = { status: 'unable-to-start', code: captured.code, input: captured.input, inputName: captured.inputName, compileStdout: '', compileStderr: '', output: '', helperStderr: '', runtimeLimitMs: limits.maxRuntimeMs, outputLimitBytes: limits.maxOutputBytes, truncated: false, omittedBytes: 0, startedAt: Date.now(), endedAt: Date.now() };
-	const session = await fs.mkdtemp(path.join(tmpdir(), 'bcnb-'));
+	const session = reuse?.directory ?? await fs.mkdtemp(path.join(tmpdir(), 'bcnb-'));
 	const identity = await fs.lstat(session);
 	try {
 		signal.throwIfAborted();
@@ -33,12 +40,14 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 		const source = path.join(session, `${name}-code${captured.codeNumber}.${captured.language === 'c' ? 'c' : 'cpp'}`);
 		const program = path.join(session, 'program.exe'); const input = path.join(session, 'input.snapshot');
 		const bytes = Buffer.from(captured.code, 'utf8');
-		await fs.writeFile(source, bytes, { flag: 'wx' }); await fs.writeFile(input, Buffer.from(captured.input, 'utf8'), { flag: 'wx' });
+		if (!reuse?.compiled) { await fs.writeFile(source, bytes, { flag: 'wx' }); }
+		await fs.writeFile(input, Buffer.from(captured.input, 'utf8'), { flag: reuse ? 'w' : 'wx' });
 		const originalPath = captured.notebookPath ?? path.join(captured.cwd, path.basename(source));
 		let canonicalPath = originalPath;
 		if (captured.notebookPath) { try { canonicalPath = await fs.realpath(captured.notebookPath); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { throw error; } } }
 		result.sourceSnapshot = { originalPath, canonicalPath, path: source, capturedAt: result.startedAt, byteLength: bytes.length, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
-		const plan = prepare(source, program, session, captured.language, captured.cwd);
+		const plan = reuse?.plan ?? prepare(source, program, session, captured.language, captured.cwd);
+		if (reuse) { reuse.plan = plan; }
 		// GCC reports this short relative filename. Local includes still use the original -iquote directory.
 		const compilerArgs = plan.args.map(argument => argument === source ? '.' + path.sep + path.basename(source) : argument);
 		for (const name of ['TEMP', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA']) { if (plan.environment[name]) { await fs.mkdir(plan.environment[name], { recursive: true }); } }
@@ -68,7 +77,7 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 						}
 					});
 				}
-				process.stdin.on('error', () => {}); process.stdin.end();
+				process.stdin.on('error', () => { }); process.stdin.end();
 				process.once('error', error => { failure = error.message; });
 				process.once('close', async code => {
 					operationSignal.removeEventListener('abort', abort); await stopping;
@@ -78,12 +87,15 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 				operationSignal.addEventListener('abort', abort, { once: true }); if (operationSignal.aborted) { abort(); }
 			});
 		};
-		callbacks.phase('compiling');
-		callbacks.evidence?.start(result.sourceSnapshot, { notebook: captured.notebookPath, cellId: captured.cellId, codeNumber: captured.codeNumber, inputCellId: captured.inputCellId, outputMode: 'merged', compiler: plan.compiler, args: compilerArgs, compilerCwd: session, runtimeCwd: captured.cwd, input: { name: captured.inputName, text: captured.input }, sourceRepresentation: 'UTF-8 captured cell source; named private C/C++ file; external dependencies are not snapshotted' });
-		const compiled = await child(plan.compiler, compilerArgs, 'compiling');
+		const reused = !!reuse?.compiled;
+		if (!reused) { callbacks.phase('compiling'); }
+		callbacks.evidence?.start(result.sourceSnapshot, { notebook: captured.notebookPath, cellId: captured.cellId, codeNumber: captured.codeNumber, language: captured.language, inputCellId: captured.inputCellId, outputMode: 'merged', compiler: plan.compiler, args: compilerArgs, compilerCwd: session, runtimeCwd: captured.cwd, input: { name: captured.inputName, text: captured.input }, sourceRepresentation: 'UTF-8 captured cell source; named private C/C++ file; external dependencies are not snapshotted' });
+		const compiled = reuse?.compiled ?? await child(plan.compiler, compilerArgs, 'compiling');
+		if (reuse) { reuse.compiled = compiled; }
 		result.compileStdout = compiled.stdout; result.compileStderr = compiled.stderr;
 		result.compileMs = compiled.duration;
-		callbacks.evidence?.event({ type: 'compiled', exitCode: compiled.code, error: compiled.error });
+		result.compileShared = reused;
+		if (!reused) { callbacks.evidence?.event({ type: 'compiled', exitCode: compiled.code, error: compiled.error, compileMs: compiled.duration, cancelled: signal.aborted }); }
 		if (signal.aborted) { result.status = 'cancelled'; }
 		else if (compiled.error) { result.error = compiled.error; }
 		else if (compiled.code !== 0) { result.status = 'compile-error'; result.exitCode = compiled.code ?? undefined; }
@@ -110,9 +122,37 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 	} catch (error) { result.status = signal.aborted ? 'cancelled' : 'unable-to-start'; result.error = error instanceof Error ? error.message : String(error); }
 	finally {
 		result.endedAt = Date.now();
-		try { const current = await fs.lstat(session); if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) { result.cleanupError = 'Notebook private directory identity changed.'; } else { await fs.rm(session, { recursive: true }); } }
+		try { const current = await fs.lstat(session); if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) { result.cleanupError = 'Notebook private directory identity changed.'; } else if (!reuse) { await fs.rm(session, { recursive: true }); } }
 		catch (error) { result.cleanupError = error instanceof Error ? error.message : String(error); }
 		await callbacks.evidence?.finish({ status: result.status, exitCode: result.exitCode, compileMs: result.compileMs, runMs: result.runMs, error: result.error, truncated: result.truncated, omittedBytes: result.omittedBytes, cleanupError: result.cleanupError });
 	}
 	return result;
+}
+
+export async function runNotebookProgramGroup(request: NotebookProgramGroupRequest, signal: AbortSignal, callbacks: NotebookProgramCallbacks, helper: string, prepare: PrepareNotebook, limits: NotebookRunLimits = defaultLimits): Promise<IExecutionProgramResult> {
+	const captured = structuredClone(request), results: NotebookRunResult[] = [];
+	const directory = await fs.mkdtemp(path.join(tmpdir(), 'bcnb-')), identity = await fs.lstat(directory);
+	const reuse: NotebookCompilationSession = { directory }, observer = safeExecutionObserver(callbacks.evidence);
+	let status: IExecutionProgramResult['status'] = 'completed', cleanupError: string | undefined;
+	try {
+		for (const [index, input] of captured.inputs.entries()) {
+			if (signal.aborted) { status = 'cancelled'; break; }
+			const result = await runNotebookProgram({ ...captured, input: input.text, inputName: input.name, inputCellId: input.cellId }, signal, {
+				phase: phase => { if (phase === 'running') { observer?.event({ type: 'input-started', index }); } callbacks.phase(index, phase); },
+				output: (phase, stream, text) => callbacks.output(index, phase, stream, text),
+				evidence: observer ? { start: (snapshot, metadata) => observer.start(snapshot, { ...(metadata as object), inputs: captured.inputs }), event: value => observer.event({ ...(value as object), index }), finish: () => { } } : undefined
+			}, helper, prepare, limits, reuse);
+			results.push(result);
+			if (result.status !== 'compile-error' && reuse.compiled?.code === 0) { observer?.event({ type: 'input-finished', index, result }); }
+			callbacks.finished(index, result);
+			if (result.status === 'cancelled') { status = 'cancelled'; break; }
+			if (result.status === 'compile-error') { status = 'compile-error'; break; }
+			if (result.status === 'unable-to-start') { status = 'failed'; if (reuse.compiled?.code !== 0) { break; } }
+		}
+	} finally {
+		try { const current = await fs.lstat(directory); if (current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) { cleanupError = 'Notebook private directory identity changed.'; } else { await fs.rm(directory, { recursive: true }); } }
+		catch (error) { cleanupError = String(error); }
+		observer?.finish({ status: status === 'compile-error' ? 'compile-error' : status, compileMs: reuse.compiled?.duration, cleanupError });
+	}
+	return { results, status, ...(cleanupError ? { cleanupError } : {}) };
 }

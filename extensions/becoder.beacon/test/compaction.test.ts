@@ -94,7 +94,7 @@ for (const provider of ['deepseek', 'bailian'] as const) {
 				return response(summary ? JSON.stringify({ summary: 'Earlier conceptual questions were explained.' }) : 'new answer');
 			}, 'none', [], false, fetch, {}, {
 				describe: async () => '', execute: async () => { throw new Error('No tool call is expected'); },
-				compactionView: () => ({ operations: ['codeSnapshot'], describe: async () => '', execute: async () => { throw new Error('No compaction tool call is expected'); } })
+				compactionView: () => ({ names: ['readMaterial'], describe: async () => '', execute: async () => { throw new Error('No compaction tool call is expected'); } })
 			}), connection);
 			assert.equal(history.snapshot.error, '');
 			assert.deepEqual(requests.map(request => request.summary), [true, false]);
@@ -150,7 +150,7 @@ test('ordinary and compaction model steps share the same twenty-step ceiling', a
 	await history.session.send('Keep reading the actual material', createGenerator(async () => connection, async (_url, init) => {
 		calls++; const body = JSON.parse(String(init?.body));
 		if (body.messages[0].content.startsWith('Summarize')) { summaries++; return response(JSON.stringify({ summary: 'Earlier bounded material was read; no extra permissions.' })); }
-		return new Response('data: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'reused', type: 'function', function: { name: 'inspectContext', arguments: '{"operation":"currentCode"}' } }] }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+		return new Response('data: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'reused', type: 'function', function: { name: 'readCurrentCode', arguments: '{}'  } }] }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 	}, 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: `read ${executions}:` + 'x'.repeat(4000) }; } }), connection);
 	assert.ok(summaries > 0); assert.ok(calls <= 20); assert.equal(calls, summaries + executions); assert.ok(history.snapshot.error); await history.dispose();
 });

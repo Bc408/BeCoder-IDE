@@ -7,7 +7,9 @@
 	},
 	"include": [
 		"src/**/*",
-		"test/**/*"
+		"test/**/*",
+		"../../src/typings/becoder-beacon.d.ts",
+		"../../src/typings/becoder-oj-connect.d.ts"
 	],
 	"exclude": [
 		"dist",

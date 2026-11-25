@@ -17,7 +17,7 @@ const fixture: PromptEvaluationCase = { id: 'P01', turns: [
 function stream(delta: Record<string, unknown>, finish = 'stop'): Response {
 	return new Response('data: ' + JSON.stringify({ id: 'synthetic', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'synthetic', choices: [{ index: 0, delta: {}, finish_reason: finish }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
-const call = { tool_calls: [{ index: 0, id: 'read-one', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: metadata.id, version: '1' }) } }] };
+const call = { tool_calls: [{ index: 0, id: 'read-one', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: metadata.id, version: '1' }) } }] };
 
 suite('Beacon synthetic prompt evaluation', () => {
 	test('rejects cloud or credential endpoints before sending', async () => {
@@ -63,7 +63,7 @@ suite('Beacon synthetic prompt evaluation', () => {
 		assert.equal(result.turns[1].text, 'SECOND ACTUAL REPLY');
 		assert.equal(result.requestCount, 3);
 		assert.equal(result.turns[0].toolCalls[0].callId, 'read-one');
-		assert.equal(result.turns[0].toolCalls[0].name, 'inspectContext');
+		assert.equal(result.turns[0].toolCalls[0].name, 'readPage');
 		assert.ok(JSON.stringify(result.turns[0].protocol).includes('read-one'));
 		assert.ok(JSON.stringify(bodies[2].messages).includes('FIRST ACTUAL REPLY'));
 		assert.ok(JSON.stringify(bodies[2].messages).includes('read-one'));
@@ -173,7 +173,7 @@ suite('Beacon evaluation evidence boundaries', () => {
 			if (calls === 3) {
 				assert.ok(JSON.stringify(sent.messages).includes('read-one'));
 				assert.ok(sent.messages.find((message: { role: string }) => message.role === 'system').content.includes('editor:b'));
-				return stream({ tool_calls: [{ index: 0, id: 'read-two', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: b.id, version: b.version }) } }] }, 'tool_calls');
+				return stream({ tool_calls: [{ index: 0, id: 'read-two', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: b.id, version: b.version }) } }] }, 'tool_calls');
 			}
 			return stream({ content: calls === 2 ? 'A reply' : 'B reply' });
 		}, new AbortController().signal);

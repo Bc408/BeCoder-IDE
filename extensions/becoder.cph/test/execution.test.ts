@@ -60,10 +60,7 @@ test('CPH bound source survives original edits and remains available after sessi
 	assert.match(Buffer.from(result.sourceSnapshot!.bytesBase64, 'base64').toString('utf8'), /return 0;/);
 	assert.strictEqual(fs.existsSync(result.sourceSnapshot!.path), false);
 	assert.strictEqual(fs.readFileSync(source, 'utf8'), '#error later_version\n');
-	assert.strictEqual(observations[0]?.type, 'start');
-	assert.strictEqual(observations[0].value.snapshot.sha256, result.sourceSnapshot!.sha256);
-	assert.strictEqual(observations[0].value.metadata.problem.tests.length, problem.tests.length);
-	assert.strictEqual(observations.at(-1)?.type, 'finish');
+	assert.deepStrictEqual(observations, [], 'standalone compile-only never reaches the collection observer');
 });
 
 test('external Python checker receives input and actual output, reports logs and cleans sessions', { timeout: 110000 }, async t => {
@@ -76,7 +73,7 @@ test('external Python checker receives input and actual output, reports logs and
 	let pythonCommand = 'python3';
 	let cancelChecker = false;
 	const executor = new CphExecutor({ prepareCompilation,
-		inputHelper: path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'), dataRoot: sessions,
+		inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'), dataRoot: sessions,
 		preferences: () => ({ timeOut: 1000, ignoreSTDERROR: true, pythonCommand }), onCheckerStarted: () => { if (cancelChecker) { executor.cancel(); } } });
 	t.after(() => executor.dispose());
 	const source = path.resolve('extensions/becoder.cph/test/fixtures/streams.cpp');
@@ -110,9 +107,23 @@ test('shared compiler policy retains required flags without CPH or static linkin
 	}
 });
 
+test('missing checker preserves the already completed program facts before failure', { timeout: 30000 }, async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-checker-facts-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const events: { type?: string; result?: { exitCode: number; durationMs: number; stdout: string } }[] = [];
+	const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), prepareCompilation,
+		inputHelper: process.env.BECODER_NOTEBOOK_HELPER!, evidence: () => ({ start() {}, event(value) { events.push(value as typeof events[number]); }, async finish() {} }) });
+	t.after(() => executor.dispose());
+	await assert.rejects(executor.judge({ ...problem, customCheckerPath: path.join(root, 'missing.py'), tests: [{ input: '21', output: '42' }] }, path.resolve('extensions/becoder.cph/test/fixtures/streams.cpp')), /ENOENT|not found/);
+	const result = events.find(event => event.type === 'sample-executed')?.result;
+	assert.ok(result, 'The student process terminal fact precedes checker access');
+	assert.strictEqual(result.exitCode, 0); assert.ok(result.durationMs >= 0); assert.strictEqual(result.stdout.trim(), '42');
+	assert.strictEqual(events.some(event => event.type === 'sample-finished'), false);
+});
+
 test('real bundled GCC and pipe helper preserve EOF, stderr, exit125, timeout and cleanup', { timeout: 110000 }, async t => {
 	const application = path.resolve('../VSCode-win32-x64');
-	const inputHelper = path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe');
+	const inputHelper = process.env.BECODER_NOTEBOOK_HELPER ?? path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe');
 	assert.ok(fs.statSync(inputHelper).isFile());
 	const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-executor-'));
 	t.after(() => fs.rmSync(dataRoot, { recursive: true, force: true }));

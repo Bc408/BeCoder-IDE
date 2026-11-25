@@ -13,7 +13,7 @@ import { IWindowsMainService } from '../../windows/electron-main/windows.js';
 import { ILifecycleMainService } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { BeaconMode, IBeaconContextService, IBeaconConversation, IBeaconResume } from '../common/beaconContext.js';
 import { BeaconCoordinator } from '../node/beaconCoordinator.js';
-import type { BeaconProducer, IBeaconContext, BeaconRecentProducer, IBeaconCollectionScope, IBeaconProblemCapture, IBeaconOjCapture, IBeaconRecordRef, IBeaconCodeObservation } from '../common/beaconContextTypes.js';
+import type { IBeaconContext, IBeaconCollectionScope, BeaconRecordKind, IBeaconRecordWrite } from '../common/beaconContextTypes.js';
 
 export class BeaconContextMainService extends Disposable implements IBeaconContextService {
 	declare readonly _serviceBrand: undefined;
@@ -75,16 +75,12 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	async beginRuntimeActivity(windowId: number): Promise<string> { return this.coordinator.beginRuntimeActivity(windowId); }
 	async endRuntimeActivity(windowId: number, handle: string): Promise<void> { this.coordinator.endRuntimeActivity(windowId, handle); }
 	captureCollectionScope(windowId: number) { return this.coordinator.captureCollectionScope(windowId); }
+	captureProblemRecord(windowId: number, input: IBeaconRecordWrite<'problem'>, scope: IBeaconCollectionScope) { return this.coordinator.captureProblemRecord(windowId, input, scope); }
+	captureVerdict(windowId: number, input: IBeaconRecordWrite<'verdict'>, scope: IBeaconCollectionScope) { return this.coordinator.captureVerdict(windowId, input, scope); }
+	captureRun(windowId: number, handle: string, input: IBeaconRecordWrite<'run'>) { return this.coordinator.captureRun(windowId, handle, input); }
+	listRecords<K extends BeaconRecordKind>(windowId: number, kind: K, scope: IBeaconContext) { return this.coordinator.listRecords(windowId, kind, scope); }
+	readRecord<K extends BeaconRecordKind>(windowId: number, kind: K, id: string, scope: IBeaconContext) { return this.coordinator.readRecord(windowId, kind, id, scope); }
 	beginActivity(windowId: number, source: string, scope: IBeaconCollectionScope | undefined) { return this.coordinator.beginActivity(windowId, source, scope); }
-	captureProblem(windowId: number, input: IBeaconProblemCapture, scope: IBeaconCollectionScope) { return this.coordinator.captureProblem(windowId, input, scope); }
-	captureOj(windowId: number, input: IBeaconOjCapture, scope: IBeaconCollectionScope) { return this.coordinator.captureOj(windowId, input, scope); }
-	beginOjCaptureActivity(windowId: number, input: { sourceUri: string; attemptId?: string; recordKey?: string }, scope: IBeaconCollectionScope) { return this.coordinator.beginOjCaptureActivity(windowId, input, scope); }
-	endOjCaptureActivity(windowId: number, handle: string) { return this.coordinator.endOjCaptureActivity(windowId, handle); }
-	listRecent(windowId: number, producer: BeaconRecentProducer, scope: IBeaconContext) { return this.coordinator.listRecent(windowId, producer, scope); }
-	readRecent(windowId: number, ref: IBeaconRecordRef, scope: IBeaconContext) { return this.coordinator.readRecent(windowId, ref, scope); }
-	saveCodeRead(windowId: number, observation: IBeaconCodeObservation, scope: IBeaconContext) { return this.coordinator.saveCodeRead(windowId, observation, scope); }
-	listCodeSnapshots(windowId: number, scope: IBeaconContext) { return this.coordinator.listCodeSnapshots(windowId, scope); }
-	readCodeSnapshot(windowId: number, id: string, scope: IBeaconContext) { return this.coordinator.readCodeSnapshot(windowId, id, scope); }
 	endActivity(windowId: number, handle: string) { return this.coordinator.endActivity(windowId, handle); }
 	reportNotebooks(windowId: number, files: { file: string; dirty: boolean }[]) { return this.coordinator.reportNotebooks(windowId, files); }
 	notebookReadonly(windowId: number, files: string[]) { return this.coordinator.notebookReadonly(windowId, files); }
@@ -93,11 +89,6 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	beginNotebookCreate(windowId: number, file: string, scope: IBeaconContext) { return this.coordinator.beginNotebookCreate(windowId, file, scope); }
 	verifyNotebookEdit(windowId: number, handle: string) { return this.coordinator.verifyNotebookEdit(windowId, handle); }
 	endNotebookResource(windowId: number, handle: string) { return this.coordinator.endNotebookResource(windowId, handle); }
-	startRuntime(windowId: number, handle: string, producer: BeaconProducer, source: string, code: string, events: unknown[]) { return this.coordinator.startRuntime(windowId, handle, producer, source, code, events); }
-	appendRuntime(windowId: number, handle: string, sequence: number, events: unknown[]) { return this.coordinator.appendRuntime(windowId, handle, sequence, events); }
-	listRuntime(windowId: number, producer: BeaconProducer, scope: IBeaconContext) { return this.coordinator.listRuntime(windowId, producer, scope); }
-	consumeRuntime(windowId: number, producer: BeaconProducer, id: string, revision: number, scope: IBeaconContext) { return this.coordinator.consumeRuntime(windowId, producer, id, revision, scope); }
-	readConsumed(windowId: number, materialId: string, scope: IBeaconContext) { return this.coordinator.readConsumed(windowId, materialId, scope); }
 	checkPageAccess(windowId: number, file: string) { return this.coordinator.checkPageAccess(windowId, file); }
 	async resetWindow(windowId: number): Promise<void> { await this.coordinator.resetWindow(windowId); this.changed.fire(windowId); }
 	listHistory(windowId: number) { return this.coordinator.listHistory(windowId); }

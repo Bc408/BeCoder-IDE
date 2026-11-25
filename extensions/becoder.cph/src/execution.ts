@@ -49,7 +49,7 @@ export class CphExecutor {
 
 	constructor(private readonly options: CphExecutionOptions) { }
 
-	async judge(problem: ImportedProblem & { customCheckerPath?: string }, sourcePath: string, compileOnly = false, sampleNumbers: readonly number[] = problem.tests.map((_, index) => index + 1)): Promise<JudgeRun> {
+	async judge(problem: ImportedProblem & { customCheckerPath?: string }, sourcePath: string, compileOnly = false, sampleNumbers: readonly number[] = problem.tests.map((_, index) => index + 1), operation: 'test-one' | 'test-all' = 'test-all'): Promise<JudgeRun> {
 		if (this.controller || this.disposed) { throw new Error('CPH is busy or disposed.'); }
 		if (!/\.(c|cpp|cc|cxx)$/i.test(sourcePath) || problem.interactive || problem.input.type !== 'stdin' || problem.output.type !== 'stdout') {
 			throw new Error('Only non-interactive C/C++ stdin/stdout problems are supported.');
@@ -77,8 +77,12 @@ export class CphExecutor {
 				fs.mkdirSync(toolchain.environment[name], { recursive: true });
 			}
 			this.options.onCompileStarted?.();
-			evidence = this.options.evidence?.();
-			if (toolchain.sourceSnapshot) { evidence?.start(toolchain.sourceSnapshot, { compiler: toolchain.compiler, args: toolchain.args, cwd: path.dirname(sourcePath), problem, sampleNumbers: [...sampleNumbers], preferences, timeout, compileOnly, localHeadersSnapshotted: false, programStream: 'separate-pipes' }); }
+			evidence = compileOnly ? undefined : this.options.evidence?.();
+			if (evidence) {
+				const observer = evidence;
+				evidence = { start: (snapshot, metadata) => { try { observer.start(snapshot, metadata); } catch { } }, event: value => { try { observer.event(value); } catch { } }, finish: async outcome => { try { void Promise.resolve(observer.finish(outcome)).catch(() => { }); } catch { } } };
+			}
+			if (toolchain.sourceSnapshot) { evidence?.start(toolchain.sourceSnapshot, { compiler: toolchain.compiler, args: [...toolchain.args], cwd: path.dirname(sourcePath), inputs: problem.tests.map(test => ({ input: test.input, output: test.output })), sampleNumbers: [...sampleNumbers], operation }); }
 			const rawCompile = await runProcess(toolchain.compiler, [...toolchain.args], path.dirname(sourcePath), toolchain.environment, 120000, controller.signal, true, undefined,
 				(stream, bytes) => evidence?.event({ type: 'stream', phase: 'compiling', stream, bytesBase64: bytes.toString('base64') }));
 			const sourceSnapshot = toolchain.sourceSnapshot;
@@ -101,6 +105,8 @@ export class CphExecutor {
 				const result = await runWithInput(this.options.inputHelper, executable, input, session, toolchain.environment, timeout, controller.signal,
 					() => { evidence?.event({ type: 'sample-started', index, sampleId: String(sampleNumbers[index]), at: Date.now() }); this.options.onSampleStarted?.(index); },
 					(stream, bytes) => evidence?.event({ type: 'stream', phase: 'running', index, sampleId: String(sampleNumbers[index]), stream, bytesBase64: bytes.toString('base64') }));
+				// Student process facts survive a subsequent checker/configuration failure.
+				evidence?.event({ type: 'sample-executed', index, sampleId: String(sampleNumbers[index]), result });
 				let verdict = judgeSample(sample.output, result);
 				let checkerRun: CheckerRun | undefined;
 				if (preferences?.ignoreSTDERROR === false && result.stderr && (verdict === 'passed' || verdict === 'wrong-answer')) { verdict = 'runtime-error'; }
@@ -121,7 +127,7 @@ export class CphExecutor {
 						: checked.launchError || checked.signal ? 'runtime-error' : checked.exitCode === 0 ? 'passed' : 'wrong-answer';
 				}
 				samples.push({ result, verdict, checkerRun });
-				evidence?.event({ type: 'sample-finished', index, sampleId: String(sampleNumbers[index]), result, verdict, checkerRun });
+				evidence?.event({ type: 'sample-finished', index, sampleId: String(sampleNumbers[index]), result, verdict });
 				this.options.onSampleFinished?.(index, { result, verdict, checkerRun });
 			}
 			outcome = { status: controller.signal.aborted ? 'cancelled' : 'completed', completedSamples: samples.length, requestedSamples: problem.tests.length };

@@ -5,7 +5,7 @@
 
 import { Event } from '../../../base/common/event.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume, BeaconProducer, IBeaconRuntimeItem, IBeaconConsumedRecord, BeaconRecentProducer, IBeaconCollectionScope, IBeaconProblemCapture, IBeaconOjCapture, IBeaconRecordRef, IBeaconRecentItem, IBeaconRecentRecord, IBeaconCodeObservation, IBeaconCodeSnapshot, IBeaconCodeSave } from './beaconContextTypes.js';
+import type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume, IBeaconCollectionScope, BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite } from './beaconContextTypes.js';
 export type { BeaconMode, IBeaconContext, IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconWindowSelection, IBeaconResume } from './beaconContextTypes.js';
 export { beaconContextChannel, beaconContextCommand } from './beaconContextTypes.js';
 export const IBeaconContextService = createDecorator<IBeaconContextService>('beaconContextService');
@@ -23,16 +23,12 @@ export interface IBeaconContextService {
 	beginRuntimeActivity(windowId: number): Promise<string>;
 	endRuntimeActivity(windowId: number, handle: string): Promise<void>;
 	captureCollectionScope(windowId: number): Promise<IBeaconCollectionScope | undefined>;
+	captureProblemRecord(windowId: number, input: IBeaconRecordWrite<'problem'>, scope: IBeaconCollectionScope): Promise<string>;
+	captureVerdict(windowId: number, input: IBeaconRecordWrite<'verdict'>, scope: IBeaconCollectionScope): Promise<string>;
+	captureRun(windowId: number, handle: string, input: IBeaconRecordWrite<'run'>): Promise<string>;
+	listRecords<K extends BeaconRecordKind>(windowId: number, kind: K, scope: IBeaconContext): Promise<IBeaconRecordByKind[K][]>;
+	readRecord<K extends BeaconRecordKind>(windowId: number, kind: K, id: string, scope: IBeaconContext): Promise<IBeaconRecordByKind[K]>;
 	beginActivity(windowId: number, source: string, scope: IBeaconCollectionScope | undefined): Promise<string | undefined>;
-	captureProblem(windowId: number, input: IBeaconProblemCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef>;
-	captureOj(windowId: number, input: IBeaconOjCapture, scope: IBeaconCollectionScope): Promise<IBeaconRecordRef>;
-	beginOjCaptureActivity(windowId: number, input: { sourceUri: string; attemptId?: string; recordKey?: string }, scope: IBeaconCollectionScope): Promise<string>;
-	endOjCaptureActivity(windowId: number, handle: string): Promise<void>;
-	listRecent(windowId: number, producer: BeaconRecentProducer, scope: IBeaconContext): Promise<IBeaconRecentItem[]>;
-	readRecent(windowId: number, ref: IBeaconRecordRef, scope: IBeaconContext): Promise<IBeaconRecentRecord>;
-	saveCodeRead(windowId: number, observation: IBeaconCodeObservation, scope: IBeaconContext): Promise<IBeaconCodeSave>;
-	listCodeSnapshots(windowId: number, scope: IBeaconContext): Promise<Omit<IBeaconCodeSnapshot, 'contents'>[]>;
-	readCodeSnapshot(windowId: number, id: string, scope: IBeaconContext): Promise<IBeaconCodeSnapshot>;
 	endActivity(windowId: number, handle: string): Promise<void>;
 	reportNotebooks(windowId: number, files: { file: string; dirty: boolean }[]): Promise<void>;
 	notebookReadonly(windowId: number, files: string[]): Promise<boolean[]>;
@@ -41,11 +37,6 @@ export interface IBeaconContextService {
 	beginNotebookCreate(windowId: number, file: string, scope: IBeaconContext): Promise<string>;
 	verifyNotebookEdit(windowId: number, handle: string): Promise<void>;
 	endNotebookResource(windowId: number, handle: string): Promise<void>;
-	startRuntime(windowId: number, handle: string, producer: BeaconProducer, source: string, code: string, events: unknown[]): Promise<void>;
-	appendRuntime(windowId: number, handle: string, sequence: number, events: unknown[]): Promise<boolean>;
-	listRuntime(windowId: number, producer: BeaconProducer, scope: IBeaconContext): Promise<IBeaconRuntimeItem[]>;
-	consumeRuntime(windowId: number, producer: BeaconProducer, id: string, revision: number, scope: IBeaconContext): Promise<IBeaconConsumedRecord>;
-	readConsumed(windowId: number, materialId: string, scope: IBeaconContext): Promise<IBeaconConsumedRecord | undefined>;
 	checkPageAccess(windowId: number, file: string): Promise<void>;
 	resetWindow(windowId: number): Promise<void>;
 	listHistory(windowId: number): Promise<IBeaconHistoryItem[]>;

@@ -6,10 +6,10 @@
 export const beCoderNotebookType = 'becoder-notebook';
 export const beCoderNotebookInputLanguage = 'becoder-input';
 export const beCoderNotebookStatusMime = 'application/vnd.becoder.notebook.status';
-export function formatBeCoderRunHeading(attempt: { status?: string; compileMs?: number; runMs?: number; exitCode?: number }): string {
-	const states: Record<string, string> = { preparing: 'Preparing', compiling: 'Compiling', running: 'Running', completed: 'OK', 'compile-error': 'CE', 'runtime-error': 'RE', 'timed-out': 'TLE', 'output-limit': 'OLE', cancelled: 'Stopped', 'unable-to-start': 'Unable to start' };
+export function formatBeCoderRunHeading(attempt: { status?: string; compileMs?: number; compileShared?: boolean; runMs?: number; exitCode?: number }): string {
+	const states: Record<string, string> = { preparing: 'Preparing', compiling: 'Compiling', running: 'Running', completed: 'OK', 'compile-error': 'CE', 'runtime-error': 'RE', 'timed-out': 'TLE', 'output-limit': 'OLE', cancelled: 'Stopped', 'unable-to-start': 'Unable to start', 'not-run': 'Not run' };
 	const status = states[attempt.status ?? ''] ?? 'Preparing';
-	return [status + (attempt.status === 'runtime-error' && attempt.exitCode !== undefined ? ` (exit code ${attempt.exitCode})` : ''), ...(attempt.compileMs === undefined ? [] : [`compile ${Math.round(attempt.compileMs)} ms`]), ...(attempt.runMs === undefined ? [] : [`run ${Math.round(attempt.runMs)} ms`])].join(' | ');
+	return [status + (attempt.status === 'runtime-error' && attempt.exitCode !== undefined ? ` (exit code ${attempt.exitCode})` : ''), ...(attempt.compileMs === undefined ? [] : [`${attempt.compileShared ? 'shared compile' : 'compile'} ${Math.round(attempt.compileMs)} ms`]), ...(attempt.runMs === undefined ? [] : [`run ${Math.round(attempt.runMs)} ms`])].join(' | ');
 }
 export const beCoderNotebookStreamMime = 'application/vnd.becoder.notebook.stream';
 export function isBeCoderInputCell(metadata: Record<string, unknown> | undefined): boolean { return (metadata?.becoder as { role?: string } | undefined)?.role === 'input'; }

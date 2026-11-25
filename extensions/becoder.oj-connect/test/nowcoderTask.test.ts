@@ -10,6 +10,9 @@ import { resolveProblem } from '../src/problemResolver';
 import { defaultDirectories, readDirectories } from '../src/settings';
 
 const adapters = [{ site: 'nowcoder' as const, resolve: nowcoderProblem }];
+test('Nowcoder canonical identifiers round trip without requiring the model to provide another URL', () => {
+	for (const problemId of ['problem/18204', 'contest/5657/A']) { assert.strictEqual(nowcoderProblem(problemId)?.nativeId, problemId); }
+});
 test('Nowcoder resolves explicit ACM public and contest entries without converting their context', () => {
 	for (const input of ['18204', '18204.cpp', 'https://ac.nowcoder.com/acm/problem/18204/']) {
 		assert.strictEqual(nowcoderProblem(input)?.nativeId, 'problem/18204');

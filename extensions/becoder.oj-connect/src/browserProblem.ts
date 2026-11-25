@@ -8,7 +8,16 @@ import { atCoderProblem } from './adapters/atcoder/task';
 import { codeforcesProblem } from './adapters/codeforces/task';
 import { nowcoderProblem } from './adapters/nowcoder/task';
 import { lanqiaoProblem } from './adapters/lanqiao/task';
-import type { ProblemRef } from './domain';
+import type { ProblemRef, SiteId } from './domain';
+
+/** Canonical tool identity; never guesses a different task or asks for a second URL. */
+export function resolveBeaconProblemId(oj: SiteId, problemId: string): ProblemRef {
+	const parsers = { luogu: luoguProblem, atcoder: atCoderProblem, nowcoder: nowcoderProblem, codeforces: codeforcesProblem, lanqiao: lanqiaoProblem };
+	if (typeof problemId !== 'string' || !Object.hasOwn(parsers, oj)) { throw new Error('oj-connect-invalid-problem'); }
+	const ref = parsers[oj](problemId);
+	if (!ref || ref.site !== oj || ref.nativeId !== problemId) { throw new Error('oj-connect-invalid-problem'); }
+	return ref;
+}
 
 /** Pure entry also used by the browser host, without activating the extension. */
 export function browserProblem(input: string): ProblemRef | undefined {

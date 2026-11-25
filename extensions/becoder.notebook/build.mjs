@@ -11,6 +11,7 @@ const options = { absWorkingDir: import.meta.dirname, bundle: true, platform: 'n
 await build({ ...options, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.cjs' });
 await build({ ...options, entryPoints: ['test/coreOutputFixture.ts'], outfile: 'dist-test/coreOutputFixture.cjs' });
 await build({ ...options, external: [...options.external, './coreOutputFixture.cjs'], entryPoints: ['test/model.test.ts'], outfile: 'dist-test/model.test.cjs' });
+await build({ ...options, external: [], entryPoints: ['test/execution.test.ts'], outfile: 'dist-test/execution.test.cjs', plugins: [{ name: 'notebook-test-vscode', setup(builder) { builder.onResolve({ filter: /^vscode$/ }, () => ({ path: path.join(import.meta.dirname, 'test/executionMock.ts') })); } }] });
 await build({ absWorkingDir: import.meta.dirname, bundle: true, platform: 'browser', format: 'esm', target: 'es2022', legalComments: 'linked', entryPoints: ['renderer/index.ts'], outfile: 'dist/renderer.js' });
 const notice = `Microsoft Notebook renderer ANSI utilities (extensions/notebook-renderers/src)
 Copyright (c) Microsoft Corporation. All rights reserved.

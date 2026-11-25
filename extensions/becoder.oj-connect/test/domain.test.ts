@@ -8,8 +8,27 @@ import { test } from 'node:test';
 import { validateProblem, validateRecord, validateProblemRef, validateOutcome, validateLanqiaoProgress } from '../src/domain';
 import { cphSamples } from '../src/cphHost';
 import { createBeaconPages } from '../src/beaconPages';
+import { toBeaconProblemRecord, toBeaconVerdictRecord } from '../src/beaconRecords';
+import { browserProblem, resolveBeaconProblemId } from '../src/browserProblem';
+
+test('five canonical Beacon problem IDs roundtrip through the real OJ parsers', () => {
+	for (const [oj, id] of [['luogu', 'P1001'], ['codeforces', '4/A'], ['atcoder', 'abc485/abc485_b'], ['nowcoder', 'problem/1001'], ['nowcoder', 'contest/1000/A'], ['lanqiao', '254']] as const) {
+		const problem = resolveBeaconProblemId(oj, id);
+		assert.strictEqual(problem.nativeId, id); assert.deepStrictEqual(browserProblem(problem.url), problem);
+	}
+	for (const id of ['', '../P1001', 'P1001.cpp', 'https://www.luogu.com.cn/problem/P1001']) { assert.throws(() => resolveBeaconProblemId('luogu', id)); }
+});
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('Beacon collects only problem identity and a final verdict, never a statement or intermediate poll', () => {
+	const document = validateProblem({ ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false });
+	assert.deepStrictEqual(toBeaconProblemRecord(document, 'file:///C:/practice/A%20B.cpp', 0), { problem: { oj: 'luogu', problemId: 'P1001' }, filePath: 'C:\\practice\\A B.cpp', viewedAt: '1970-01-01T00:00:00.000Z' });
+	const record = validateRecord({ ref: { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' }, phase: 'finished', rawStatus: 'WA', source: 'original\r\n', sourceVerification: 'matched', score: '9223372036854775807' });
+	assert.strictEqual(toBeaconVerdictRecord({ ...record, phase: 'judging' }), undefined);
+	const saved = toBeaconVerdictRecord(record, undefined, 0)!;
+	assert.strictEqual(saved.submission.code, 'original\r\n'); assert.strictEqual(saved.result.score, '9223372036854775807'); assert.strictEqual(saved.filePath, null);
+	assert.strictEqual(Object.hasOwn(saved, 'phase'), false); assert.strictEqual(Object.hasOwn(saved, 'document'), false);
+});
 test('receipt observations retain their real attempt and reject a different formal record', () => {
 	const record = { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' };
 	const observed = { attemptId: 'native-attempt', snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' } };

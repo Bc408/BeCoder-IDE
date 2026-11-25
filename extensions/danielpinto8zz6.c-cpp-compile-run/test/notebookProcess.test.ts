@@ -10,8 +10,10 @@ import * as path from 'path';
 import { tmpdir } from 'os';
 import * as fsSync from 'fs';
 import { runNotebookProgram } from '../src/notebookProcess';
+import * as notebookProcess from '../src/notebookProcess';
 import { buildCompilerArguments, privateRunnerEnvironment } from '../src/compilation';
 import type { RunnerSettings } from '../src/compiler';
+import { BeaconEvidence } from '../src/beaconEvidence';
 
 test('Notebook compilation uses a short named source while runtime retains notebook cwd', async () => {
 	const request = { code: 'captured', language: 'cpp' as const, input: '', inputName: '', cellId: 'code', cwd: process.cwd(), notebookPath: path.join(process.cwd(), '动态规划.bcnb'), codeNumber: 2 };
@@ -43,6 +45,25 @@ test('Notebook compilation uses captured memory source and reports actual compil
 test('a missing Notebook helper reports its actual spawn error rather than inventing a program result', async () => {
 	const result = await runNotebookProgram({ code: 'captured', language: 'cpp', input: '', inputName: '', codeNumber: 1, cellId: 'missing-helper', cwd: process.cwd() }, new AbortController().signal, { phase: () => {}, output: () => {} }, path.join(process.cwd(), 'tmp', 'no-notebook-helper.exe'), (_source, output) => ({ compiler: process.execPath, args: ['-e', 'require("fs").writeFileSync(process.argv[1],"fixture")', output], environment: { ...process.env } as Record<string, string> }));
 	assert.equal(result.status, 'unable-to-start'); assert.match(result.error!, /ENOENT/); assert.equal(result.exitCode, undefined);
+});
+
+test('Notebook helper startup failure marks the real group and collected record failed', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'notebook', async (_operation, value: any) => { record = value.record; }, error => assert.fail(String(error)));
+	const result = await notebookProcess.runNotebookProgramGroup({ code: 'captured', language: 'cpp', cellId: 'code', codeNumber: 1, cwd: process.cwd(), inputs: [{ text: 'one', name: 'one', cellNumber: 2 }, { text: 'two', name: 'two', cellNumber: 3 }] }, new AbortController().signal, { phase: () => {}, output: () => {}, finished: () => {}, evidence }, path.join(process.cwd(), 'tmp', 'no-notebook-helper.exe'), (_source, output) => ({ compiler: process.execPath, args: ['-e', 'require("fs").writeFileSync(process.argv[1],"fixture")', output], environment: { ...process.env } as Record<string, string> }));
+	assert.equal(result.results[0].status, 'unable-to-start'); assert.match(result.results[0].error!, /ENOENT/);
+	assert.equal(result.status, 'failed'); assert.equal(record.status, 'failed');
+	assert.equal(record.compile.status, 'succeeded'); assert.equal(record.runs[0].status, 'start-failed');
+	assert.equal(record.runs[0].exitCode, undefined); assert.match(record.runs[0].error, /ENOENT/);
+});
+
+test('Notebook compilation cancellation preserves the cancelled compile fact in the real record', async () => {
+	const abort = new AbortController(); let record: any;
+	const evidence = new BeaconEvidence('handle', 'notebook', async (_operation, value: any) => { record = value.record; }, error => assert.fail(String(error)));
+	const result = await notebookProcess.runNotebookProgramGroup({ code: 'captured', language: 'cpp', cellId: 'code', codeNumber: 1, cwd: process.cwd(), inputs: [{ text: 'one', name: 'one', cellNumber: 2 }, { text: 'two', name: 'two', cellNumber: 3 }] }, abort.signal, { phase: () => {}, output: (index, phase, _stream, text) => { if (index === 0 && phase === 'compiling' && text.includes('compiling')) { abort.abort(); } }, finished: () => {}, evidence }, 'unused-helper', () => ({ compiler: process.execPath, args: ['-e', 'process.stdout.write("compiling");setInterval(()=>{},1000)'], environment: { ...process.env } as Record<string, string> }));
+	assert.equal(result.status, 'cancelled'); assert.equal(result.results[0].status, 'cancelled');
+	assert.equal(record.status, 'cancelled'); assert.equal(record.compile.status, 'cancelled');
+	assert.deepEqual(record.runs.map((run: any) => [run.status, run.skipReason]), [['not-run', 'cancelled'], ['not-run', 'cancelled']]);
 });
 
 function runNotebookWithNodeHelper(script: string, limits?: { maxRuntimeMs: number; maxOutputBytes: number }, compileDelayMs = 0, signal = new AbortController().signal, phase: (phase: 'compiling' | 'running') => void = () => {}) {
@@ -110,6 +131,31 @@ const compiler = process.env['BECODER_NOTEBOOK_COMPILER'] ?? path.join(stagedApp
 const helper = process.env['BECODER_NOTEBOOK_HELPER'] ?? path.join(stagedApplication, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe');
 const actual = { skip: !fsSync.existsSync(compiler) || !fsSync.existsSync(helper), timeout: 30000 };
 const settings: RunnerSettings = { cStandard: 'c17', cppStandard: 'c++20', cFlags: [], cppFlags: [] };
+test('Notebook program group compiles once and runs each frozen input in an independent process', actual, async () => {
+	const execute = Reflect.get(notebookProcess, 'runNotebookProgramGroup') as (...args: any[]) => Promise<{ results: { output: string; status: string }[] }>;
+	assert.equal(typeof execute, 'function');
+	let preparations = 0, compiles = 0;
+	const request = { code: '#include <cstdio>\nint main(){static int count=0;int n;scanf("%d",&n);printf("%d",n+(++count));}', language: 'cpp', cellId: 'code', codeNumber: 1, cwd: process.cwd(), notebookPath: path.join(process.cwd(), 'group.bcnb'), inputs: [{ text: '1', name: 'one', cellNumber: 2 }, { text: '2', name: 'two', cellNumber: 3 }] };
+	const result = await execute(request, new AbortController().signal, { phase: (_index: number, phase: string) => { if (phase === 'compiling') { compiles++; } }, output: () => {}, finished: () => {} }, helper, (source: string, output: string, session: string, language: 'cpp', cwd: string) => {
+		preparations++; return { compiler, args: buildCompilerArguments({ path: source, originalPath: path.join(cwd, path.basename(source)), language }, settings, output), environment: privateRunnerEnvironment(session, compiler) };
+	});
+	assert.equal(preparations, 1); assert.equal(compiles, 1);
+	assert.deepEqual(result.results.map(value => [value.status, value.output]), [['completed', '2'], ['completed', '3']]);
+});
+
+test('Notebook grouped execution continues runtime failures and stops a cancelled batch before the next input', actual, async () => {
+	const base = { code: '#include <cstdio>\nint main(){int n;scanf("%d",&n);if(n==0)return 2;printf("%d",n);}', language: 'cpp' as const, cellId: 'code', codeNumber: 1, cwd: process.cwd(), inputs: [{ text: '1', name: 'one', cellNumber: 2 }, { text: '0', name: 'two', cellNumber: 3 }, { text: '3', name: 'three', cellNumber: 4 }] };
+	const prepare = (source: string, output: string, session: string, language: 'c' | 'cpp', cwd: string) => ({ compiler, args: buildCompilerArguments({ path: source, originalPath: path.join(cwd, path.basename(source)), language }, settings, output), environment: privateRunnerEnvironment(session, compiler) });
+	const callbacks = { phase: () => {}, output: () => {}, finished: () => {} };
+	const result = await notebookProcess.runNotebookProgramGroup(base, new AbortController().signal, callbacks, helper, prepare);
+	assert.deepEqual(result.results.map(value => value.status), ['completed', 'runtime-error', 'completed']);
+	assert.equal(result.results[1].compileShared, true);
+	const abort = new AbortController();
+	const cancelled = await notebookProcess.runNotebookProgramGroup(base, abort.signal, { ...callbacks, finished: () => abort.abort() }, helper, prepare);
+	assert.equal(cancelled.results.length, 1); assert.equal(cancelled.status, 'cancelled');
+	const failed = await notebookProcess.runNotebookProgramGroup({ ...base, code: '#error compilation_failure' }, new AbortController().signal, callbacks, helper, prepare);
+	assert.equal(failed.results.length, 1); assert.equal(failed.status, 'compile-error');
+});
 test('Notebook actual GCC diagnostics identify the notebook and program without a temporary path', actual, async () => {
 	const result = await runNotebookProgram({ code: 'int main() { broken }', language: 'cpp', input: '', inputName: '', cellId: 'bad', codeNumber: 3, notebookPath: path.join(process.cwd(), '动态规划.bcnb'), cwd: process.cwd() }, new AbortController().signal, { phase: () => {}, output: () => {} }, helper!, (source, output, session, language, cwd) => ({ compiler: compiler!, args: buildCompilerArguments({ path: source, originalPath: path.join(cwd, path.basename(source)), language }, settings, output), environment: privateRunnerEnvironment(session, compiler!) }));
 	assert.equal(result.status, 'compile-error');

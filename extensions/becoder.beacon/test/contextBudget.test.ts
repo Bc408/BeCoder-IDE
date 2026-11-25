@@ -9,6 +9,7 @@ import { measureBeaconRequest, type PreparedBeaconRequest } from '../src/context
 import { createGenerator } from '../src/provider';
 import { defaultCapabilities, resolveCapabilities } from '../src/models';
 import { ChatSession } from '../src/session';
+import { ChatHistory } from '../src/history';
 
 const prepared = (): PreparedBeaconRequest => ({ source: { provider: 'fixture', baseURL: 'https://fixture.example', model: 'one' }, phase: 'answer', limits: { contextWindow: 32768, maxInputTokens: 24576, maxOutputTokens: 8192 }, instructions: 'mentor', activeTools: [], messages: [{ role: 'user', content: '中文与 code {}' }], media: [], projectionFingerprint: 'p', contractFingerprint: 'c', unitFingerprints: ['u'] });
 test('a discovered large context does not inherit an unrelated 24K input ceiling', () => {
@@ -51,17 +52,25 @@ test('known input overflow is blocked before any final fetch', async () => {
 	const session = new ChatSession(() => { }, String); await session.send('x'.repeat(10000), generator);
 	assert.equal(calls, 0); assert.ok(session.snapshot.error);
 });
-test('legal ordinary requests reserve tool results up to hard capacity before the next compaction gate', async () => {
-	const budget = 49152, minimum = Math.floor((budget * 0.1 - 512) * 0.8);
-	let legal = 0;
-	for (let padding = 16000; padding <= 36000; padding += 2000) {
-		let allocated = -1, fetched = false;
-		const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://provider.invalid', model: 'fixture', apiKey: 'synthetic', parameters: { maxOutputTokens: 4096 }, capabilities: { ...defaultCapabilities, contextWindow: 65536, maxInputTokens: budget, maxOutputTokens: 8192 } }), async () => {
-			fetched = true;
-			return new Response('data: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta: { content: 'answer' }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
-		}, 'none', [], false, undefined, {}, { describe: async () => 'x'.repeat(padding), execute: async () => ({ ok: false }), setResultBudget: bytes => { allocated = bytes; } });
-		const session = new ChatSession(() => {}, String); await session.send('Read the relevant current code.', generator);
-		if (fetched) { legal++; assert.ok(allocated >= minimum, `A legal request left only ${allocated} bytes for tool results at padding ${padding}`); }
-	}
-	assert.ok(legal > 0, 'The regression must exercise an admitted ordinary request.');
-});
+for (const oversized of [false, true]) {
+	test(`complete record exchange is retained before ${oversized ? 'capacity failure' : 'one compaction'} without repeat execution`, async () => {
+		const history = new ChatHistory(undefined, async data => data, () => {}, String);
+		for (let index = 0; index < 4; index++) { await history.session.send('Q' + 'x'.repeat(1000), async function* () { yield { type: 'text', text: 'A' + 'y'.repeat(1000) }; }); }
+		const contents = 'FULL-BEGIN' + 'z'.repeat(oversized ? 200000 : 22000) + 'FULL-END';
+		let calls = 0, reads = 0, summaries = 0;
+		const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://provider.invalid', model: 'fixture', apiKey: 'synthetic', parameters: { maxOutputTokens: 4096 }, capabilities: { ...defaultCapabilities, contextWindow: 65536, maxInputTokens: 38000, maxOutputTokens: 8192 } }), async (_url, init) => {
+			const body = JSON.parse(String(init?.body)); calls++;
+			const summary = body.messages[0].content.startsWith('Summarize');
+			if (summary) { summaries++; }
+			const delta = calls === 1 ? { tool_calls: [{ index: 0, id: 'full', type: 'function', function: { name: 'readRunRecord', arguments: '{"id":"run"}' } }] } : { content: summary ? '{"summary":"Earlier questions were explained."}' : 'answer' };
+			return new Response('data: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta: {}, finish_reason: calls === 1 ? 'tool_calls' : 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+		}, 'none', [], false, undefined, {}, { names: ['readRunRecord'], describe: async () => '', execute: async () => { reads++; return { record: { id: 'run', code: contents } }; } });
+		try {
+			await history.session.send('Read this run.', generator);
+			assert.equal(reads, 1);
+			assert.ok(JSON.stringify(history.snapshot.messages.at(-1)?.protocol).includes(contents));
+			if (oversized) { assert.ok(history.snapshot.error); assert.equal(summaries, 0); }
+			else { assert.equal(history.snapshot.error, ''); assert.equal(summaries, 1); }
+		} finally { await history.dispose(); }
+	});
+}

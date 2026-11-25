@@ -247,14 +247,14 @@ export class Connections implements vscode.Disposable {
 	private async writeKey(provider: ProviderId, key: string | undefined): Promise<void> {
 		if (key) { await this.context.secrets.store(secretName(provider), key); } else { await this.context.secrets.delete(secretName(provider)); }
 	}
-	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean, context?: import('./contextTools').ContextAccess, notebooks?: import('./notebookTools').NotebookAccess) {
+	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean, context?: import('./contextTools').ContextAccess) {
 		if (this.testing) { throw new Error('settings-pending'); }
 		if (!this.configured) { throw new Error('model-unavailable'); }
 		const state = this.snapshot;
 		const model = this.data.providers[state.provider].models.find(item => item.id === state.model)!;
 		validateModel(state.provider, state.baseURL, model);
 		const connection: Connection = structuredClone({ provider: state.provider, baseURL: state.baseURL, model: state.model, parameters: state.parameters, capabilities: state.capabilities, modelSettings: state.modelSettings, apiKey: this.keys[state.provider] });
-		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }, context, notebooks), files };
+		return { capabilities: connection.capabilities!, source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, generate: createGenerator(async () => connection, fetch, permission, structuredClone(roots), webEnabled, fetch, { diagnostic: event => this.diagnostic?.({ ...event, provider: connection.provider }) }, context), files };
 	}
 	dispose(): void { this.disposed = true; this.tests.dispose(); this.controller.abort(); this.cancelDiscovery(); for (const disposable of this.subscriptions) { disposable.dispose(); } }
 }

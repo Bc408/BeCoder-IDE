@@ -15,7 +15,6 @@ import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
 import { INotebookService } from '../../notebook/common/notebookService.js';
-import type { IBeaconCodeObservation } from '../../../../platform/beacon/common/beaconContextTypes.js';
 
 /** Never resolves an editor, creates a model or opens a resource to acquire content. */
 export class BeaconWorkbenchPages extends Disposable {
@@ -37,17 +36,7 @@ export class BeaconWorkbenchPages extends Disposable {
 		if (!key) { key = {}; keys.set(side, key); }
 		return key;
 	}
-	async readCurrentCode(id?: string, expectedVersion?: string): Promise<Omit<IBeaconCodeObservation, 'contentSha256'>> {
-		const pages = this.pages.list();
-		const page = id ? pages.find(page => page.id === id) : pages.find(page => page.active && page.kind === 'text' && ['c', 'cpp'].includes(page.languageId ?? ''));
-		if (!page) { throw new Error('beacon-page-closed'); }
-		if (page.kind !== 'text' || !['c', 'cpp'].includes(page.languageId ?? '') || !page.uri) { throw new Error('beacon-code-unavailable'); }
-		if (page.reason) { throw new Error(page.reason); }
-		if (expectedVersion !== undefined && expectedVersion !== page.version) { throw new Error('beacon-page-changed'); }
-		const read = await this.pages.read(page.id, page.version, 0, Number.MAX_SAFE_INTEGER);
-		const uri = URI.parse(page.uri);
-		return { sourceUri: page.uri, fileName: uri.path.split('/').at(-1) || page.title, ...(uri.scheme === 'file' ? { filePath: uri.fsPath } : {}), pageId: page.id, version: page.version, languageId: page.languageId as 'c' | 'cpp', observedAt: Date.now(), contents: read.contents };
-	}
+	readVisibleCurrentCode() { return this.pages.readVisibleCurrentCode(); }
 	private sources(): IBeaconPageSource[] {
 		return this.editors.editors.flatMap<IBeaconPageSource>(editor => {
 			if (editor instanceof BrowserEditorInput) {
@@ -61,14 +50,16 @@ export class BeaconWorkbenchPages extends Disposable {
 					listeners.add(model.onWillDispose(() => this.watched.deleteAndDispose(model)));
 				}
 				const url = model?.url;
-				return [{ key: this.key(editor, 'browser'), kind: 'browser', title: editor.getName(), uri: url, version: `${version?.id}:${version?.navigation}`, reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
-					const uri = URI.parse(url!);
-					if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
-					if (await this.browsers.resolveBrowserProblem(url!) || /^https:\/\/(?:www\.)?(?:luogu\.com\.cn\/record\/|atcoder\.jp\/contests\/[^/]+\/submissions\/|codeforces\.com\/(?:contest\/[^/]+\/)?submission\/|ac\.nowcoder\.com\/acm\/contest\/view-submission|lanqiao\.cn\/problems\/[^/]+\/submissions\/)/i.test(url!)) { throw new Error('beacon-persisted-evidence-required'); }
-					const text = await this.browsers.readCurrentPage(editor.id, this.windowId, url!);
-					if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
-					return text;
-				} }];
+				return [{
+					key: this.key(editor, 'browser'), kind: 'browser', title: editor.getName(), uri: url, version: `${version?.id}:${version?.navigation}`, reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
+						const uri = URI.parse(url!);
+						if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
+						if (await this.browsers.resolveBrowserProblem(url!) || /^https:\/\/(?:www\.)?(?:luogu\.com\.cn\/record\/|atcoder\.jp\/contests\/[^/]+\/submissions\/|codeforces\.com\/(?:contest\/[^/]+\/)?submission\/|ac\.nowcoder\.com\/acm\/contest\/view-submission|lanqiao\.cn\/problems\/[^/]+\/submissions\/)/i.test(url!)) { throw new Error('beacon-persisted-evidence-required'); }
+						const text = await this.browsers.readCurrentPage(editor.id, this.windowId, url!);
+						if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
+						return text;
+					}
+				}];
 			}
 			const resources = EditorResourceAccessor.getCanonicalUri(editor, { supportSideBySide: SideBySideEditor.BOTH });
 			const uris = resources instanceof URI ? [resources] : [resources?.primary, resources?.secondary].filter((uri): uri is URI => !!uri);
@@ -79,11 +70,13 @@ export class BeaconWorkbenchPages extends Disposable {
 				const model = this.models.getModel(uri);
 				let version = model && this.versions.get(model);
 				if (model && !version) { version = { id: generateUuid(), navigation: 0 }; this.versions.set(model, version); }
-				return { key: this.key(editor, uri.toString()), kind: 'text' as const, title: editor.getName(), uri: uri.toString(), version: `${version?.id}:${model?.getVersionId()}`, languageId: model?.getLanguageId(), dirty: editor.isDirty(), active: this.editors.activeEditor === editor, reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
-					if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
-					if (!model || model.isDisposed() || this.models.getModel(uri) !== model) { throw new Error('beacon-page-changed'); }
-					return model.getValue();
-				} };
+				return {
+					key: this.key(editor, uri.toString()), kind: 'text' as const, title: editor.getName(), uri: uri.toString(), version: `${version?.id}:${model?.getVersionId()}`, languageId: model?.getLanguageId(), dirty: editor.isDirty(), visible: this.editors.visibleEditors.includes(editor), active: this.editors.activeEditor === editor, reason: model ? undefined : 'beacon-page-provider-unavailable', read: async () => {
+						if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
+						if (!model || model.isDisposed() || this.models.getModel(uri) !== model) { throw new Error('beacon-page-changed'); }
+						return model.getValue();
+					}
+				};
 			});
 		});
 	}

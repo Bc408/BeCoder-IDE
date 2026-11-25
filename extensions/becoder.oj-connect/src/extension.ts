@@ -5,9 +5,11 @@
 
 import { fileURLToPath } from 'url';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import * as vscode from 'vscode';
 import type { IBeaconAcquisition, IBeaconCollectionScope, IBeaconOjCapture } from 'becoder-beacon';
+import { toBeaconProblemRecord, toBeaconVerdictRecord } from './beaconRecords';
+import { resolveBeaconProblemId } from './browserProblem';
 import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost, CommandLanqiaoHost } from './browserHost';
 import { LanqiaoAdapter } from './adapters/lanqiao/adapter';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
@@ -67,21 +69,32 @@ export async function activate(context: vscode.ExtensionContext) {
 		try { return await vscode.commands.executeCommand<IBeaconCollectionScope>('_becoder.beacon.context', 'captureCollectionScope'); }
 		catch { return undefined; }
 	};
-	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
+	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, _trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
 		if (!scope) { return; }
-		try { await execute('_becoder.beacon.context', 'captureProblem', { input: { document, sourceUri, viewedAt, trigger }, scope }); }
+		try { await execute('_becoder.beacon.context', 'captureProblemRecord', { record: toBeaconProblemRecord(document, sourceUri, viewedAt), collectionScope: scope }); }
 		catch { void vscode.window.showWarningMessage(vscode.l10n.t('The problem was opened, but Beacon could not save its context.')); }
 	};
-	const createOjCapture = (sourceUri: string, scope: IBeaconCollectionScope | undefined, identity: { attemptId?: string; recordKey?: string }) => {
-		let tail = Promise.resolve(), handle: string | undefined, failed = false;
+	const createOjCapture = (sourceUri: string, scope: IBeaconCollectionScope | undefined, _identity: { attemptId?: string; recordKey?: string }) => {
+		// Repeated delivery within this observation is idempotent; a later read is new evidence.
+		const publishedRecords = new Set<string>();
+		let tail = Promise.resolve(), failed = false;
 		const enqueue = (operation: () => Promise<unknown>) => {
 			if (!scope) { return; }
 			tail = tail.then(async () => { if (!failed) { await operation(); } }).catch(() => { failed = true; void vscode.window.showWarningMessage(vscode.l10n.t('The submission continues, but Beacon could not save its context.')); });
 		};
-		if (sourceUri) { enqueue(async () => { handle = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginOjCaptureActivity', { input: { sourceUri, ...identity }, scope }); }); }
 		return {
-			accept: (input: IBeaconOjCapture) => enqueue(() => execute('_becoder.beacon.context', 'captureOj', { input, scope })),
-			finish: async () => { await tail; if (handle) { await execute('_becoder.beacon.context', 'endOjCaptureActivity', { id: handle }).catch(() => undefined); } }
+			accept: (input: IBeaconOjCapture) => {
+				if (!scope || !Object.hasOwn(input, 'record')) { return; }
+				const observed = input as Extract<IBeaconOjCapture, { record: RecordSnapshot }>;
+				const record = toBeaconVerdictRecord(observed.record, sourceUri || undefined); if (!record) { return; }
+				const key = createHash('sha256').update(JSON.stringify([scope, observed.record])).digest('hex');
+				enqueue(async () => {
+					if (publishedRecords.has(key)) { return; }
+					await execute('_becoder.beacon.context', 'captureVerdict', { record, collectionScope: scope });
+					publishedRecords.add(key);
+				});
+			},
+			finish: async () => { await tail; }
 		};
 	};
 	const publishObservedRecord = async (record: RecordSnapshot, sourceUri: string, scope: IBeaconCollectionScope | undefined, attemptId: string) => {
@@ -272,6 +285,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);
 	return {
+		resolveBeaconProblemId,
 		resolveBeaconUrl: (url: string) => adapters.map(adapter => adapter.resolve(url)).find(ref => !!ref),
 		resolveBeaconProblem: (sourceUri: string) => {
 			if (!sourceUri.startsWith('file:')) { return { kind: 'inputRequired' as const }; }

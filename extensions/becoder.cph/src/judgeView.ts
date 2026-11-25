@@ -333,7 +333,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				this.dirty = this.dirtyVersion !== dirtyVersion;
 			} else {
 				const source = this.session.current?.problem.srcPath;
-				if (source) {
+				if (source && request.command === 'run') {
 					try { beaconActivity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source, collectionScope }); }
 					catch (error) { console.warn('Beacon CPH activity tracking unavailable', error); }
 				}

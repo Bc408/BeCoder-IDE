@@ -17,6 +17,7 @@ export function nowcoderProblem(input: string): ProblemRef | undefined {
 			path = match[1];
 		} catch { return undefined; }
 	} else if (/^[1-9]\d*$/.test(path)) { path = 'problem/' + path; }
+	else if (/^(?:problem\/[1-9]\d*|contest\/[1-9]\d*\/[A-Z][A-Z0-9]*)$/.test(path)) { /* Already canonical. */ }
 	else {
 		const match = /^([1-9]\d*)[_/]([A-Z][A-Z0-9]*)$/i.exec(path);
 		if (!match) { return undefined; }

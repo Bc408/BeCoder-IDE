@@ -12,6 +12,7 @@ import { generateUuid } from '../../../../../base/common/uuid.js';
 import { AccessibilitySignal, IAccessibilitySignalService } from '../../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
+import { beCoderNotebookType } from '../../../becoder/common/beCoderNotebook.js';
 import { NotebookTextModel } from '../../common/model/notebookTextModel.js';
 import { CellEditType, CellUri, ICellEditOperation, NotebookCellExecutionState, NotebookCellInternalMetadata, NotebookExecutionState, NotebookTextModelWillAddRemoveEvent } from '../../common/notebookCommon.js';
 import { CellExecutionUpdateType, INotebookExecutionService } from '../../common/notebookExecutionService.js';
@@ -360,6 +361,8 @@ class NotebookExecutionListeners extends Disposable {
 	}
 
 	private onWillAddRemoveCells(e: NotebookTextModelWillAddRemoveEvent): void {
+		// BeCoder runs a frozen input plan; deleting an output destination is not a stop.
+		if (this._notebookModel.viewType === beCoderNotebookType) { return; }
 		const notebookExes = this._notebookExecutionStateService.getCellExecutionsByHandleForNotebook(this._notebookModel.uri);
 
 		const executingDeletedHandles = new Set<number>();

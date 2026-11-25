@@ -49,7 +49,7 @@ test('three OJs: Get Problem → statement send to CPH preserves source, samples
 			onDidCloseTextDocument: event, onDidSaveTextDocument: event, onDidRenameFiles: event, onDidDeleteFiles: event, onDidChangeTextDocument: event,
 			openTextDocument: async (value: { fsPath: string }) => document(value.fsPath)
 		},
-		commands: { registerCommand: (name: string, action: (...args: any[]) => Promise<any>) => { commands.set(name, action); return event(); } },
+		commands: { registerCommand: (name: string, action: (...args: any[]) => Promise<any>) => { commands.set(name, action); return event(); }, executeCommand: async (name: string, ...args: unknown[]) => commands.get(name)?.(...args) },
 		window: {
 			onDidChangeActiveTextEditor: event, registerWebviewViewProvider: event,
 			showTextDocument: async () => ({ edit: async () => assert.fail('existing source must not be edited during import') }),
@@ -64,7 +64,7 @@ test('three OJs: Get Problem → statement send to CPH preserves source, samples
 				async open(value: { srcPath: string }) { displayed.push(value.srcPath); } dispose() { } } };
 		}
 		if (name === './webview' && parent.filename === path.join(oj, 'views', 'problemPanel.js')) {
-			return { labels: () => ({}), Panel: class { constructor(_context: unknown, _state: unknown, action: (value: any) => Promise<void>, close: () => void) { captures.push({ action, dispose: close }); } reveal() { } dispose() { } } };
+			return { labels: () => ({}), Panel: class { constructor(_context: unknown, public state: Record<string, unknown>, action: (value: any) => Promise<void>, close: () => void) { captures.push({ action, dispose: close }); } update(value: Record<string, unknown>) { Object.assign(this.state, value); } reveal() { } dispose() { } } };
 		}
 		return load.call(this, name, parent, ...rest);
 	};
@@ -112,8 +112,8 @@ test('three OJs: Get Problem → statement send to CPH preserves source, samples
 			assert.strictEqual(fs.readFileSync(source, 'utf8'), solution);
 			saved = store.load(source)!;
 			const application = path.resolve('../VSCode-win32-x64');
-			const compiler = path.join(application, 'data/toolchains/ucrt64/bin/g++.exe');
-			const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), inputHelper: path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'),
+			const compiler = path.join(process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? path.join(application, 'data/toolchains/ucrt64'), 'bin/g++.exe');
+			const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'),
 				prepareCompilation: async (filename: string, output: string, session: string) => ({ compiler, args: [filename, '-o', output, '-std=c++20', '-O2'],
 					environment: require(path.resolve('extensions/danielpinto8zz6.c-cpp-compile-run/out-test/src/compilation.js')).privateRunnerEnvironment(session, compiler) }) });
 			try { const result = await executor.judge(saved.problem, source); assert.strictEqual(result.compile.exitCode, 0, result.compile.stderr); assert.deepStrictEqual(result.samples.map(sample => sample.verdict), ['passed', 'passed']); }

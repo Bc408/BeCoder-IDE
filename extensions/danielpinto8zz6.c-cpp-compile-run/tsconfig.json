@@ -24,6 +24,8 @@
 		"test"
 	],
 	"include": [
-		"src/**/*"
+		"src/**/*",
+		"../../src/typings/becoder-beacon.d.ts",
+		"../../src/typings/becoder-oj-connect.d.ts"
 	]
 }

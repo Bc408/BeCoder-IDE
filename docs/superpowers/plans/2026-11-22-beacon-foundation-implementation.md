@@ -1,6 +1,8 @@
 # Beacon 底层建筑夯实执行计划
 
-> 2026-11-23实施后修订：负责人撤回讨论对象的harness绑定。本计划原targetSelection／pinnedTarget及跟随／会话固定描述仅保留原审阅身份，不再作为现行实现要求；以[当前代码工具规则](../../beacon/code-snapshots.md)与[最新实现状态](../../beacon/implementation-status.md)为准。模型容量已提供C但未提供I时，按C约束输入，不能再套用缺省24K上限。
+> 历史计划，停止作为新阶段执行依据（2026-11-24）。负责人已重划三类业务队列、撤回codesnap并移除模型笔记写工具；以下正文和原审批仅解释当时实施。当前见[新工具审阅稿](../specs/2026-11-23-beacon-tool-interface-simplification-design.md)，须另审新接口和实施计划。
+
+> 2026-11-23历史修订：负责人当时已撤回讨论对象绑定；2026-11-24决定进一步覆盖本计划的代码存储和队列合同。现行见[代码只读合同](../../beacon/code-reading.md)与[实现状态](../../beacon/implementation-status.md)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 执行方式由负责人审阅后选择；本文件不授权 Git 提交、推送或发行。
 
@@ -10,7 +12,7 @@
 
 **Tech Stack:** 现有 TypeScript、Code - OSS 服务／IPC、Node 文件存储、扩展命令、AI SDK、node:test 与 Mocha；不增加运行依赖。
 
-**Spec:** [阶段设计](../../beacon/foundation-design.md)、[总体架构](../../beacon/architecture.md)、[代码队列](../../beacon/code-snapshots.md)、[压缩设计](../../beacon/context-compaction.md)、[完整能力](../../beacon/prd.md)。
+**原Spec追溯：** 本计划所依据版本保存在Git备份74d09ef4；同名[阶段设计](../../beacon/foundation-design.md)、[架构](../../beacon/architecture.md)、[代码读取](../../beacon/code-reading.md)、[压缩](../../beacon/context-compaction.md)和[需求](../../beacon/prd.md)已更新，不再与以下任务一一对应。
 
 创建日期：2026-11-22。实施筹划修订：2026-11-23。负责人已通过现行架构方案并授权本轮实施筹划与落盘；本稿是基于已通过方案的执行审阅稿，仍须选择执行方式后才开始产品代码。源码路径相对仓库根，文档入口为[Beacon](../../beacon/README.md)。本轮不执行产品测试、模型请求、构建或Git提交。
 

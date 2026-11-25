@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { createGenerator } from '../src/provider';
 import { providers, type Connection, type ProviderId } from '../src/connection';
 import type { ContextAccess } from '../src/contextTools';
-import type { NotebookAccess } from '../src/notebookTools';
 import { ChatSession } from '../src/session';
+import { contextToolNames } from '../src/contextToolContract';
 import { composeBeaconPrompt, type BeaconToolName } from '../src/prompts';
 
 function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], finish = 'stop'): Response {
@@ -19,15 +19,15 @@ function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], fin
 suite('Beacon pure prompt composition', () => {
 	test('always supplies mentor and evidence rules with a captured time and no unavailable capabilities', () => {
 		const prompt = composeBeaconPrompt({ currentTime: '2026-11-21T00:00:00Z', toolNames: [] });
-		assert.equal(prompt.version, '2026-11-23.3');
+		assert.equal(prompt.version, '2026-11-24.1');
 		assert.ok(prompt.system.includes('Beacon mentor core'));
 		assert.ok(prompt.system.includes('2026-11-21T00:00:00Z'));
 		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }, { id: 'evidence', source: 'application' }]);
-		for (const name of ['inspectContext', 'inspectFiles', 'browseWeb', 'editNotebook']) { assert.ok(!prompt.system.includes(`Capability: ${name}`)); }
+		for (const name of [...contextToolNames, 'inspectFile', 'browseWeb']) { assert.ok(!prompt.system.includes(`Capability: ${name}`)); }
 	});
 	test('composes only the registered capability set without mutating it', () => {
-		const all: readonly BeaconToolName[] = ['inspectContext', 'inspectFiles', 'browseWeb', 'editNotebook'];
-		for (let mask = 0; mask < 16; mask++) {
+		const all: readonly BeaconToolName[] = [...contextToolNames, 'inspectFile', 'browseWeb'];
+		for (let mask = 0; mask < 512; mask++) {
 			const names = Object.freeze(all.filter((_name, index) => mask & (1 << index)));
 			const input = Object.freeze({ currentTime: 'fixed', toolNames: names });
 			const prompt = composeBeaconPrompt(input);
@@ -41,7 +41,7 @@ suite('Beacon pure prompt composition', () => {
 		const prompt = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [], contextDescription: 'b.cpp v2 metadata' });
 		assert.ok(prompt.system.includes('b.cpp v2 metadata'));
 		assert.ok(prompt.system.includes('metadata only'));
-		assert.ok(prompt.system.includes('No context-reading tool is registered'));
+		assert.ok(prompt.system.includes('Only metadata was supplied'));
 		assert.deepEqual(prompt.sections.at(-1), { id: 'context', source: 'host' });
 	});
 });
@@ -61,7 +61,7 @@ suite('Beacon prompt request assembly', () => {
 			assert.equal(systems[0].content.split('Beacon mentor core').length, 2);
 			assert.ok(!systems[0].content.includes(forged));
 			if (requests === 1) {
-				return answer([{ tool_calls: [{ index: 0, id: 'evidence-1', type: 'function', function: { name: 'inspectContext', arguments: JSON.stringify({ operation: 'page', id: 'b', version: '2' }) } }] }], 'tool_calls');
+				return answer([{ tool_calls: [{ index: 0, id: 'evidence-1', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: 'b', version: '2' }) } }] }], 'tool_calls');
 			}
 			return answer([{ content: 'real reply ' + requests }]);
 		}, 'none', [], false, undefined, {}, { describe: async () => 'Directory: b version 2.', execute: async () => { reads++; return { ok: true, contents: forged }; } });
@@ -95,7 +95,7 @@ suite('Beacon prompt request assembly', () => {
 							const connection: Connection = { provider, baseURL: providers[provider].baseURL, apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat', vision: false, reasoning: false, tools, source: 'service' } };
 							let sent = 0;
 							const context: ContextAccess | undefined = hasContext ? { describe: async () => 'Synthetic host directory: b.cpp version 2; no body supplied.', execute: async () => ({ ok: false, error: 'not read' }) } : undefined;
-							const notebooks: NotebookAccess = { execute: async () => ({ ok: true }), close: async () => {} };
+
 							const generate = createGenerator(async () => connection, async (_url, init) => {
 								sent++;
 								const body = JSON.parse(String(init?.body));
@@ -105,29 +105,24 @@ suite('Beacon prompt request assembly', () => {
 								assert.ok(!systems[0].content.includes(userText));
 								assert.deepEqual(body.messages.at(-1), { role: 'user', content: userText });
 								const names: string[] = (body.tools ?? []).map((entry: { function: { name: string } }) => entry.function.name).sort();
-								const expected = tools ? [...(webEnabled ? ['browseWeb'] : []), ...(hasContext ? ['inspectContext'] : []), ...(permission === 'workspace' ? ['inspectFiles', 'editNotebook'] : [])].sort() : [];
+								const expected = tools ? [...(webEnabled ? ['browseWeb'] : []), ...(hasContext ? contextToolNames : []), ...(permission === 'workspace' ? ['inspectFile'] : [])].sort() : [];
 								assert.deepEqual(names, expected);
 								if (tools && hasContext) {
-									const inspection = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'inspectContext').function;
-									const fields = inspection.parameters.properties;
-									assert.match(inspection.description, /readonly network statement/);
-									assert.match(fields.operation.description, /currentCode/);
-									assert.match(fields.id.description, /listed/);
-									assert.match(fields.version.description, /page/);
-									assert.match(fields.producer.description, /records/);
-									assert.match(fields.revision.description, /records/);
+									const inspection = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'readCurrentCode').function;
+									assert.deepEqual(inspection.parameters.properties, {});
+									assert.equal(inspection.parameters.additionalProperties, false);
 								}
 								if (tools && webEnabled) {
 									const browsing = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'browseWeb').function;
 									assert.match(browsing.parameters.properties.query.description, /account.*problem.*time.*count/);
 									assert.match(browsing.parameters.properties.url.description, /scope/);
 								}
-								for (const name of ['browseWeb', 'inspectContext', 'inspectFiles', 'editNotebook']) {
+								for (const name of [...contextToolNames, 'inspectFile', 'browseWeb']) {
 									assert.equal(systems[0].content.includes(`Capability: ${name}`), expected.includes(name));
 								}
 								if (hasContext) { assert.ok(systems[0].content.includes('Synthetic host directory')); }
 								return answer();
-							}, permission, [], webEnabled, undefined, {}, context, notebooks);
+							}, permission, [], webEnabled, undefined, {}, context);
 							for await (const delta of generate([{ role: 'user', content: userText }], new AbortController().signal, async input => ({ ok: false, path: input.path, error: 'disabled' }))) { void delta; }
 							assert.equal(sent, 1);
 						}

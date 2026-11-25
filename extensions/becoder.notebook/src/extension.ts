@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { encodeNotebook, decodeNotebook, associatedNotebook, prepareAssociationLocation, captureInputRun, inputCommandTarget, type NotebookData } from './model';
+import { encodeNotebook, decodeNotebook, associatedNotebook, prepareAssociationLocation, captureNotebookRunPlan, inputCommandTarget, type NotebookData } from './model';
 import { imageAttachment, imageMimeTypes } from './images';
 import { CellOutputQueue } from './outputQueue';
 import { NotebookEdits, type NotebookEditApi } from './editApi';
@@ -16,6 +16,7 @@ import type { RunnerCompilerApi } from '../../danielpinto8zz6.c-cpp-compile-run/
 import type { NotebookRunResult } from '../../danielpinto8zz6.c-cpp-compile-run/src/notebookProcess';
 
 const running = new Map<string, AbortController>();
+const runDocuments = new Map<AbortController, vscode.NotebookDocument>();
 const settling = new Map<string, Promise<void>>();
 const outputQueues = new Map<string, CellOutputQueue>();
 const outputContainers = new Map<string, vscode.NotebookCellOutput>();
@@ -57,112 +58,104 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 	const selectController = (document: vscode.NotebookDocument) => { if (document.notebookType === beCoderNotebookType) { controller.updateNotebookAffinity(document, vscode.NotebookControllerAffinity.Preferred); void ensureIds(document).catch(report); } };
 	context.subscriptions.push(vscode.workspace.onDidOpenNotebookDocument(selectController));
 	for (const document of vscode.workspace.notebookDocuments) { selectController(document); }
-	context.subscriptions.push(vscode.workspace.onDidCloseNotebookDocument(document => { for (const cell of document.getCells()) { running.get(cell.document.uri.toString())?.abort(); } documents.delete(document); }));
+	context.subscriptions.push(vscode.workspace.onDidCloseNotebookDocument(document => { for (const [controller, owner] of runDocuments) { if (owner === document) { controller.abort(); } } documents.delete(document); }));
 	context.subscriptions.push(vscode.workspace.onDidChangeNotebookDocument(event => {
 		if (event.notebook.notebookType !== beCoderNotebookType) { return; }
-		for (const change of event.contentChanges) { for (const cell of change.removedCells) { if (!event.notebook.getCells().includes(cell)) { running.get(cell.document.uri.toString())?.abort(); } } }
 		if (event.contentChanges.length) { void ensureIds(event.notebook).catch(report); }
 		for (const change of event.cellChanges) { if (change.outputs?.length === 0 && !editing.has(event.notebook)) { const key = change.cell.document.uri.toString(); outputQueues.get(key)?.clear(); outputContainers.delete(key); if (!running.has(key)) { void Promise.resolve(patch(change.cell, { clearAttempt: true })).catch(report); } } }
 	}));
-	const runInput = async (cell: vscode.NotebookCell, document: vscode.NotebookDocument) => {
-		if (!vscode.workspace.isTrusted) { void vscode.window.showInformationMessage(vscode.l10n.t('Trust this workspace before running a program.')); return; }
-		const key = cell.document.uri.toString();
-		if (retired || running.has(key)) { return; }
-		let captured: ReturnType<typeof captureInputRun>;
-		try { captured = captureInputRun({ cells: document.getCells().map(value => ({ kind: value.kind, value: value.document.getText(), languageId: value.document.languageId, metadata: value.metadata })) }, cell.index); }
+	controller.executeHandler = async (cells, document) => {
+		if (!vscode.workspace.isTrusted || retired || document.isClosed) { return; }
+		const selected = cells.filter(cell => isBeCoderInputCell(cell.metadata));
+		if (!selected.length) { void vscode.window.showInformationMessage(vscode.l10n.t('Run an input cell below the C/C++ program block.')); return; }
+		if (selected.some(cell => running.has(cell.document.uri.toString()))) { return; }
+		// Freeze all programs, inputs and original cell identities before the first await.
+		const originalCells = document.getCells();
+		let plan: ReturnType<typeof captureNotebookRunPlan>;
+		try { plan = captureNotebookRunPlan({ cells: originalCells.map(cell => ({ kind: cell.kind, value: cell.document.getText(), languageId: cell.document.languageId, metadata: cell.metadata })) }, selected.map(cell => originalCells.indexOf(cell))); }
 		catch { void vscode.window.showInformationMessage(vscode.l10n.t('Add a C/C++ program block above this input before running.')); return; }
-		const programCell = document.cellAt(captured.codeIndex);
-		let collectionScope: unknown;
-		try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* The independent notebook remains usable without Beacon. */ }
-		if (document.isClosed || !document.getCells().includes(cell) || running.has(key)) { return; }
-		let resource: string | undefined;
-		if (document.uri.scheme === 'file') {
-			try { resource = await vscode.commands.executeCommand<string>('_becoder.notebook.resource', 'beginRun', { file: document.uri.fsPath }); }
-			catch (error) { void vscode.window.showInformationMessage(vscode.l10n.t('This Notebook is busy or unavailable: {0}', String(error))); return; }
-			if (document.isClosed || !document.getCells().includes(cell) || running.has(key)) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); return; }
-		}
-		let execution: vscode.NotebookCellExecution;
-		try { execution = controller.createNotebookCellExecution(cell); execution.start(Date.now()); }
-		catch (error) { if (resource) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); } throw error; }
-		const abort = new AbortController(); running.set(key, abort);
-		let settle!: () => void; settling.set(key, new Promise<void>(resolve => { settle = resolve; }));
-		const cancellation = execution.token.onCancellationRequested(() => abort.abort());
-		let activity: string | undefined;
-		let runtimeActivity: string | undefined;
-		const statusOutput = new vscode.NotebookCellOutput([]);
-		const showStatus = (attempt: object) => execution.replaceOutputItems([vscode.NotebookCellOutputItem.text(JSON.stringify(attempt), beCoderNotebookStatusMime)], statusOutput);
-		let currentAttempt: Record<string, unknown> | undefined; let completedResult: NotebookRunResult | undefined;
-		const alive = () => !retired && !document.isClosed && document.getCells().includes(cell);
+		const abort = new AbortController(), keys = selected.map(cell => cell.document.uri.toString());
+		runDocuments.set(abort, document);
+		let settle!: () => void; const completion = new Promise<void>(resolve => { settle = resolve; });
+		for (const key of keys) { running.set(key, abort); settling.set(key, completion); }
+		let resource: string | undefined, runtimeActivity: string | undefined;
+		const notebookPath = document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
 		try {
-			try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
-			catch (error) { console.warn('Beacon Notebook runtime tracking unavailable', error); }
-			await execution.replaceOutput([statusOutput]); await showStatus({ status: 'preparing' }); await patch(cell, { clearAttempt: true }); await ensureIds(document);
-			const meta = readBeCoderCellMetadata(cell.metadata);
-			captured.codeCellId = readBeCoderCellMetadata(programCell.metadata).id || programCell.document.uri.toString();
-			const notebookPath = document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
-			let root = notebookPath ? path.dirname(notebookPath) : creationRoots.get(document);
-			if (!notebookPath && !vscode.workspace.workspaceFolders?.some(folder => folder.uri.scheme === 'file' && folder.uri.fsPath === root)) { root = await chooseCreationRoot(); if (root) { creationRoots.set(document, root); } }
-			if (!root) { throw new Error(vscode.l10n.t('Open a folder to choose the execution base for this unsaved notebook.')); }
-			const request = { ...captured, cellId: captured.codeCellId, inputCellId: meta.id, cwd: root, notebookPath, notebookName: path.basename(document.uri.path) };
-			const attempt = { id: randomUUID(), code: captured.code, codeCellId: captured.codeCellId, input: request.input, inputName: request.inputName, startedAt: Date.now(), status: 'preparing' };
-			currentAttempt = attempt;
-			await patch(cell, { attempt });
-			if (notebookPath) { try { activity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source: notebookPath, collectionScope }); } catch { await execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(vscode.l10n.t('Beacon evidence is unavailable for this execution.'))])); } }
-			const runnerExtension = vscode.extensions.getExtension<RunnerCompilerApi>('becoder.runner');
-			if (!runnerExtension) { throw new Error(vscode.l10n.t('The BeCoder Runner extension is unavailable.')); }
-			const runner = await runnerExtension.activate();
-			const evidence = activity ? runner.createEvidence(activity, 'notebook', () => { if (alive()) { void Promise.resolve(execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(vscode.l10n.t('Beacon evidence could not be saved.'))]))).catch(report); } }) : undefined;
-			const queue = new CellOutputQueue(async parts => {
-				if (!alive()) { return; }
-				const item = vscode.NotebookCellOutputItem.text(parts.map(part => part.text).join(''), beCoderNotebookStreamMime);
-				const output = outputContainers.get(key);
-				if (!output) { const next = new vscode.NotebookCellOutput([item]); outputContainers.set(key, next); await execution.appendOutput(next); }
-				else { await execution.appendOutputItems(item, output); }
-			});
-			outputQueues.set(key, queue);
-			let tail = Promise.resolve(); let presentationError: unknown;
-			const result = await runner.runNotebook(request, abort.signal, {
-				evidence,
-				phase: status => { tail = tail.then(async () => { if (alive()) { await patch(cell, { attempt: { ...attempt, status } }); await showStatus({ ...attempt, status }); } }).catch(error => { presentationError = error; }); },
-				output: (phase, stream, text) => { if (text && alive()) { queue.append({ phase, stream, text }); } }
-			});
-			completedResult = result;
-			await tail; try { await queue.flush(); } catch (error) { presentationError = error; }
-			if (alive()) {
-				const facts = { status: result.status, exitCode: result.exitCode, compileMs: result.compileMs, runMs: result.runMs, endedAt: result.endedAt, truncated: result.truncated, omittedBytes: result.omittedBytes, error: result.error, cleanupError: result.cleanupError, presentationError: presentationError ? String(presentationError) : undefined, sourceSha256: result.sourceSnapshot?.sha256 };
-				await patch(cell, { attempt: { ...attempt, ...facts } });
-				await showStatus(facts);
-				const message = describeResult(result) + (presentationError ? '\n' + String(presentationError) : '');
-				if (message) { await execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message)])); }
-			}
-			execution.end(result.status === 'completed', Date.now());
-			return result.status;
-		} catch (error) {
-			try { if (alive()) { await execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(error instanceof Error ? error.message : String(error))])); await patch(cell, { attempt: { ...currentAttempt, status: completedResult?.status ?? (abort.signal.aborted ? 'cancelled' : 'unable-to-start'), exitCode: completedResult?.exitCode, endedAt: completedResult?.endedAt ?? Date.now(), error: completedResult?.error, presentationError: String(error) } }); } }
-			finally {
-				try { if (alive()) { await showStatus({ status: completedResult?.status ?? (abort.signal.aborted ? 'cancelled' : 'unable-to-start'), compileMs: completedResult?.compileMs, runMs: completedResult?.runMs }); } }
-				finally { execution.end(completedResult?.status === 'completed', Date.now()); }
-			}
-			return completedResult?.status ?? (abort.signal.aborted ? 'cancelled' : 'unable-to-start');
-		} finally {
-			cancellation.dispose(); outputQueues.get(key)?.clear(); outputQueues.delete(key); outputContainers.delete(key);
-			try {
-				if (activity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity }); }
-			} finally {
+			let collectionScope: unknown;
+			try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* Optional collection. */ }
+			if (abort.signal.aborted || document.isClosed || retired) { return; }
+			if (notebookPath) { resource = await vscode.commands.executeCommand<string>('_becoder.notebook.resource', 'beginRun', { file: notebookPath }); }
+			try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); } catch { /* Independent execution. */ }
+			let cwd = notebookPath ? path.dirname(notebookPath) : creationRoots.get(document);
+			if (!cwd) { cwd = await chooseCreationRoot(); if (cwd) { creationRoots.set(document, cwd); } }
+			if (!cwd) { throw new Error(vscode.l10n.t('Open a folder to choose the execution base for this unsaved notebook.')); }
+			const runner = await vscode.extensions.getExtension<RunnerCompilerApi>('becoder.runner')?.activate();
+			if (!runner) { throw new Error(vscode.l10n.t('The BeCoder Runner extension is unavailable.')); }
+			await ensureIds(document);
+			for (const program of plan.programs) {
+				if (abort.signal.aborted || document.isClosed || retired) { break; }
+				let activity: string | undefined;
+				if (notebookPath) { try { activity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginActivity', { source: notebookPath, collectionScope }); } catch { /* Execution does not depend on collection. */ } }
+				const entries: ({ cell: vscode.NotebookCell; key: string; execution: vscode.NotebookCellExecution; cancellation: vscode.Disposable; status: vscode.NotebookCellOutput; attempt: Record<string, unknown>; queue: CellOutputQueue; result?: NotebookRunResult } | undefined)[] = [];
+				let tail = Promise.resolve();
+				const enqueue = (operation: () => Promise<unknown>) => { tail = tail.then(operation).then(() => { }, error => { report(error); }); };
 				try {
-					if (resource) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); }
+					for (const input of program.inputs) {
+						const cell = originalCells[input.inputIndex];
+						if (!document.getCells().includes(cell)) { entries.push(undefined); continue; }
+						const key = cell.document.uri.toString(), execution = controller.createNotebookCellExecution(cell);
+						execution.start(Date.now());
+						const cancellation = execution.token.onCancellationRequested(() => abort.abort()), status = new vscode.NotebookCellOutput([]);
+						const attempt = { id: randomUUID(), code: program.code, codeCellId: program.codeCellId, input: input.text, inputName: input.name, startedAt: Date.now(), status: 'preparing' };
+						const alive = () => !retired && !document.isClosed && document.getCells().includes(cell);
+						const queue = new CellOutputQueue(async parts => {
+							if (!alive()) { return; }
+							const item = vscode.NotebookCellOutputItem.text(parts.map(part => part.text).join(''), beCoderNotebookStreamMime), output = outputContainers.get(key);
+							if (output) { await execution.appendOutputItems(item, output); }
+							else { const next = new vscode.NotebookCellOutput([item]); outputContainers.set(key, next); await execution.appendOutput(next); }
+						});
+						entries.push({ cell, key, execution, cancellation, status, attempt, queue }); outputQueues.set(key, queue);
+						if (alive()) { await execution.replaceOutput([status]); await patch(cell, { attempt }); }
+					}
+					if (abort.signal.aborted) { break; }
+					const update = (index: number, facts: Record<string, unknown>) => enqueue(async () => {
+						const entry = entries[index]; if (!entry || retired || document.isClosed || !document.getCells().includes(entry.cell)) { return; }
+						const attempt = { ...entry.attempt, ...facts };
+						await patch(entry.cell, { attempt });
+						await entry.execution.replaceOutputItems([vscode.NotebookCellOutputItem.text(JSON.stringify(attempt), beCoderNotebookStatusMime)], entry.status);
+					});
+					const evidence = activity ? runner.createEvidence(activity, 'notebook', report) : undefined;
+					const result = await runner.runNotebookProgramGroup({ code: program.code, language: program.language, cellId: program.codeCellId || originalCells[program.codeIndex].document.uri.toString(), codeNumber: program.codeNumber, cwd, notebookPath, notebookName: path.basename(document.uri.path), inputs: program.inputs }, abort.signal, {
+						evidence,
+						phase: (index, status) => update(index, { status }),
+						output: (index, phase, stream, text) => { if (text) { entries[index]?.queue.append({ phase, stream, text }); } },
+						finished: (index, result) => {
+							const entry = entries[index]; if (entry) { entry.result = result; }
+							update(index, { status: result.status, compileMs: result.compileMs, compileShared: result.compileShared, runMs: result.runMs, exitCode: result.exitCode, endedAt: result.endedAt, error: result.error, truncated: result.truncated, omittedBytes: result.omittedBytes });
+						}
+					});
+					for (const [index, entry] of entries.entries()) { if (entry && !entry.result) { update(index, { status: 'not-run', reason: result.status }); } }
+					await tail;
+					for (const entry of entries) {
+						if (!entry) { continue; }
+						await entry.queue.flush();
+						if (entry.result && !document.isClosed && document.getCells().includes(entry.cell)) {
+							const message = describeResult(entry.result); if (message) { await entry.execution.appendOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message)])); }
+						}
+					}
 				} finally {
-					try {
-						if (runtimeActivity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endRuntimeActivity', { handle: runtimeActivity }); }
-					} finally { running.delete(key); settle(); settling.delete(key); }
+					for (const entry of entries) { if (entry) { entry.cancellation.dispose(); entry.queue.clear(); outputQueues.delete(entry.key); outputContainers.delete(entry.key); entry.execution.end(entry.result?.status === 'completed', entry.result?.endedAt ?? Date.now()); } }
+					if (activity) { await Promise.resolve(vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity })).catch(report); }
 				}
 			}
+		} catch (error) { report(error); }
+		finally {
+			try { if (resource) { await vscode.commands.executeCommand('_becoder.notebook.resource', 'release', { handle: resource }); } }
+			finally {
+				try { if (runtimeActivity) { await vscode.commands.executeCommand('_becoder.beacon.context', 'endRuntimeActivity', { handle: runtimeActivity }); } }
+				finally { runDocuments.delete(abort); for (const key of keys) { running.delete(key); settling.delete(key); } settle(); }
+			}
 		}
-	};
-	controller.executeHandler = async (cells, document) => {
-		const inputs = cells.filter(cell => isBeCoderInputCell(cell.metadata));
-		if (!inputs.length) { void vscode.window.showInformationMessage(vscode.l10n.t('Run an input cell below the C/C++ program block.')); return; }
-		for (const cell of inputs) { if (document.isClosed || retired) { break; } if (await runInput(cell, document) === 'cancelled') { break; } }
 	};
 	context.subscriptions.push(vscode.commands.registerCommand('becoder.notebook.addInput', async () => {
 		const editor = vscode.window.activeNotebookEditor;

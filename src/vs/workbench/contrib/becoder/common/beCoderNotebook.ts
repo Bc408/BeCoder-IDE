@@ -14,6 +14,32 @@ export function formatBeCoderRunHeading(attempt: { status?: string; compileMs?: 
 export const beCoderNotebookStreamMime = 'application/vnd.becoder.notebook.stream';
 export function isBeCoderInputCell(metadata: Record<string, unknown> | undefined): boolean { return (metadata?.becoder as { role?: string } | undefined)?.role === 'input'; }
 
+export interface IBeCoderNotebookContentCell {
+	cellNumber: number;
+	kind: 'markdown' | 'code' | 'input';
+	language: string;
+	source: string;
+	id?: string;
+	name?: string;
+	attachments?: Record<string, unknown>;
+}
+
+/** Shared content-only projection for loaded models and authorized file reads. */
+export function beCoderNotebookContentCells(cells: readonly { kind: number; language: string; source: string; metadata?: Record<string, unknown> }[]): IBeCoderNotebookContentCell[] {
+	return cells.map((cell, index) => {
+		const kind = cell.kind === 1 ? 'markdown' : cell.kind === 2 && cell.language === beCoderNotebookInputLanguage ? 'input' : cell.kind === 2 && ['c', 'cpp'].includes(cell.language) ? 'code' : undefined;
+		if (!kind) { throw new Error('notebook-unsupported-cell'); }
+		const metadata = cell.metadata?.becoder as { id?: unknown; name?: unknown } | undefined;
+		const attachments = describeNotebookMetadata(cell.metadata ?? {}).attachments;
+		return {
+			cellNumber: index + 1, kind, language: cell.language, source: cell.source,
+			...(typeof metadata?.id === 'string' ? { id: metadata.id } : {}),
+			...(kind === 'input' && typeof metadata?.name === 'string' ? { name: metadata.name } : {}),
+			...(attachments && typeof attachments === 'object' && !Array.isArray(attachments) ? { attachments: attachments as Record<string, unknown> } : {})
+		};
+	});
+}
+
 /** Text context exposes attachment identities, never encoded image payloads. */
 export function describeNotebookMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
 	if (!metadata.attachments || typeof metadata.attachments !== 'object' || Array.isArray(metadata.attachments)) { return metadata; }

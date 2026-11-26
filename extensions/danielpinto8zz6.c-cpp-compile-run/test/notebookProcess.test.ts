@@ -42,6 +42,24 @@ test('Notebook compilation uses captured memory source and reports actual compil
 	assert.equal((result as typeof result & { runMs?: number }).runMs, undefined);
 	await assert.rejects(fs.stat(result.sourceSnapshot!.path), { code: 'ENOENT' });
 });
+test('Notebook grouped evidence retains the clicked whole-cell positions independently of legacy program ordinals', async () => {
+	let record: any;
+	const evidence = new BeaconEvidence('handle', 'notebook', async (_op, value: any) => { record = value.record; }, error => assert.fail(String(error)));
+	const request = { code: '// 中😀\r\nint main() { return 0; }\r\n', language: 'cpp' as const, cellId: 'second-program', codeNumber: 2, codeCellNumber: 5, notebookPath: path.join(process.cwd(), 'position.bcnb'), cwd: process.cwd(), inputs: [{ text: 'one', name: 'same', cellNumber: 6 }, { text: 'two', name: 'same', cellNumber: 8 }] };
+	const result = await notebookProcess.runNotebookProgramGroup(request, new AbortController().signal, { phase: () => {}, output: () => {}, finished: () => {}, evidence }, 'unused-helper', () => {
+		request.codeCellNumber = 99; request.code = 'later edit'; request.inputs[0].cellNumber = 99;
+		return { compiler: process.execPath, args: ['-e', 'process.exit(1)'], environment: { ...process.env } as Record<string, string> };
+	});
+	assert.equal(result.status, 'compile-error');
+	assert.equal(record.program.codeCellNumber, 5);
+	assert.equal(Object.hasOwn(record.program, 'codeBlockNumber'), false);
+	assert.equal(record.program.codeHash, 'cb0b697d6c2979c00245331c72ee7efcfc44dcb0d312e1ca7feb6ced73e258d7');
+	assert.deepEqual(record.runs.map((run: any) => [run.inputCellNumber, run.status]), [[6, 'not-run'], [8, 'not-run']]);
+	assert.equal(path.basename(result.results[0].sourceSnapshot!.path), 'position-code2.cpp');
+	assert.equal(result.results[0].code, '// 中😀\r\nint main() { return 0; }\r\n');
+	await assert.rejects(fs.stat(result.results[0].sourceSnapshot!.path), { code: 'ENOENT' });
+});
+
 test('a missing Notebook helper reports its actual spawn error rather than inventing a program result', async () => {
 	const result = await runNotebookProgram({ code: 'captured', language: 'cpp', input: '', inputName: '', codeNumber: 1, cellId: 'missing-helper', cwd: process.cwd() }, new AbortController().signal, { phase: () => {}, output: () => {} }, path.join(process.cwd(), 'tmp', 'no-notebook-helper.exe'), (_source, output) => ({ compiler: process.execPath, args: ['-e', 'require("fs").writeFileSync(process.argv[1],"fixture")', output], environment: { ...process.env } as Record<string, string> }));
 	assert.equal(result.status, 'unable-to-start'); assert.match(result.error!, /ENOENT/); assert.equal(result.exitCode, undefined);
@@ -66,8 +84,8 @@ test('Notebook compilation cancellation preserves the cancelled compile fact in 
 	assert.deepEqual(record.runs.map((run: any) => [run.status, run.skipReason]), [['not-run', 'cancelled'], ['not-run', 'cancelled']]);
 });
 
-function runNotebookWithNodeHelper(script: string, limits?: { maxRuntimeMs: number; maxOutputBytes: number }, compileDelayMs = 0, signal = new AbortController().signal, phase: (phase: 'compiling' | 'running') => void = () => {}) {
-	return runNotebookProgram({ code: 'captured', language: 'cpp', input: '', inputName: '', codeNumber: 1, cellId: 'bounded-run', cwd: process.cwd() }, signal, { phase, output: () => {} }, process.execPath, (_source, output) => ({
+function runNotebookWithNodeHelper(script: string, limits?: { maxRuntimeMs: number; maxOutputBytes: number }, compileDelayMs = 0, signal = new AbortController().signal, phase: (phase: 'compiling' | 'running') => void = () => {}, evidence?: import('../src/executionResults').ExecutionObserver) {
+	return runNotebookProgram({ code: 'captured', language: 'cpp', input: '', inputName: '', codeNumber: 1, cellId: 'bounded-run', cwd: process.cwd() }, signal, { phase, output: () => {}, evidence }, process.execPath, (_source, output) => ({
 		compiler: process.execPath,
 		args: ['-e', 'setTimeout(()=>require("fs").writeFileSync(process.argv[1], ' + JSON.stringify(script) + '), ' + compileDelayMs + ')', output],
 		environment: { ...process.env } as Record<string, string>
@@ -111,6 +129,17 @@ test('Notebook output cap reports overflow and preserves only the configured byt
 	assert.equal(result.status, 'output-limit'); assert.equal(Buffer.byteLength(result.output), 64 * 1024); assert.ok(result.output.endsWith('x')); assert.ok(result.omittedBytes >= 1); assert.equal(result.truncated, true);
 });
 
+test('Notebook delivers accepted output before its same-chunk omission event', async () => {
+	const events: { text?: string; bytesBase64?: string; sourceOmittedBytes?: number; phase?: string }[] = [];
+	const script = `const net=require('net');const socket=net.createConnection(process.argv[3]);socket.on('connect',()=>socket.write(JSON.stringify({type:'started',pid:process.pid})+'\\n'));socket.once('data',()=>{process.stdout.write('abcdefghijklmnop');});`;
+	const evidence = { start() {}, event: (value: unknown) => { events.push(value as typeof events[number]); }, async finish() {} };
+	const result = await runNotebookWithNodeHelper(script, { maxRuntimeMs: 1000, maxOutputBytes: 4 }, 0, new AbortController().signal, () => {}, evidence);
+	assert.equal(result.output, 'abcd');
+	const output = events.filter(event => event.phase === 'running' && (event.bytesBase64 || event.sourceOmittedBytes));
+	assert.equal(Buffer.from(output[0].bytesBase64!, 'base64').toString(), 'abcd');
+	assert.ok(output[1].sourceOmittedBytes! > 0);
+});
+
 test('Notebook runtime output cap does not count helper diagnostics as program output', async () => {
 	const script = `const net=require('net');const socket=net.createConnection(process.argv[3]);socket.on('connect',()=>socket.write(JSON.stringify({type:'started',pid:process.pid})+'\\n'));socket.once('data',()=>{process.stdout.write('ok');process.stderr.write('d'.repeat(65537));socket.write(JSON.stringify({type:'exit',code:0,runMs:1})+'\\n');socket.end();});`;
 	const result = await runNotebookWithNodeHelper(script, { maxRuntimeMs: 1000, maxOutputBytes: 64 * 1024 });
@@ -125,7 +154,7 @@ test('Notebook explicit cancellation takes precedence over the runtime deadline'
 	await assert.rejects(fs.stat(result.sourceSnapshot!.path), { code: 'ENOENT' });
 });
 
-const repositoryRoot = path.resolve(__dirname, '../../../../');
+const repositoryRoot = path.resolve(__dirname, '../../../../../../');
 const stagedApplication = path.resolve(repositoryRoot, '../VSCode-win32-x64');
 const compiler = process.env['BECODER_NOTEBOOK_COMPILER'] ?? path.join(stagedApplication, 'data/toolchains/ucrt64/bin/g++.exe');
 const helper = process.env['BECODER_NOTEBOOK_HELPER'] ?? path.join(stagedApplication, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe');

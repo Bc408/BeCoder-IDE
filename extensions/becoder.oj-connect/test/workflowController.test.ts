@@ -132,6 +132,23 @@ test('a receipt observation failure leaves the accepted submission and its previ
 	assert.strictEqual(f.released(), 1);
 });
 
+test('a native receipt and its fallback result panel keep the same observation attempt', async () => {
+	const f = fixture(), opened: unknown[][] = [];
+	Object.assign(f.host, { openRecord: async (...args: unknown[]) => { opened.push(args); } });
+	const prepare = f.luogu.prepare;
+	f.luogu.prepare = async (...args) => {
+		const session = await prepare(...args);
+		return { ...session, send: async (...sendArgs) => {
+			const outcome = await session.send(...sendArgs);
+			if (outcome.kind !== 'record') { throw new Error('expected record'); }
+			return { ...outcome, observed: { attemptId: 'native-attempt', snapshot: { ref: outcome.record, phase: 'finished', rawStatus: 'WA', sourceVerification: 'mismatch' } } };
+		} };
+	};
+	await f.controller.submit(snapshot);
+	assert.strictEqual(opened.length, 1);
+	assert.strictEqual(opened[0][3], 'native-attempt', 'the fallback panel must not create a second mismatch observation');
+});
+
 test('native evaluation evidence is independent of a closed preview and keeps the acquisition scope', async () => {
 	const f = fixture(), problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
 	const scope = { slot: 'chosen', root: 'C:/cpp', workspaceIdentity: 'root-one', rootSelectionEpoch: 1 };

@@ -29,6 +29,32 @@ test('Beacon collects only problem identity and a final verdict, never a stateme
 	assert.strictEqual(saved.submission.code, 'original\r\n'); assert.strictEqual(saved.result.score, '9223372036854775807'); assert.strictEqual(saved.filePath, null);
 	assert.strictEqual(Object.hasOwn(saved, 'phase'), false); assert.strictEqual(Object.hasOwn(saved, 'document'), false);
 });
+
+test('Beacon rejects a mismatched final verdict while retaining the other verification states', () => {
+	const snapshot = validateRecord({ ref: { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' }, phase: 'finished', rawStatus: 'WA', source: 'abc\r\n', sourceVerification: 'mismatch' });
+	assert.strictEqual(toBeaconVerdictRecord(snapshot), undefined);
+	for (const sourceVerification of ['matched', 'not-checked', 'unavailable'] as const) {
+		const saved = toBeaconVerdictRecord({ ...snapshot, sourceVerification })!;
+		assert.strictEqual(saved.submission.code, 'abc\r\n');
+		assert.strictEqual(saved.result.rawStatus, 'WA');
+		assert.strictEqual(toBeaconVerdictRecord({ ...snapshot, sourceVerification, phase: 'judging' }), undefined);
+	}
+});
+
+test('verdict codeHash uses the complete original source with only CRLF normalized', () => {
+	const snapshot = validateRecord({ ref: { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' }, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' });
+	const hash = (source: string) => toBeaconVerdictRecord({ ...snapshot, source })!.submission.codeHash;
+	assert.strictEqual(hash('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+	assert.strictEqual(hash('abc\n'), 'edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb');
+	assert.strictEqual(hash('abc\r\n'), hash('abc\n'));
+	for (const source of ['abc\r', 'abc \n', 'abc\n\n']) { assert.notStrictEqual(hash(source), hash('abc\n')); }
+	assert.notStrictEqual(hash('a'.repeat(20000) + 'x'), hash('a'.repeat(20000) + 'y'), 'hashing cannot use a truncated prefix');
+	const saved = toBeaconVerdictRecord({ ...snapshot, source: 'abc\r\n' })!;
+	assert.strictEqual(saved.submission.code, 'abc\r\n', 'hash normalization never rewrites the submitted source');
+	assert.strictEqual(Object.hasOwn(toBeaconVerdictRecord(snapshot)!.submission, 'codeHash'), false);
+	assert.strictEqual(Object.hasOwn(toBeaconVerdictRecord(snapshot)!.submission, 'code'), false);
+	assert.strictEqual(hash(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+});
 test('receipt observations retain their real attempt and reject a different formal record', () => {
 	const record = { problem: ref, id: '123', url: 'https://www.luogu.com.cn/record/123' };
 	const observed = { attemptId: 'native-attempt', snapshot: { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'not-checked' } };

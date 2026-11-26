@@ -10,7 +10,6 @@ import { modelMessageSchema } from 'ai';
 import { isWebSource } from './webTools';
 import { validAttachments, type Attachment } from './attachments';
 import { isToolError } from './toolFeedback';
-import { validContextSnapshots, type ContextSnapshot } from './contextTools';
 import { selectCompaction, type BeaconCompaction, type CompactionExpectation } from './compaction';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 
@@ -23,7 +22,8 @@ export interface Conversation {
 	workspace: FileRoot[];
 	draft?: { text: string; attachments: Attachment[] };
 	draftOnly?: boolean;
-	contextSnapshots?: ContextSnapshot[];
+	/** Legacy opaque data, preserved but never acquired or consumed. */
+	contextSnapshots?: unknown[];
 	compaction?: BeaconCompaction;
 }
 
@@ -52,7 +52,7 @@ export function readHistory(value: unknown): HistoryData {
 		ids.add(item.id);
 		Reflect.deleteProperty(item, 'pinnedTarget');
 		if (item.draftOnly !== undefined && typeof item.draftOnly !== 'boolean') { throw new Error('invalid-history'); }
-		if (item.contextSnapshots !== undefined && !validContextSnapshots(item.contextSnapshots)) { throw new Error('invalid-history'); }
+		if (item.contextSnapshots !== undefined && (!Array.isArray(item.contextSnapshots) || Buffer.byteLength(JSON.stringify(item.contextSnapshots), 'utf8') > 32 * 1024 * 1024)) { throw new Error('invalid-history'); }
 		if (item.compaction !== undefined && (!item.compaction || item.compaction.schemaVersion !== 1 || typeof item.compaction.summary !== 'string' || !item.compaction.summary || typeof item.compaction.prefixSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.compaction.prefixSha256) || !Number.isFinite(item.compaction.createdAt) || !Number.isSafeInteger(item.compaction.coveredThrough?.messageId) || !Number.isSafeInteger(item.compaction.coveredThrough?.unit) || item.compaction.coveredThrough.unit < 0)) { throw new Error('invalid-history'); }
 		if (item.draft !== undefined && (!item.draft || typeof item.draft.text !== 'string' || !validAttachments(item.draft.attachments))) { throw new Error('invalid-history'); }
 		if (!Array.isArray(item.workspace) || item.workspace.some(root => typeof root.name !== 'string' || typeof root.path !== 'string')) { throw new Error('invalid-history'); }
@@ -130,48 +130,6 @@ export class ChatHistory {
 
 	get currentConversation(): Conversation | undefined {
 		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId));
-	}
-
-	get contextSnapshots(): ContextSnapshot[] {
-		return structuredClone(this.data.conversations.find(item => item.id === this.data.activeId)?.contextSnapshots ?? []);
-	}
-	/** Project retained evidence from the effective prefix without deleting original assets. */
-	effectiveContextSnapshots(beforeId = Infinity): ContextSnapshot[] { return this.effectiveContextAccess(beforeId).snapshots; }
-	effectiveContextAccess(beforeId = Infinity): { keys: readonly string[]; snapshots: ContextSnapshot[] } {
-		const keys = new Set<string>();
-		for (const message of this.session.snapshot.messages) {
-			if (message.id >= beforeId) { continue; }
-			if (message.role !== 'assistant' || !['complete', 'stopped', 'error'].includes(message.status)) { continue; }
-			for (const turn of message.protocol ?? []) {
-				for (const part of turn.messages) {
-					if (part.role !== 'tool') { continue; }
-					for (const result of part.content) {
-						if (result.type !== 'tool-result' || !['readPage', 'inspectContext'].includes(result.toolName) || result.output.type !== 'json') { continue; }
-						const value: unknown = result.output.value;
-						if (!value || typeof value !== 'object' || Array.isArray(value)) { continue; }
-						const output = value as Record<string, unknown>;
-						if (output.ok !== true) { continue; }
-						if (typeof output.materialId === 'string') { keys.add(`material:${output.materialId}`); }
-						const source = output.source as Record<string, unknown> | undefined;
-						if (source && typeof source === 'object' && !Array.isArray(source) && source.kind === 'page' && typeof source.id === 'string' && typeof source.version === 'string') {
-							keys.add(`page:${source.id}:${source.version}:${typeof source.pageNumber === 'number' ? source.pageNumber : ''}`);
-						}
-					}
-				}
-			}
-		}
-		return { keys: [...keys], snapshots: this.contextSnapshots.filter(snapshot => keys.has(snapshot.key)) };
-	}
-
-	captureContext(snapshot: ContextSnapshot): void {
-		if (this.disposed) { return; }
-		const active = this.data.conversations.find(item => item.id === this.data.activeId);
-		if (!active) { return; }
-		const snapshots = this.contextSnapshots.filter(item => item.key !== snapshot.key).concat(snapshot);
-		if (!validContextSnapshots(snapshots)) { throw new Error('invalid-history'); }
-		active.contextSnapshots = structuredClone(snapshots);
-		if (!this.timer) { this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, 300); }
-		this.changed();
 	}
 
 	get checkpoint(): HistoryData { return structuredClone(this.data); }

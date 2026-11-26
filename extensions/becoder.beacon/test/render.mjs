@@ -30,14 +30,14 @@ try {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.addInitScript(() => {
-		let state = { type: 'snapshot', screen: 'home', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, responseBusy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] } };
+		let state = { type: 'snapshot', screen: 'home', activeId: '', canSend: true, temporary: true, viewKey: 'test::', attachments: [], messages: [], history: [], busy: false, responseBusy: false, saveFailed: false, historyUnreadable: false, error: '', permission: 'none', webEnabled: true, context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] } };
 		// Produce complete current host snapshots. Individual cases patch fixture state.
 		window.fixtureSnapshot = (patch, origin) => {
 			if (patch.type !== 'snapshot') { window.postMessage(patch, origin); return; }
 			const previousView = state.viewKey;
 			state = { ...state, ...patch };
 			if (patch.busy !== undefined && patch.responseBusy === undefined) { state.responseBusy = patch.busy; }
-			if (patch.context !== undefined) { state.context = { runtimeBusy: false, ...patch.context }; }
+			if (patch.context !== undefined) { state.context = { runtimeBusy: false, collectionPending: false, ...patch.context }; }
 			if (patch.screen === undefined && patch.messages !== undefined) { state.screen = patch.messages.length ? 'conversation' : 'home'; }
 			state.viewKey = `${state.context.slot}:${state.context.root ?? ''}:${state.activeId}`;
 			if (state.viewKey !== previousView && patch.draftText === undefined) { state.draftText = ''; }
@@ -53,6 +53,54 @@ try {
 	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-editor-background:#181b20; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-input-background:#1b1f24; --vscode-input-foreground:#d4d4d4; --vscode-input-placeholderForeground:#8b919a; --vscode-textCodeBlock-background:#171b20; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-button-background:#505965; --vscode-button-foreground:#fff; --vscode-scrollbarSlider-background:#454c57; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
+	// Editing stays local until the actual host has admitted this exact revision.
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'edit-admission', configured: true, canSend: true, busy: false, responseBusy: false, context: { slot: 'test', root: 'C:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', busy: false, runtimeBusy: false, collectionPending: false, recent: [] }, messages: [{ id: 1, role: 'user', text: 'original question', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: 'original answer', status: 'complete', activities: [] }] }, '*'));
+	const editDraft = page.getByRole('textbox', { name: '编辑消息', exact: true });
+	const submitEdit = () => page.locator('.message-edit .edit-submit').click();
+	const latestEdit = () => page.evaluate(() => window.messages.findLast(message => message.type === 'edit'));
+	const settleEdit = patch => page.evaluate(patch => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, ...patch }, '*'), patch);
+	const acknowledgeEdit = message => page.evaluate(message => window.postMessage({ type: 'editAccepted', viewKey: message.viewKey, id: message.id, editRevision: message.editRevision }, '*'), message);
+	const editFrame = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	const openEdit = async () => { await page.locator('.message.user').hover(); await page.getByRole('button', { name: '编辑消息', exact: true }).click(); };
+	await openEdit();
+	await editDraft.fill('preserve rejected edit'); await submitEdit();
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { ...window.fixtureState().context, collectionPending: true } }, '*'));
+	assert.equal(await editDraft.count(), 1, 'A rejected host refresh keeps the message edit form open');
+	assert.equal(await editDraft.inputValue(), 'preserve rejected edit');
+	assert.equal(await page.locator('.edit-submit').isDisabled(), true);
+	const rejectedEdits = await page.evaluate(() => window.messages.filter(message => message.type === 'edit').length);
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { ...window.fixtureState().context, collectionPending: false } }, '*'));
+	await page.locator('.edit-submit:enabled').waitFor(); await editFrame();
+	assert.equal(await editDraft.inputValue(), 'preserve rejected edit');
+	assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'edit').length), rejectedEdits, 'Saving completion never resubmits a rejected edit');
+	await submitEdit(); const admittedEdit = await latestEdit();
+	assert.equal(admittedEdit.viewKey, await page.evaluate(() => window.fixtureState().viewKey));
+	assert.equal(Number.isSafeInteger(admittedEdit.editRevision), true);
+	await acknowledgeEdit(admittedEdit); await page.locator('.message-edit').waitFor({ state: 'detached' });
+	await settleEdit({});
+	await openEdit();
+	await editDraft.fill('submitted edit'); await submitEdit(); const oldEdit = await latestEdit();
+	await settleEdit({}); await editDraft.fill(''); await editDraft.fill('submitted edit');
+	await acknowledgeEdit(oldEdit); await editFrame();
+	assert.equal(await editDraft.inputValue(), 'submitted edit', 'A late acknowledgement cannot close a newer draft, even with identical text');
+	await submitEdit(); const newerEdit = await latestEdit();
+	await acknowledgeEdit({ ...newerEdit, id: 999 }); await acknowledgeEdit({ ...newerEdit, viewKey: 'another-view' }); await editFrame();
+	assert.equal(await editDraft.count(), 1, 'A different message or view cannot acknowledge the current form');
+	await acknowledgeEdit(newerEdit); await page.locator('.message-edit').waitFor({ state: 'detached' });
+	await settleEdit({});
+	await openEdit();
+	await editDraft.fill('cancel then reopen'); await submitEdit(); const cancelledEdit = await latestEdit();
+	await page.locator('.message-edit').getByRole('button', { name: '取消', exact: true }).click();
+	await settleEdit({}); await openEdit();
+	await editDraft.fill('cancel then reopen'); await acknowledgeEdit(cancelledEdit); await editFrame();
+	assert.equal(await editDraft.inputValue(), 'cancel then reopen', 'An earlier submission cannot close a reopened form');
+	await settleEdit({ activeId: 'another-edit-view' });
+	await openEdit();
+	await editDraft.fill('new view draft'); await submitEdit();
+	await acknowledgeEdit(cancelledEdit); await editFrame();
+	assert.equal(await editDraft.inputValue(), 'new view draft', 'A late acknowledgement from an old view preserves the current edit');
+	await acknowledgeEdit(await latestEdit()); await page.locator('.message-edit').waitFor({ state: 'detached' });
+	await settleEdit({});
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'inherited', configured: true, messages: [
 		{ id: 1, role: 'user', text: '原聊天中的问题', status: 'complete', activities: [] },
 		{ id: 2, role: 'assistant', text: '这是已有上下文。', status: 'complete', activities: [] },
@@ -99,7 +147,7 @@ try {
 	assert.equal(await sameTextInput.inputValue(), '同样的问题继续');
 	await page.evaluate(() => { window.acceptSends = true; });
 	// Navigation keeps interaction locked without dimming otherwise available controls.
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', messages: [], busy: false, responseBusy: false, navigationBusy: false, configured: true, canSend: true, permission: 'workspace', draftText: 'next question', context: { slot: 'test', root: 'C:/example', usable: true, workspaceState: 'ready', mode: 'spot', busy: false, runtimeBusy: false, recent: [] }, history: [{ id: 'visual-chat', title: 'Visual chat', updatedAt: Date.now() }] }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', messages: [], busy: false, responseBusy: false, navigationBusy: false, configured: true, canSend: true, permission: 'workspace', draftText: 'next question', context: { slot: 'test', root: 'C:/example', usable: true, workspaceState: 'ready', mode: 'spot', busy: false, runtimeBusy: false, collectionPending: false, recent: [] }, history: [{ id: 'visual-chat', title: 'Visual chat', updatedAt: Date.now() }] }, '*'));
 	await page.locator('.history-open').waitFor();
 	const stableControls = ['.add-files', '.permission-trigger', '.header-actions > button:last-child', '.send'];
 	const appearance = () => page.evaluate(selectors => selectors.map(selector => { const style = getComputedStyle(document.querySelector(selector)); return { opacity: style.opacity, color: style.color, background: style.backgroundColor }; }), stableControls);
@@ -134,7 +182,7 @@ try {
 	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 	assert.equal(await page.locator('.add-files').evaluate(node => getComputedStyle(node).opacity), '0.4', 'Runtime activity takes precedence over quiet navigation');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', navigationBusy: false, busy: false, context: { ...window.fixtureState().context, runtimeBusy: false } }, '*'));
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', canSend: false, configured: false, busy: false, messages: [], history: [], permission: 'none', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', busy: false, runtimeBusy: false, recent: [] } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', canSend: false, configured: false, busy: false, messages: [], history: [], permission: 'none', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', busy: false, runtimeBusy: false, collectionPending: false, recent: [] } }, '*'));
 	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始。').waitFor();
 	assert.equal(await page.getByText('打开一段聊天，或点击新聊天开始提问。', { exact: true }).count(), 0, 'A clean home screen does not show an obsolete chat-selection warning');
 	assert.equal(await page.getByRole('button', { name: '选择工作区' }).count(), 1, 'The workspace selector appears on the home page');
@@ -161,13 +209,14 @@ try {
 	await runtimeDraft.fill('运行结束后由我再次发送');
 	const beforeRuntime = await page.evaluate(() => window.messages.filter(message => ['send', 'stop', 'continue'].includes(message.type)).length);
 	for (const workspace of [false, true]) {
-		for (const activity of ['context', 'runtime']) {
-			await page.evaluate(({ workspace, activity }) => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { slot: 'test', ...(workspace ? { root: 'D:/fixture' } : {}), usable: workspace, workspaceState: workspace ? 'ready' : 'none', mode: workspace ? 'spot' : 'blackout', epoch: 0, busy: activity === 'context', runtimeBusy: activity === 'runtime', recent: [] } }, '*'), { workspace, activity });
+		for (const activity of ['context', 'runtime', ...(workspace ? ['collection'] : [])]) {
+			await page.evaluate(({ workspace, activity }) => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { slot: 'test', ...(workspace ? { root: 'D:/fixture' } : {}), usable: workspace, workspaceState: workspace ? 'ready' : 'none', mode: workspace ? 'spot' : 'blackout', epoch: 0, busy: activity === 'context', runtimeBusy: activity === 'runtime', collectionPending: activity === 'collection', recent: [] } }, '*'), { workspace, activity });
 			await page.locator('.send').waitFor();
 			await runtimeDraft.fill('运行结束后由我再次发送');
 			assert.equal(await page.getByRole('button', { name: '暂停生成', exact: true }).count(), 0, 'A producer activity never impersonates an assistant response');
 			const blockedSend = page.getByRole('button', { name: '发送', exact: true });
 			assert.ok(await blockedSend.isDisabled(), 'Producer activity disables the send arrow with or without a workspace');
+			if (activity === 'collection') { assert.ok(await page.getByText('正在保存用户行为上下文', { exact: true }).isVisible()); }
 			const idleSurface = await blockedSend.evaluate(element => { const style = getComputedStyle(element); return { background: style.backgroundColor, color: style.color, opacity: style.opacity, shadow: style.boxShadow }; });
 			await blockedSend.hover();
 			await page.waitForTimeout(130);
@@ -178,20 +227,20 @@ try {
 			if (activity === 'runtime') { await page.locator('footer').screenshot({ path: path.join(output, `runtime-send-disabled-${workspace ? 'workspace' : 'no-workspace'}.png`) }); }
 		}
 	}
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: true, responseBusy: true, context: { ...window.fixtureState().context, runtimeBusy: true } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: true, responseBusy: true, context: { ...window.fixtureState().context, runtimeBusy: true, collectionPending: true } }, '*'));
 	await page.getByRole('button', { name: '暂停生成', exact: true }).waitFor();
 	assert.ok(await page.getByRole('button', { name: '暂停生成', exact: true }).isEnabled(), 'An actual assistant response remains pausable while a producer is active');
 	await page.getByRole('button', { name: '暂停生成', exact: true }).click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'stop' });
 	const sendsAfterRuntime = await page.evaluate(() => window.messages.filter(message => message.type === 'send').length);
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { ...window.fixtureState().context, busy: false, runtimeBusy: false } }, '*'));
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false, responseBusy: false, context: { ...window.fixtureState().context, busy: false, runtimeBusy: false, collectionPending: false } }, '*'));
 	await page.getByRole('button', { name: '发送', exact: true }).waitFor();
 	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 	assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'send').length), sendsAfterRuntime, 'Completing runtime work does not automatically send the preserved draft');
 	assert.equal(await runtimeDraft.inputValue(), '运行结束后由我再次发送', 'Runtime activity preserves the draft');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '运行结束后由我再次发送', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
-	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] } }, '*'));
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '运行结束后由我再次发送', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision), viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
+	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] } }, '*'));
 	const webToggle = page.getByRole('button', { name: '联网搜索', exact: true });
 	// The reference's cool hover surface follows the theme, including selected web search.
 	await page.setViewportSize({ width: 648, height: 1000 });
@@ -411,7 +460,7 @@ try {
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', permission: 'workspace', context: { slot: 'test', root: 'D:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 3, busy: false, recent: ['D:/fixture'] } }, '*'));
 	await page.getByRole('textbox').fill('解释这段代码');
 	await page.getByRole('textbox').press('Enter');
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision), viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: true, messages: [] }, '*'));
 	assert.ok(await page.getByRole('button', { name: 'Spot', exact: true }).isDisabled(), 'Permission changes are unavailable while a response is running');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
@@ -463,10 +512,12 @@ try {
 	await page.getByRole('button', { name: '编辑消息', exact: true }).click();
 	await page.getByRole('textbox', { name: '编辑消息', exact: true }).fill('修改后的问题');
 	await page.locator('.message-edit').getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'edit', id: 1, text: '修改后的问题' });
+	const editedQuestion = await latestEdit();
+	assert.deepStrictEqual(editedQuestion, { type: 'edit', id: 1, text: '修改后的问题', viewKey: await page.evaluate(() => window.fixtureState().viewKey), editRevision: editedQuestion.editRevision });
+	await acknowledgeEdit(editedQuestion); await page.locator('.message-edit').waitFor({ state: 'detached' });
 	await page.evaluate(({ text, createdAt }) => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: false, error: '', messages: [{ id: 1, role: 'user', text: '给一份代码和泰勒展开式', status: 'complete', reasoning: '', activities: [], createdAt }, { id: 2, role: 'assistant', text, reasoning: '检查题意与公式。', activities: [], status: 'complete', createdAt: createdAt + 1000, durationMs: 18000 }] }, '*'), { text, createdAt });
 	await page.getByRole('button', { name: '重新回答', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 2 });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 2, viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
 	await page.locator('.conversation-back:enabled').waitFor();
 	for (const selector of ['.message-actions button', '.conversation-back', '.code-toolbar button']) {
@@ -541,13 +592,13 @@ try {
 	assert.equal(await page.locator('.assistant-actions').getByRole('button', { name: '继续回答', exact: true }).count(), 0);
 	await page.getByRole('textbox').fill('补充要求');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '补充要求', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '补充要求', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision), viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await publishAnswer(burst + '停止。', '', 'stopped', 1000, 23);
 	await page.getByRole('button', { name: '继续回答', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'continue', id: 23 });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'continue', id: 23, viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await publishAnswer(burst + '停止。', '', 'stopped', 1000, 23);
 	await page.getByRole('button', { name: '重新回答', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 23 });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 23, viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await publishAnswer('', '', 'stopped', 1000, 23);
 	await page.locator('.assistant > .markdown').waitFor({ state: 'detached' });
 	await page.locator('.composer .send:enabled').waitFor();
@@ -692,7 +743,7 @@ try {
 	assert.equal(await page.getByRole('button', { name: '重新生成回答', exact: true }).count(), 0, 'Failed responses have no duplicate text retry action');
 	assert.equal(await page.locator('.assistant-actions button').count(), 1, 'An empty failed response has only the regenerate icon');
 	await page.getByRole('button', { name: '重新回答', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 31 });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'regenerate', id: 31, viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	// Markdown typography, formulas and narrow layouts retain their semantic elements.
 	await publishAnswer('|项目|复杂度|\n|---|---|\n|排序|$n \\log n$|\n\n- [x] 已完成\n- [ ] 待完成\n\n> 引用说明\n\n~~删除线~~ 与 **加粗**。\n\n\\[\\frac{a+b}{c}\\]\n\n```cpp\nint answer = 42;\n```', '', 'complete', 1000);
 	await page.waitForSelector('.markdown table');
@@ -941,7 +992,7 @@ try {
 	await page.getByRole('button', { name: '发送', exact: true }).waitFor();
 	assert.equal(await page.getByRole('button', { name: '继续回答', exact: true }).count(), 0, 'A new attachment sends a new message after pause');
 	await page.getByRole('button', { name: '发送', exact: true }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision) });
+	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision), viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await page.goto('http://127.0.0.1:' + server.address().port + '/configuration');
 	await page.evaluate(() => {
 		window.settings = { revision: 1, pending: false, error: '', supplierEnabled: true, keyConfigured: { deepseek: true }, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [] } } };

@@ -221,7 +221,7 @@ export class RunnerExecutor {
 			);
 			compilerSpawnMs = compilerResult.spawnAt - compileRequestedAt;
 			compileMs = compilerResult.closeAt - compilerResult.spawnAt;
-			callbacks.evidence?.event({ type: 'compiled', exitCode: compilerResult.exitCode, compilerSpawnMs, compileMs });
+			callbacks.evidence?.event({ type: 'compiled', exitCode: compilerResult.exitCode, cancelled: this.cancellationRequested, compilerSpawnMs, compileMs });
 			this.throwIfCancellationRequested();
 			if (compilerResult.exitCode !== 0) {
 				status = 'compile-error';

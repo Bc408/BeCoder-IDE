@@ -115,7 +115,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const roots = native.roots;
 		const scope = native.captureScope();
 		const requestHistory = history;
-		const privateContext = requestHistory.effectiveContextAccess(beforeId);
 		const fileTools = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] });
 		const files = fileTools.execute;
 		const oj = async () => {
@@ -125,7 +124,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], {
 			readBeCoderInfo: createBeCoderInfoReader(path.join(context.extensionUri.fsPath, 'resources', 'product-info'), signal => native.productVersion(signal)),
-			privateSnapshots: privateContext.snapshots, allowedPrivateKeys: privateContext.keys, capturePrivate: snapshot => requestHistory.captureContext(snapshot),
 			authorizeLocal: (file, signal) => fileTools.authorize(file, signal),
 			resolveProblemId: async (ojName, problemId) => (await oj()).resolveBeaconProblemId(ojName, problemId),
 			readProblem: async (ref, signal, options) => (await oj()).readBeaconProblem(ref, signal, options)
@@ -191,7 +189,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		try { switch (value.type) {
 			case 'ready': publish(); break;
 			case 'draft': if (typeof value.text === 'string' && typeof value.viewKey === 'string') { updateDraft(value.text, value.viewKey); } break;
-			case 'send': if (typeof value.text === 'string') { void track(send(value.text, value.editRevision)); } break;
+			case 'send': if (typeof value.text === 'string') { void track(send(value.text, value.editRevision, value.viewKey)); } break;
 			case 'addFiles': void pickFiles(); break;
 			case 'pasteImages': addClipboardImages(value.images, value.activeId); break;
 			case 'attachmentInputError': if (value.code === 'image' || value.code === 'budget' || value.code === 'busy') { attachmentNotice(new AttachmentError(value.code)); } break;
@@ -206,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				break;
 			}
 			case 'openAttachment': if (typeof value.id === 'string') { void openAttachment(value.id); } break;
-			case 'edit': case 'regenerate': case 'continue': if (typeof value.id === 'number') { void track(respond(value.type, value.id, value.text)); } break;
+			case 'edit': case 'regenerate': case 'continue': if (typeof value.id === 'number') { void track(respond(value.type, value.id, value.text, value.editRevision, value.viewKey)); } break;
 			case 'chooseWorkspace': if (screen === 'home') { void chooseWorkspace(); } break;
 			case 'selectWorkspace': if (screen === 'home' && typeof value.root === 'string') { void workspaceAction(() => selectWorkspace(value.root!)); } break;
 			case 'clearWorkspace': if (screen === 'home') { void workspaceAction(clearWorkspace); } break;
@@ -384,15 +382,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 		generation++; await recordView();
 	}
-	async function respond(kind: string, id: number, text?: string): Promise<void> {
+	async function respond(kind: string, id: number, text?: string, editRevision?: number, expectedViewKey?: string): Promise<void> {
 		if (modeDraft) { requestNotice = { id: Date.now(), text: vscode.l10n.t('Send a new question to inherit this context, or switch back to the original mode to change earlier messages.') }; publish(); return; }
-		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured) { publish(); return; }
+		if (expectedViewKey !== undefined && expectedViewKey !== viewKey()) { publish(); return; }
+		if (busy() || native.state.runtimeBusy || native.state.collectionPending || !canSend() || !connections.configured) { publish(); return; }
+		const sentViewKey = viewKey(), editingSession = session;
 		const controller = new AbortController(); attachmentJob = controller; publish();
 		let completion: Promise<void> | undefined;
 		try {
 			const next = await request(kind === 'edit' ? id + 1 : kind === 'regenerate' ? id : Infinity);
+			await native.refreshForRequest();
 			controller.signal.throwIfAborted();
+			if (kind === 'edit' && (sentViewKey !== viewKey() || editingSession !== session)) { return; }
 			completion = kind === 'edit' && typeof text === 'string' ? session.edit(id, text, next.generate, next.source, next.files) : kind === 'regenerate' ? session.regenerate(id, next.generate, next.source, next.files) : session.resume(id, next.generate, next.source, next.files);
+			// edit() admits and replaces the user message synchronously, before its response awaits.
+			if (kind === 'edit' && typeof text === 'string' && session.snapshot.busy && session.snapshot.messages.some(message => message.id === id && message.role === 'user' && message.text === text.trim())) {
+				void view?.webview.postMessage({ type: 'editAccepted', id, viewKey: sentViewKey, editRevision });
+			}
 		} catch (error) { if (!controller.signal.aborted) { attachmentNotice(error); } }
 		finally { attachmentJob = undefined; publish(); }
 		await completion; publish();
@@ -466,6 +472,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const contextErrors: Record<string, string> = {
 			'beacon-page-closed': vscode.l10n.t('The requested page is no longer open.'),
 			'beacon-runtime-busy': vscode.l10n.t('Wait for the current run to finish before sending to Beacon.'),
+			'beacon-collection-pending': vscode.l10n.t('Saving user activity context'),
 			'beacon-busy': vscode.l10n.t('Finish the current response, run or save before switching the Beacon workspace.'),
 			'conversation-open': vscode.l10n.t('This chat is already open in another window.'),
 			'beacon-workspace-unavailable': vscode.l10n.t('The selected Beacon workspace is unavailable. Restore it or choose a folder again.'),
@@ -539,8 +546,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		// Permission may have changed while the native dialog was open.
 		if (alive && !controller.signal.aborted && uris?.length) { await track(addResources(uris, 'picker')); }
 	}
-	async function send(text: string, editRevision?: number): Promise<void> {
-		if (busy() || native.state.runtimeBusy || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
+	async function send(text: string, editRevision?: number, expectedViewKey?: string): Promise<void> {
+		if (expectedViewKey !== undefined && expectedViewKey !== viewKey()) { publish(); return; }
+		if (busy() || native.state.runtimeBusy || native.state.collectionPending || !canSend() || !connections.configured || text.length > 32000 || (!text.trim() && !attachments().length)) { publish(); return; }
 		const sentViewKey = viewKey();
 		const sentInputRevision = inputRevision;
 		const controller = new AbortController();
@@ -593,7 +601,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					target = await native.bindHistory({ id: targetId, create: true });
 				} else { target = { data: { version: 1, activeId: randomUUID(), conversations: [] }, save: async data => data }; }
 				const id = target.data.activeId;
-				const conversation: Conversation = { id, title: history.currentConversation?.title ?? '', updatedAt: Date.now(), messages: inherited, error: '', workspace: native.roots, draftOnly: inherited.length === 0, draft: pending, contextSnapshots: history.contextSnapshots };
+				const conversation: Conversation = { id, title: history.currentConversation?.title ?? '', updatedAt: Date.now(), messages: inherited, error: '', workspace: native.roots, draftOnly: inherited.length === 0, draft: pending };
 				target.data = { ...target.data, conversations: [...target.data.conversations.filter(item => item.id !== id), conversation] };
 				await replaceHistory(target);
 				await draftTail;

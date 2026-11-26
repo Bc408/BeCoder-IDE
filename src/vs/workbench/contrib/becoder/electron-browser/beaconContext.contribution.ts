@@ -50,6 +50,8 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 		case 'beginRuntimeActivity': return service.beginRuntimeActivity(windowId);
 		case 'endRuntimeActivity': if (typeof value?.handle === 'string') { return service.endRuntimeActivity(windowId, value.handle); } break;
 		case 'captureCollectionScope': return service.captureCollectionScope(windowId);
+		case 'beginCollection': return service.beginCollection(windowId, recent?.collectionScope, value?.source);
+		case 'endCollection': if (typeof value?.handle === 'string') { return service.endCollection(windowId, value.handle); } break;
 		case 'beginActivity': if (typeof value?.source === 'string') { return service.beginActivity(windowId, value.source, recent?.collectionScope); } break;
 		case 'endActivity': if (typeof value?.handle === 'string') { return service.endActivity(windowId, value.handle); } break;
 		case 'pages': return pages().pages.list();

@@ -21,7 +21,7 @@ export interface SubmissionHost {
 	onLanguages?(problem: ProblemRef, options: readonly LanguageOption[]): void;
 	confirmDraft(fileName: string): Promise<boolean>;
 	runWithProgress<T>(fileName: string, operation: (progress: (value: SubmissionProgress) => void) => Promise<T>): Promise<T>;
-	openRecord(record: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope): Promise<void>;
+	openRecord(record: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope, attemptId?: string): Promise<void>;
 	/** Returning false from finish means the preview owns presentation; do not reopen it later. */
 	beginEvaluation?(value: SubmissionEvaluation, sourceUri: string, scope?: IBeaconCollectionScope): { update(value: SubmissionEvaluation): void; finish(outcome?: SubmissionOutcome): boolean | void };
 	onEvaluation?(attemptId: string, evaluation: SubmissionEvaluation, sourceUri: string, scope: IBeaconCollectionScope | undefined): void;
@@ -118,7 +118,7 @@ export class SubmissionController {
 					await this.releaseSession(request);
 					if (this.active === request) { this.active = undefined; }
 					if (this.disposed || !revealRecord) { return outcome; }
-					try { await this.host.openRecord(record, snapshot.uri, scope); }
+					try { await this.host.openRecord(record, snapshot.uri, scope, outcome.observed?.attemptId); }
 					catch (error) { throw new OperationError('track', 'record', error instanceof Error ? error.message : String(error), record); }
 				} else if (outcome.kind === 'unconfirmed') {
 					if (validateProblemRef(outcome.problem).url !== problem.url || !outcome.attemptId) { throw new OperationError('confirm', 'unconfirmed', 'The submission receipt could not be confirmed.'); }

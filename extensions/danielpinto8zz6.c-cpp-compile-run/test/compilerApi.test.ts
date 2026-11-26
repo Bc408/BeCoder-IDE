@@ -16,6 +16,32 @@ import { test } from 'node:test';
 import { buildCompilerArguments } from '../src/compilation';
 import type { RunnerSettings } from '../src/compiler';
 
+for (const [producer, reason] of [
+	['cph', 'beacon-run-record-too-large'], ['cph', 'Error: beacon-record-publication-uncertain'],
+	['notebook', 'beacon-run-record-too-large'], ['notebook', 'Error: beacon-record-publication-uncertain']
+] as const) {
+	test(`${producer} evidence delegates ${reason} to its owner exactly once`, async () => {
+		const entry = path.resolve(__dirname, '../src/extension.js');
+		const nativeRequire = createRequire(entry), exports: any = {}, notices: string[] = [];
+		const failure = new Error(reason), failures: unknown[] = [];
+		const disposable = { dispose() { } };
+		new vm.Script(`(function(require,exports){${fs.readFileSync(entry, 'utf8')}\n})`).runInThisContext()((id: string) => {
+			if (id === 'vscode') { return { l10n: { t: (text: string) => text }, window: { registerTerminalProfileProvider: () => disposable, showWarningMessage: async (text: string) => { notices.push(text); } }, commands: { registerCommand: () => disposable, executeCommand: async () => { throw failure; } } }; }
+			if (id === './compile-run-manager') { return { CompileRunManager: class { dispose() { } } }; }
+			if (id === './compiler') { return { bundledCompiler: () => 'C:/BeCoder/bin/g++.exe', runnerSettings: () => ({}) }; }
+			return nativeRequire(id);
+		}, exports);
+		const api = exports.activate({ subscriptions: [] });
+		const evidence = api.createEvidence('handle', producer, (error: unknown) => { failures.push(error); });
+		evidence.start({ originalPath: 'C:/main.cpp', bytesBase64: Buffer.from('int main(){}').toString('base64') }, { inputs: [{ input: '', output: '' }] });
+		evidence.event({ type: 'compiled', exitCode: 0 });
+		await evidence.finish({ status: 'completed', exitCode: 0 });
+		await evidence.finish({ status: 'completed', exitCode: 0 });
+		assert.deepStrictEqual(failures, [failure]);
+		assert.deepStrictEqual(notices, [], 'the evidence API must not add a second, source-independent notification');
+	});
+}
+
 test('Runner compiler API reads current shared settings and returns the Run command', () => {
 	const entry = path.resolve(__dirname, '../src/extension.js');
 	const nativeRequire = createRequire(entry);

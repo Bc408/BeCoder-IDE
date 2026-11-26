@@ -10,7 +10,7 @@ import { ContextTools } from '../src/contextTools';
 test('registered_tools_do_not_duplicate_system_guidance', () => {
 	const withTools = composeBeaconPrompt({ currentTime: 'fixed', toolNames: ['readCurrentCode', 'readBeCoderInfo'] });
 	const without = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [] });
-	assert.equal(withTools.version, '2026-11-25.3');
+	assert.equal(withTools.version, '2026-11-26.2');
 	assert.equal(withTools.system, without.system);
 	assert.ok(!withTools.system.includes('Capability:'));
 	assert.ok(!withTools.sections.some(section => String(section.id) === 'capabilities'));
@@ -22,7 +22,7 @@ function stream(delta: object, finish = 'stop'): Response {
 test('product_info_is_an_ordinary_paired_tool_fact', async () => {
 	let reads = 0, requests = 0;
 	const bodies: { messages: { role: string; content: unknown }[]; tools?: unknown[] }[] = [];
-	const client = new BeaconContextClient(async operation => operation === 'pages' ? [] : ({ slot: 'wire', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] })); await client.refresh();
+	const client = new BeaconContextClient(async operation => operation === 'pages' ? [] : ({ slot: 'wire', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] })); await client.refresh();
 	const tools = new ContextTools(client, client.captureScope(), [], { readBeCoderInfo: async topic => { reads++; return { version: '2.1.1', topic, content: 'FACT UNIQUE: product facts only' }; } });
 	const connection = { provider: 'deepseek' as const, baseURL: 'https://fixture.invalid', apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat' as const, vision: false, tools: true, reasoning: false, source: 'service' as const } };
 	const generator = createGenerator(async () => connection, async (_url, init) => {
@@ -39,6 +39,54 @@ test('product_info_is_an_ordinary_paired_tool_fact', async () => {
 		await history.session.send('只复述刚才已读的版本。', generator, connection);
 		assert.equal(reads, 1);
 		assert.ok(JSON.stringify(bodies.at(-1)).includes('2.1.1'));
+	} finally { await history.dispose(); }
+});
+
+test('completed_readMaterial_history_replays_without_registration_or_private_material_reads', async () => {
+	const connection = { provider: 'deepseek' as const, baseURL: 'https://fixture.invalid', apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat' as const, vision: false, tools: true, reasoning: false, source: 'service' as const } };
+	const legacy = [{ key: 'page:closed:old:', raw: 'UNCONSUMED_PRIVATE_BODY' }, { oldShape: true }];
+	const stored = {
+		version: 1, activeId: 'legacy', conversations: [{ id: 'legacy', title: 'Old page discussion', updatedAt: 1, error: '', workspace: [], contextSnapshots: legacy, messages: [
+			{ id: 1, role: 'user', text: 'Explain the previously opened page', status: 'complete', activities: [] },
+			{ id: 2, role: 'assistant', text: 'Original answer', status: 'complete', activities: [], protocol: [{ provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: [
+				{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'old-material', toolName: 'readMaterial', input: { id: 'page:closed:old:' } }] },
+				{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'old-material', toolName: 'readMaterial', output: { type: 'json', value: { ok: true, contents: 'ACTUAL_OLD_RETURNED_EXCERPT' } } }] },
+				{ role: 'assistant', content: [{ type: 'text', text: 'Original answer' }] }
+			] }] }
+		] }]
+	};
+	const before = structuredClone(stored), operations: string[] = [];
+	const client = new BeaconContextClient(async operation => {
+		operations.push(operation);
+		if (operation === 'context') { return { slot: 'legacy', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] }; }
+		if (operation === 'pages') { return []; }
+		throw new Error('Unexpected source read: ' + operation);
+	});
+	await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+	let requests = 0;
+	const generator = createGenerator(async () => connection, async (_url, init) => {
+		requests++; const body = JSON.parse(String(init?.body));
+		assert.ok(body.tools.every((tool: { function: { name: string } }) => tool.function.name !== 'readMaterial'));
+		const call = body.messages.find((message: { tool_calls?: { id: string }[] }) => message.tool_calls?.some(item => item.id === 'old-material'));
+		assert.equal(call.tool_calls[0].function.name, 'readMaterial');
+		const result = body.messages.find((message: { role: string; tool_call_id?: string }) => message.role === 'tool' && message.tool_call_id === 'old-material');
+		assert.match(result.content, /ACTUAL_OLD_RETURNED_EXCERPT/);
+		assert.doesNotMatch(JSON.stringify(body), /UNCONSUMED_PRIVATE_BODY/);
+		return stream({ content: 'Continue from the actual old excerpt' });
+	}, 'none', [], false, undefined, {}, tools);
+	const history = new ChatHistory(stored, async value => value, () => {}, String);
+	try {
+		await history.session.send('Continue after the page has closed', generator, connection);
+		assert.equal(history.snapshot.error, '');
+		assert.deepEqual(history.currentConversation?.contextSnapshots, legacy);
+		assert.deepEqual(stored, before);
+		const restored = new ChatHistory(history.checkpoint, async value => value, () => {}, String);
+		try {
+			await restored.session.send('Continue once more after restart', generator, connection);
+			assert.equal(restored.snapshot.error, ''); assert.equal(requests, 2);
+			assert.ok(operations.every(operation => operation === 'context' || operation === 'pages'));
+			assert.deepEqual(restored.currentConversation?.contextSnapshots, legacy);
+		} finally { await restored.dispose(); }
 	} finally { await history.dispose(); }
 });
 

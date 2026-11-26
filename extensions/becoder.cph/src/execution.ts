@@ -82,7 +82,7 @@ export class CphExecutor {
 				const observer = evidence;
 				evidence = { start: (snapshot, metadata) => { try { observer.start(snapshot, metadata); } catch { } }, event: value => { try { observer.event(value); } catch { } }, finish: async outcome => { try { void Promise.resolve(observer.finish(outcome)).catch(() => { }); } catch { } } };
 			}
-			if (toolchain.sourceSnapshot) { evidence?.start(toolchain.sourceSnapshot, { compiler: toolchain.compiler, args: [...toolchain.args], cwd: path.dirname(sourcePath), inputs: problem.tests.map(test => ({ input: test.input, output: test.output })), sampleNumbers: [...sampleNumbers], operation }); }
+			if (toolchain.sourceSnapshot) { evidence?.start(toolchain.sourceSnapshot, { compiler: toolchain.compiler, args: [...toolchain.args], compilerCwd: path.dirname(sourcePath), runtimeCwd: session, cwd: path.dirname(sourcePath), inputs: problem.tests.map(test => ({ input: test.input, output: test.output })), sampleNumbers: [...sampleNumbers], operation }); }
 			const rawCompile = await runProcess(toolchain.compiler, [...toolchain.args], path.dirname(sourcePath), toolchain.environment, 120000, controller.signal, true, undefined,
 				(stream, bytes) => evidence?.event({ type: 'stream', phase: 'compiling', stream, bytesBase64: bytes.toString('base64') }));
 			const sourceSnapshot = toolchain.sourceSnapshot;
@@ -105,6 +105,7 @@ export class CphExecutor {
 				const result = await runWithInput(this.options.inputHelper, executable, input, session, toolchain.environment, timeout, controller.signal,
 					() => { evidence?.event({ type: 'sample-started', index, sampleId: String(sampleNumbers[index]), at: Date.now() }); this.options.onSampleStarted?.(index); },
 					(stream, bytes) => evidence?.event({ type: 'stream', phase: 'running', index, sampleId: String(sampleNumbers[index]), stream, bytesBase64: bytes.toString('base64') }));
+				if (result.cancelled && !result.started) { break; }
 				// Student process facts survive a subsequent checker/configuration failure.
 				evidence?.event({ type: 'sample-executed', index, sampleId: String(sampleNumbers[index]), result });
 				let verdict = judgeSample(sample.output, result);
@@ -208,7 +209,7 @@ async function runProcess(file: string, args: string[], cwd: string, env: NodeJS
 	});
 }
 
-async function runWithInput(helper: string, executable: string, input: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, onStarted: () => void, onOutput?: (stream: 'stdout' | 'stderr', bytes: Buffer) => void): Promise<SampleExecution> {
+async function runWithInput(helper: string, executable: string, input: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number, signal: AbortSignal, onStarted: () => void, onOutput?: (stream: 'stdout' | 'stderr', bytes: Buffer) => void): Promise<SampleExecution & { readonly started: boolean }> {
 	const pipe = `\\\\.\\pipe\\becoder-cph-${process.pid}-${randomUUID()}`;
 	let socket: net.Socket | undefined;
 	let code: number | undefined;
@@ -256,7 +257,7 @@ async function runWithInput(helper: string, executable: string, input: string, c
 				if (timer) { clearTimeout(timer); }
 			}
 		}
-		return { ...result, timedOut: result.timedOut && started, exitCode: code ?? result.exitCode,
+		return { ...result, started, timedOut: result.timedOut && started, exitCode: code ?? result.exitCode,
 			launchError: result.launchError ?? failure ?? (!started && !result.cancelled ? 'Helper failed to start the program.' : code === undefined && !result.cancelled && !result.timedOut && !result.outputLimitExceeded ? 'Helper returned no result.' : undefined) };
 	} finally {
 		socket?.destroy();

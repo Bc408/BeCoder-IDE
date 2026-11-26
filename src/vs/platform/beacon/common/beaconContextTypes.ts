@@ -20,6 +20,7 @@ export interface IBeaconContext {
 	epoch: number;
 	busy: boolean;
 	runtimeBusy: boolean;
+	collectionPending: boolean;
 	activeId?: string;
 	recent: string[];
 }
@@ -37,7 +38,7 @@ export interface IBeaconConversation {
 export interface IBeaconResume { screen: 'home' | 'conversation'; id?: string; homeId?: string }
 export interface IBeaconStoredConversation { revision: number; data: IBeaconConversation }
 export interface IBeaconHistoryItem { id: string; title: string; updatedAt: number; revision: number; workspace: { name: string; path: string }[] }
-export interface IBeaconPage { id: string; kind: 'text' | 'browser' | 'notebook' | 'unsupported'; title: string; uri?: string; version: string; languageId?: string; dirty?: boolean; reason?: string; active?: boolean }
+export interface IBeaconPage { id: string; kind: 'text' | 'browser' | 'notebook' | 'unsupported'; title: string; uri?: string; version: string; languageId?: string; dirty?: boolean; reason?: string; active?: boolean; visible?: boolean }
 export interface IBeaconPageRead extends IBeaconPage { contents: string; nextOffset?: number; totalCharacters: number }
 export const beaconContextChannel = 'becoderBeaconContext';
 export const beaconContextCommand = '_becoder.beacon.context';

@@ -6,6 +6,7 @@
 import type { IBeaconRecordWrite } from 'becoder-beacon';
 import type { ProblemDocument, RecordSnapshot } from './domain';
 import { fileURLToPath } from 'url';
+import { createHash } from 'crypto';
 
 function filePath(uri: string | undefined): string | null {
 	if (!uri?.startsWith('file:')) { return null; }
@@ -15,10 +16,13 @@ export function toBeaconProblemRecord(document: ProblemDocument, sourceUri: stri
 	return { problem: { oj: document.ref.site, problemId: document.ref.nativeId }, filePath: filePath(sourceUri), viewedAt: new Date(viewedAt).toISOString() };
 }
 export function toBeaconVerdictRecord(record: RecordSnapshot, sourceUri?: string, observedAt = Date.now()): IBeaconRecordWrite<'verdict'> | undefined {
-	if (record.phase !== 'finished') { return undefined; }
+	if (record.phase !== 'finished' || record.sourceVerification === 'mismatch') { return undefined; }
 	const submission: IBeaconRecordWrite<'verdict'>['submission'] = { id: record.ref.id, url: record.ref.url, sourceVerification: record.sourceVerification };
 	for (const key of ['submittedAt', 'language', 'codeLength'] as const) { if (record[key] !== undefined) { submission[key] = record[key]; } }
-	if (record.source !== undefined) { submission.code = record.source; }
+	if (record.source !== undefined) {
+		submission.code = record.source;
+		submission.codeHash = createHash('sha256').update(record.source.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+	}
 	const result: IBeaconRecordWrite<'verdict'>['result'] = { rawStatus: record.rawStatus };
 	for (const key of ['score', 'time', 'memory', 'compileMessage'] as const) { if (record[key] !== undefined) { result[key] = record[key]; } }
 	if (record.compileSucceeded !== undefined) { result.compileSucceeded = record.compileSucceeded; }

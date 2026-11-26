@@ -6,10 +6,12 @@
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
+import nativeFs from 'node:fs/promises';
 import * as path from 'path';
 import type * as vscode from 'vscode';
 import { AttachmentError, attachmentBudget, captureClipboardImages, readAttachments, validAttachments, type Attachment } from '../src/attachments';
 import { FileTools } from '../src/fileTools';
+import { createFileTools } from '../src/workspaceFiles';
 import { ChatSession, type Generate, type Snapshot } from '../src/session';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import type { ContextOutput } from '../src/contextTools';
@@ -20,7 +22,7 @@ import { WebviewResourceDrag } from '../../../src/vs/workbench/contrib/webview/c
 import { activate, deactivate } from '../src/extension';
 import * as mock from './vscodeMock';
 
-type ContextInput = { operation: 'page' | 'material' | 'currentCode'; id?: string; version?: string; limit?: number };
+type ContextInput = { operation: 'page' | 'currentCode'; id?: string; limit?: number };
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dwAAAABJRU5ErkJggg==';
 const signal = new AbortController().signal;
 async function fixture(run: (directory: string) => Promise<void>) {
@@ -33,7 +35,7 @@ function response(text = 'answer') {
 	return new Response('data: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'attachments', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 function contextResponse(input: ContextInput, id = 'context-call') {
-	return new Response('data: ' + JSON.stringify({ id: 'context', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id, type: 'function', function: { name: input.operation === 'currentCode' ? 'readCurrentCode' : input.operation === 'material' ? 'readMaterial' : 'readPage', arguments: JSON.stringify({ ...input, operation: undefined }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+	return new Response('data: ' + JSON.stringify({ id: 'context', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id, type: 'function', function: { name: input.operation === 'currentCode' ? 'readCurrentCode' : 'readPage', arguments: JSON.stringify({ ...input, operation: undefined }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 }
 async function until(condition: () => boolean, label = '') {
 	for (let i = 0; i < 200; i++) { if (condition()) { return; } await new Promise(resolve => setTimeout(resolve, 10)); }
@@ -49,6 +51,28 @@ function requestTarget(body: string): { id: string; version: string; unavailable
 }
 
 suite('Beacon attachments', () => {
+	for (const change of ['edit', 'close', 'replace'] as const) {
+		test(`ordinary dirty file ${change} during final verification rejects stale text`, async t => fixture(async directory => {
+			mock.reset(directory);
+			const file = path.join(directory, 'dirty.cpp'); await fs.writeFile(file, 'saved');
+			let captured = false;
+			const document = { uri: mock.Uri.file(file), version: 1, isClosed: false, getText: () => { captured = true; return 'old dirty code'; } };
+			mock.workspace.textDocuments = [document];
+			const stat = nativeFs.stat;
+			t.mock.method(nativeFs, 'stat', async (...args: Parameters<typeof fs.stat>) => {
+				const value = await stat(...args);
+				if (captured) {
+					if (change === 'edit') { document.version++; }
+					if (change === 'close') { document.isClosed = true; }
+					if (change === 'replace') { mock.workspace.textDocuments = [{ ...document }]; }
+				}
+				return value;
+			});
+			const result = await createFileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'read', path: file }, signal);
+			assert.equal(result.ok, false); assert.equal(result.code, 'conflict'); assert.equal(result.contents, undefined);
+		}));
+	}
+
 	test('a first short question with the discovered 1M model reaches live code and the answer through all tools', async () => fixture(async directory => {
 		const context = mock.reset(directory), view = mock.makeView(), originalFetch = globalThis.fetch;
 		const configuration = structuredClone(mock.values.get('modelConfiguration')) as import('../src/modelConfiguration').ModelConfiguration;
@@ -72,7 +96,7 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 			view.receive({ type: 'send', text: '我这份代码写对了吗' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
 			assert.equal(snapshot().error, ''); assert.equal(requests.length, 2);
-			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'fetchProblem', 'inspectFile', 'readBeCoderInfo', 'readCurrentCode', 'readMaterial', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
+			assert.deepEqual(JSON.parse(requests[0]).tools.map((tool: { function: { name: string } }) => tool.function.name).sort(), ['browseWeb', 'fetchProblem', 'inspectFile', 'readBeCoderInfo', 'readCurrentCode', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
 			assert.equal(reads, 1); assert.equal(saves, 0); assert.ok(requests[1].includes('int main(){return 0;}'));
 			assert.equal(snapshot().messages[1].text, '已读取当前代码');
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
@@ -111,10 +135,10 @@ suite('Beacon attachments', () => {
 		}));
 	}
 	for (const change of ['changed', 'closed'] as const) {
-		test(`regeneration reports a ${change} page and cannot revive unreferenced historical material`, async () => fixture(async directory => {
+		test(`regeneration reads the current ${change} page without reviving a separate historical body`, async () => fixture(async directory => {
 			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
-			let open = true; let version = '1'; let requested: ContextInput | undefined = { operation: 'page', id: 'a', version: '1' };
+			let open = true; let version = '1'; let reads = 0; let requested: ContextInput | undefined = { operation: 'page', id: 'a' };
 			const requests: string[] = [];
 			const outputs: ContextOutput[] = [];
 			let cursor = 0;
@@ -128,7 +152,7 @@ suite('Beacon attachments', () => {
 			mock.commandHandlers.set('_becoder.beacon.context', (operation, input) => {
 				const page = { id: 'a', kind: 'text', title: 'a.cpp', uri: 'file:///C:/chosen/a.cpp', version, active: true };
 				if (operation === 'pages') { return open ? [page] : []; }
-				if (operation === 'page') { return { ...page, contents: 'captured V1', totalCharacters: 11 }; }
+				if (operation === 'page') { reads++; assert.equal((input as { version: string }).version, version); return { ...page, contents: 'captured V' + version, totalCharacters: 11 }; }
 				return native(operation, input);
 			});
 			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; requestNotice?: { text: string } };
@@ -137,28 +161,34 @@ suite('Beacon attachments', () => {
 				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
 				view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 				view.receive({ type: 'send', text: 'Explain V1' }); await until(() => requests.length === 2 && !snapshot().busy);
+				assert.equal(outputs.at(-1)?.contents, 'captured V1'); assert.equal(reads, 1);
 				version = '2'; open = change !== 'closed'; cursor = requests.length;
-				requested = { operation: 'page', id: 'a', version: '1' };
+				requested = { operation: 'page', id: 'a' };
 				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
 				assert.equal(requestTarget(requests[cursor])?.version, undefined, 'ordinary text without a code language is not the live code target');
-				assert.equal((outputs.at(-1)?.error as { code: string })?.code, change === 'closed' ? 'not_found' : 'read_failed');
-				assert.equal(snapshot().requestNotice, undefined, 'The host does not claim a send-time version lock or missing code snapshot');
-				cursor = requests.length; requested = { operation: 'material', id: 'page:a:1:' };
-				view.receive({ type: 'regenerate', id: snapshot().messages[1].id }); await until(() => requests.length === cursor + 2 && !snapshot().busy);
-				assert.ok(outputs.at(-1)?.error); assert.equal((outputs.at(-1)?.error as { code: string })?.code, 'not_found');
-				if (change === 'changed') {
-					cursor = requests.length; view.receive({ type: 'send', text: 'Now V2' }); await until(() => requests.length === cursor + 1 && !snapshot().busy);
-					assert.equal(requestTarget(requests[cursor])?.version, undefined);
+				assert.doesNotMatch(requests[cursor], /captured V1/);
+				if (change === 'closed') {
+					assert.equal((outputs.at(-1)?.error as { code: string })?.code, 'not_found');
+					assert.equal(outputs.at(-1)?.contents, undefined); assert.equal(reads, 1);
+				} else {
+					assert.equal(outputs.at(-1)?.error, undefined); assert.equal(outputs.at(-1)?.contents, 'captured V2');
+					assert.equal(outputs.at(-1)?.source?.version, '2'); assert.equal(reads, 2);
 				}
+				assert.equal(snapshot().requestNotice, undefined, 'The host does not claim a send-time version lock or missing code snapshot');
+				cursor = requests.length; open = false;
+				view.receive({ type: 'send', text: 'Continue with the actual returned facts' }); await until(() => requests.length === cursor + 1 && !snapshot().busy);
+				assert.doesNotMatch(requests[cursor], /captured V1/);
+				if (change === 'changed') { assert.match(requests[cursor], /captured V2/); }
+				assert.equal(reads, change === 'changed' ? 2 : 1, 'Completed page exchanges replay without reading a closed page');
 			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 		}));
 	}
 	for (const action of ['edit', 'regenerate'] as const) {
-		test(`effective materials exclude a deleted suffix after ${action} and a later new question`, async () => fixture(async directory => {
+		test(`ordinary page results exclude a deleted suffix after ${action} and a later new question`, async () => fixture(async directory => {
 			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
 			let active = 'a'; let openB = true;
-			let requested: ContextInput | undefined = { operation: 'page', id: 'a', version: '1' };
+			let requested: ContextInput | undefined = { operation: 'page', id: 'a' };
 			const requests: string[] = [];
 			globalThis.fetch = async (_input, options) => {
 				requests.push(String(options?.body));
@@ -178,7 +208,7 @@ suite('Beacon attachments', () => {
 				view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 				view.receive({ type: 'send', text: 'First question A' }); await until(() => requests.length === 2 && !snapshot().busy);
 				const firstUser = snapshot().messages[0].id; const firstReply = snapshot().messages[1].id;
-				active = 'b'; requested = { operation: 'page', id: 'b', version: '1' };
+				active = 'b'; requested = { operation: 'page', id: 'b' };
 				view.receive({ type: 'send', text: 'Later question B' }); await until(() => requests.length === 4 && !snapshot().busy);
 				assert.equal(snapshot().messages[3].status, 'complete', snapshot().error);
 				const actualTools = JSON.stringify((JSON.parse(requests[3]) as { messages: { role: string; content: unknown }[] }).messages.filter(message => message.role === 'tool'));
@@ -186,17 +216,19 @@ suite('Beacon attachments', () => {
 				openB = false; active = 'a';
 				view.receive({ type: action, id: action === 'edit' ? firstUser : firstReply, text: 'Revised first question A' }); await until(() => requests.length === 5 && !snapshot().busy);
 				assert.doesNotMatch(requests[4], /page:b:1:|Later question B|captured b/);
-				assert.doesNotMatch(requests[4], /page:a:1:/, 'A removed answer no longer authorizes its private page body');
-				requested = { operation: 'page', id: 'a', version: '1' };
+				assert.doesNotMatch(requests[4], /captured a/, 'The removed answer no longer contributes its returned page body');
+				requested = { operation: 'page', id: 'a' };
 				view.receive({ type: 'send', text: 'Follow-up A' }); await until(() => requests.length === 7 && !snapshot().busy);
 				assert.doesNotMatch(requests[5], /page:b:1:|Later question B|captured b/);
 				await mock.commands.executeCommand('_becoder.beacon.flush');
-				const saved = mock.beaconConversations.get(`${directory}:${snapshot().activeId}`)!.data as unknown as { contextSnapshots: { key: string }[] };
-				assert.deepEqual(saved.contextSnapshots.map(item => item.key).sort(), ['page:a:1:', 'page:b:1:']);
+				const saved = mock.beaconConversations.get(`${directory}:${snapshot().activeId}`)!.data;
+				assert.deepEqual(saved.contextSnapshots ?? [], []);
+				assert.match(JSON.stringify(saved.messages), /captured a/);
+				assert.doesNotMatch(JSON.stringify(saved.messages), /captured b|Later question B/);
 			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 		}));
 	}
-	test('effective materials do not unlock a target first consumed only in a deleted later answer', async () => fixture(async directory => {
+	test('a closed page read cannot restore a body consumed only in a deleted later answer', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		const native = mock.commandHandlers.get('_becoder.beacon.context')!;
 		let open = true; let requested: ContextInput | undefined;
@@ -220,15 +252,16 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
 			view.receive({ type: 'selectWorkspace', root: directory }); await until(() => snapshot().busy); await until(() => !snapshot().busy);
 			view.receive({ type: 'send', text: 'A conceptual question without reading A' }); await until(() => requests.length === 1 && !snapshot().busy);
-			requested = { operation: 'page', id: 'a', version: '1' };
+			requested = { operation: 'page', id: 'a' };
 			view.receive({ type: 'send', text: 'Read A only now' }); await until(() => requests.length === 3 && !snapshot().busy);
-			open = false; requested = { operation: 'material', id: 'page:a:1:' };
+			open = false; requested = { operation: 'page', id: 'a' };
 			view.receive({ type: 'edit', id: snapshot().messages[0].id, text: 'Revise the first conceptual question' }); await until(() => requests.length === 5 && !snapshot().busy);
-			assert.equal(/page:a:1:/.test(requestSystem(requests[3])), false, 'A target reference is not consumption of its body');
-			assert.ok(outputs.at(-1)?.error);
-			assert.equal(snapshot().requestNotice, undefined, 'Material access is reported by the tool without obsolete snapshot claims');
+			assert.doesNotMatch(requests[3], /only read in the later answer/);
+			assert.equal((outputs.at(-1)?.error as { code: string })?.code, 'not_found');
+			assert.equal(outputs.at(-1)?.contents, undefined);
+			assert.equal(snapshot().requestNotice, undefined, 'A closed page is reported by the tool without obsolete snapshot claims');
 			view.receive({ type: 'send', text: 'Another conceptual question' }); await until(() => requests.length === 6 && !snapshot().busy);
-			assert.equal(/page:a:1:/.test(requestSystem(requests[5])), false);
+			assert.doesNotMatch(requests[5], /only read in the later answer|page:a:1:/);
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
 	test('a follow-up supplies observed active-page metadata without choosing a discussion object', async () => fixture(async directory => {
@@ -362,12 +395,13 @@ suite('Beacon attachments', () => {
 			await navigate({ type: 'back' }); assert.equal(snapshot().draftText, 'carried home');
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
-	test('mode changes keep the composer and fork independent context only on accepted sends', async () => fixture(async directory => {
+	test('mode changes keep the composer and fork ordinary page history without a separate body copy', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		let requests = 0;
-		globalThis.fetch = async () => {
+		globalThis.fetch = async (_url, init) => {
+			assert.doesNotMatch(String(init?.body), /legacy-private-only/);
 			if (requests++ === 0) {
-				return new Response('data: ' + JSON.stringify({ id: 'capture', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'page-capture', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: 'page-one', version: 'v1', limit: 3 }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+				return new Response('data: ' + JSON.stringify({ id: 'capture', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'page-capture', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: 'page-one', limit: 3 }) } }] }, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 			}
 			return response();
 		};
@@ -388,7 +422,14 @@ suite('Beacon attachments', () => {
 			view.receive({ type: 'send', text: 'original question' }); await until(() => snapshot().messages.length === 2 && !snapshot().busy);
 			const originalId = snapshot().activeId;
 			await mock.commands.executeCommand('_becoder.beacon.flush');
-			assert.equal((mock.beaconConversations.get(`${directory}:${originalId}`)!.data.contextSnapshots as { raw: string }[])[0].raw, 'complete captured page beyond the requested excerpt');
+			const original = mock.beaconConversations.get(`${directory}:${originalId}`)!.data;
+			assert.deepEqual(original.contextSnapshots ?? [], []);
+			assert.match(JSON.stringify(original.messages), /"contents":"com"/);
+			assert.doesNotMatch(JSON.stringify(original), /complete captured page beyond the requested excerpt/);
+			await navigate({ type: 'back' });
+			const legacy = [{ key: 'page:closed:old:', raw: 'legacy-private-only' }, { unrecognized: true }];
+			mock.beaconConversations.get(`${directory}:${originalId}`)!.data.contextSnapshots = legacy;
+			await navigate({ type: 'openHistory', conversationId: originalId });
 			await write('question B');
 			await navigate({ type: 'setPermission', permission: 'computer' });
 			assert.equal(snapshot().activeId, originalId); assert.equal(snapshot().draftText, 'question B');
@@ -406,6 +447,7 @@ suite('Beacon attachments', () => {
 			assert.equal(snapshot().messages[2].transition, 'temporary');
 			const source = mock.beaconConversations.get(`${directory}:${originalId}`)!;
 			assert.equal(source.data.messages.length, 2); assert.deepStrictEqual(source.data.draft, { text: '', attachments: [] });
+			assert.deepEqual(source.data.contextSnapshots, legacy, 'The source retains its opaque old data when the accepted send forks');
 			const temporaryId = snapshot().activeId;
 			await write('question D'); await navigate({ type: 'setPermission', permission: 'workspace' });
 			assert.equal(snapshot().activeId, temporaryId); assert.equal(snapshot().draftText, 'question D');
@@ -414,7 +456,10 @@ suite('Beacon attachments', () => {
 			assert.equal(snapshot().messages[4].transition, 'persistent');
 			await mock.commands.executeCommand('_becoder.beacon.flush');
 			assert.equal(mock.beaconConversations.get(`${directory}:${savedId}`)!.data.messages.length, 6);
-			assert.equal((mock.beaconConversations.get(`${directory}:${savedId}`)!.data.contextSnapshots as { raw: string }[])[0].raw, 'complete captured page beyond the requested excerpt');
+			const forked = mock.beaconConversations.get(`${directory}:${savedId}`)!.data;
+			assert.deepEqual(forked.contextSnapshots ?? [], []);
+			assert.match(JSON.stringify(forked.messages), /"contents":"com"/);
+			assert.doesNotMatch(JSON.stringify(forked), /complete captured page beyond the requested excerpt/);
 			await navigate({ type: 'back' }); await navigate({ type: 'deleteHistory', conversationId: originalId });
 			await navigate({ type: 'openHistory', conversationId: savedId });
 			assert.equal(snapshot().messages.length, 6); assert.equal(snapshot().messages[0].text, 'original question');
@@ -426,8 +471,64 @@ suite('Beacon attachments', () => {
 			assert.equal(restored().messages[2].transition, 'temporary'); assert.equal(restored().messages[4].transition, 'persistent');
 		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 	}));
+	test('late request actions from a previous view cannot mutate the current conversation', async () => fixture(async directory => {
+		for (const type of ['send', 'regenerate', 'continue'] as const) {
+			const context = mock.reset(directory), view = mock.makeView(), originalFetch = globalThis.fetch;
+			let requests = 0; globalThis.fetch = async () => { requests++; return response(); };
+			const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; draftText: string };
+			try {
+				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+				const staleView = snapshot().viewKey;
+				view.receive({ type: 'send', text: 'current question', viewKey: staleView });
+				await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+				assert.notEqual(snapshot().viewKey, staleView);
+				view.receive({ type: 'draft', text: 'current unsent draft', viewKey: snapshot().viewKey });
+				await until(() => snapshot().draftText === 'current unsent draft');
+				const before = JSON.stringify(snapshot().messages);
+				view.receive({ type, id: snapshot().messages.at(-1)!.id, text: 'late old question', viewKey: staleView });
+				assert.equal(snapshot().busy, false, type + ' must reject the stale view before request preparation');
+				assert.equal(requests, 1, type + ' must reject the stale view before generation');
+				assert.equal(JSON.stringify(snapshot().messages), before, type + ' must leave current messages intact');
+				assert.equal(snapshot().draftText, 'current unsent draft');
+			} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
+		}
+	}));
+	test('actual host acknowledges an edit only after admission and never after pending or stale rejection', async () => fixture(async directory => {
+		for (const persistent of [false, true]) {
+			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
+			let requests = 0; let finish!: () => void;
+			globalThis.fetch = async () => { requests++; return requests === 1 ? response() : new Promise<Response>(resolve => { finish = () => resolve(response()); }); };
+			const snapshots = () => view.messages.filter(message => message.type === 'snapshot');
+			const snapshot = () => snapshots().at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; responseBusy: boolean };
+			const acknowledgements = () => view.messages.filter(message => message.type === 'editAccepted');
+			try {
+				await activate(context as unknown as vscode.ExtensionContext); mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+				view.receive({ type: 'ready' }); await until(() => snapshot()?.configured);
+				if (persistent) { view.receive({ type: 'selectWorkspace', root: directory }); await until(() => mock.beaconContext.usable && !snapshot().busy); }
+				view.receive({ type: 'send', text: 'original question' }); await until(() => snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
+				const id = snapshot().messages[0].id, viewKey = snapshot().viewKey;
+				const rejectEdit = async (input: object) => { const count = snapshots().length; view.receive({ type: 'edit', id, viewKey, editRevision: 3, text: 'replacement', ...input }); await until(() => snapshots().length > count && !snapshot().busy); assert.equal(acknowledgements().length, 0); assert.equal(requests, 1); assert.equal(snapshot().messages[0].text, 'original question'); };
+				mock.beaconContext.collectionPending = true; await rejectEdit({});
+				mock.beaconContext.collectionPending = false; await mock.commands.executeCommand('_becoder.beacon.contextChanged');
+				assert.equal(acknowledgements().length, 0); assert.equal(requests, 1, 'Releasing collection never replays the edit');
+				await rejectEdit({ viewKey: viewKey + ':stale' });
+				await rejectEdit({ id: 999 }); await rejectEdit({ text: ' ' }); await rejectEdit({ text: 'x'.repeat(32001) });
+				view.receive({ type: 'edit', id, viewKey, editRevision: 7, text: '  admitted edit  ' });
+				await until(() => acknowledgements().length === 1 && requests === 2);
+				assert.deepEqual(acknowledgements()[0], { type: 'editAccepted', id, viewKey, editRevision: 7 });
+				assert.equal(snapshot().responseBusy, true, 'Admission is acknowledged before the pending provider completes');
+				assert.equal(snapshot().messages[0].text, 'admitted edit');
+				finish(); await until(() => !snapshot().busy);
+				view.receive({ type: 'edit', id, text: 'legacy edit' }); await until(() => acknowledgements().length === 2 && requests === 3);
+				assert.equal(snapshot().messages[0].text, 'legacy edit', 'Older clients may omit acknowledgement metadata');
+				finish(); await until(() => !snapshot().busy);
+			} finally { finish?.(); globalThis.fetch = originalFetch; await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+		}
+	}));
+	for (const blocker of ['runtimeBusy', 'collectionPending'] as const) {
 	for (const newerText of ['unsent question', 'edited while preparing']) {
-	test('a run starting during final draft persistence preserves ' + newerText, async () => fixture(async directory => {
+	test(blocker + ' starting during final draft persistence preserves ' + newerText, async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 		let requests = 0; globalThis.fetch = async () => { requests++; return response(); };
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { configured: boolean; viewKey: string; draftText: string; attachments: Attachment[] };
@@ -441,7 +542,7 @@ suite('Beacon attachments', () => {
 			const native = mock.commandHandlers.get('_becoder.beacon.context')!;
 			let started = false;
 			mock.commandHandlers.set('_becoder.beacon.context', (...args: unknown[]) => {
-				if (args[0] === 'view' && !started && snapshot().draftText === newerText) { started = true; mock.beaconContext.runtimeBusy = true; }
+				if (args[0] === 'view' && !started && snapshot().draftText === newerText) { started = true; mock.beaconContext[blocker] = true; }
 				return native(...args);
 			});
 			view.receive({ type: 'send', text: 'unsent question' });
@@ -453,6 +554,7 @@ suite('Beacon attachments', () => {
 			assert.equal(snapshot().attachments.length, 1);
 		} finally { globalThis.fetch = originalFetch; await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
 	}));
+	}
 	}
 	for (const target of ['none', 'workspace'] as const) {
 		test('a rejected mode fork keeps the source page, input and attachment for ' + target, async () => fixture(async directory => {
@@ -522,7 +624,8 @@ suite('Beacon attachments', () => {
 			} finally { finish?.(); mock.commandHandlers.set('_becoder.beacon.context', native); await deactivate(); for (const item of context.subscriptions) { item.dispose(); } globalThis.fetch = originalFetch; }
 		}));
 	}
-	test('actual host rejects stale runtime sends and response actions without replaying them after release', async () => fixture(async directory => {
+	for (const blocker of ['runtimeBusy', 'collectionPending'] as const) {
+	test('actual host rejects stale ' + blocker + ' sends and response actions without replaying them after release', async () => fixture(async directory => {
 		for (const persistent of [false, true]) {
 			const context = mock.reset(directory); const view = mock.makeView(); const originalFetch = globalThis.fetch;
 			let requests = 0;
@@ -537,7 +640,7 @@ suite('Beacon attachments', () => {
 				const before = structuredClone(snapshot().messages);
 				view.receive({ type: 'draft', text: 'keep this draft', viewKey: snapshot().viewKey }); await until(() => snapshot().draftText === 'keep this draft');
 				// No contextChanged notification: the displayed snapshot is deliberately stale.
-				mock.beaconContext.runtimeBusy = true;
+				mock.beaconContext[blocker] = true;
 				for (const action of [{ type: 'send', text: 'keep this draft' }, { type: 'regenerate', id: before[1].id }, { type: 'continue', id: before[1].id }, { type: 'edit', id: before[0].id, text: 'replacement' }]) {
 					const count = snapshots().length; view.receive(action);
 					await until(() => snapshots().length > count && !snapshot().busy);
@@ -546,7 +649,7 @@ suite('Beacon attachments', () => {
 					assert.equal(snapshot().draftText, 'keep this draft');
 					assert.equal(requests, 1, 'No blocked action reaches the provider');
 				}
-				mock.beaconContext.runtimeBusy = false;
+				mock.beaconContext[blocker] = false;
 				await mock.commands.executeCommand('_becoder.beacon.contextChanged');
 				assert.equal(requests, 1, 'Releasing activity never replays a rejected action');
 				view.receive({ type: 'send', text: 'keep this draft' }); await until(() => snapshot().messages.length === 4 && snapshot().messages.at(-1)?.status === 'complete' && !snapshot().busy);
@@ -554,6 +657,7 @@ suite('Beacon attachments', () => {
 			} finally { globalThis.fetch = originalFetch; await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
 		}
 	}));
+	}
 	test('workspace text draft survives navigation and restart without becoming history', async () => fixture(async directory => {
 		const context = mock.reset(directory); const view = mock.makeView();
 		const snapshot = () => view.messages.filter(message => message.type === 'snapshot').at(-1) as unknown as Snapshot & { draftText: string; viewKey: string; screen: string; activeId: string; history: unknown[]; homeHasDraft: boolean; configured: boolean };

@@ -13,9 +13,12 @@ import { ImportedProblem } from '../src/problem';
 import { spawnSync } from 'child_process';
 import { stripVTControlCharacters } from 'util';
 import type { CompilationPlan } from '../src/toolchain';
+import { EventEmitter } from 'events';
+import { PassThrough } from 'stream';
+import { createConnection, type Socket } from 'net';
 
 // The owning Runner test compilation must precede this suite.
-const runnerTestRoot = path.resolve(process.env.BECODER_RUNNER_TEST_ROOT ?? 'extensions/danielpinto8zz6.c-cpp-compile-run/out-test/src');
+const runnerTestRoot = path.resolve(process.env.BECODER_RUNNER_TEST_ROOT ?? 'extensions/danielpinto8zz6.c-cpp-compile-run/out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src');
 const { buildCompilerArguments, privateRunnerEnvironment } = require(path.join(runnerTestRoot, 'compilation.js'));
 const { captureCompilationSource } = require(path.join(runnerTestRoot, 'compilationSnapshot.js'));
 const compilerRoot = path.resolve(process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? '../VSCode-win32-x64/data/toolchains/ucrt64');
@@ -31,6 +34,72 @@ const problem: ImportedProblem = {
 	interactive: false, tests: [{ input: '21', output: '42' }, { input: '', output: 'EOF' }, { input: '125', output: '250' }],
 	batch: { id: 'probe', size: 1 }, input: { type: 'stdin' }, output: { type: 'stdout' }, testType: 'single'
 };
+
+for (const started of [false, true]) {
+	test(`helper startup cancellation ${started ? 'after' : 'before'} student start preserves execution facts`, { timeout: 10000 }, async t => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cph-start-cancel-'));
+		t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+		const source = path.join(root, 'main.cpp'); fs.writeFileSync(source, 'int main(){}');
+		const { BeaconEvidence } = require(path.join(runnerTestRoot, 'beaconEvidence.js'));
+		const processApi = require('child_process') as typeof import('child_process'), originalSpawn = processApi.spawn;
+		let studentStarts = 0, record: any, socket: Socket | undefined;
+		const events: any[] = [];
+		const spawn = t.mock.method(processApi, 'spawn', ((file: string, args: string[], options: any) => {
+			if (file !== 'held-helper') { return originalSpawn(file, args, options); }
+			const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), pid: 424242, exitCode: null,
+				kill: () => { socket?.destroy(); queueMicrotask(() => { child.stdout.end(); child.stderr.end(); child.emit('close', null, null); }); return true; } });
+			queueMicrotask(() => {
+				child.emit('spawn');
+				if (!started) { executor.cancel(); return; }
+				socket = createConnection(args[2]);
+				socket.on('error', () => {});
+				socket.on('connect', () => socket!.write(JSON.stringify({ type: 'started', pid: 424242 }) + '\n'));
+			});
+			return child;
+		}) as typeof processApi.spawn);
+		t.after(() => { spawn.mock.restore(); socket?.destroy(); });
+		const evidence = new BeaconEvidence('activity', 'cph', async (_operation: string, input: any) => { record = input.record; }, (error: unknown) => assert.fail(String(error)));
+		const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), inputHelper: 'held-helper',
+			prepareCompilation: async (original, output, session) => ({ compiler: process.execPath, args: ['-e', 'require("fs").writeFileSync(process.argv[1], "executable")', output], environment: { ...process.env } as Record<string, string>, sourceSnapshot: await captureCompilationSource(original, session) }),
+			onSampleStarted: () => { studentStarts++; executor.cancel(); },
+			evidence: () => ({ start: (snapshot, metadata) => evidence.start(snapshot, metadata), event: value => { events.push(value); evidence.event(value); }, finish: async outcome => { await evidence.finish(outcome); } }) });
+		t.after(() => executor.dispose());
+		const result = await executor.judge({ ...problem, tests: [{ input: '1', output: '1' }, { input: '2', output: '2' }] }, source);
+		assert.equal(result.compile.exitCode, 0); assert.equal(studentStarts, started ? 1 : 0);
+		assert.equal(record.status, 'cancelled'); assert.equal(record.compile.status, 'succeeded');
+		assert.equal(record.runs[0].status, started ? 'cancelled' : 'not-run');
+		assert.equal(record.runs[0].skipReason, started ? undefined : 'cancelled');
+		assert.equal(record.runs[0].check, started ? 'cancelled' : undefined);
+		assert.equal(typeof record.runs[0].durationMs, started ? 'number' : 'undefined');
+		assert.equal(events.some(event => event.type === 'sample-executed'), started);
+		assert.equal(record.runs[1].status, 'not-run'); assert.equal(record.runs[1].skipReason, 'cancelled');
+		if (!started) { assert.equal(record.runs[0].output, undefined); assert.equal(record.runs[0].exitCode, undefined); }
+		assert.deepStrictEqual(fs.readdirSync(path.join(root, 'sessions')), []);
+	});
+}
+
+test('reports_actual_execution_directories', { timeout: 30000 }, async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-cwd-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const source = path.join(root, 'main.cpp');
+	fs.writeFileSync(source, '#include <filesystem>\n#include <iostream>\nint main(){std::cout << std::filesystem::current_path().string();}\n');
+	let metadata: Record<string, unknown> | undefined;
+	const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'),
+		inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.resolve('../VSCode-win32-x64/resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'),
+		prepareCompilation: async (original, output, session) => {
+			const sourceSnapshot = await captureCompilationSource(original, session);
+			return { ...prepareCompilation(sourceSnapshot.path, output, session), sourceSnapshot };
+		},
+		evidence: () => ({ start(_snapshot, value) { metadata = value as Record<string, unknown>; }, event() {}, async finish() {} })
+	});
+	t.after(() => executor.dispose());
+	const result = await executor.judge({ ...problem, tests: [{ input: '', output: '' }] }, source);
+	assert.strictEqual(result.compile.exitCode, 0, result.compile.stderr);
+	assert.strictEqual(result.samples[0].result.exitCode, 0);
+	assert.strictEqual(metadata?.compilerCwd, root);
+	assert.strictEqual(path.normalize(result.samples[0].result.stdout), path.normalize(String(metadata?.runtimeCwd)));
+	assert.notStrictEqual(metadata?.runtimeCwd, root);
+});
 
 test('CPH bound source survives original edits and remains available after session cleanup', { timeout: 110000 }, async t => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-bound-source-'));
@@ -61,6 +130,40 @@ test('CPH bound source survives original edits and remains available after sessi
 	assert.strictEqual(fs.existsSync(result.sourceSnapshot!.path), false);
 	assert.strictEqual(fs.readFileSync(source, 'utf8'), '#error later_version\n');
 	assert.deepStrictEqual(observations, [], 'standalone compile-only never reaches the collection observer');
+});
+
+test('CPH cleans its execution and accepts a new run while evidence publication remains pending', { timeout: 30000 }, async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'becoder-cph-evidence-pending-'));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const source = path.join(root, 'main.cpp');
+	fs.writeFileSync(source, 'int main() {}\n');
+	let release!: () => void;
+	const pending = new Promise<void>(resolve => { release = resolve; });
+	t.after(release);
+	const published: any[] = [];
+	const { BeaconEvidence } = require(path.join(runnerTestRoot, 'beaconEvidence.js'));
+	let actions = 0;
+	const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'),
+		inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.resolve('../VSCode-win32-x64/resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'),
+		prepareCompilation: async (original, output, session) => {
+			const sourceSnapshot = await captureCompilationSource(original, session);
+			return { ...prepareCompilation(sourceSnapshot.path, output, session), sourceSnapshot };
+		},
+		evidence: () => new BeaconEvidence(`action-${++actions}`, 'cph', async (_operation: string, input: any) => {
+			published.push(input);
+			if (input.handle === 'action-1') { await pending; }
+		}, (error: unknown) => assert.fail(String(error)))
+	});
+	t.after(() => executor.dispose());
+	const samples = { ...problem, tests: [{ input: '', output: '' }] };
+	const first = await executor.judge(samples, source);
+	assert.equal(first.samples[0].verdict, 'passed');
+	assert.deepStrictEqual(fs.readdirSync(path.join(root, 'sessions')), [], 'execution cleanup cannot wait for publication');
+	const second = await executor.judge(samples, source);
+	assert.equal(second.samples[0].verdict, 'passed');
+	assert.deepStrictEqual(published.map(item => item.handle), ['action-1', 'action-2']);
+	assert.equal(published[0].record.runs[0].check, 'passed');
+	release(); await pending;
 });
 
 test('external Python checker receives input and actual output, reports logs and cleans sessions', { timeout: 110000 }, async t => {
@@ -112,7 +215,7 @@ test('missing checker preserves the already completed program facts before failu
 	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
 	const events: { type?: string; result?: { exitCode: number; durationMs: number; stdout: string } }[] = [];
 	const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), prepareCompilation,
-		inputHelper: process.env.BECODER_NOTEBOOK_HELPER!, evidence: () => ({ start() {}, event(value) { events.push(value as typeof events[number]); }, async finish() {} }) });
+		inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.resolve('../VSCode-win32-x64/resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'), evidence: () => ({ start() {}, event(value) { events.push(value as typeof events[number]); }, async finish() {} }) });
 	t.after(() => executor.dispose());
 	await assert.rejects(executor.judge({ ...problem, customCheckerPath: path.join(root, 'missing.py'), tests: [{ input: '21', output: '42' }] }, path.resolve('extensions/becoder.cph/test/fixtures/streams.cpp')), /ENOENT|not found/);
 	const result = events.find(event => event.type === 'sample-executed')?.result;

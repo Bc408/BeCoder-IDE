@@ -1,14 +1,17 @@
-/* Copyright (c) 2026 BeCoder contributors. GPL-3.0-or-later. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { Terminal } = require('@xterm/headless');
-const { RunnerExecutor, finalizePublishedExecutable } = require('../out-test/src/runnerProcess');
+const { RunnerExecutor, finalizePublishedExecutable } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerProcess');
 const Module = require('module');
 const { EventEmitter } = require('events');
-const { CommandHistory } = require('../out-test/src/bcLineEditor');
+const { CommandHistory } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/bcLineEditor');
 class MockEmitter extends EventEmitter {
 	event = listener => { this.on('data', listener); return { dispose: () => this.off('data', listener) }; };
 	fire(data) { this.emit('data', data); }
@@ -16,7 +19,7 @@ class MockEmitter extends EventEmitter {
 }
 const originalLoad = Module._load;
 Module._load = function (name, ...args) { return name === 'vscode' ? { EventEmitter: MockEmitter } : originalLoad.call(this, name, ...args); };
-const { BcTerminal } = require('../out-test/src/bcTerminal');
+const { BcTerminal } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/bcTerminal');
 Module._load = originalLoad;
 
 (async () => {

@@ -14,6 +14,7 @@ import { NotebookEdits, type NotebookEditApi } from './editApi';
 import { beCoderNotebookType, beCoderNotebookStreamMime, beCoderNotebookStatusMime, isBeCoderInputCell, readBeCoderCellMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
 import type { RunnerCompilerApi } from '../../danielpinto8zz6.c-cpp-compile-run/src/extension';
 import type { NotebookRunResult } from '../../danielpinto8zz6.c-cpp-compile-run/src/notebookProcess';
+import { isRunRecordTooLarge } from '../../../src/vs/platform/beacon/common/beaconRunRecord';
 
 const running = new Map<string, AbortController>();
 const runDocuments = new Map<AbortController, vscode.NotebookDocument>();
@@ -75,6 +76,15 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 		try { plan = captureNotebookRunPlan({ cells: originalCells.map(cell => ({ kind: cell.kind, value: cell.document.getText(), languageId: cell.document.languageId, metadata: cell.metadata })) }, selected.map(cell => originalCells.indexOf(cell))); }
 		catch { void vscode.window.showInformationMessage(vscode.l10n.t('Add a C/C++ program block above this input before running.')); return; }
 		const abort = new AbortController(), keys = selected.map(cell => cell.document.uri.toString());
+		let collectionFailureShown = false;
+		const reportCollection = (error: unknown) => {
+			if (collectionFailureShown) { return; } collectionFailureShown = true;
+			const message = String(error).includes('beacon-record-publication-uncertain')
+				? vscode.l10n.t('Beacon could not confirm whether this Notebook run record was saved. Program execution is unaffected.')
+				: isRunRecordTooLarge(error) ? vscode.l10n.t('This Notebook run record exceeds 32 KB and was not saved to Beacon. Program execution is unaffected.')
+					: vscode.l10n.t('This Notebook run record could not be saved to Beacon. Program execution is unaffected.');
+			void vscode.window.showWarningMessage(message);
+		};
 		runDocuments.set(abort, document);
 		let settle!: () => void; const completion = new Promise<void>(resolve => { settle = resolve; });
 		for (const key of keys) { running.set(key, abort); settling.set(key, completion); }
@@ -82,7 +92,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 		const notebookPath = document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
 		try {
 			let collectionScope: unknown;
-			try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* Optional collection. */ }
+			try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch (error) { reportCollection(error); }
 			if (abort.signal.aborted || document.isClosed || retired) { return; }
 			if (notebookPath) { resource = await vscode.commands.executeCommand<string>('_becoder.notebook.resource', 'beginRun', { file: notebookPath }); }
 			try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); } catch { /* Independent execution. */ }
@@ -95,7 +105,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 			for (const program of plan.programs) {
 				if (abort.signal.aborted || document.isClosed || retired) { break; }
 				let activity: string | undefined;
-				if (notebookPath) { try { activity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginActivity', { source: notebookPath, collectionScope }); } catch { /* Execution does not depend on collection. */ } }
+				if (notebookPath) { try { activity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginActivity', { source: notebookPath, collectionScope }); } catch (error) { reportCollection(error); } }
 				const entries: ({ cell: vscode.NotebookCell; key: string; execution: vscode.NotebookCellExecution; cancellation: vscode.Disposable; status: vscode.NotebookCellOutput; attempt: Record<string, unknown>; queue: CellOutputQueue; result?: NotebookRunResult } | undefined)[] = [];
 				let tail = Promise.resolve();
 				const enqueue = (operation: () => Promise<unknown>) => { tail = tail.then(operation).then(() => { }, error => { report(error); }); };
@@ -124,8 +134,8 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 						await patch(entry.cell, { attempt });
 						await entry.execution.replaceOutputItems([vscode.NotebookCellOutputItem.text(JSON.stringify(attempt), beCoderNotebookStatusMime)], entry.status);
 					});
-					const evidence = activity ? runner.createEvidence(activity, 'notebook', report) : undefined;
-					const result = await runner.runNotebookProgramGroup({ code: program.code, language: program.language, cellId: program.codeCellId || originalCells[program.codeIndex].document.uri.toString(), codeNumber: program.codeNumber, cwd, notebookPath, notebookName: path.basename(document.uri.path), inputs: program.inputs }, abort.signal, {
+					const evidence = activity ? runner.createEvidence(activity, 'notebook', reportCollection) : undefined;
+					const result = await runner.runNotebookProgramGroup({ code: program.code, language: program.language, cellId: program.codeCellId || originalCells[program.codeIndex].document.uri.toString(), codeNumber: program.codeNumber, codeCellNumber: program.codeCellNumber, cwd, notebookPath, notebookName: path.basename(document.uri.path), inputs: program.inputs }, abort.signal, {
 						evidence,
 						phase: (index, status) => update(index, { status }),
 						output: (index, phase, stream, text) => { if (text) { entries[index]?.queue.append({ phase, stream, text }); } },
@@ -145,7 +155,7 @@ export function activate(context: vscode.ExtensionContext): NotebookEditApi {
 					}
 				} finally {
 					for (const entry of entries) { if (entry) { entry.cancellation.dispose(); entry.queue.clear(); outputQueues.delete(entry.key); outputContainers.delete(entry.key); entry.execution.end(entry.result?.status === 'completed', entry.result?.endedAt ?? Date.now()); } }
-					if (activity) { await Promise.resolve(vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity })).catch(report); }
+					if (activity) { await Promise.resolve(vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: activity })).catch(reportCollection); }
 				}
 			}
 		} catch (error) { report(error); }

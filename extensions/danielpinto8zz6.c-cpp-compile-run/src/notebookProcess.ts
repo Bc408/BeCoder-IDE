@@ -13,7 +13,7 @@ import { spawn } from 'child_process';
 import { StringDecoder } from 'string_decoder';
 import { RunnerInputControl } from './runnerInputControl';
 import { terminateProcessTree } from './runnerProcess';
-export interface NotebookRunRequest { code: string; language: 'c' | 'cpp'; input: string; inputName: string; cellId: string; codeNumber: number; inputCellId?: string; cwd: string; notebookPath?: string; notebookName?: string }
+export interface NotebookRunRequest { code: string; language: 'c' | 'cpp'; input: string; inputName: string; cellId: string; codeNumber: number; codeCellNumber?: number; inputCellId?: string; cwd: string; notebookPath?: string; notebookName?: string }
 export interface NotebookRunCallbacks { phase(phase: 'compiling' | 'running'): void; output(phase: 'compiling' | 'running', stream: 'stdout' | 'stderr' | 'merged', text: string): void; evidence?: RuntimeEvidence }
 export interface NotebookRunResult { status: 'completed' | 'compile-error' | 'runtime-error' | 'timed-out' | 'output-limit' | 'cancelled' | 'unable-to-start'; code: string; input: string; inputName: string; compileStdout: string; compileStderr: string; output: string; helperStderr: string; compileMs?: number; compileShared?: boolean; runMs?: number; runtimeLimitMs: number; outputLimitBytes: number; exitCode?: number; error?: string; truncated: boolean; omittedBytes: number; startedAt: number; endedAt: number; sourceSnapshot?: CompilationSourceSnapshot; cleanupError?: string }
 export interface NotebookRunLimits { maxRuntimeMs: number; maxOutputBytes: number }
@@ -68,12 +68,14 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 						const accepted = chunk.subarray(0, Math.max(0, remaining));
 						if (accepted.length !== chunk.length) {
 							result.truncated = true; result.omittedBytes += chunk.length - accepted.length;
-							callbacks.evidence?.event({ type: 'stream', phase, stream: name, blockId: captured.cellId, inputId: captured.inputCellId, bytesBase64: '', sourceOmittedBytes: chunk.length - accepted.length });
 							if (limitedProgramOutput && !outputLimitReached) { outputLimitReached = true; onOutputLimit?.(); }
 						}
 						if (accepted.length) {
 							callbacks.evidence?.event({ type: 'stream', phase, stream: name, blockId: captured.cellId, inputId: captured.inputCellId, bytesBase64: accepted.toString('base64') });
 							buffers[index].push(accepted); sizes[index] += accepted.length; if (limitedProgramOutput) { total += accepted.length; } callbacks.output(phase, name, decoders[index].write(accepted));
+						}
+						if (accepted.length !== chunk.length) {
+							callbacks.evidence?.event({ type: 'stream', phase, stream: name, blockId: captured.cellId, inputId: captured.inputCellId, bytesBase64: '', sourceOmittedBytes: chunk.length - accepted.length });
 						}
 					});
 				}
@@ -89,7 +91,7 @@ export async function runNotebookProgram(request: NotebookRunRequest, signal: Ab
 		};
 		const reused = !!reuse?.compiled;
 		if (!reused) { callbacks.phase('compiling'); }
-		callbacks.evidence?.start(result.sourceSnapshot, { notebook: captured.notebookPath, cellId: captured.cellId, codeNumber: captured.codeNumber, language: captured.language, inputCellId: captured.inputCellId, outputMode: 'merged', compiler: plan.compiler, args: compilerArgs, compilerCwd: session, runtimeCwd: captured.cwd, input: { name: captured.inputName, text: captured.input }, sourceRepresentation: 'UTF-8 captured cell source; named private C/C++ file; external dependencies are not snapshotted' });
+		callbacks.evidence?.start(result.sourceSnapshot, { notebook: captured.notebookPath, cellId: captured.cellId, codeNumber: captured.codeNumber, codeCellNumber: captured.codeCellNumber, language: captured.language, inputCellId: captured.inputCellId, outputMode: 'merged', compiler: plan.compiler, args: compilerArgs, compilerCwd: session, runtimeCwd: captured.cwd, input: { name: captured.inputName, text: captured.input }, sourceRepresentation: 'UTF-8 captured cell source; named private C/C++ file; external dependencies are not snapshotted' });
 		const compiled = reuse?.compiled ?? await child(plan.compiler, compilerArgs, 'compiling');
 		if (reuse) { reuse.compiled = compiled; }
 		result.compileStdout = compiled.stdout; result.compileStderr = compiled.stderr;

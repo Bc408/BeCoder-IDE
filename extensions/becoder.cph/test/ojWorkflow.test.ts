@@ -115,7 +115,7 @@ test('three OJs: Get Problem → statement send to CPH preserves source, samples
 			const compiler = path.join(process.env.BECODER_TEST_TOOLCHAIN_ROOT ?? path.join(application, 'data/toolchains/ucrt64'), 'bin/g++.exe');
 			const executor = new CphExecutor({ dataRoot: path.join(root, 'sessions'), inputHelper: process.env.BECODER_NOTEBOOK_HELPER ?? path.join(application, 'resources/app/extensions/danielpinto8zz6.c-cpp-compile-run/dist/runner-input.exe'),
 				prepareCompilation: async (filename: string, output: string, session: string) => ({ compiler, args: [filename, '-o', output, '-std=c++20', '-O2'],
-					environment: require(path.resolve('extensions/danielpinto8zz6.c-cpp-compile-run/out-test/src/compilation.js')).privateRunnerEnvironment(session, compiler) }) });
+					environment: require(path.resolve('extensions/danielpinto8zz6.c-cpp-compile-run/out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/compilation.js')).privateRunnerEnvironment(session, compiler) }) });
 			try { const result = await executor.judge(saved.problem, source); assert.strictEqual(result.compile.exitCode, 0, result.compile.stderr); assert.deepStrictEqual(result.samples.map(sample => sample.verdict), ['passed', 'passed']); }
 			finally { executor.dispose(); }
 			bound.isClosed = true; await assert.rejects(action({ action: 'importCph' }), /source/i); bound.isClosed = false;

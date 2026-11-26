@@ -12,6 +12,8 @@ import type { Message } from '../src/session';
 import { ChatHistory, type HistoryData } from '../src/history';
 import { createGenerator } from '../src/provider';
 import { defaultCapabilities } from '../src/models';
+import { fileModelOutput } from '../src/session';
+import type { Connection } from '../src/connection';
 
 const response = (text: string) => new Response('data: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 
@@ -94,7 +96,7 @@ for (const provider of ['deepseek', 'bailian'] as const) {
 				return response(summary ? JSON.stringify({ summary: 'Earlier conceptual questions were explained.' }) : 'new answer');
 			}, 'none', [], false, fetch, {}, {
 				describe: async () => '', execute: async () => { throw new Error('No tool call is expected'); },
-				compactionView: () => ({ names: ['readMaterial'], describe: async () => '', execute: async () => { throw new Error('No compaction tool call is expected'); } })
+				compactionView: () => ({ names: ['readRunRecord'], describe: async () => '', execute: async () => { throw new Error('No compaction tool call is expected'); } })
 			}), connection);
 			assert.equal(history.snapshot.error, '');
 			assert.deepEqual(requests.map(request => request.summary), [true, false]);
@@ -153,4 +155,88 @@ test('ordinary and compaction model steps share the same twenty-step ceiling', a
 		return new Response('data: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'reused', type: 'function', function: { name: 'readCurrentCode', arguments: '{}'  } }] }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'loop', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 	}, 'none', [], false, fetch, {}, { describe: async () => '', execute: async () => { executions++; return { ok: true, contents: `read ${executions}:` + 'x'.repeat(4000) }; } }), connection);
 	assert.ok(summaries > 0); assert.ok(calls <= 20); assert.equal(calls, summaries + executions); assert.ok(history.snapshot.error); await history.dispose();
+});
+
+interface PreparationBody {
+	messages: { role: string; content: string | { type: string; image_url?: { url: string } }[] }[];
+	thinking?: { type: string };
+	enable_thinking?: boolean;
+	reasoning_effort?: string;
+	temperature?: number;
+	top_p?: number;
+	max_tokens?: number;
+}
+
+function preparationHistory(connection: Connection, image?: string): ChatHistory {
+	const raw: Message[] = [];
+	for (let index = 0; index < 4; index++) {
+		raw.push({ id: index * 2 + 1, role: 'user', text: `Question ${index}:` + 'x'.repeat(2500), activities: [], status: 'complete' }, { id: index * 2 + 2, role: 'assistant', text: `Answer ${index}:` + 'y'.repeat(2500), activities: [], status: 'complete' });
+	}
+	if (image) {
+		raw[7].protocol = [{ provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: [
+			{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'image-read', toolName: 'inspectFile', input: { operation: 'read', path: 'image.png' } }] },
+			{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'image-read', toolName: 'inspectFile', output: fileModelOutput({ ok: true, kind: 'image', path: 'image.png', mediaType: 'image/png', contents: image }) }] },
+			{ role: 'assistant', content: [{ type: 'text', text: raw[7].text }] }
+		] }];
+	}
+	return new ChatHistory({ version: 1, activeId: 'preparation', conversations: [{ id: 'preparation', title: 'Earlier conversation', updatedAt: 1, error: '', workspace: [], messages: raw }] }, async data => data, () => { }, String);
+}
+
+for (const provider of ['bailian', 'moonshot', 'ollama'] as const) {
+	for (const large of [false, true]) {
+		test(`request preparation: compaction sends tool images as media (${provider}, ${large ? 'large' : 'small'})`, async () => {
+			const connection: Connection = { provider, baseURL: 'https://fixture.example/v1', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: false } };
+			const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6dwAAAABJRU5ErkJggg==' + (large ? 'A'.repeat(50000) : '');
+			const history = preparationHistory(connection, image), original = history.snapshot.messages;
+			const requests: { summary: boolean; body: PreparationBody }[] = [];
+			try {
+				await history.session.send('Explain the image again', createGenerator(async () => connection, async (_url, init) => {
+					const body = JSON.parse(String(init?.body)) as PreparationBody;
+					const summary = typeof body.messages[0].content === 'string' && body.messages[0].content.startsWith('Summarize');
+					requests.push({ summary, body });
+					return response(summary ? '{"summary":"Earlier questions and an image were discussed."}' : 'answer');
+				}, 'none', [], false), connection);
+				assert.equal(history.snapshot.error, '');
+				assert.deepEqual(requests.map(request => request.summary), [true, false]);
+				const summary = requests[0].body;
+				const images = summary.messages.flatMap(message => Array.isArray(message.content) ? message.content.filter(part => part.type === 'image_url') : []);
+				assert.deepEqual(images.map(part => part.image_url?.url), ['data:image/png;base64,' + image]);
+				assert.ok(!summary.messages.some(message => message.role === 'tool' && typeof message.content === 'string' && message.content.includes(image)), 'Image bytes must not be measured or sent as tool text');
+				assert.deepEqual(history.snapshot.messages.slice(0, original.length), original, 'Preparing media must preserve raw history and tool pairs');
+			} finally { await history.dispose(); }
+		});
+	}
+}
+
+for (const provider of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) {
+	test(`request preparation: compaction retains disabled thinking and sampling (${provider})`, async () => {
+		const connection: Connection = { provider, baseURL: 'https://fixture.example/v1', model: 'deepseek-flash', apiKey: 'synthetic', parameters: { temperature: 0.4, topP: 0.8, maxOutputTokens: 8192 }, capabilities: { ...defaultCapabilities, tools: false }, modelSettings: { thinking: 'disabled' } };
+		const history = preparationHistory(connection), requests: PreparationBody[] = [];
+		try {
+			await history.session.send('Continue explaining', createGenerator(async () => connection, async (_url, init) => {
+				const body = JSON.parse(String(init?.body)) as PreparationBody; requests.push(body);
+				return response(typeof body.messages[0].content === 'string' && body.messages[0].content.startsWith('Summarize') ? '{"summary":"Earlier questions were explained."}' : 'answer');
+			}, 'none', [], false), connection);
+			assert.equal(history.snapshot.error, ''); assert.equal(requests.length, 2);
+			for (const body of requests) {
+				if (provider === 'bailian') { assert.equal(body.enable_thinking, false); }
+				else if (provider === 'ollama') { assert.equal(body.reasoning_effort, 'none'); }
+				else { assert.deepEqual(body.thinking, { type: 'disabled' }); }
+				assert.equal(body.temperature, 0.4); assert.equal(body.top_p, 0.8); assert.equal(body.max_tokens, 8192);
+			}
+		} finally { await history.dispose(); }
+	});
+}
+
+test('request preparation: compaction retains captured DeepSeek reasoning effort', async () => {
+	const connection: Connection = { provider: 'deepseek', baseURL: 'https://fixture.example/v1', model: 'deepseek-flash', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: false, reasoningEfforts: ['low', 'high', 'max'] }, modelSettings: { thinking: 'enabled', effort: 'max' } };
+	const history = preparationHistory(connection), requests: PreparationBody[] = [];
+	try {
+		await history.session.send('Continue explaining', createGenerator(async () => connection, async (_url, init) => {
+			const body = JSON.parse(String(init?.body)) as PreparationBody; requests.push(body);
+			return response(typeof body.messages[0].content === 'string' && body.messages[0].content.startsWith('Summarize') ? '{"summary":"Earlier questions were explained."}' : 'answer');
+		}, 'none', [], false), connection);
+		assert.equal(history.snapshot.error, ''); assert.equal(requests.length, 2);
+		for (const body of requests) { assert.deepEqual(body.thinking, { type: 'enabled' }); assert.equal(body.reasoning_effort, 'max'); }
+	} finally { await history.dispose(); }
 });

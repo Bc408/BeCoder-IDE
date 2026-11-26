@@ -23,6 +23,18 @@ const verdict = (id: string, code?: string): IBeaconVerdictRecord => ({ id, prob
 
 suite('Beacon semantic records', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
+	test('full-code hashes and whole-notebook coordinates coexist with readable legacy records', () => {
+		const next = run('next'); next.source = 'notebook'; next.operation = 'run-inputs';
+		next.program.codeHash = 'a'.repeat(64); next.program.codeCellNumber = 5;
+		assert.doesNotThrow(() => validateBeaconRecord('run', next));
+		const legacy = { ...next, program: { ...run('legacy').program, codeBlockNumber: 2 } };
+		assert.doesNotThrow(() => validateBeaconRecord('run', legacy));
+		const unavailablePosition = { ...next, program: run('unknown-position').program };
+		assert.doesNotThrow(() => validateBeaconRecord('run', unavailablePosition));
+		assert.strictEqual(appendBeaconRecord('run', [], unavailablePosition, 'position-unavailable')[0].program.codeCellNumber, undefined);
+		const mismatch = verdict('bad', 'int main(){}'); mismatch.submission.sourceVerification = 'mismatch';
+		assert.throws(() => appendBeaconRecord('verdict', [verdict('old')], mismatch, 'new'), /beacon-verdict-source-mismatch/);
+	});
 	test('reads complete dirty visible code and untitled pages without reading a background tab', async () => {
 		let backgroundReads = 0;
 		const sources = [
@@ -41,6 +53,59 @@ suite('Beacon semantic records', () => {
 		const next = appendBeaconRecord('problem', [problem('old'), problem('other', 'C:/B.cpp')], problem('ignored'), 'new');
 		assert.deepStrictEqual(next.map(row => row.id), ['other', 'new']);
 		assert.deepStrictEqual(appendBeaconRecord('problem', [problem('old', null)], problem('ignored', null), 'new').map(row => row.id), ['new']);
+	});
+	test('run truncates independent Unicode fields without changing the execution source', () => {
+		const record = run('original');
+		record.program.code = 'c'.repeat(8192) + 'tail';
+		record.runs[0].input.text = '😀'.repeat(4097);
+		const next = appendBeaconRecord('run', [], record, 'new')[0];
+		assert.deepStrictEqual(next.program.code, { text: 'c'.repeat(8192), truncated: true });
+		assert.deepStrictEqual(next.runs[0].input.text, { text: '😀'.repeat(4096), truncated: true });
+		assert.strictEqual(Array.from(record.runs[0].input.text).length, 4097);
+	});
+	test('new run enforces its complete serialized size including ID and escaping', () => {
+		const record = run('ignored');
+		const blank = { ...record, id: 'new', command: '' };
+		const fixed = Buffer.byteLength(JSON.stringify(blank));
+		const exact = { ...record, command: 'x'.repeat(32768 - fixed) };
+		const accepted = appendBeaconRecord('run', [], exact, 'new')[0];
+		assert.strictEqual(Buffer.byteLength(JSON.stringify(accepted)), 32768);
+		const previous = [run('old')];
+		assert.throws(() => appendBeaconRecord('run', previous, { ...exact, command: exact.command + 'x' }, 'new'), /beacon-run-record-too-large/);
+		assert.deepStrictEqual(previous.map(item => item.id), ['old']);
+		assert.throws(() => appendBeaconRecord('run', [], { ...record, command: '"\\\n中'.repeat(5000) }, 'new'), /beacon-run-record-too-large/);
+		const many = run('many'); many.source = 'cph'; many.operation = 'test-all';
+		many.runs = Array.from({ length: 12 }, (_, index) => ({ input: { mode: 'text', text: 'x'.repeat(4096) }, status: 'completed', testCaseNumber: index + 1, expectedOutput: 'ok', output: { stdout: 'ok' }, check: 'passed' }));
+		assert.throws(() => appendBeaconRecord('run', [], many, 'new'), /beacon-run-record-too-large/);
+		assert.strictEqual(many.runs.length, 12, 'Do not discard cases to force admission');
+	});
+	test('reads legacy head and tail output without migration or shared quota enforcement', async () => {
+		const root = await fs.mkdtemp(path.join(tmpdir(), 'beacon-legacy-output-'));
+		try {
+			const binding = await prepareBeaconWorkspace(root, true), store = new BeaconStore(binding);
+			const record = run('legacy'); record.runs[0].output = { merged: { head: 'first\n', tail: 'last\n', omittedBytes: 500, sourceOmittedBytesAtLeast: 1 } };
+			const directory = path.join(binding.assetsPath, 'cache', 'context'); await fs.mkdir(directory, { recursive: true });
+			const file = path.join(directory, 'run.json'), original = JSON.stringify({ version: 1, records: [record] }); await fs.writeFile(file, original);
+			assert.deepStrictEqual(await store.readRecord('run', 'legacy'), record);
+			assert.strictEqual(await fs.readFile(file, 'utf8'), original);
+		} finally { await fs.rm(root, { recursive: true, force: true }); }
+	});
+	test('Store refuses only the selected oversized old run and preserves the old queue on rejected capture', async () => {
+		const root = await fs.mkdtemp(path.join(tmpdir(), 'beacon-record-limit-'));
+		try {
+			const binding = await prepareBeaconWorkspace(root, true), store = new BeaconStore(binding);
+			const directory = path.join(binding.assetsPath, 'cache', 'context'); await fs.mkdir(directory, { recursive: true });
+			const old = run('oversized'); old.runs[0].input.text = 'x'.repeat(1600017);
+			const file = path.join(directory, 'run.json'), original = JSON.stringify({ version: 1, records: [old] }); await fs.writeFile(file, original);
+			assert.strictEqual((await store.listRecords('run'))[0].id, 'oversized');
+			await assert.rejects(store.readRecord('run', 'oversized'), /beacon-run-record-too-large/);
+			assert.strictEqual(await fs.readFile(file, 'utf8'), original);
+			await assert.rejects(store.appendRecord('run', { ...run('unused'), command: 'x'.repeat(32768) }), /beacon-run-record-too-large/);
+			assert.strictEqual(await fs.readFile(file, 'utf8'), original);
+			const id = await store.appendRecord('run', run('unused'));
+			assert.strictEqual((await store.readRecord('run', id)).id, id);
+			assert.strictEqual((await store.listRecords('run')).length, 2);
+		} finally { await fs.rm(root, { recursive: true, force: true }); }
 	});
 	test('visible code unavailable or replaced during reading fails without a partial batch', async () => {
 		const key = {}, source = { key, kind: 'text' as const, title: 'A.cpp', uri: 'file:///C:/practice/A.cpp', visible: true, version: '1', reason: 'beacon-page-provider-unavailable', read: async () => '' };

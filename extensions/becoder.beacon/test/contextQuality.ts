@@ -161,7 +161,7 @@ export async function runContextQualityScenario(runtime: ContextQualityRuntime, 
 			}
 			const observations: unknown[] = [], requests: unknown[] = [];
 			const state = { slot: 'quality-fixture', ...(fixture.workspaceUsable ? { root: options.workspace } : {}), mode: fixture.mode, usable: fixture.workspaceUsable,
-				workspaceState: !fixture.workspaceUsable ? 'none' : fixture.mode === 'blackout' ? 'blackout' : 'ready', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
+				workspaceState: !fixture.workspaceUsable ? 'none' : fixture.mode === 'blackout' ? 'blackout' : 'ready', epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, recent: [] };
 			const client = new runtime.BeaconContextClient(async (operation, input) => {
 				if (operation === 'context') { return state; }
 				observations.push({ operation, input });

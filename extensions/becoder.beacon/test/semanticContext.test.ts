@@ -11,7 +11,7 @@ import { createGenerator } from '../src/provider';
 import { defaultCapabilities } from '../src/models';
 import { contextToolNames, contextInputValid, type BeaconContextToolName } from '../src/contextToolContract';
 
-const state = { slot: 'fixture', root: 'C:/practice', mode: 'spot', workspaceState: 'ready', usable: true, epoch: 1, busy: false, runtimeBusy: false, activeId: 'chat', recent: [] };
+const state = { slot: 'fixture', root: 'C:/practice', mode: 'spot', workspaceState: 'ready', usable: true, epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, activeId: 'chat', recent: [] };
 const signal = new AbortController().signal;
 interface FixtureOutput { files: { code: string }[]; records: { program: { code?: string }; problem?: unknown }[]; record: { program: { code: string } }; error?: unknown }
 const execute = (tools: ContextTools, name: string, input: object = {}) => tools.execute(name as BeaconContextToolName, input as Record<string, unknown>, signal) as unknown as Promise<FixtureOutput>;
@@ -26,15 +26,20 @@ test('semantic current code reads complete fresh visible files without any save 
 });
 
 test('record tools list on demand, read whole ID records, and pin only this answer without copying into private storage', async () => {
-	let lists = 0, reads = 0, copies = 0;
-	const record = { id: 'run', source: 'runner', operation: 'run', program: { filePath: 'C:/practice/A.cpp', code: 'original' }, compile: { status: 'succeeded' }, runs: [{ input: { mode: 'text', text: '' }, status: 'completed', output: { merged: '' } }], startedAt: 'time', endedAt: 'time', status: 'completed' };
+	let lists = 0, reads = 0;
+	const record = { id: 'run', source: 'runner', operation: 'run', program: { filePath: 'C:/practice/A.cpp', code: 'original' }, compile: { status: 'succeeded', compiler: 'C:/private/g++.exe', args: ['-std=c++20', '-O2', '-include', 'private-header.h'], durationMs: 128.5 }, runs: [{ input: { mode: 'text', text: '' }, status: 'completed', durationMs: 1.7, output: { merged: '' } }], startedAt: '2026-11-26T01:10:00.123Z', endedAt: '2026-11-26T01:10:01.456Z', status: 'completed' };
 	const client = new BeaconContextClient(async operation => { if (operation === 'context') { return state; } if (operation === 'pages') { return []; } if (operation === 'listRecords') { lists++; return [record]; } if (operation === 'readRecord') { reads++; return structuredClone(record); } throw new Error(operation); });
-	await client.refresh(); const tools = new ContextTools(client, client.captureScope(), [], { capturePrivate: () => { copies++; } });
+	await client.refresh(); const tools = new ContextTools(client, client.captureScope());
 	await tools.describe(signal); assert.strictEqual(lists, 0);
 	const listing = await execute(tools, 'readRunRecord'); assert.strictEqual(listing.records[0].program.code, undefined); assert.strictEqual(listing.records[0].problem, undefined);
+	assert.doesNotMatch(JSON.stringify(listing), /compiler|args|durationMs|endedAt|private-header/);
 	const first = await execute(tools, 'readRunRecord', { id: 'run' }); record.program.code = 'changed';
+	assert.doesNotMatch(JSON.stringify(first), /compiler|args|endedAt|private-header|128\.5/);
+	assert.equal(Reflect.get(first.record, 'startedAt'), '2026-11-26T01:10:00Z');
+	assert.deepEqual(Reflect.get(first.record, 'compile'), { status: 'succeeded', standard: 'c++20', optimization: 'O2' });
+	assert.equal(Reflect.get(first.record, 'runs')[0].durationMs, 2);
 	assert.strictEqual((await execute(tools, 'readRunRecord', { id: 'run' })).record.program.code, first.record.program.code);
-	assert.strictEqual(reads, 1); assert.strictEqual(copies, 0);
+	assert.strictEqual(reads, 1);
 	const compact = tools.compactionView()!;
 	assert.ok((await execute(compact as ContextTools, 'readRunRecord')).error);
 	assert.ok((await execute(compact as ContextTools, 'readRunRecord', { id: 'other' })).error);
@@ -52,31 +57,32 @@ test('invalid selectors fail before reads and Blackout cannot consume queue reco
 
 test('provider registers independent semantic tools and no legacy writer or operation union', async () => {
 	const client = new BeaconContextClient(async operation => operation === 'context' ? state : []); await client.refresh();
-	const tools = new ContextTools(client, client.captureScope()); let names: string[] = [];
+	const tools = new ContextTools(client, client.captureScope(), [], { readBeCoderInfo: async topic => ({ version: '2.1.1', topic, content: 'Product fixture' }) }); let names: string[] = [];
 	const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://fixture.invalid', apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { ...defaultCapabilities, source: 'service' } }), async (_url, options) => {
 		const body = JSON.parse(String(options?.body)); names = (body.tools ?? []).map((tool: { function: { name: string } }) => tool.function.name).sort();
 		return new Response('data: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta: { content: 'answer' }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'one', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 	}, 'workspace', [{ name: 'practice', path: 'C:/practice' }], true, undefined, {}, tools);
 	for await (const result of generator([{ role: 'user', content: 'Explain.' }], signal, async input => ({ ok: false, path: input.path, error: 'unused' }))) { void result; }
-	assert.deepStrictEqual(names, ['browseWeb', 'fetchProblem', 'inspectFile', 'readCurrentCode', 'readMaterial', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
+	assert.deepStrictEqual(names, ['browseWeb', 'fetchProblem', 'inspectFile', 'readBeCoderInfo', 'readCurrentCode', 'readPage', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord'].sort());
 });
 
 test('each semantic schema accepts its own request and rejects nulls, selectors and unknown fields', () => {
 	for (const name of contextToolNames) {
-		const input = name === 'fetchProblem' ? { oj: 'luogu', problemId: 'P1001' } : name === 'readPage' ? { id: 'page', version: '1' } : name === 'readMaterial' ? { id: 'page:p:1:' } : {};
+		const input = name === 'fetchProblem' ? { oj: 'luogu', problemId: 'P1001' } : name === 'readPage' ? { id: 'page' } : {};
 		assert.equal(contextInputValid(name, input), true);
 		assert.equal(contextInputValid(name, { ...input, producer: 'runner' }), false);
 		assert.equal(contextInputValid(name, null), false);
 	}
 	for (const value of [null, '', '   ', 1]) { assert.equal(contextInputValid('readRunRecord', { id: value }), false); }
 	assert.equal(contextInputValid('fetchProblem', { oj: 'other', problemId: '1' }), false);
+	assert.equal(contextInputValid('readPage', { id: 'page', version: '1' }), false);
 });
 
 test('concurrent first reads share one fixed body and a failed first read can be retried', async () => {
 	let reads = 0, reject = true;
 	const client = new BeaconContextClient(async operation => {
 		if (operation === 'context') { return state; }
-		if (operation === 'readRecord') { reads++; await Promise.resolve(); if (reject) { throw new Error('missing'); } return { id: 'run', program: { code: 'fixed' } }; }
+		if (operation === 'readRecord') { reads++; await Promise.resolve(); if (reject) { throw new Error('missing'); } return { id: 'run', source: 'runner', operation: 'run', program: { filePath: 'C:/practice/A.cpp', language: 'cpp', code: 'fixed' }, compile: { status: 'succeeded' }, runs: [], startedAt: '2026-11-26T01:10:00Z', endedAt: '2026-11-26T01:10:01Z', status: 'completed' }; }
 		throw new Error(operation);
 	});
 	await client.refresh(); const tools = new ContextTools(client, client.captureScope());
@@ -85,10 +91,10 @@ test('concurrent first reads share one fixed body and a failed first read can be
 	assert.equal(reads, 2); assert.deepEqual(results[0], results[1]);
 });
 
-test('compaction permits fixed material and records but never new code, directories or network', async () => {
+test('compaction permits only fixed records and never new pages, code, directories or network', async () => {
 	const client = new BeaconContextClient(async operation => operation === 'context' ? state : []);
 	await client.refresh(); const tools = new ContextTools(client, client.captureScope()).compactionView();
-	for (const [name, input] of [['readCurrentCode', {}], ['fetchProblem', { oj: 'luogu', problemId: 'P1001' }], ['readProblemRecord', {}], ['readVerdictRecord', { id: 'unknown' }]] as const) {
+	for (const [name, input] of [['readCurrentCode', {}], ['readPage', { id: 'page' }], ['fetchProblem', { oj: 'luogu', problemId: 'P1001' }], ['readProblemRecord', {}], ['readVerdictRecord', { id: 'unknown' }]] as const) {
 		assert.ok((await tools.execute(name, input, signal)).error);
 	}
 });

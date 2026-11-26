@@ -6,6 +6,7 @@
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs/promises';
+import nativeFs from 'node:fs/promises';
 import * as path from 'path';
 import { FileTools, safeFileError } from '../src/fileTools';
 import { ChatSession, fileModelOutput, type Generate } from '../src/session';
@@ -21,6 +22,194 @@ async function fixture(run: (directory: string) => Promise<void>) {
 }
 
 suite('Beacon read-only permissions', () => {
+	test('Notebook owner validation includes the final file-handle close', async t => fixture(async directory => {
+		const file = path.join(directory, 'notes.bcnb'); await fs.writeFile(file, 'saved');
+		let version = 1;
+		const open = nativeFs.open;
+		t.mock.method(nativeFs, 'open', async (...args: Parameters<typeof fs.open>) => {
+			const handle = await open(...args), close = handle.close.bind(handle);
+			t.mock.method(handle, 'close', async () => { await close(); version++; });
+			return handle;
+		});
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }], undefined, { readRepresentation: async () => {
+			const observed = version;
+			return { contents: 'dirty content', representation: 'notebook-content', verify: () => { if (version !== observed) { throw new Error('file-changed'); } } };
+		} });
+		const result = await reader.execute({ operation: 'read', path: file }, signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'conflict'); assert.equal(result.contents, undefined);
+	}));
+	test('search marks unreadable ordinary files incomplete without failing on sensitive exclusions', async t => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'blocked.txt'), 'needle');
+		await fs.writeFile(path.join(directory, 'readable.txt'), 'needle');
+		await fs.writeFile(path.join(directory, '.env'), 'excluded');
+		const open = nativeFs.open;
+		t.mock.method(nativeFs, 'open', async (...args: Parameters<typeof fs.open>) => {
+			if (String(args[0]).endsWith('blocked.txt')) { throw Object.assign(new Error('denied'), { code: 'EACCES' }); }
+			return open(...args);
+		});
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'search', path: '.', query: 'needle' }, signal);
+		assert.equal(result.ok, true); assert.equal(result.truncated, true);
+		assert.match(result.contents!, /readable\.txt:1: needle/); assert.doesNotMatch(result.contents!, /blocked|\.env/);
+	}));
+	test('sensitive exclusions alone do not mark an otherwise complete search incomplete', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, '.env'), 'needle');
+		await fs.writeFile(path.join(directory, 'notes.txt'), 'ordinary content');
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'search', path: '.', query: 'needle' }, signal);
+		assert.equal(result.ok, true); assert.equal(result.truncated, false); assert.equal(result.contents, '');
+	}));
+	test('Notebook owner validation runs after the final disk verification', async t => fixture(async directory => {
+		const file = path.join(directory, 'notes.bcnb'); await fs.writeFile(file, 'saved');
+		let captured = false, version = 1;
+		const stat = nativeFs.stat;
+		t.mock.method(nativeFs, 'stat', async (...args: Parameters<typeof fs.stat>) => { const value = await stat(...args); if (captured) { version++; } return value; });
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }], undefined, { readRepresentation: async () => {
+			const observed = version; captured = true;
+			return { contents: 'dirty content', representation: 'notebook-content', verify: () => { if (version !== observed) { throw new Error('file-changed'); } } };
+		} });
+		const result = await reader.execute({ operation: 'read', path: file }, signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'conflict'); assert.equal(result.contents, undefined);
+	}));
+
+	test('search marks a long text window incomplete when its matching suffix was not read', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'long.txt'), 'a'.repeat(131072) + '\nneedle\n');
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'search', path: '.', query: 'needle' }, signal);
+		assert.equal(result.ok, true); assert.equal(result.contents, ''); assert.equal(result.truncated, true);
+	}));
+	test('cancellation during the final file stat cannot publish a successful read', async t => fixture(async directory => {
+		const file = path.join(directory, 'cancel.txt'); await fs.writeFile(file, 'saved');
+		const controller = new AbortController(), reason = new Error('cancel during final stat');
+		const stat = nativeFs.stat; let finalStat = false;
+		t.mock.method(nativeFs, 'stat', async (...args: Parameters<typeof fs.stat>) => {
+			const result = await stat(...args); if (finalStat) { controller.abort(reason); } return result;
+		});
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }], () => { finalStat = true; return 'dirty'; });
+		await assert.rejects(reader.execute({ operation: 'read', path: file }, controller.signal), error => error === reason);
+	}));
+	test('cancellation while opening an empty directory cannot publish a successful scan', async t => fixture(async directory => {
+		const controller = new AbortController(), reason = new Error('cancel during empty opendir');
+		const opendir = nativeFs.opendir;
+		t.mock.method(nativeFs, 'opendir', async (...args: Parameters<typeof fs.opendir>) => {
+			const result = await opendir(...args); controller.abort(reason); return result;
+		});
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		await assert.rejects(reader.execute({ operation: 'list', path: '.' }, controller.signal), error => error === reason);
+	}));
+	test('disk, dirty editor and Notebook text resume at the same Unicode code point offsets', async () => fixture(async directory => {
+		const text = 'A你😀𐐷e\u0301\n尾';
+		const disk = path.join(directory, 'unicode.txt'); const notebook = path.join(directory, 'unicode.bcnb');
+		await fs.writeFile(disk, text); await fs.writeFile(notebook, 'native Notebook data');
+		const roots = [{ name: 'root', path: directory }];
+		const readers = [new FileTools('workspace', roots), new FileTools('workspace', roots, () => text), new FileTools('workspace', roots, undefined, { readRepresentation: async () => ({ contents: text, representation: 'notebook-content' }) })];
+		for (const [index, reader] of readers.entries()) {
+			for (const [offset, contents, nextOffset] of [[0, 'A你', 2], [2, '😀𐐷', 4], [4, 'e\u0301', 6], [6, '\n尾', undefined]] as const) {
+				const result = await reader.execute({ operation: 'read', path: index === 2 ? notebook : disk, offset, limit: 2 }, signal);
+				assert.equal(result.kind, 'text'); assert.equal(result.contents, contents); assert.equal(result.nextOffset, nextOffset);
+				assert.equal(Reflect.get(result, 'offsetUnit'), 'character');
+			}
+			assert.equal((await reader.execute({ operation: 'read', path: index === 2 ? notebook : disk, offset: 3, limit: 1 }, signal)).contents, '𐐷');
+		}
+	}));
+	test('disk UTF-8 decoding crosses a chunk boundary without an eager whole-file read', async t => fixture(async directory => {
+		const file = path.join(directory, 'stream.txt');
+		await fs.writeFile(file, 'a'.repeat(65535) + '😀你尾' + 'b'.repeat(2 * 1024 * 1024));
+		const open = nativeFs.open;
+		let readBytes = 0, maxRead = 0;
+		t.mock.method(nativeFs, 'readFile', async () => { throw new Error('whole-file reads are forbidden'); });
+		t.mock.method(nativeFs, 'open', async (...args: Parameters<typeof fs.open>) => {
+			const handle = await open(...args), read = handle.read.bind(handle);
+			t.mock.method(handle, 'readFile', async () => { throw new Error('whole-file reads are forbidden'); });
+			t.mock.method(handle, 'read', async (buffer: Buffer, offset: number, length: number, position: number) => {
+				maxRead = Math.max(maxRead, length); const result = await read(buffer, offset, length, position); readBytes += result.bytesRead; return result;
+			});
+			return handle;
+		});
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'read', path: file, offset: 65535, limit: 2 }, signal);
+		assert.equal(result.contents, '😀你'); assert.equal(result.nextOffset, 65537); assert.equal(Reflect.get(result, 'offsetUnit'), 'character');
+		assert.ok(maxRead <= 128 * 1024); assert.ok(readBytes <= 256 * 1024, `read ${readBytes} bytes for a short excerpt`);
+	}));
+	test('default text size and byte caps return a real character continuation', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'ascii.txt'), 'a'.repeat(40000));
+		await fs.writeFile(path.join(directory, 'emoji.txt'), '😀'.repeat(40000));
+		const roots = [{ name: 'root', path: directory }];
+		for (const reader of [new FileTools('workspace', roots), new FileTools('workspace', roots, file => file.endsWith('emoji.txt') ? '😀'.repeat(40000) : 'a'.repeat(40000))]) {
+			const first = await reader.execute({ operation: 'read', path: 'ascii.txt' }, signal);
+			assert.equal(first.contents?.length, 32768); assert.equal(first.nextOffset, 32768);
+			const emoji = await reader.execute({ operation: 'read', path: 'emoji.txt', limit: 131072 }, signal);
+			assert.equal(emoji.contents, '😀'.repeat(32768)); assert.equal(emoji.nextOffset, 32768); assert.equal(Buffer.byteLength(emoji.contents!), 128 * 1024);
+			assert.equal((await reader.execute({ operation: 'read', path: 'emoji.txt', offset: 32768 }, signal)).contents, '😀'.repeat(7232));
+		}
+	}));
+	test('operations reject unrelated parameters and scan limits above 200', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'note.txt'), 'needle');
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		for (const input of [
+			{ operation: 'read', path: 'note.txt', query: 'needle' }, { operation: 'list', path: '.', query: 'needle' },
+			{ operation: 'list', path: '.', offset: 0 }, { operation: 'find', path: '.', query: 'note', offset: 0 },
+			{ operation: 'search', path: '.', query: 'needle', offset: 0 }, { operation: 'find', path: '.' },
+			{ operation: 'list', path: '.', limit: 201 }, { operation: 'search', path: '.', query: 'needle', limit: 201 }
+		] as const) {
+			const result = await reader.execute(input, signal); assert.equal(result.ok, false, JSON.stringify(input)); assert.equal(result.code, 'invalid-input');
+		}
+		assert.equal((await reader.execute({ operation: 'find', path: '.', query: 'note', limit: 200 }, signal)).ok, true);
+	}));
+	test('missing targets, access denial and wrong types have safe distinct actionable errors', async () => fixture(async directory => {
+		const file = path.join(directory, 'note.txt'); await fs.writeFile(file, 'notes');
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		const missing = await reader.execute({ operation: 'read', path: 'missing.txt' }, signal);
+		const wrongType = await reader.execute({ operation: 'list', path: file }, signal);
+		assert.equal(missing.code, 'material-missing'); assert.match(missing.error!, /not exist|not found/i);
+		assert.equal(wrongType.code, 'invalid-input'); assert.match(wrongType.error!, /directory|type/i);
+		for (const code of ['EACCES', 'EPERM']) {
+			const error = Object.assign(new Error('secret raw operating system detail'), { code });
+			assert.match(safeFileError(error), /denied|permission/i); assert.doesNotMatch(safeFileError(error), /secret/);
+		}
+		assert.notEqual(safeFileError(Object.assign(new Error('same'), { code: 'ENOENT' })), safeFileError(Object.assign(new Error('same'), { code: 'EACCES' })));
+	}));
+	test('binary offsets remain bytes and images reject text ranges', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'bytes.bin'), Buffer.from([0, 255, 3, 42]));
+		await fs.writeFile(path.join(directory, 'pixel.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		const binary = await reader.execute({ operation: 'read', path: 'bytes.bin', offset: 1, limit: 2 }, signal);
+		assert.equal(binary.kind, 'binary'); assert.equal(binary.contents, 'ff03'); assert.equal(binary.nextOffset, 3); assert.equal(Reflect.get(binary, 'offsetUnit'), 'byte');
+		assert.equal((await reader.execute({ operation: 'read', path: 'pixel.png', offset: 0, limit: 1 }, signal)).ok, false);
+	}));
+	test('a remaining answer byte budget shortens text without splitting its next character', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'large.txt'), 'x'.repeat(131072)); await fs.writeFile(path.join(directory, 'small.txt'), 'abc');
+		await fs.writeFile(path.join(directory, 'emoji.txt'), '😀'.repeat(40000));
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		for (let index = 0; index < 63; index++) { assert.equal((await reader.execute({ operation: 'read', path: 'large.txt', limit: 131072 }, signal)).ok, true); }
+		assert.equal((await reader.execute({ operation: 'read', path: 'small.txt' }, signal)).contents, 'abc');
+		const result = await reader.execute({ operation: 'read', path: 'emoji.txt', limit: 131072 }, signal);
+		assert.equal(result.contents, '😀'.repeat(32767)); assert.equal(result.nextOffset, 32767);
+		const blocked = await reader.execute({ operation: 'read', path: 'emoji.txt', offset: 32767 }, signal);
+		assert.equal(blocked.ok, false); assert.equal(blocked.code, 'budget');
+	}));
+	test('search result lines respect the response byte cap without returning partial matches', async () => fixture(async directory => {
+		const name = 'long-'.repeat(30) + '.txt'; await fs.writeFile(path.join(directory, name), ('needle' + 'x'.repeat(494) + '\n').repeat(200));
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'search', path: '.', query: 'needle', limit: 200 }, signal);
+		assert.equal(result.ok, true); assert.ok(Buffer.byteLength(result.contents!) <= 131072); assert.equal(result.truncated, true);
+		assert.ok(result.contents!.split('\n').every(line => line.endsWith('x'.repeat(494))));
+	}));
+	test('search excerpts never end inside an emoji surrogate pair', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'emoji.txt'), 'x' + '😀'.repeat(300) + 'needle');
+		const result = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'search', path: '.', query: 'needle' }, signal);
+		assert.equal(result.ok, true); assert.equal(result.contents!.isWellFormed(), true);
+	}));
+	test('a file disappearing during an owner read returns changed instead of publishing its text', async () => fixture(async directory => {
+		const file = path.join(directory, 'changing.txt'); await fs.writeFile(file, 'before');
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }], async () => { await fs.unlink(file); return 'unverified text'; });
+		const result = await reader.execute({ operation: 'read', path: file }, signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'conflict'); assert.equal(result.contents, undefined);
+	}));
+	test('search cannot hide an exhausted read budget as an empty successful match list', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'large.txt'), 'x'.repeat(131072)); await fs.writeFile(path.join(directory, 'filler.txt'), 'x'.repeat(131070));
+		await fs.writeFile(path.join(directory, 'other.txt'), 'text');
+		const reader = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		for (let index = 0; index < 63; index++) { await reader.execute({ operation: 'read', path: 'large.txt', limit: 131072 }, signal); }
+		await reader.execute({ operation: 'read', path: 'filler.txt', limit: 131072 }, signal);
+		const result = await reader.execute({ operation: 'search', path: '.', query: 'absent' }, signal);
+		assert.equal(result.ok, false); assert.equal(result.code, 'budget');
+	}));
 	test('notebook reads and search use owner content before paging, with no raw fallback', async () => fixture(async directory => {
 		const file = path.join(directory, 'note.bcnb');
 		await fs.writeFile(file, JSON.stringify({ cells: [{ source: 'normal WA discussion', outputs: ['secret-run'], metadata: { becoder: { attempt: 'secret-attempt' } } }] }));
@@ -121,12 +310,12 @@ suite('Beacon read-only permissions', () => {
 		await fs.writeFile(path.join(directory, 'main.cpp'), 'int main() {}\nneedle');
 		const files = new FileTools('workspace', [{ name: 'root', path: directory }]);
 		for (const operation of ['list', 'find', 'search'] as const) {
-			const result = await files.execute({ operation, path: '.', query: operation === 'search' ? 'needle' : 'main' }, signal);
+			const result = await files.execute({ operation, path: '.', ...(operation === 'list' ? {} : { query: operation === 'search' ? 'needle' : 'main' }) }, signal);
 			assert.equal(result.ok, true); assert.ok(result.contents?.includes('main.cpp')); assert.ok(!result.contents?.includes('.env'));
 		}
 		await fs.writeFile(path.join(directory, 'large.txt'), 'x'.repeat(128 * 1024));
 		const budget = new FileTools('workspace', [{ name: 'root', path: directory }]);
-		for (let index = 0; index < 64; index++) { assert.equal((await budget.execute({ operation: 'read', path: 'large.txt' }, signal)).ok, true); }
+		for (let index = 0; index < 64; index++) { assert.equal((await budget.execute({ operation: 'read', path: 'large.txt', limit: 131072 }, signal)).ok, true); }
 		assert.equal((await budget.execute({ operation: 'read', path: 'large.txt' }, signal)).ok, false);
 		await assert.rejects(() => files.execute({ operation: 'read', path: 'main.cpp' }, AbortSignal.abort()));
 	}));

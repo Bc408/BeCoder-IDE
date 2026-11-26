@@ -10,6 +10,7 @@ export const NotebookCellKind = { Markup: 1, Code: 2 };
 export const NotebookControllerAffinity = { Preferred: 2 };
 export const workspace = {
 	isTrusted: true, notebookDocuments: [] as any[],
+	textDocuments: [] as any[],
 	registerNotebookSerializer: disposable, onDidOpenNotebookDocument: disposable,
 	onDidCloseNotebookDocument: (callback: (document: any) => void) => { state.closed = callback; return disposable(); },
 	onDidChangeNotebookDocument: (callback: (event: any) => void) => { state.changed = callback; return disposable(); },

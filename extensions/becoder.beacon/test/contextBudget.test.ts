@@ -10,8 +10,46 @@ import { createGenerator } from '../src/provider';
 import { defaultCapabilities, resolveCapabilities } from '../src/models';
 import { ChatSession } from '../src/session';
 import { ChatHistory } from '../src/history';
+import type { Connection } from '../src/connection';
 
 const prepared = (): PreparedBeaconRequest => ({ source: { provider: 'fixture', baseURL: 'https://fixture.example', model: 'one' }, phase: 'answer', limits: { contextWindow: 32768, maxInputTokens: 24576, maxOutputTokens: 8192 }, instructions: 'mentor', activeTools: [], messages: [{ role: 'user', content: '中文与 code {}' }], media: [], projectionFingerprint: 'p', contractFingerprint: 'c', unitFingerprints: ['u'] });
+for (const contextWindow of [4096, 8192]) {
+	for (const explicitOutputLimit of [false, true]) {
+		test(`request preparation: default output leaves input capacity (${contextWindow}, ${explicitOutputLimit ? 'declared output limit' : 'missing output limit'})`, async () => {
+			const capabilities = resolveCapabilities('ollama', 'http://localhost:11434/v1', 'fixture', { ...defaultCapabilities, source: 'service', tools: false, contextWindow, ...(explicitOutputLimit ? { maxOutputTokens: contextWindow } : {}) });
+			const connection: Connection = { provider: 'ollama', baseURL: 'http://localhost:11434/v1', model: 'fixture', parameters: {}, capabilities };
+			const before = structuredClone(connection);
+			const outputs: number[] = [];
+			const request: typeof fetch = async (_url, init) => {
+				outputs.push((JSON.parse(String(init?.body)) as { max_tokens: number }).max_tokens);
+				return new Response('data: ' + JSON.stringify({ id: 'small', choices: [{ index: 0, delta: { content: 'Hello' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+			};
+			const session = new ChatSession(() => { }, String);
+			await session.send('Hi', createGenerator(async () => connection, request, 'none', [], false), connection);
+			assert.equal(session.snapshot.error, '');
+			assert.equal(session.snapshot.messages.at(-1)?.text, 'Hello');
+			assert.equal(outputs.length, 1);
+			assert.ok(outputs[0] > 0 && outputs[0] < contextWindow);
+			assert.deepEqual(connection, before, 'Request defaults must not rewrite discovered capacities');
+			if (explicitOutputLimit) { assert.equal(connection.capabilities?.maxOutputTokens, contextWindow); }
+
+			const overridden = { ...connection, parameters: { maxOutputTokens: contextWindow } };
+			const explicit = new ChatSession(() => { }, String);
+			await explicit.send('Hi', createGenerator(async () => overridden, request, 'none', [], false), overridden);
+			assert.ok(explicit.snapshot.error, 'An explicit output reservation must still obey the hard budget');
+			assert.equal(outputs.length, 1);
+
+			if (contextWindow === 4096 && !explicitOutputLimit) {
+				const withTools = { ...connection, capabilities: { ...capabilities, tools: true } };
+				const full = new ChatSession(() => { }, String);
+				await full.send('Hi', createGenerator(async () => withTools, request, 'workspace', [], true, request, {}, { describe: async () => '', execute: async () => { assert.fail('Oversized schemas must fail before tool execution'); } }), withTools);
+				assert.ok(full.snapshot.error, 'A 4K window must still reject its complete oversized tool contract');
+				assert.equal(outputs.length, 1);
+			}
+		});
+	}
+}
+
 test('a discovered large context does not inherit an unrelated 24K input ceiling', () => {
 	const capabilities = resolveCapabilities('deepseek', 'https://fixture.example', 'synthetic', { ...defaultCapabilities, source: 'service', contextWindow: 1048576, maxOutputTokens: 393216 });
 	const measured = measureBeaconRequest({ ...prepared(), limits: { contextWindow: capabilities.contextWindow!, maxInputTokens: capabilities.maxInputTokens!, maxOutputTokens: capabilities.maxOutputTokens! } });

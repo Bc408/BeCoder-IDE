@@ -14,7 +14,7 @@ const os = require('os');
 // Run each probe in a separate host. Success requires natural host termination;
 // the watchdog kills only the probe process tree and always reports failure.
 if (process.argv[2] === '--host') {
-	const { RunnerPtyProcess } = require('../out-test/src/runnerPtyProcess.js');
+	const { RunnerPtyProcess } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerPtyProcess.js');
 	const mode = process.argv[3];
 	const isGcc = mode.startsWith('gcc');
 	const terminal = mode === 'transcript' || isGcc ? new (require('@xterm/headless').Terminal)({ cols: 80, rows: 24, allowProposedApi: true }) : undefined;

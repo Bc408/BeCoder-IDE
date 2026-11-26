@@ -9,6 +9,11 @@ import type { ProblemDocument, RecordRef, RecordSnapshot, SubmissionOutcome } fr
 import type { RecordCapture } from '../src/views/recordPanel';
 import type { IBeaconCollectionScope, IBeaconRecordWrite } from 'becoder-beacon';
 import { toBeaconVerdictRecord } from '../src/beaconRecords';
+import type { ProblemActions } from '../src/views/problemPanel';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void, reject!: (error: Error) => void;
@@ -16,24 +21,30 @@ function deferred<T>() {
 	return { promise, resolve, reject };
 }
 
-async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeaconCollectionScope; confirmedSend?: boolean; failCapture?: boolean } = {}) {
+async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeaconCollectionScope; scopeError?: boolean; importRoot?: string; confirmedSend?: boolean; failCapture?: boolean; captureError?: string; endError?: string; sourceUri?: string; outside?: boolean; publication?: ReturnType<typeof deferred<void>>; verification?: RecordSnapshot['sourceVerification'] } = {}) {
 	const Module = require('module'), original = Module._load;
-	const commands = new Map<string, () => Promise<void>>();
+	const commands = new Map<string, (...args: any[]) => Promise<any>>();
+	let problemActions!: ProblemActions;
+	const imports: unknown[] = [];
 	const notices: ReturnType<typeof deferred<string | undefined>>[] = [];
+	const warnings: string[] = [];
 	const queries: { attemptId: string; result: ReturnType<typeof deferred<SubmissionOutcome>> }[] = [];
 	const opened: { record: RecordRef; sourceUri: string }[] = [];
-	const reads: ReturnType<typeof deferred<ProblemDocument>>[] = [], shown: ProblemDocument[] = [];
+	const reads: ReturnType<typeof deferred<ProblemDocument>>[] = [], shown: ProblemDocument[] = [], problemDisplayCollections: number[] = [];
 	const problem = lanqiao ? { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' } : { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
 	const previews: { closed: boolean; adopted: RecordRef[] }[] = [];
 	const captures: { record: IBeaconRecordWrite<'verdict'>; collectionScope: IBeaconCollectionScope }[] = [];
+	const problemCaptures: { record: IBeaconRecordWrite<'problem'>; collectionScope: IBeaconCollectionScope }[] = [];
+	const collections = new Set<string>(), collectionEvents: { operation: string; input: unknown }[] = [];
+	let collectionId = 0;
 	let captureRecord!: (ref: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope, attemptId?: string) => RecordCapture;
 	let attempts = 0, missingSource = false, failRecordOpen = false;
 	const disposable = () => ({ dispose() { } });
 	const sourcePath = lanqiao ? 'C:/practice/lanqiao/254.cpp' : 'C:/practice/luogu/P1001.cpp';
-	const source = { uri: { scheme: 'file', fsPath: sourcePath, toString: () => 'file:///' + sourcePath }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
+	const source = { uri: { scheme: 'file', fsPath: sourcePath, toString: () => options.sourceUri ?? 'file:///' + sourcePath }, languageId: 'cpp', version: 1, getText: () => 'int main() {}' };
 	const record = (id: string): Extract<SubmissionOutcome, { kind: 'record' }> => {
 		const ref = { problem, id, url: lanqiao ? 'https://www.lanqiao.cn/problems/254/submissions/' + id + '/' : 'https://www.luogu.com.cn/record/' + id };
-		return { kind: 'record', record: ref, ...(lanqiao ? { observed: { attemptId: 'attempt-1', snapshot: { ref, phase: 'finished' as const, rawStatus: 'AC', sourceVerification: 'matched' as const } } } : {}) };
+		return { kind: 'record', record: ref, ...(lanqiao ? { observed: { attemptId: 'attempt-1', snapshot: { ref, phase: 'finished' as const, rawStatus: 'AC', sourceVerification: options.verification ?? 'matched' } } } : {}) };
 	};
 	const vscode = {
 		ConfigurationTarget: { Global: 1 },
@@ -41,12 +52,24 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 		l10n: { t: (value: string, ...args: string[]) => value.replace('{0}', args[0]) },
 		Uri: { parse: (value: string) => value }, ViewColumn: { One: 1 },
 		commands: {
-			registerCommand: (id: string, action: () => Promise<void>) => { commands.set(id, action); return disposable(); }, executeCommand: async (id: string, ...args: unknown[]) => {
+			registerCommand: (id: string, action: (...args: any[]) => Promise<any>) => { commands.set(id, action); return disposable(); }, executeCommand: async (id: string, ...args: unknown[]) => {
 				if (id === '_becoder.beacon.context') {
-					if (args[0] === 'captureCollectionScope') { return options.scope; }
-					if (args[0] === 'captureVerdict') { if (options.failCapture) { throw new Error('disk unavailable'); } captures.push(structuredClone(args[1]) as typeof captures[number]); }
+					if (args[0] === 'captureCollectionScope') { if (options.scopeError) { throw new Error('scope capture unavailable'); } return options.scope; }
+					if (args[0] === 'beginCollection') {
+						collectionEvents.push({ operation: 'begin', input: structuredClone(args[1]) });
+						if (!options.scope || options.outside) { return undefined; }
+						const handle = 'collection-' + ++collectionId; collections.add(handle); return handle;
+					}
+					if (args[0] === 'endCollection') { const input = args[1] as { handle: string }; collectionEvents.push({ operation: 'end', input }); assert.ok(collections.delete(input.handle), 'release the owned collection exactly once'); if (options.endError) { throw new Error(options.endError); } return; }
+					if (args[0] === 'captureVerdict' || args[0] === 'captureProblemRecord') {
+						await options.publication?.promise;
+						if (options.failCapture || options.captureError) { throw new Error(options.captureError ?? 'disk unavailable'); }
+						if (args[0] === 'captureVerdict') { captures.push(structuredClone(args[1]) as typeof captures[number]); }
+						else { problemCaptures.push(structuredClone(args[1]) as typeof problemCaptures[number]); }
+					}
 					return undefined;
 				}
+				if (id === '_becoder.cph.importSamplesForSource') { imports.push(args[0]); return true; }
 				if (id.endsWith('.prepare')) { return { handle: 'prepared', languages: [{ id: lanqiao ? 'cpp' : '27', family: 'cpp', label: lanqiao ? 'C++（g++17）' : 'C++' }], hasDraft: false }; }
 				if (id.endsWith('.send')) { attempts++; if (options.confirmedSend) { previews.at(-1)!.closed = true; return record('a'.repeat(24)); } return { kind: 'unconfirmed', problem, attemptId: 'attempt-' + attempts, message: 'Connection lost' }; }
 				if (id.endsWith('.reconcile')) { const result = deferred<SubmissionOutcome>(); queries.push({ attemptId: String(args[0]), result }); return result.promise; }
@@ -55,13 +78,13 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 				return undefined;
 			}
 		},
-		workspace: { isTrusted: true, getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), onDidGrantWorkspaceTrust: () => ({ dispose() { } }), openTextDocument: async () => { if (missingSource) { throw new Error('source-removed'); } return source; } },
+		workspace: { isTrusted: true, workspaceFolders: options.importRoot ? [{ uri: { scheme: 'file', fsPath: options.importRoot } }] : [], getConfiguration: () => ({ get: () => undefined, update: async () => { } }), onDidChangeConfiguration: () => ({ dispose() { } }), onDidGrantWorkspaceTrust: () => ({ dispose() { } }), openTextDocument: async () => { if (missingSource) { throw new Error('source-removed'); } return source; } },
 		window: {
 			activeTextEditor: { document: source, viewColumn: 1 },
 			registerWebviewViewProvider: disposable,
 			createStatusBarItem: () => ({ show() { }, dispose() { } }),
 			showQuickPick: async (options: unknown[]) => options[0], showTextDocument: async () => undefined,
-			showWarningMessage: (_message: string, ...actions: string[]) => { if (!actions.length) { return Promise.resolve(undefined); } const notice = deferred<string | undefined>(); notices.push(notice); return notice.promise; },
+			showWarningMessage: (message: string, ...actions: string[]) => { if (!actions.length) { warnings.push(message); return Promise.resolve(undefined); } const notice = deferred<string | undefined>(); notices.push(notice); return notice.promise; },
 			showErrorMessage: async () => undefined
 		}
 	};
@@ -80,18 +103,20 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 				} };
 			}
 		} }; }
-		if (id === './views/problemPanel') { return { ProblemPanel: class { async open(document: ProblemDocument) { shown.push(document); } updateLanguages() { } updateLanguage() { } refreshLanguages() { } refreshPreferences() { } dispose() { } } }; }
+		if (id === './views/problemPanel') { return { ProblemPanel: class { constructor(_context: unknown, actions: ProblemActions) { problemActions = actions; } async open(document: ProblemDocument) { problemDisplayCollections.push(collections.size); shown.push(document); } updateLanguages() { } updateLanguage() { } refreshLanguages() { } refreshPreferences() { } dispose() { } } }; }
 		return original.call(this, id, ...args);
 	};
 	const subscriptions: { dispose(): void }[] = [];
 	const extension = require('../src/extension'); await extension.activate({ subscriptions, globalState: { get: () => undefined, update: async () => { } } });
 	t.after(async () => { await extension.deactivate(); subscriptions.forEach(value => value.dispose()); Module._load = original; delete require.cache[extensionPath]; });
 	return {
-		queries, opened, notices, previews, captures,
-		captureRecord: (snapshot: RecordSnapshot) => captureRecord(snapshot.ref, source.uri.toString(), options.scope),
+		queries, opened, notices, warnings, previews, captures, problemCaptures, collections, collectionEvents, imports,
+		captureRecord: (snapshot: RecordSnapshot, attemptId?: string, sourceUri = source.uri.toString()) => captureRecord(snapshot.ref, sourceUri, options.scopeError ? undefined : options.scope, attemptId),
+		importCph: (document: ProblemDocument) => problemActions.importCph(source.uri.toString(), document),
+		importBrowser: (document: ProblemDocument) => commands.get('_becoder.ojConnect.importFromBrowser')!(document),
 		removeSource: () => { missingSource = true; },
 		failRecordOpen: () => { failRecordOpen = true; },
-		reads, shown, showProblem: () => commands.get('becoder.ojConnect.showProblem')!(),
+		reads, shown, problemDisplayCollections, showProblem: () => commands.get('becoder.ojConnect.showProblem')!(),
 		dispose: () => subscriptions.forEach(value => value.dispose()),
 		problemDocument: (title: string): ProblemDocument => ({ ref: problem, title, interactive: false, bodies: [{ locale: 'zh-CN', sections: [{ format: 'markdown', content: title }] }], samples: [], limits: [], languages: [] }),
 		submit: () => commands.get('becoder.ojConnect.submit')!(),
@@ -100,6 +125,173 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 		record
 	};
 }
+
+for (const scopeError of [false, true]) {
+	for (const action of ['get', 'import-cph', 'import-browser', 'submit-final']) {
+		test(`OJ scope capture ${scopeError ? 'failure' : 'undefined'} preserves ${action} with one action notification`, async t => {
+			const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oj-scope-'));
+			t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+			const f = await fixture(t, true, { scopeError, importRoot: root, confirmedSend: true });
+			for (const count of [1, 2]) {
+				const document = f.problemDocument('A+B');
+				if (action === 'get') {
+					const reading = f.showProblem(); await f.settle();
+					if (scopeError) { assert.equal(f.warnings[count - 1], 'Beacon could not prepare this activity context. The requested OJ action will continue.'); }
+					f.reads[count - 1].resolve(document); await reading; assert.equal(f.shown.length, count);
+				}
+				if (action === 'import-cph') { await f.importCph(document); assert.equal(f.imports.length, count); }
+				if (action === 'import-browser') { const imported = await f.importBrowser(document); assert.equal(fs.existsSync(fileURLToPath(imported.sourceUri)), true); assert.equal(f.shown.length, count); }
+				if (action === 'submit-final') {
+					await f.submit();
+					const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot, 'attempt-1');
+					capture.accept({ ...snapshot, phase: 'judging' }); capture.accept(snapshot); capture.accept(snapshot); await capture.finish();
+					assert.equal(f.previews.length, count); assert.equal(f.notices.length, 0); assert.equal(f.queries.length, 0);
+				}
+				assert.equal(f.warnings.length, scopeError ? count : 0);
+			}
+			if (scopeError) { assert.equal(f.warnings[0], 'Beacon could not prepare this activity context. The requested OJ action will continue.'); }
+			assert.deepStrictEqual(f.captures, []); assert.deepStrictEqual(f.problemCaptures, []); assert.equal(f.collections.size, 0);
+		});
+	}
+}
+
+test('a completed verdict begins collection synchronously and releases only after publication', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 };
+	const publication = deferred<void>(), f = await fixture(t, true, { scope, publication });
+	const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot);
+	capture.accept({ ...snapshot, phase: 'queued' }); capture.accept({ ...snapshot, phase: 'judging' });
+	assert.strictEqual(f.collections.size, 0, 'remote judging has no record ready to publish');
+	capture.accept(snapshot);
+	assert.strictEqual(f.collections.size, 1, 'accept registers before its asynchronous publication tail');
+	assert.deepStrictEqual(f.collectionEvents[0], { operation: 'begin', input: { collectionScope: scope, source: 'C:\\practice\\lanqiao\\254.cpp' } });
+	await f.settle(); assert.strictEqual(f.captures.length, 0); assert.strictEqual(f.collections.size, 1);
+	publication.resolve(); await capture.finish();
+	assert.strictEqual(f.captures.length, 1); assert.strictEqual(f.collections.size, 0);
+	assert.deepStrictEqual(f.collectionEvents.map(event => event.operation), ['begin', 'end']);
+});
+
+test('verdict adaptation failure is covered and reported once without escaping accept', async t => {
+	const f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 } });
+	const snapshot = f.record('a'.repeat(24)).observed!.snapshot;
+	const capture = f.captureRecord(snapshot, 'bad-uri', 'file:///C:/practice/%invalid.cpp');
+	assert.doesNotThrow(() => capture.accept(snapshot));
+	assert.strictEqual(f.collections.size, 1);
+	assert.doesNotThrow(() => capture.accept(structuredClone(snapshot)));
+	assert.strictEqual(f.collections.size, 2, 'every registered duplicate must release even after the first adaptation fails');
+	await capture.finish();
+	assert.strictEqual(f.collections.size, 0); assert.deepStrictEqual(f.captures, []);
+	assert.deepStrictEqual(f.collectionEvents.map(event => event.operation), ['begin', 'begin', 'end', 'end']);
+	assert.strictEqual(f.warnings.length, 1); assert.match(f.warnings[0], /submission.*Beacon.*context/i);
+});
+
+for (const [captureError, expected] of [['beacon-record-publication-uncertain', /could not confirm.*saved/i], ['beacon-run-record-too-large', /capacity limit/i], ['disk unavailable', /could not save/i]] as const) {
+	test('verdict publication reports ' + captureError + ' once and releases collection', async t => {
+		const f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, captureError });
+		const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot);
+		capture.accept(snapshot); capture.accept(structuredClone(snapshot)); await capture.finish();
+		assert.strictEqual(f.collections.size, 0); assert.deepStrictEqual(f.captures, []);
+		assert.deepStrictEqual(f.collectionEvents.map(event => event.operation), ['begin', 'begin', 'end', 'end']);
+		assert.strictEqual(f.warnings.length, 1); assert.match(f.warnings[0], expected);
+		if (captureError === 'beacon-record-publication-uncertain') { assert.doesNotMatch(f.warnings[0], /could not save|not saved/i); }
+	});
+}
+
+for (const outside of [false, true]) {
+	test('verdict skips intentionally ineligible collection ' + (outside ? 'outside root' : 'without root'), async t => {
+		const scope = outside ? { slot: 'chosen', root: 'C:/elsewhere', workspaceIdentity: 'root', rootSelectionEpoch: 1 } : undefined;
+		const f = await fixture(t, true, { scope, outside, failCapture: true });
+		const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot);
+		capture.accept(snapshot); await capture.finish();
+		assert.deepStrictEqual(f.captures, []); assert.deepStrictEqual(f.warnings, []); assert.strictEqual(f.collections.size, 0);
+		assert.deepStrictEqual(f.collectionEvents, outside ? [{ operation: 'begin', input: { collectionScope: scope, source: 'C:\\practice\\lanqiao\\254.cpp' } }] : []);
+	});
+}
+
+test('a final verdict without a local source preserves null path under the original scope', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 };
+	const f = await fixture(t, true, { scope });
+	const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot, 'source-unavailable', '');
+	capture.accept(snapshot); await capture.finish();
+	assert.deepStrictEqual(f.collectionEvents[0], { operation: 'begin', input: { collectionScope: scope } });
+	assert.strictEqual(f.captures.length, 1); assert.strictEqual(f.captures[0].record.filePath, null);
+	assert.strictEqual(f.collections.size, 0); assert.deepStrictEqual(f.warnings, []);
+});
+
+test('duplicate final observations release all collection handles and publish once', async t => {
+	const publication = deferred<void>(), f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, publication });
+	const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot);
+	capture.accept(snapshot); capture.accept(structuredClone(snapshot));
+	assert.strictEqual(f.collections.size, 2);
+	await f.settle(); assert.strictEqual(f.captures.length, 0); assert.strictEqual(f.collections.size, 2);
+	publication.resolve(); await capture.finish();
+	assert.strictEqual(f.captures.length, 1); assert.strictEqual(f.collections.size, 0); assert.deepStrictEqual(f.warnings, []);
+	assert.deepStrictEqual(f.collectionEvents.map(event => event.operation), ['begin', 'begin', 'end', 'end']);
+	assert.notStrictEqual((f.collectionEvents[2].input as { handle: string }).handle, (f.collectionEvents[3].input as { handle: string }).handle);
+});
+
+test('completed problem publication holds collection through the save and preserves opened content', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 };
+	const publication = deferred<void>(), f = await fixture(t, false, { scope, publication });
+	const reading = f.showProblem(); await f.settle(); assert.strictEqual(f.collections.size, 0);
+	f.reads[0].resolve(f.problemDocument('A+B')); await f.settle();
+	assert.strictEqual(f.collections.size, 1); assert.deepStrictEqual(f.shown.map(document => document.title), ['A+B']);
+	assert.deepStrictEqual(f.problemDisplayCollections, [1], 'collection starts before displaying the acquired problem');
+	publication.resolve(); await reading;
+	assert.strictEqual(f.collections.size, 0); assert.strictEqual(f.problemCaptures.length, 1); assert.deepStrictEqual(f.warnings, []);
+});
+
+test('a successful publication with an unconfirmed lifecycle end reports uncertainty without appending again', async t => {
+	const f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, endError: 'connection closed' });
+	const snapshot = f.record('a'.repeat(24)).observed!.snapshot, capture = f.captureRecord(snapshot);
+	capture.accept(snapshot); capture.accept(structuredClone(snapshot)); await capture.finish();
+	assert.strictEqual(f.captures.length, 1); assert.strictEqual(f.collections.size, 0);
+	assert.strictEqual(f.warnings.length, 1); assert.match(f.warnings[0], /could not confirm.*saved/i);
+	assert.doesNotMatch(f.warnings[0], /could not save|not saved/i);
+});
+
+test('problem adaptation failures finish their collection and preserve the displayed problem', async t => {
+	const f = await fixture(t, false, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, sourceUri: 'file:///C:/practice/%invalid.cpp' });
+	const reading = f.showProblem(); await f.settle(); f.reads[0].resolve(f.problemDocument('A+B')); await reading;
+	assert.deepStrictEqual(f.collectionEvents.map(event => event.operation), ['begin', 'end']);
+	assert.strictEqual(f.collections.size, 0); assert.deepStrictEqual(f.problemCaptures, []);
+	assert.deepStrictEqual(f.shown.map(document => document.title), ['A+B']);
+	assert.strictEqual(f.warnings.length, 1); assert.match(f.warnings[0], /problem.*Beacon.*context/i);
+});
+
+for (const hasScope of [false, true]) {
+	test('mismatch warns once across native observations and panel polls ' + (hasScope ? 'with collection scope' : 'without a Beacon root'), async t => {
+		const scope = hasScope ? { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 } : undefined;
+		const f = await fixture(t, true, { scope, confirmedSend: true, verification: 'mismatch' });
+		await f.submit();
+		assert.strictEqual(f.warnings.length, 1, 'the native receipt reports mismatch even if its preview closed');
+		assert.match(f.warnings[0], /source mismatch/i);
+		const snapshot = f.record('a'.repeat(24)).observed!.snapshot;
+		const panel = f.captureRecord(snapshot, 'attempt-1');
+		panel.accept({ ...snapshot, phase: 'judging' }); panel.accept(snapshot); panel.accept(structuredClone(snapshot));
+		await panel.finish();
+		assert.strictEqual(f.warnings.length, 1, 'polls and the panel share the original attempt notification');
+		assert.deepStrictEqual(f.captures, [], 'rejected observations never reach Store, so cannot replace an old record');
+		const next = f.captureRecord(snapshot, 'attempt-2'); next.accept(snapshot); await next.finish();
+		assert.strictEqual(f.warnings.length, 2, 'an independent observation may report its own mismatch');
+		const other = f.record('b'.repeat(24)).observed!.snapshot;
+		const otherPanel = f.captureRecord(other, 'attempt-2'); otherPanel.accept(other); await otherPanel.finish();
+		assert.strictEqual(f.warnings.length, 3, 'a distinct record is not hidden by the same attempt key');
+	});
+}
+
+test('all other final verification states publish normally after a rejected mismatch', async t => {
+	const scope = { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 };
+	const f = await fixture(t, true, { scope });
+	const snapshot = { ...f.record('a'.repeat(24)).observed!.snapshot, sourceVerification: 'mismatch' as const };
+	const capture = f.captureRecord(snapshot, 'attempt-1'); capture.accept(snapshot); await capture.finish();
+	assert.strictEqual(f.captures.length, 0);
+	for (const sourceVerification of ['matched', 'not-checked', 'unavailable'] as const) {
+		capture.accept({ ...snapshot, phase: 'judging', sourceVerification });
+		capture.accept({ ...snapshot, sourceVerification }); await capture.finish();
+	}
+	assert.deepStrictEqual(f.captures.map(value => value.record.submission.sourceVerification), ['matched', 'not-checked', 'unavailable']);
+	assert.strictEqual(f.warnings.length, 1, 'mismatch is a normal skip and never turns into a storage failure');
+});
 
 test('a new verdict observation is published after the previous record has left the recent queue', async t => {
 	const f = await fixture(t, true, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 } });

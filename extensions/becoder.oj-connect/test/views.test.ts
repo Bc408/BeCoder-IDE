@@ -123,11 +123,11 @@ test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore 
 		const problem = { site: 'lanqiao' as const, nativeId: '254', url: 'https://www.lanqiao.cn/problems/254/learning/' };
 		const record = { problem, id: '6aff1ff717e87398a15a4abf', url: 'https://www.lanqiao.cn/problems/254/submissions/6aff1ff717e87398a15a4abf/' };
 		let reads = 0, queries = 0, releases = 0, resolveFirst!: (snapshot: RecordSnapshot) => void;
-		const facts: RecordSnapshot[] = []; let captureFinishes = 0;
+		const facts: RecordSnapshot[] = [], captureAttempts: (string | undefined)[] = []; let captureFinishes = 0;
 		const result: RecordSnapshot = { ref: record, phase: 'finished', rawStatus: 'AC', sourceVerification: 'matched' };
 		const panels = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => ++reads === 1 ? new Promise<RecordSnapshot>(resolve => { resolveFirst = resolve; }) : result }], async () => { }, async () => { releases++; }, (outcome: { attemptId: string }, _source: string, adopt: (record: RecordRef) => void) => async () => {
 			assert.strictEqual(outcome.attemptId, 'attempt'); queries++; adopt(record);
-		}, () => ({ accept: (snapshot: RecordSnapshot) => facts.push(snapshot), finish: async () => { captureFinishes++; } }));
+		}, (_ref: RecordRef, _source: string, _scope: unknown, attemptId?: string) => { captureAttempts.push(attemptId); return { accept: (snapshot: RecordSnapshot) => facts.push(snapshot), finish: async () => { captureFinishes++; } }; });
 		const initial = { problem, phase: 'preparing' as const, codeLength: '12 B' };
 		const first = panels.beginEvaluation(initial, '');
 		assert.strictEqual(captures.length, 1); assert.strictEqual(reads, 0);
@@ -135,13 +135,14 @@ test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore 
 		assert.strictEqual(captures[0].state.message, undefined, 'normal verification stays in the verdict row');
 		const report = { ...initial, phase: 'confirming' as const, language: 'C++（g++17）', groups: [{ name: 'Test Cases', rows: [['1', 'AC', '0 ms', '0 kb']] }] };
 		first.update(report);
-		assert.strictEqual(first.finish({ kind: 'record', record }), false, 'the preview owns presentation and suppresses later generic reopening'); await panels.open(record);
+		assert.strictEqual(first.finish({ kind: 'record', record, observed: { attemptId: 'confirmed-attempt', snapshot: result } }), false, 'the preview owns presentation and suppresses later generic reopening'); await panels.open(record);
 		const adoptedSubmission = captures[0].state.submission;
 		resolveFirst(result);
 		assert.deepStrictEqual(adoptedSubmission, report, 'formal identity adoption cannot clear known report data while the result read is pending');
 		assert.strictEqual((captures[0].state as PanelState).record?.id, record.id);
 		assert.strictEqual(captures[0].state.snapshot, undefined);
 		await new Promise(resolve => setImmediate(resolve));
+		assert.strictEqual(captureAttempts[0], 'confirmed-attempt', 'the adopted page shares the native observation identity for mismatch notifications');
 		assert.strictEqual(captures.length, 1, 'formal confirmation reuses the same page');
 		assert.deepStrictEqual(captures[0].state.submission, report, 'local submitted metadata remains available when the official record omits it');
 		assert.strictEqual((captures[0].state as PanelState).snapshot?.rawStatus, 'AC');
@@ -156,6 +157,7 @@ test('pending Lanqiao views upgrade in place, keep retries GET-only, and ignore 
 		assert.strictEqual(pending.state.tracking, false); assert.strictEqual(pending.state.canRetry, true);
 		await pending.action({ action: 'continueQuery' }); await new Promise(resolve => setImmediate(resolve));
 		assert.strictEqual(queries, 1); assert.strictEqual(pending.state.snapshot?.rawStatus, 'AC');
+		assert.strictEqual(captureAttempts.at(-1), 'attempt', 'continued receipt queries retain the unconfirmed attempt even without a progress milestone');
 		assert.strictEqual(captures.length, 3); panels.dispose();
 		const unavailable = new RecordPanel({}, [{ site: 'lanqiao', readRecord: async () => { throw new Error('lanqiao-session-changed'); } }], async () => { }, async () => { });
 		const fourth = unavailable.beginEvaluation(report, ''), stopped = captures.at(-1)!;

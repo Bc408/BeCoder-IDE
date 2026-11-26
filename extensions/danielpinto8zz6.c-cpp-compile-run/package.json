@@ -60,7 +60,7 @@
 	"scripts": {
 		"compile": "webpack",
 		"package": "webpack --mode production --devtool hidden-source-map",
-		"test": "node -e \"require('fs').rmSync('out-test', { recursive: true, force: true })\" && node ../../node_modules/typescript/bin/tsc6 -p ./tsconfig.test.json && node --test out-test/test/*.test.js",
+		"test": "node -e \"require('fs').rmSync('out-test', { recursive: true, force: true })\" && node ../../node_modules/typescript/bin/tsc6 -p ./tsconfig.test.json && node --test out-test/extensions/danielpinto8zz6.c-cpp-compile-run/test/*.test.js",
 		"vscode:prepublish": "npm run package"
 	},
 	"devDependencies": {

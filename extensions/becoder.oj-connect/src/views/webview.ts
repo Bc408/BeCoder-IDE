@@ -28,7 +28,7 @@ export function labels(): Record<string, string> {
 		compileSucceeded: vscode.l10n.t('Compilation succeeded'), compileFailed: vscode.l10n.t('Compilation failed'),
 		compileUnavailable: vscode.l10n.t('Compiler output is unavailable for this record.'),
 		owner: vscode.l10n.t('User'), compiler: vscode.l10n.t('Compilation Details'),
-		'verification_mismatch': vscode.l10n.t('The record source differs from the submitted source.'),
+		'verification_mismatch': vscode.l10n.t('Source mismatch: the record source differs from the submitted source.'),
 	};
 }
 

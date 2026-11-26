@@ -1,11 +1,7 @@
-# CPH local tests
+# cph
 
-CPH associates local test cases with one C/C++ source file. Test data includes input and expected output. Import to CPH in the embedded browser and the CPH button on a statement page import problem samples; users can also edit and add cases. Associations and test configuration are saved in the .cph directory beside the source file.
+CPH stores editable input/expected-output test cases associated with a C/C++ source, under its adjacent .cph directory. Samples can be imported from a problem. A case action runs one case; Run All compiles the program once and executes its cases independently. Each action produces one program record. Compile Only produces no run record.
 
-The CPH sidebar shows the associated source and test cases. Ctrl+Alt+D focuses the panel; Ctrl+Alt+B runs tests. Each case has its own run action; Run All executes multiple cases for the program. One Run All action shares a single compilation, then executes each input independently. Compile Only is a separate action and does not execute tests.
+CPH reuses Runner's compiler configuration and separates program stdout/stderr. It supports output comparison and user-provided Python checkers; the latter require Python. The program's exit/timeout and the answer check are independent. A normally exited program can have wrong-answer or checker time-limit; checker failures do not establish student-program failures. Beacon receives the check result, not checker code or configuration. Passing local cases does not establish OJ acceptance.
 
-CPH reuses Runner's bundled C/C++ compiler and compiler settings, rather than legacy CPH compiler-argument settings. Program stdout and stderr are displayed separately. Checking includes existing output comparisons and user-provided Python special-judge scripts. Python is used only for the checker and requires an available local Python environment; the student C/C++ program still uses the bundled compiler.
-
-The process outcome describes the student program's completion, exit, timeout and similar states; check describes answer checking. A normal program exit and a checker timeout can occur together. A checker error does not establish a student-process error. Recorded check results do not include the checker implementation. Run All can contain multiple inputs; one single-case action and one Run All action each produce one program-run record.
-
-Passing all local samples establishes only those cases and checks, not online OJ acceptance. CPH can import more problem sources than the five OJs with full OJ Connect support.
+Check results are available when checking completes. Compilation failure leaves the planned inputs unexecuted and without checks; an execution record can also lack a check if the checking stage fails. A missing check does not mean passed or that CPH lacks answer checking. Run summaries count actual executions, unexecuted inputs and recorded check outcomes separately.

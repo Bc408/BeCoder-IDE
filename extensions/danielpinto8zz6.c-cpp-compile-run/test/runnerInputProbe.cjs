@@ -1,4 +1,7 @@
-/* Copyright (c) 2026 BeCoder contributors. GPL-3.0-or-later. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -6,8 +9,8 @@ const path = require('path');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 const { Terminal } = require('@xterm/headless');
-const { RunnerPtyProcess } = require('../out-test/src/runnerPtyProcess');
-const { RunnerInputControl } = require('../out-test/src/runnerInputControl');
+const { RunnerPtyProcess } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerPtyProcess');
+const { RunnerInputControl } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerInputControl');
 
 async function main() {
 	const helper = path.resolve(process.argv[3]);

@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import { beCoderNotebookType, isBeCoderInputCell, describeNotebookMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
@@ -14,7 +15,7 @@ import { NotebookEditOwner, createNotebook } from './editOwner';
 import { writeNotebookBackup } from './backup';
 
 export interface NotebookEditInput { operation: 'create' | 'begin' | 'read' | 'apply' | 'finish' | 'cancel'; path?: string; sourcePath?: string; handle?: string; revision?: number; cells?: ContentCell[]; cellId?: string; part?: 'content' | 'outputs' | 'attempt' }
-export interface NotebookEditApi { edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>>; readBeaconContent?(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content' }> }
+export interface NotebookEditApi { edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>>; readBeaconContent?(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content'; verify?(): void }> }
 const nativeCells = (data: NotebookData) => data.cells.map(cell => {
 	const value = new vscode.NotebookCellData(cell.kind, cell.value, cell.languageId); value.metadata = cell.metadata;
 	value.outputs = cell.outputs?.map(output => new vscode.NotebookCellOutput(output.items.map(item => new vscode.NotebookCellOutputItem(item.data, item.mime)), output.metadata)); value.executionSummary = cell.executionSummary; return value;
@@ -27,20 +28,34 @@ export class NotebookEdits implements NotebookEditApi {
 	private readonly pendingCreations = new Set<Promise<Record<string, unknown>>>();
 	private disposed = false;
 	constructor(private readonly ensureIds: (document: vscode.NotebookDocument) => Promise<void>, private readonly editing: Set<vscode.NotebookDocument>) { }
-	async readBeaconContent(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content' }> {
+	async readBeaconContent(sourceUri: string, signal: AbortSignal): Promise<{ contents: string; version?: string; representation: 'notebook-content'; verify?(): void }> {
 		signal.throwIfAborted(); const uri = vscode.Uri.parse(sourceUri);
 		if (uri.scheme !== 'file' || !/\.bcnb(?:-backup)?$/i.test(uri.fsPath)) { throw new Error('notebook-invalid-type'); }
-		const loaded = vscode.workspace.notebookDocuments.find(document => !document.isClosed && document.uri.toString() === sourceUri);
-		if (loaded) { const version = loaded.version; const contents = beaconNotebookContent(snapshot(loaded)); signal.throwIfAborted(); if (loaded.version !== version || loaded.isClosed) { throw new Error('notebook-version-changed'); } return { contents, version: String(version), representation: 'notebook-content' }; }
+		const canonical = await fs.realpath(uri.fsPath);
+		const matches = async (document: { uri: vscode.Uri; isClosed: boolean }) => {
+			if (document.isClosed || document.uri.scheme !== 'file') { return false; }
+			try { return path.relative(await fs.realpath(document.uri.fsPath), canonical) === ''; } catch { return false; }
+		};
+		for (const document of vscode.workspace.notebookDocuments) {
+			if (document.notebookType !== beCoderNotebookType || !await matches(document)) { continue; }
+			const version = document.version;
+			const verify = () => { signal.throwIfAborted(); if (document.version !== version || document.isClosed || !vscode.workspace.notebookDocuments.includes(document)) { throw new Error('notebook-version-changed'); } };
+			verify(); const contents = beaconNotebookContent(snapshot(document)); verify();
+			return { contents, version: String(version), representation: 'notebook-content', verify };
+		}
 		const before = await fs.stat(uri.fsPath, { bigint: true });
 		if (!before.isFile() || before.size > 32n * 1024n * 1024n) { throw new Error('notebook-invalid-type'); }
-		const text = vscode.workspace.textDocuments.find(document => !document.isClosed && document.uri.toString() === sourceUri);
+		let text: vscode.TextDocument | undefined;
+		for (const document of vscode.workspace.textDocuments) { if (await matches(document)) { text = document; break; } }
 		const version = text?.version;
+		const verify = () => { signal.throwIfAborted(); if (text && (text.isClosed || text.version !== version || !vscode.workspace.textDocuments.includes(text))) { throw new Error('notebook-version-changed'); } };
+		verify();
 		const data = decodeNotebook(text ? Buffer.from(text.getText(), 'utf8') : await fs.readFile(uri.fsPath));
 		const after = await fs.stat(uri.fsPath, { bigint: true });
 		signal.throwIfAborted();
-		if (after.ino !== before.ino || after.dev !== before.dev || after.size !== before.size || after.mtimeNs !== before.mtimeNs || (text && (text.isClosed || text.version !== version))) { throw new Error('notebook-version-changed'); }
-		return { contents: beaconNotebookContent(data), ...(version === undefined ? {} : { version: String(version) }), representation: 'notebook-content' };
+		if (after.ino !== before.ino || after.dev !== before.dev || after.size !== before.size || after.mtimeNs !== before.mtimeNs) { throw new Error('notebook-version-changed'); }
+		verify();
+		return { contents: beaconNotebookContent(data), ...(version === undefined ? {} : { version: String(version) }), representation: 'notebook-content', verify };
 	}
 	private resource<T>(operation: string, input: object): PromiseLike<T> { return vscode.commands.executeCommand<T>('_becoder.notebook.resource', operation, input); }
 	async edit(input: NotebookEditInput, scope: IBeaconContext, signal?: AbortSignal): Promise<Record<string, unknown>> {
@@ -76,7 +91,8 @@ export class NotebookEdits implements NotebookEditApi {
 			try {
 				document = await vscode.workspace.openNotebookDocument(vscode.Uri.file(input.path)); if (document.notebookType !== beCoderNotebookType) { throw new Error('notebook-invalid-type'); }
 				const target = document; this.editing.add(target); await this.ensureIds(target);
-				owner = new NotebookEditOwner({ snapshot: () => snapshot(target), version: () => target.version, dirty: () => target.isDirty, closed: () => target.isClosed,
+				owner = new NotebookEditOwner({
+					snapshot: () => snapshot(target), version: () => target.version, dirty: () => target.isDirty, closed: () => target.isClosed,
 					verify: async () => { await this.resource('verify', { handle: resource }); },
 					backup: data => writeNotebookBackup(input.path!, encodeNotebook(data), async () => { await this.resource('verify', { handle: resource }); }),
 					apply: async data => { const edit = new vscode.WorkspaceEdit(); edit.set(target.uri, [vscode.NotebookEdit.replaceCells(new vscode.NotebookRange(0, target.cellCount), nativeCells(data))]); if (!await vscode.workspace.applyEdit(edit)) { throw new Error('notebook-edit-not-applied'); } await this.ensureIds(target); },
@@ -107,7 +123,7 @@ export class NotebookEdits implements NotebookEditApi {
 				case 'cancel': try { return { path: session.path, ...await session.owner.cancel(), released: session.owner.isReleased }; } finally { if (session.owner.isReleased) { this.sessions.delete(input.handle!); } }
 				default: throw new Error('notebook-invalid-operation');
 			}
-		}); session.tail = result.catch(() => {}); try { return await result; } catch (error) { return { error: String(error), ...session.owner.status(), released: session.owner.isReleased }; }
+		}); session.tail = result.catch(() => { }); try { return await result; } catch (error) { return { error: String(error), ...session.owner.status(), released: session.owner.isReleased }; }
 	}
 	async dispose(): Promise<void> {
 		this.disposed = true; await Promise.allSettled(this.pendingCreations);

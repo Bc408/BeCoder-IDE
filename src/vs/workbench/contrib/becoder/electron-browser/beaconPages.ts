@@ -15,6 +15,7 @@ import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
 import { INotebookService } from '../../notebook/common/notebookService.js';
+import { beCoderNotebookType, beCoderNotebookContentCells } from '../common/beCoderNotebook.js';
 
 /** Never resolves an editor, creates a model or opens a resource to acquire content. */
 export class BeaconWorkbenchPages extends Disposable {
@@ -66,7 +67,26 @@ export class BeaconWorkbenchPages extends Disposable {
 			if (!uris.length) { return [{ key: this.key(editor, 'unsupported'), kind: 'unsupported', title: editor.getName(), version: 'unavailable', reason: 'beacon-page-provider-unavailable', read: async () => { throw new Error('beacon-page-provider-unavailable'); } }]; }
 			return uris.map(uri => {
 				const notebook = this.notebooks.getNotebookTextModel(uri);
-				if (notebook || /\.bcnb(?:-backup)?$/i.test(uri.path)) { return { key: this.key(editor, uri.toString()), kind: 'unsupported' as const, title: editor.getName(), uri: uri.toString(), version: 'content-owner', reason: 'beacon-notebook-content-owner', read: async () => { throw new Error('beacon-notebook-content-owner'); } }; }
+				if (notebook?.viewType === beCoderNotebookType) {
+					let version = this.versions.get(notebook);
+					if (!version) { version = { id: generateUuid(), navigation: 0 }; this.versions.set(notebook, version); }
+					return {
+						key: notebook, kind: 'notebook' as const, title: editor.getName(), uri: uri.toString(), version: `${version.id}:${notebook.versionId}`, dirty: editor.isDirty(), visible: this.editors.visibleEditors.includes(editor), active: this.editors.activeEditor === editor,
+						read: async () => { throw new Error('beacon-notebook-content-owner'); },
+						readNotebook: async () => {
+							if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
+							if (this.notebooks.getNotebookTextModel(uri) !== notebook) { throw new Error('beacon-page-changed'); }
+							const cells = beCoderNotebookContentCells(notebook.cells.map(cell => ({ kind: cell.cellKind, language: cell.language, source: cell.getValue(), metadata: cell.metadata })));
+							if (uri.scheme === 'file') { await this.context.checkPageAccess(this.windowId, uri.fsPath); }
+							if (this.notebooks.getNotebookTextModel(uri) !== notebook) { throw new Error('beacon-page-changed'); }
+							return cells;
+						}
+					};
+				}
+				// A filename can block raw execution data, but cannot establish a loaded content owner.
+				if (notebook || editor.editorId === beCoderNotebookType || /\.bcnb(?:-backup)?$/i.test(uri.path)) {
+					return { key: this.key(editor, uri.toString()), kind: notebook ? 'unsupported' as const : 'notebook' as const, title: editor.getName(), uri: uri.toString(), version: 'content-owner', visible: this.editors.visibleEditors.includes(editor), active: this.editors.activeEditor === editor, reason: 'beacon-notebook-content-owner', read: async () => { throw new Error('beacon-notebook-content-owner'); } };
+				}
 				const model = this.models.getModel(uri);
 				let version = model && this.versions.get(model);
 				if (model && !version) { version = { id: generateUuid(), navigation: 0 }; this.versions.set(model, version); }

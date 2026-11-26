@@ -50,9 +50,10 @@ export class RecordPanel implements vscode.Disposable {
 			finish: (outcome?: SubmissionOutcome) => {
 				if (settled) { return false; } settled = true;
 				// This preview owns result presentation, including closure during later async cleanup.
-				if (outcome?.kind === 'record') { adopt(outcome.record); return false; }
+				if (outcome?.kind === 'record') { view.attemptId = outcome.observed?.attemptId ?? view.attemptId; adopt(outcome.record); return false; }
 				if (view.closed) { return false; }
 				if (outcome?.kind === 'unconfirmed') {
+					view.attemptId = outcome.attemptId;
 					view.retry = this.queryPending?.(outcome, sourceUri, adopt, () => !view.closed, scope);
 					view.update({ tracking: false, canRetry: !!view.retry, message: vscode.l10n.t('The submission receipt is still unconfirmed. Continue querying; no code will be resent.') });
 				} else {

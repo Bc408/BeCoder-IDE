@@ -67,32 +67,75 @@ export async function activate(context: vscode.ExtensionContext) {
 	const execute = async (command: string, ...args: unknown[]) => vscode.commands.executeCommand(command, ...args);
 	const collectionScope = async (): Promise<IBeaconCollectionScope | undefined> => {
 		try { return await vscode.commands.executeCommand<IBeaconCollectionScope>('_becoder.beacon.context', 'captureCollectionScope'); }
-		catch { return undefined; }
+		catch { void vscode.window.showWarningMessage(vscode.l10n.t('Beacon could not prepare this activity context. The requested OJ action will continue.')); return undefined; }
+	};
+	const beginCollection = (scope: IBeaconCollectionScope | undefined, sourceUri: string) => {
+		let source: string | undefined;
+		try { if (sourceUri.startsWith('file:')) { source = fileURLToPath(sourceUri); } } catch { /* Adaptation reports an invalid source inside the collection lifetime. */ }
+		// Register immediately, before a synchronous observation returns to its UI owner.
+		return vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginCollection', { collectionScope: scope, ...(source ? { source } : {}) }).then(handle => ({ ok: true as const, handle }), (error: unknown) => ({ ok: false as const, error }));
+	};
+	const completeCollection = async (started: ReturnType<typeof beginCollection>, publish: () => Promise<unknown>) => {
+		const result = await started;
+		if (!result.ok) { throw result.error; }
+		if (!result.handle) { return; }
+		let failure: { error: unknown } | undefined;
+		try { await publish(); }
+		catch (error) { failure = { error }; }
+		finally {
+			try { await execute('_becoder.beacon.context', 'endCollection', { handle: result.handle }); }
+			catch (error) { failure ??= { error: new Error('beacon-record-publication-uncertain', { cause: error }) }; }
+		}
+		if (failure) { throw failure.error; }
+	};
+	const reportCollectionFailure = (kind: 'problem' | 'verdict', error: unknown) => {
+		const message = error instanceof Error ? error.message : String(error);
+		const notice = message.includes('beacon-record-publication-uncertain')
+			? kind === 'problem' ? vscode.l10n.t('The problem was opened, but Beacon could not confirm whether its context was saved.') : vscode.l10n.t('The submission continues, but Beacon could not confirm whether its context was saved.')
+			: message.includes('too-large')
+				? kind === 'problem' ? vscode.l10n.t('The problem was opened, but its context exceeded the Beacon capacity limit and was not saved.') : vscode.l10n.t('The submission continues, but its context exceeded the Beacon capacity limit and was not saved.')
+				: kind === 'problem' ? vscode.l10n.t('The problem was opened, but Beacon could not save its context.') : vscode.l10n.t('The submission continues, but Beacon could not save its context.');
+		void vscode.window.showWarningMessage(notice);
 	};
 	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, _trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
 		if (!scope) { return; }
-		try { await execute('_becoder.beacon.context', 'captureProblemRecord', { record: toBeaconProblemRecord(document, sourceUri, viewedAt), collectionScope: scope }); }
-		catch { void vscode.window.showWarningMessage(vscode.l10n.t('The problem was opened, but Beacon could not save its context.')); }
+		try { await completeCollection(beginCollection(scope, sourceUri), async () => execute('_becoder.beacon.context', 'captureProblemRecord', { record: toBeaconProblemRecord(document, sourceUri, viewedAt), collectionScope: scope })); }
+		catch (error) { reportCollectionFailure('problem', error); }
 	};
-	const createOjCapture = (sourceUri: string, scope: IBeaconCollectionScope | undefined, _identity: { attemptId?: string; recordKey?: string }) => {
+	const mismatchNotices = new Set<string>();
+	context.subscriptions.push({ dispose: () => mismatchNotices.clear() });
+	const createOjCapture = (sourceUri: string, scope: IBeaconCollectionScope | undefined, identity: { attemptId?: string; recordKey?: string }) => {
 		// Repeated delivery within this observation is idempotent; a later read is new evidence.
+		const observationId = identity.attemptId ?? randomUUID();
 		const publishedRecords = new Set<string>();
 		let tail = Promise.resolve(), failed = false;
 		const enqueue = (operation: () => Promise<unknown>) => {
 			if (!scope) { return; }
-			tail = tail.then(async () => { if (!failed) { await operation(); } }).catch(() => { failed = true; void vscode.window.showWarningMessage(vscode.l10n.t('The submission continues, but Beacon could not save its context.')); });
+			tail = tail.then(operation).then(() => undefined).catch(error => { if (!failed) { failed = true; reportCollectionFailure('verdict', error); } });
 		};
 		return {
 			accept: (input: IBeaconOjCapture) => {
-				if (!scope || !Object.hasOwn(input, 'record')) { return; }
+				if (!Object.hasOwn(input, 'record')) { return; }
 				const observed = input as Extract<IBeaconOjCapture, { record: RecordSnapshot }>;
-				const record = toBeaconVerdictRecord(observed.record, sourceUri || undefined); if (!record) { return; }
-				const key = createHash('sha256').update(JSON.stringify([scope, observed.record])).digest('hex');
-				enqueue(async () => {
+				if (observed.record.sourceVerification === 'mismatch') {
+					const ref = observed.record.ref;
+					const key = JSON.stringify([observed.attemptId ?? observationId, ref.problem.site, ref.problem.nativeId, ref.id, ref.url]);
+					if (!mismatchNotices.has(key)) {
+						mismatchNotices.add(key);
+						void vscode.window.showWarningMessage(vscode.l10n.t('Source mismatch: the record source differs from the submitted source. This verdict was not saved to Beacon.'));
+					}
+					return;
+				}
+				if (!scope || failed || observed.record.phase !== 'finished') { return; }
+				const started = beginCollection(scope, sourceUri);
+				enqueue(() => completeCollection(started, async () => {
+					if (failed) { return; }
+					const record = toBeaconVerdictRecord(observed.record, sourceUri || undefined); if (!record) { return; }
+					const key = createHash('sha256').update(JSON.stringify([scope, observed.record])).digest('hex');
 					if (publishedRecords.has(key)) { return; }
 					await execute('_becoder.beacon.context', 'captureVerdict', { record, collectionScope: scope });
 					publishedRecords.add(key);
-				});
+				}));
 			},
 			finish: async () => { await tail; }
 		};
@@ -261,8 +304,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				if (!ref || read.signal.aborted) { return; }
 				const document = await adapters.find(item => item.site === ref.site)!.readProblem(ref, read.signal, { family: input.family });
 				if (read.signal.aborted) { return; }
-				await revealSource(input.uri);
-				if (!read.signal.aborted) { await problems.open(document, input.uri, source); await publishAcquiredProblem(document, input.uri, Date.now(), 'get-problem', scope); }
+				const publishing = publishAcquiredProblem(document, input.uri, Date.now(), 'get-problem', scope);
+				try { await revealSource(input.uri); if (!read.signal.aborted) { await problems.open(document, input.uri, source); } }
+				finally { await publishing; }
 			} catch (error) { if (!read.signal.aborted) { throw error; } }
 			finally { if (problemReads.get(input.uri) === read) { problemReads.delete(input.uri); } }
 		})),

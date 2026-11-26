@@ -3,17 +3,19 @@
  *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createHash } from 'crypto';
 import type { CompilationSourceSnapshot } from './compilationSnapshot';
 import type { ExecutionObserver } from './executionResults';
 import type { IBeaconOutput, IBeaconRecordWrite, IBeaconRunInput } from 'becoder-beacon';
-import { ObservedOutput, retainRunOutput, type OutputTarget } from './runRecordAdapter';
+import { ObservedOutput, type OutputTarget } from './runRecordAdapter';
+import { normalizeRunRecord } from '../../../src/vs/platform/beacon/common/beaconRunRecord';
 export type RuntimeEvidence = ExecutionObserver;
 
 interface Facts {
 	type?: string; status?: string; phase?: string; stream?: string; index?: number;
 	compileOnly?: boolean; input?: { text?: string; bytesBase64?: string; source?: string; name?: string };
 	inputs?: { input?: string; text?: string; output?: string; name?: string; cellNumber?: number }[];
-	sampleNumbers?: number[]; operation?: IBeaconRecordWrite<'run'>['operation']; language?: 'c' | 'cpp'; codeNumber?: number;
+	sampleNumbers?: number[]; operation?: IBeaconRecordWrite<'run'>['operation']; language?: 'c' | 'cpp'; codeCellNumber?: number;
 	compiler?: string; args?: string[]; compilerCwd?: string; runtimeCwd?: string; cwd?: string; command?: string;
 	text?: string; bytesBase64?: string; sourceOmittedBytes?: number;
 	cancelled?: boolean; timedOut?: boolean; outputLimitExceeded?: boolean; launchError?: string; error?: string; message?: string;
@@ -31,7 +33,7 @@ export class BeaconEvidence implements ExecutionObserver {
 	private record: IBeaconRecordWrite<'run'> | undefined;
 	private readonly channels = new Map<string, OutputTarget>();
 	private done = false;
-	constructor(private readonly handle: string | undefined, private readonly producer: 'runner' | 'cph' | 'notebook', private readonly invoke: (operation: string, input: unknown) => PromiseLike<unknown>, private readonly failed: (error: unknown) => void, private readonly capacity = 8192) { }
+	constructor(private readonly handle: string | undefined, private readonly producer: 'runner' | 'cph' | 'notebook', private readonly invoke: (operation: string, input: unknown) => PromiseLike<unknown>, private readonly failed: (error: unknown) => void) { }
 	start(snapshot: CompilationSourceSnapshot, value: unknown): void {
 		if (!this.handle || this.record || this.done) { return; }
 		try {
@@ -40,16 +42,18 @@ export class BeaconEvidence implements ExecutionObserver {
 			const input = meta.input ?? {}, tests = meta.inputs;
 			const inputText = typeof input.text === 'string' ? input.text : typeof input.bytesBase64 === 'string' ? Buffer.from(input.bytesBase64, 'base64').toString('utf8') : null;
 			const fileInput = this.producer === 'runner' && input.source && input.source !== 'interactive';
+			const code = Buffer.from(snapshot.bytesBase64, 'base64').toString('utf8');
+			const codeHash = createHash('sha256').update(code.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 			const runs: IBeaconRunInput[] = tests ? tests.map((test, index) => ({ input: { mode: 'text', text: String(test.input ?? test.text ?? '') }, status: 'not-run', skipReason: 'failed', ...(this.producer === 'cph' ? { testCaseNumber: Number(meta.sampleNumbers?.[index] ?? index + 1), expectedOutput: String(test.output ?? '') } : { inputName: test.name ?? '', inputCellNumber: test.cellNumber }) }))
 				: [{ input: { mode: fileInput ? 'file' : this.producer === 'runner' ? 'interactive' : 'text', text: inputText, ...(fileInput ? { filePath: input.source } : {}) }, status: 'not-run', skipReason: 'failed', ...(this.producer === 'notebook' ? { inputName: input.name ?? '' } : {}) }];
-			this.record = {
+			this.record = normalizeRunRecord({
 				source: this.producer, operation: this.producer === 'runner' ? fileInput ? 'run-with-input' : 'run' : this.producer === 'cph' ? meta.operation ?? (tests?.length === 1 ? 'test-one' : 'test-all') : 'run-inputs',
 				startedAt: iso(), endedAt: iso(), status: 'failed',
-				program: { filePath: snapshot.originalPath, language: meta.language ?? (/\.c$/i.test(snapshot.originalPath) ? 'c' : 'cpp'), code: Buffer.from(snapshot.bytesBase64, 'base64').toString('utf8'), ...(this.producer === 'notebook' ? { codeBlockNumber: meta.codeNumber } : {}) },
+				program: { filePath: snapshot.originalPath, language: meta.language ?? (/\.c$/i.test(snapshot.originalPath) ? 'c' : 'cpp'), code, codeHash, ...(this.producer === 'notebook' && meta.codeCellNumber !== undefined ? { codeCellNumber: meta.codeCellNumber } : {}) },
 				compile: { status: 'start-failed', ...(meta.compiler ? { compiler: meta.compiler } : {}), ...(Array.isArray(meta.args) ? { args: [...meta.args] } : {}), ...(meta.compilerCwd ?? meta.cwd ? { workingDirectory: meta.compilerCwd ?? meta.cwd } : {}), output: { stdout: '', stderr: '' } },
 				runs, ...(meta.runtimeCwd ?? meta.cwd ? { workingDirectory: meta.runtimeCwd ?? meta.cwd } : {}), ...(meta.command ? { command: meta.command } : {}),
 				...(inputText === null && !tests ? { gaps: ['Reliable input text was not available; terminal echo is not stdin.'] } : {})
-			};
+			});
 		} catch (error) { this.fail(error); }
 	}
 	event(value: unknown): void {
@@ -72,11 +76,13 @@ export class BeaconEvidence implements ExecutionObserver {
 				if (Number.isInteger(event.exitCode)) { result.exitCode = event.exitCode; }
 				if (Number.isFinite(event.compileMs ?? event.durationMs)) { result.durationMs = event.compileMs ?? event.durationMs; }
 				if (event.launchError ?? event.error) { result.error = String(event.launchError ?? event.error); }
-			} else if (event.type === 'sample-started' || event.type === 'input-started') {
+			} else if (event.type === 'sample-started' || event.type === 'input-started' || event.type === 'process-spawned' && event.phase === 'running') {
 				const item = this.record.runs[Number(event.index ?? 0)]; if (item) { delete item.skipReason; item.status = 'cancelled'; }
 			} else if (event.type === 'sample-executed' || event.type === 'sample-finished' || event.type === 'input-finished') {
 				const index = Number(event.index ?? 0), item = this.record.runs[index]; if (!item) { return; }
-				const result = facts(event.result); this.applyResult(item, result);
+				const result = facts(event.result);
+				if (event.type === 'input-finished' && item.status === 'not-run' && runtimeStatus(result) === 'cancelled' && !Number.isFinite(result.runMs)) { return; }
+				this.applyResult(item, result);
 				if (this.producer === 'cph' && typeof event.verdict === 'string') { item.check = event.verdict as IBeaconRunInput['check']; }
 				for (const stream of this.producer === 'cph' ? ['stdout', 'stderr'] as const : ['merged'] as const) {
 					if (!this.channels.has(`${index}:${stream}`)) { this.event({ type: 'stream', phase: 'running', index, stream, text: result[stream === 'merged' ? 'output' : stream] ?? '' }); }
@@ -98,13 +104,15 @@ export class BeaconEvidence implements ExecutionObserver {
 			record.endedAt = iso();
 			if (Number.isFinite(outcome.compileMs)) { record.compile.durationMs = outcome.compileMs; }
 			record.status = outcome.status === 'cancelled' ? 'cancelled' : record.compile.status !== 'succeeded' ? 'compile-failed' : ['completed', 'runtime-error', 'timed-out', 'output-limit'].includes(outcome.status ?? '') ? 'completed' : 'failed';
-			if (this.producer !== 'cph' && record.runs.length === 1 && record.compile.status === 'succeeded' && record.runs[0].status === 'not-run') { this.applyResult(record.runs[0], outcome); }
+			if (this.producer !== 'cph' && record.runs.length === 1 && record.compile.status === 'succeeded') {
+				const item = record.runs[0];
+				if (this.producer === 'runner' && item.status === 'cancelled' || item.status === 'not-run' && (outcome.status !== 'cancelled' || Number.isFinite(outcome.programRuntimeMs ?? outcome.runMs))) { this.applyResult(item, outcome); }
+			}
 			for (const item of record.runs) {
 				if (item.status === 'not-run') { delete item.output; item.skipReason = record.status === 'compile-failed' ? 'compile-failed' : record.status === 'cancelled' ? 'cancelled' : 'failed'; }
 			}
-			for (const channel of this.channels.values()) { channel.observed.finish(); }
-			retainRunOutput(record, [...this.channels.values()], Math.min(this.capacity, 8192));
-			await this.invoke('captureRun', { handle: this.handle, record });
+			for (const channel of this.channels.values()) { channel.observed.finish(); channel.output[channel.stream] = channel.observed.retain(); }
+			await this.invoke('captureRun', { handle: this.handle, record: normalizeRunRecord(record) });
 		} catch (error) { this.fail(error); }
 		finally { this.record = undefined; this.channels.clear(); }
 	}

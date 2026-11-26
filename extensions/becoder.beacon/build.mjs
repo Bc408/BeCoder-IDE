@@ -18,6 +18,8 @@ await build({ ...shared, entryPoints: ['test/session.test.ts'], outfile: 'dist-t
 await build({ ...shared, entryPoints: ['test/files.test.ts'], outfile: 'dist-test/files.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/context.test.ts'], outfile: 'dist-test/context.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/semanticContext.test.ts'], outfile: 'dist-test/semanticContext.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/visiblePages.test.ts'], outfile: 'dist-test/visiblePages.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/toolInformation.test.ts'], outfile: 'dist-test/toolInformation.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/contextBudget.test.ts'], outfile: 'dist-test/contextBudget.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/compaction.test.ts'], outfile: 'dist-test/compaction.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 await build({ ...shared, entryPoints: ['test/drafts.test.ts'], outfile: 'dist-test/drafts.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });

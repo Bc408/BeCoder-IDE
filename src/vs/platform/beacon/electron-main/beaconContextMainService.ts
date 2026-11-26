@@ -41,7 +41,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 			changed: id => this.changed.fire(id)
 		});
 		for (const window of windowsService.getWindows()) { this.watchWindow(window); }
-		this._register(lifecycle.onWillShutdown(event => event.join('beacon.resume', Promise.resolve().then(() => this.coordinator.flushResume()))));
+		this._register(lifecycle.onWillShutdown(event => event.join('beacon.shutdown', Promise.resolve().then(() => this.coordinator.flushShutdown()))));
 		this._register(windowsService.onDidOpenWindow(window => this.watchWindow(window)));
 		this._register(windowsService.onDidDestroyWindow(window => {
 			this.watched.get(window.id)?.dispose(); this.watched.delete(window.id);
@@ -75,6 +75,8 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	async beginRuntimeActivity(windowId: number): Promise<string> { return this.coordinator.beginRuntimeActivity(windowId); }
 	async endRuntimeActivity(windowId: number, handle: string): Promise<void> { this.coordinator.endRuntimeActivity(windowId, handle); }
 	captureCollectionScope(windowId: number) { return this.coordinator.captureCollectionScope(windowId); }
+	beginCollection(windowId: number, scope: IBeaconCollectionScope | undefined, source?: string) { return this.coordinator.beginCollection(windowId, scope, source); }
+	async endCollection(windowId: number, handle: string): Promise<void> { this.coordinator.endCollection(windowId, handle); }
 	captureProblemRecord(windowId: number, input: IBeaconRecordWrite<'problem'>, scope: IBeaconCollectionScope) { return this.coordinator.captureProblemRecord(windowId, input, scope); }
 	captureVerdict(windowId: number, input: IBeaconRecordWrite<'verdict'>, scope: IBeaconCollectionScope) { return this.coordinator.captureVerdict(windowId, input, scope); }
 	captureRun(windowId: number, handle: string, input: IBeaconRecordWrite<'run'>) { return this.coordinator.captureRun(windowId, handle, input); }

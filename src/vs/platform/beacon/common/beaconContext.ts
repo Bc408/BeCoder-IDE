@@ -23,6 +23,8 @@ export interface IBeaconContextService {
 	beginRuntimeActivity(windowId: number): Promise<string>;
 	endRuntimeActivity(windowId: number, handle: string): Promise<void>;
 	captureCollectionScope(windowId: number): Promise<IBeaconCollectionScope | undefined>;
+	beginCollection(windowId: number, scope: IBeaconCollectionScope | undefined, source?: string): Promise<string | undefined>;
+	endCollection(windowId: number, handle: string): Promise<void>;
 	captureProblemRecord(windowId: number, input: IBeaconRecordWrite<'problem'>, scope: IBeaconCollectionScope): Promise<string>;
 	captureVerdict(windowId: number, input: IBeaconRecordWrite<'verdict'>, scope: IBeaconCollectionScope): Promise<string>;
 	captureRun(windowId: number, handle: string, input: IBeaconRecordWrite<'run'>): Promise<string>;

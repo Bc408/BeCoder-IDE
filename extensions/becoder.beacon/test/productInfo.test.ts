@@ -11,7 +11,7 @@ import { ContextTools } from '../src/contextTools';
 import { contextInputValid } from '../src/contextToolContract';
 
 const signal = new AbortController().signal;
-const state = { slot: 'info', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] };
+const state = { slot: 'info', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] };
 test('topic_reads_one_complete_resource', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'becoder-info-'));
 	try {

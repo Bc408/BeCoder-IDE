@@ -194,7 +194,7 @@ async function fixtureContext(turn: PromptEvaluationTurn) {
 	if (!turn.context) { return; }
 	const { overview, pages } = structuredClone(turn.context);
 	const client = new BeaconContextClient(async (operation, input) => {
-		if (operation === 'context') { return { slot: 'synthetic', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, recent: [] }; }
+		if (operation === 'context') { return { slot: 'synthetic', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] }; }
 		if (operation === 'pages') { return overview.pages; }
 		if (operation === 'page') {
 			const request = input as { id: string; version: string };

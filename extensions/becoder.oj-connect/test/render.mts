@@ -119,6 +119,9 @@ try {
 			assert.ok((await page.locator('.record-info').textContent()).includes('C++20'));
 			assert.ok((await page.locator('.record-info').textContent()).includes('128B'));
 			assert.equal(await page.getByRole('link', { name: localLabels.viewSource }).count(), 1);
+			state.snapshot.sourceVerification = 'mismatch'; await updateAcmState(); await page.locator('.notice').waitFor();
+			assert.match(await page.locator('.notice').textContent(), /mismatch|源码不匹配/i, 'source mismatch remains explicit in every locale, site and ACM mode');
+			state.snapshot.sourceVerification = 'matched'; await updateAcmState(); await page.locator('.notice').waitFor({ state: 'detached' });
 			state.acmMode = false; await updateAcmState(); await page.locator('.testCaseData').waitFor();
 			assert.equal(await page.getByText(localLabels.score, { exact: true }).count(), 1);
 			assert.ok((await page.locator('pre').textContent()).includes('PRIVATE COMPILER DIAGNOSTIC'));

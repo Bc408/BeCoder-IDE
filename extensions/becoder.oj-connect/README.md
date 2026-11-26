@@ -66,3 +66,5 @@ AtCoder／CF 快捷键看题使用当前存储范围的真实 Session，对固�
 开发命令：`npm run typecheck`、`npm run build`、`npm test`、`npm run test-render`。构建包含站点脚本、Webview JS/CSS、KaTeX 字体；运行时无外部 npm 依赖。许可与来源见 UPSTREAM.md、ThirdPartyNotices.txt。设计、当前检查和真实验收分别见 [开发入口](../../docs/oj-connect/README.md)。CF 的[已批准设计](../../docs/superpowers/specs/2026-11-18-codeforces-practice-design.md)、[实施计划](../../docs/superpowers/plans/2026-11-18-codeforces-practice.md)与[协议证据](../../docs/oj-connect/codeforces-protocol-evidence.md)分别记录范围、实现安排和隔离实交；历史协议探针只证明当轮采证范围；本次 2.1.0 产品验收另见交付记录。
 
 侧栏只在 OJ 名称上提供入口：未登录或没有可核对个人页时打开官网登录页；已登录且个人页有效时打开个人页，蓝桥始终打开固定 Passport 入口。状态文字不可点击。站点图标始终保留清晰原色，登录状态由文字表示。退出登录请在内置浏览器的官网页面完成。
+
+检测到记录源码与本次提交稿不匹配时，结果页显示“源码不匹配（Source mismatch）”，右下角通知一次；该次观测不进入 Beacon 的最终测评队列，也不替换旧记录。原站结果仍保留供用户核对，不自动重新提交。尚未核验或无法取得源码的正常最终结果仍可记录；工程核验字段由 OJ Connect 处理，不交给 Beacon 判断可信度。

@@ -35,29 +35,28 @@ export type RunnerSettings = {
 	readonly cppFlags: readonly string[];
 };
 
-export async function prepareActiveSource(): Promise<PreparedSource> {
-	const editor = vscode.window.activeTextEditor;
-	if (!editor || !['c', 'cpp'].includes(editor.document.languageId)) {
+export async function prepareActiveSource(document: vscode.TextDocument | undefined): Promise<PreparedSource> {
+	if (!document || !['c', 'cpp'].includes(document.languageId)) {
 		throw new RunnerRequestError(
 			'BeCoder Runner supports only C and C++ source files.',
 			vscode.l10n.t('BeCoder Runner supports only C and C++ source files.')
 		);
 	}
 	const saveStartedAt = Date.now();
-	if ((editor.document.isUntitled || editor.document.isDirty) && !await editor.document.save()) {
+	if ((document.isUntitled || document.isDirty) && !await document.save()) {
 		throw new RunnerRequestError(
 			'Save the source file before using BeCoder Runner.',
 			vscode.l10n.t('Save the source file before using BeCoder Runner.')
 		);
 	}
-	if (editor.document.isUntitled) {
+	if (document.isUntitled) {
 		throw new RunnerRequestError(
 			'Save the source file before using BeCoder Runner.',
 			vscode.l10n.t('Save the source file before using BeCoder Runner.')
 		);
 	}
 	return {
-		source: await sourceFromPath(editor.document.fileName),
+		source: await sourceFromPath(document.fileName),
 		saveMs: Date.now() - saveStartedAt
 	};
 }

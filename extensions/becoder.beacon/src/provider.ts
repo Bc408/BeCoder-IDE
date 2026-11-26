@@ -198,9 +198,9 @@ const fileSchema = jsonSchema<FileInput>({
 	type: 'object',
 	properties: {
 		operation: { type: 'string', enum: ['read', 'list', 'find', 'search'] },
-		path: { type: 'string', description: 'Absolute local/UNC path, or workspace-relative path (prefix folder name in multi-root workspaces). Use . to list the workspace.' },
-		offset: { type: 'integer', minimum: 0, description: 'Continue at the previous nextOffset: disk byte offset, or character offset for an open editor document.' },
-		limit: { type: 'integer', minimum: 1, maximum: 131072 },
+		path: { type: 'string', description: 'Absolute local/UNC path, or path relative to the listed authorized root. Use . to list that root.' },
+		offset: { type: 'integer', minimum: 0, description: 'For read only. Continue with nextOffset: Unicode character offset for text, byte offset for binary hex.' },
+		limit: { type: 'integer', minimum: 1, maximum: 131072, description: 'For read: maximum characters (default 32768), subject to file byte budgets. For list/find/search: maximum results, default 100, maximum 200.' },
 		query: { type: 'string', description: 'Literal, case-insensitive filename substring for find or text substring for search.' }
 	},
 	required: ['operation', 'path'],
@@ -222,7 +222,7 @@ function toolActivity(id: string, input: unknown, status: ToolActivity['status']
 	const feedback = error ? { error } : {};
 	if (contextToolNames.includes(name as BeaconContextToolName)) {
 		const value = input as Record<string, unknown> | undefined;
-		return { id, type: name.endsWith('Record') && !value?.id ? 'list' : 'read', path: String(value?.id ?? name), status, ...feedback };
+		return { id, type: name.endsWith('Record') && !value?.id && !value?.latest ? 'list' : 'read', path: String(value?.id ?? value?.filePath ?? name), status, ...feedback };
 	}
 	if (name === 'browseWeb') {
 		const value = input as Partial<WebInput> | undefined;
@@ -262,12 +262,16 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 		if (!connection.model.trim()) { throw new Error('missing-model'); }
 		if (signal.aborted) { return; }
 		const capabilities = resolveCapabilities(connection.provider, connection.baseURL, connection.model, connection.capabilities, connection.modelSettings);
-		const maxOutputTokens = connection.parameters.maxOutputTokens ?? capabilities.maxOutputTokens!;
+		// Keep declared capacities intact. An unusable default reservation falls back
+		// to the existing 3:1 input/output split; explicit reservations still fail honestly.
+		const defaultOutputTokens = capabilities.maxOutputTokens! < capabilities.contextWindow! ? capabilities.maxOutputTokens! : Math.max(1, Math.floor(capabilities.contextWindow! / 4));
+		const maxOutputTokens = connection.parameters.maxOutputTokens ?? defaultOutputTokens;
 		const limits = { contextWindow: capabilities.contextWindow!, maxInputTokens: capabilities.maxInputTokens!, maxOutputTokens };
 		if (!['chat', 'unknown'].includes(capabilities.purpose)) { throw new ModelCapabilityError('non-chat'); }
 		if (connection.parameters.maxOutputTokens && capabilities.maxOutputTokens && connection.parameters.maxOutputTokens > capabilities.maxOutputTokens) { throw new ModelCapabilityError('output-limit'); }
 		const providerOptions = reasoningOptions(connection.provider, connection.model, capabilities, connection.modelSettings ?? {});
 		const vision = capabilities.vision;
+		const prepareMessages = (messages: readonly ModelMessage[]) => fileMessages([...messages], vision);
 		const systemTime = new Date().toISOString();
 		const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(180000)]);
 		const recovery = new RequestRecovery(fetchImplementation, requestSignal, { ...recoveryOptions, progress });
@@ -284,7 +288,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				})])) : {}),
 				...(permission === 'none' ? {} : {
 					inspectFile: tool<FileInput, FileOutput, Record<string, unknown>>({
-						description: `Read files, list directories, find files or search text in the authorized scope. Open text documents include unsaved edits; long reads return nextOffset. File scope: ${permission}; workspace folders: ${JSON.stringify(roots)}.`,
+						description: `Read files, list a directory, find names or search text within the authorized file scope. Open text includes unsaved edits. Notebook files return numbered content cells without execution results. Long text reads return nextOffset. File scope: ${permission}; authorized roots: ${JSON.stringify(roots)}.`,
 					inputSchema: fileSchema,
 					toModelOutput: ({ output }) => fileModelOutput(output),
 					execute: async (input, options): Promise<FileOutput> => {
@@ -313,7 +317,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			let requestPhase: 'answer' | 'compaction' = 'answer', repairUsed = false, stepStarted = false;
 			const steps = { remaining: 20 };
 			let installedSummary: BeaconCompaction | undefined;
-			let requestMessages = fileMessages([...messages], vision);
+			let requestMessages = prepareMessages(messages);
 			let usageAnchor: BeaconUsageAnchor | undefined, lastPrepared: PreparedBeaconRequest | undefined;
 			const anchors = new Map<string, BeaconUsageAnchor>(), measuredRequests = new Map<string, PreparedBeaconRequest>();
 			const prepared = (instructions: unknown, messages: readonly ModelMessage[], definitions: readonly { name: string; definition: unknown }[]): PreparedBeaconRequest => ({ source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, phase: requestPhase, limits, instructions, activeTools: definitions, messages, media: beaconMedia(messages), projectionFingerprint: beaconFingerprint(messages), contractFingerprint: beaconFingerprint({ instructions, definitions }), unitFingerprints: messages.map(beaconFingerprint) });
@@ -342,7 +346,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				if (steps.remaining < 1) { throw new Error('beacon-step-budget'); }
 				const state = generation ? await generation.prepare(snapshot(), requestSignal) : { conversationId: 'temporary', checkpoints: installedSummary ? [installedSummary] : [], units: current.map((message, index): EffectiveUnit => ({ key: String(index), messageId: index, unitIndex: 0, isUserQuestion: message.role === 'user', messages: [message], fingerprint: beaconFingerprint(message) })) };
 				const old = selectCompaction(state.units, state.checkpoints);
-				let projection = fileMessages(projectCompaction(state.units, old), vision);
+				let projection = prepareMessages(projectCompaction(state.units, old));
 				const input = prepared(prompt.system, projection, declarations), measured = measureBeaconRequest(input, anchors.get(input.contractFingerprint));
 				measuredRequests.set(input.contractFingerprint, input);
 				// Keep complete tool exchanges. Compact only before the next request.
@@ -354,11 +358,11 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				const tail = [...(question && !tailUnits.includes(question) ? question.messages : []), ...tailUnits.flatMap(unit => [...unit.messages])];
 				requestPhase = 'compaction';
 				let summary: string;
-				try { summary = (await compactBeaconContext({ model, prepared: { ...input, phase: 'compaction' }, units: prefix.slice(already), old, tail, context: capabilities.tools ? context?.compactionView?.() : undefined, steps }, requestSignal)).summary; }
+				try { summary = (await compactBeaconContext({ model, prepared: { ...input, phase: 'compaction' }, units: prefix.slice(already), old, tail, context: capabilities.tools ? context?.compactionView?.() : undefined, parameters: connection.parameters, providerOptions, prepareMessages, steps }, requestSignal)).summary; }
 				finally { requestPhase = 'answer'; }
 				const last = prefix.at(-1)!;
 				const candidate: BeaconCompaction = { schemaVersion: 1, coveredThrough: { messageId: last.messageId, unit: last.unitIndex }, prefixSha256: prefixFingerprint(prefix), summary, createdAt: Date.now(), ...(old ? { inputCompaction: { prefixSha256: old.prefixSha256, summarySha256: beaconFingerprint(old.summary) } } : {}) };
-				projection = fileMessages(projectCompaction(state.units, candidate), vision);
+				projection = prepareMessages(projectCompaction(state.units, candidate));
 				const after = measureBeaconRequest(prepared(prompt.system, projection, declarations));
 				if (after.estimatedInput >= measured.estimatedInput || after.estimatedInput >= measured.trigger || after.estimatedInput > after.budget) { throw new Error('beacon-compaction-no-gain'); }
 				if (generation) { await generation.commitCompaction(candidate, { conversationId: state.conversationId, requestId: generation.requestId, prefixSha256: candidate.prefixSha256 }, requestSignal); }
@@ -373,7 +377,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 					messages: requestMessages,
 					prepareStep: async ({ messages }) => {
 						if (observerError) { throw observerError; }
-						return { messages: await prepareAnswer(fileMessages(messages, vision)), maxOutputTokens };
+						return { messages: await prepareAnswer(prepareMessages(messages)), maxOutputTokens };
 					},
 					providerOptions,
 					// SDK's default logger includes request bodies. Report through the

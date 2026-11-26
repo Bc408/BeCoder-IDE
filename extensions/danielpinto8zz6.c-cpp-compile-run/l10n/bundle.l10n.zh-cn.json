@@ -1,3 +1,5 @@
 {
-	"Beacon could not save this run evidence. Program execution is unaffected.": "Beacon 未能保存本次运行证据，程序运行不受影响。"
+	"Beacon could not save this run evidence. Program execution is unaffected.": "Beacon 未能保存本次运行证据，程序运行不受影响。",
+	"This run record exceeds 32 KB and was not saved to Beacon context. Program execution is unaffected.": "本次运行记录超过32 KB，未保存到Beacon上下文，程序运行不受影响。",
+	"Beacon could not confirm whether this run record was saved. Program execution is unaffected.": "无法确认本次运行记录是否已保存至 Beacon，程序运行不受影响。"
 }

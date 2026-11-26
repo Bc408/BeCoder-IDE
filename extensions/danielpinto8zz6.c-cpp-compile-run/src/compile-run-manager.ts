@@ -14,6 +14,7 @@ import { CommandHistory } from './bcLineEditor';
 import { BcTerminal } from './bcTerminal';
 import { BeCoderSource, PreparedSource, RunnerRequestError, bundledCompiler, exactInputPath, prepareActiveSource, prepareCommandSource, runnerSettings } from './compiler';
 import { BeaconEvidence } from './beaconEvidence';
+import { isRunRecordTooLarge } from '../../../src/vs/platform/beacon/common/beaconRunRecord';
 import { RunnerLifecycle, RunnerPhase } from './runnerLifecycle';
 import { finalizePublishedExecutable, RunnerExecutionResult, RunnerExecutor } from './runnerProcess';
 import { presentRunnerResult } from './runnerPresentation';
@@ -23,6 +24,7 @@ const runnerName = 'BeCoder Runner';
 type ActiveRequest = {
 	cancelled: boolean;
 	beaconActivity?: string;
+	evidenceFailureReported?: boolean;
 	runtimeActivity?: string;
 	showExecutableRemoved?: boolean;
 	exitCode?: number;
@@ -98,8 +100,9 @@ export class CompileRunManager implements vscode.Disposable {
 
 	async run(withInput: boolean): Promise<void> {
 		const requestStartedAt = Date.now();
-		const initialDirectory = vscode.window.activeTextEditor
-			? path.dirname(vscode.window.activeTextEditor.document.fileName)
+		const document = vscode.window.activeTextEditor?.document;
+		const initialDirectory = document
+			? path.dirname(document.fileName)
 			: process.cwd();
 		const { terminal, pseudoterminal } = this.ensureTerminal(getInitialCwd(initialDirectory));
 		const request = this.beginRequest(pseudoterminal);
@@ -108,10 +111,10 @@ export class CompileRunManager implements vscode.Disposable {
 		}
 		try {
 			request.runtimeActivity = await this.beginRuntimeActivity();
-			request.beaconActivity = await this.beginBeaconActivity(vscode.window.activeTextEditor?.document.uri.fsPath);
+			request.beaconActivity = await this.beginBeaconActivity(document?.uri.fsPath, request);
 			const panelStartedAt = Date.now();
 			terminal.show(false);
-			const prepared = await prepareActiveSource();
+			const prepared = await prepareActiveSource(document);
 			const panelReadyMs = await pseudoterminal.waitForOpen(panelStartedAt);
 			this.throwIfCancelled(request);
 			if (panelReadyMs === undefined) {
@@ -172,7 +175,7 @@ export class CompileRunManager implements vscode.Disposable {
 		try {
 			request.runtimeActivity = await this.beginRuntimeActivity();
 			const sourcePath = resolveCommandSource(parsed.command.source, pseudoterminal.cwd);
-			request.beaconActivity = await this.beginBeaconActivity(sourcePath);
+			request.beaconActivity = await this.beginBeaconActivity(sourcePath, request);
 			const prepared = await prepareCommandSource(sourcePath);
 			this.throwIfCancelled(request);
 			await this.executeRun(text.trim(), parsed.command, prepared, requestStartedAt, Date.now() - requestStartedAt, 0, pseudoterminal, request);
@@ -198,13 +201,26 @@ export class CompileRunManager implements vscode.Disposable {
 		catch (error) { this.trace.warn('Beacon runtime release unavailable', error); }
 	}
 
-	private async beginBeaconActivity(source: string | undefined): Promise<string | undefined> {
+	private async beginBeaconActivity(source: string | undefined, request: ActiveRequest): Promise<string | undefined> {
 		if (!source) { return undefined; }
 		try {
 			const collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope');
 			return await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source, collectionScope });
 		}
-		catch (error) { this.trace.warn('Beacon activity tracking unavailable', error); return undefined; }
+		catch (error) { this.reportEvidenceFailure(request, error); return undefined; }
+	}
+
+	private reportEvidenceFailure(request: ActiveRequest, error: unknown): void {
+		if (request.evidenceFailureReported) { return; }
+		request.evidenceFailureReported = true;
+		const message = `Runner: ${String(error).includes('beacon-record-publication-uncertain')
+			? vscode.l10n.t('Beacon could not confirm whether this run record was saved. Program execution is unaffected.')
+			: isRunRecordTooLarge(error)
+				? vscode.l10n.t('This run record exceeds 32 KB and was not saved to Beacon context. Program execution is unaffected.')
+				: vscode.l10n.t('Beacon could not save this run evidence. Program execution is unaffected.')}`;
+		try { void vscode.window.showWarningMessage(message); } catch { /* Observation cannot control execution. */ }
+		try { this.trace.warn('Beacon run evidence unavailable', error); } catch { /* Optional diagnostics. */ }
+		try { request.pseudoterminal.writeError(message); } catch { /* The terminal may already be closed. */ }
 	}
 
 	private async endBeaconActivity(request: ActiveRequest): Promise<void> {
@@ -229,6 +245,7 @@ export class CompileRunManager implements vscode.Disposable {
 		this.history.record(commandText);
 		pseudoterminal.setProgramInputEnabled(!command.withInput);
 		pseudoterminal.setPtyInput(true);
+		const evidence = new BeaconEvidence(request.beaconActivity, 'runner', (operation, input) => vscode.commands.executeCommand('_becoder.beacon.context', operation, input), error => this.reportEvidenceFailure(request, error));
 		const result = await this.executor.execute({
 			source: prepared.source,
 			compilerPath,
@@ -241,13 +258,11 @@ export class CompileRunManager implements vscode.Disposable {
 			panelReadyMs,
 			saveMs: prepared.saveMs
 		}, {
-			evidence: new BeaconEvidence(request.beaconActivity, 'runner', (operation, input) => vscode.commands.executeCommand('_becoder.beacon.context', operation, input), error => {
-				this.trace.warn('Beacon run evidence unavailable', error);
-				pseudoterminal.writeError(vscode.l10n.t('Beacon could not save this run evidence. Program execution is unaffected.'));
-			}),
+			evidence,
 			write: text => pseudoterminal.writeProcessOutput(text),
 			beforeProgramStart: () => pseudoterminal.writeStatus('Compilation Successful, Running', 'success'),
 			setPhase: phase => {
+				if (phase === 'running') { evidence.event({ type: 'input-started', index: 0 }); }
 				if (!this.lifecycle.setPhase(phase)) {
 					return;
 				}

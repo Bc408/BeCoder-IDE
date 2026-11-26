@@ -85,6 +85,9 @@ function App() {
 	const [copied, setCopied] = useState<number>();
 	const [editing, setEditing] = useState<number>();
 	const [editingDraft, setEditingDraft] = useState('');
+	const editingRef = useRef<number | undefined>(undefined);
+	const editingRevision = useRef(0);
+	const submittedEdit = useRef<{ id: number; viewKey: string; editRevision: number } | undefined>(undefined);
 	const [preview, setPreview] = useState<{ items: Attachment[]; index: number; url?: string }>();
 	const input = useRef<HTMLTextAreaElement>(null);
 	const composer = useRef<HTMLFormElement>(null);
@@ -100,6 +103,12 @@ function App() {
 	};
 	useEffect(() => {
 		const listener = (event: MessageEvent) => {
+			if (event.data?.type === 'editAccepted') {
+				const submitted = submittedEdit.current;
+				if (submitted && event.data.viewKey === activeRef.current && event.data.viewKey === submitted.viewKey && event.data.id === submitted.id && event.data.id === editingRef.current && event.data.editRevision === submitted.editRevision && event.data.editRevision === editingRevision.current) {
+					submittedEdit.current = undefined; editingRef.current = undefined; setEditing(undefined);
+				}
+			}
 			if (event.data?.type === 'sendAccepted' && activeRef.current === event.data.viewKey) {
 				if (event.data.editRevision === undefined || event.data.editRevision === draftEditRevision.current) {
 					if (draftRef.current === event.data.text) { draftRef.current = ''; setDraft(''); }
@@ -123,6 +132,7 @@ function App() {
 						setDraft(draftRef.current);
 					}
 					setCopied(undefined);
+					editingRef.current = undefined; submittedEdit.current = undefined; editingRevision.current++;
 					setEditing(undefined);
 				}
 				else if (typeof event.data.draftText === 'string' && (!draftPending.current || event.data.draftText === draftRef.current)) {
@@ -180,6 +190,7 @@ function App() {
 		return () => clearTimeout(timer);
 	}, [copied]);
 	const busy = !!(state.busy || pending || pasting || state.context?.busy || state.context?.runtimeBusy);
+	const requestBlocked = busy || !!state.context?.collectionPending;
 	// Reuse the existing lock; only navigation-only presentation stays quiet.
 	const taskBusy = (state.busy && !state.navigationBusy) || pending === 'response' || pasting || state.responseBusy || state.context?.busy || state.context?.runtimeBusy;
 	const navigationOnly = (pending === 'navigation' || state.navigationBusy) && !taskBusy;
@@ -205,10 +216,10 @@ function App() {
 	const blocked = !capabilities.vision && [...state.attachments, ...state.messages.flatMap(message => message.attachments ?? [])].some(item => item.kind === 'image') ? t('Select a vision-capable model to send images. No automatic OCR or model switch is performed.', '请选择支持视觉的模型后发送图片，不会自动 OCR 或切换模型。') : '';
 	const sendUnavailable = !ready || !state.canSend || !state.configured || state.historyUnreadable || !!blocked || (!draft.trim() && !state.attachments.length && !canContinue);
 	const send = () => {
-		if (busy || sendUnavailable) { return; }
+		if (requestBlocked || sendUnavailable) { return; }
 		setPending('response');
-		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id }); return; }
-		api.postMessage({ type: 'send', text: draft, editRevision: draftEditRevision.current });
+		if (canContinue) { api.postMessage({ type: 'continue', id: pausedReply.id, viewKey: activeRef.current }); return; }
+		api.postMessage({ type: 'send', text: draft, editRevision: draftEditRevision.current, viewKey: activeRef.current });
 	};
 	const hasConversation = state.screen === 'conversation';
 	const home = state.screen === 'home';
@@ -244,13 +255,13 @@ function App() {
 					<article className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>
 					{message.role === 'user' ? <>
 						{!!message.attachments?.length && <div className="attachments message-attachments">{message.attachments.map(item => <AttachmentCard key={item.id} item={item} preview={(item, url) => openAttachment(message.attachments!, item, url)} />)}</div>}
-						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if ((!text && !message.attachments?.length) || busy) { return; } setPending('response'); setEditing(undefined); api.postMessage({ type: 'edit', id: message.id, text }); }}>
-							<textarea ref={editInput} rows={1} maxLength={32000} value={editingDraft} aria-label={t('Edit message', '编辑消息')} onChange={event => setEditingDraft(event.target.value)} onKeyDown={event => {
+						{editing === message.id ? <form className="message-edit" onSubmit={event => { event.preventDefault(); const text = editingDraft.trim(); if ((!text && !message.attachments?.length) || requestBlocked) { return; } const submitted = { id: message.id, viewKey: activeRef.current, editRevision: editingRevision.current }; submittedEdit.current = submitted; setPending('response'); api.postMessage({ type: 'edit', text, ...submitted }); }}>
+							<textarea ref={editInput} rows={1} maxLength={32000} value={editingDraft} aria-label={t('Edit message', '编辑消息')} onChange={event => { editingRevision.current++; setEditingDraft(event.target.value); }} onKeyDown={event => {
 								if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.keyCode !== 229) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); }
 							}} />
-							<div><button type="button" onClick={() => setEditing(undefined)}>{t('Cancel', '取消')}</button><button className="edit-submit" type="submit" disabled={(!editingDraft.trim() && !message.attachments?.length) || busy}>{t('Send', '发送')}</button></div>
+							<div><button type="button" onClick={() => { editingRef.current = undefined; submittedEdit.current = undefined; editingRevision.current++; setEditing(undefined); }}>{t('Cancel', '取消')}</button><button className="edit-submit" type="submit" disabled={(!editingDraft.trim() && !message.attachments?.length) || requestBlocked}>{t('Send', '发送')}</button></div>
 						</form> : <div className="user-content">{message.text}</div>}
-						{editing !== message.id && <div className="message-actions user-actions">{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt, now)}</time>}<button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} data-becoder-tooltip={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button><button disabled={busy || state.modeTransitionPending} onClick={() => { setEditing(message.id); setEditingDraft(message.text); }} data-becoder-tooltip={t('Edit message', '编辑消息')} aria-label={t('Edit message', '编辑消息')}><Icon name="edit" /></button></div>}
+						{editing !== message.id && <div className="message-actions user-actions">{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt, now)}</time>}<button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} data-becoder-tooltip={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy message', '复制消息')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button><button disabled={busy || state.modeTransitionPending} onClick={() => { editingRef.current = message.id; editingRevision.current++; submittedEdit.current = undefined; setEditing(message.id); setEditingDraft(message.text); }} data-becoder-tooltip={t('Edit message', '编辑消息')} aria-label={t('Edit message', '编辑消息')}><Icon name="edit" /></button></div>}
 					</> : <>
 						<ResponseActivity message={message} retry={message.status === 'streaming' ? state.retry : undefined} />
 						{message.text && <MessageResponse streaming={message.status === 'streaming'}>{message.text}</MessageResponse>}
@@ -261,7 +272,7 @@ function App() {
 						</>}
 						{message.status !== 'streaming' && <div className="message-actions assistant-actions">
 							{message.text && <button onClick={() => { api.postMessage({ type: 'copy', id: message.id }); setCopied(message.id); }} data-becoder-tooltip={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')} aria-label={copied === message.id ? t('Copied', '已复制') : t('Copy response', '复制回复')}><Icon name={copied === message.id ? 'check' : 'copy'} /></button>}
-							<button disabled={busy || state.modeTransitionPending || !state.configured || state.historyUnreadable} onClick={() => { setPending('response'); api.postMessage({ type: 'regenerate', id: message.id }); }} data-becoder-tooltip={t('Regenerate response', '重新回答')} aria-label={t('Regenerate response', '重新回答')}><Icon name="retry" /></button>
+							<button disabled={requestBlocked || state.modeTransitionPending || !state.configured || state.historyUnreadable} onClick={() => { setPending('response'); api.postMessage({ type: 'regenerate', id: message.id, viewKey: activeRef.current }); }} data-becoder-tooltip={t('Regenerate response', '重新回答')} aria-label={t('Regenerate response', '重新回答')}><Icon name="retry" /></button>
 							{message.createdAt !== undefined && <time dateTime={new Date(message.createdAt).toISOString()}>{formatTime(message.createdAt, now)}</time>}
 						</div>}
 					</>}
@@ -271,6 +282,7 @@ function App() {
 		</Conversation>
 		<footer>
 			{!failedReply && state.error && <div className={temporaryFailure ? 'connection-notice' : 'error'} role="alert">{temporaryFailure && <Icon name="info" />}{state.error}</div>}
+			{state.context?.collectionPending && <div className="attachment-warning" role="status">{t('Saving user activity context', '正在保存用户行为上下文')}</div>}
 			<form ref={composer} className="composer" onSubmit={event => { event.preventDefault(); send(); }}>
 				{!!state.attachments.length && <div className="attachments draft-attachments">{state.attachments.map(item => <AttachmentCard key={item.id} item={item} busy={busy} preview={(item, url) => openAttachment(state.attachments, item, url)} remove={() => api.postMessage({ type: 'removeAttachment', id: item.id })} />)}</div>}
 				{blocked && <div className="attachment-warning" role="status">{blocked}</div>}
@@ -283,7 +295,7 @@ function App() {
 					<Permissions permission={state.permission} ready={ready} usable={!!state.context?.usable} busy={busy} post={message => api.postMessage(message)} />
 					<span className="composer-spacer" aria-hidden="true" />
 					<ModelPicker connection={state.connection} />
-					{state.responseBusy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" data-unavailable={sendUnavailable || undefined} disabled={busy || sendUnavailable} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
+					{state.responseBusy ? <button className="send" type="button" disabled={state.stopping} onClick={() => { pasteJob.current?.abort(); setState(previous => ({ ...previous, stopping: true })); api.postMessage({ type: 'stop' }); }} data-becoder-tooltip={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')} aria-label={state.stopping ? t('Pausing response', '正在暂停') : t('Pause response', '暂停生成')}><Icon name="stop" /></button> : <button className="send" type="submit" data-unavailable={sendUnavailable || undefined} disabled={requestBlocked || sendUnavailable} data-becoder-tooltip={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')} aria-label={canContinue ? t('Continue response', '继续回答') : t('Send', '发送')}><Icon name={canContinue ? 'play' : 'up'} /></button>}
 				</div>
 			</form>
 		</footer>

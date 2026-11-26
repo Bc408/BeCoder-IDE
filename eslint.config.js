@@ -258,7 +258,7 @@ export default defineConfig(
 		files: [
 			'extensions/danielpinto8zz6.c-cpp-compile-run/{eslint.config,.vscode-test}.mjs',
 			'extensions/danielpinto8zz6.c-cpp-compile-run/webpack.config.js',
-			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{runnerInputProbe,runnerWithInputIntegration}.cjs',
+			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{runnerInputProbe,runnerUnicodeIntegration,runnerWithInputIntegration}.cjs',
 		],
 		rules: {
 			'header/header': ['error', 'block', { pattern: '^(?=[\\s\\S]*Copyright \\(c\\) 2026 BeCoder contributors\\.)(?=[\\s\\S]*GPL-3\\.0-or-later)[\\s\\S]*$' }]

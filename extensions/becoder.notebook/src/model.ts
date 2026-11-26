@@ -7,18 +7,13 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { NotebookCell, NotebookEditor } from 'vscode';
-import { beCoderNotebookType, isBeCoderInputCell, describeNotebookMetadata } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
+import { beCoderNotebookType, beCoderNotebookContentCells, isBeCoderInputCell } from '../../../src/vs/workbench/contrib/becoder/common/beCoderNotebook';
 export interface CellData { kind: number; value: string; languageId: string; metadata?: Record<string, unknown>; outputs?: { items: { mime: string; data: Uint8Array }[]; metadata?: Record<string, unknown> }[]; executionSummary?: { success?: boolean; executionOrder?: number; timing?: { startTime: number; endTime: number } } }
 export interface NotebookData { cells: CellData[]; metadata?: Record<string, unknown> }
 
 /** Model content projection; execution data remains in the native document and backups. */
 export function beaconNotebookContent(data: NotebookData): string {
-	return JSON.stringify({
-		cells: data.cells.map(cell => {
-			const metadata = cell.metadata?.becoder as { id?: string; name?: string } | undefined;
-			return { id: metadata?.id, kind: cell.kind, language: cell.languageId, source: cell.value, ...(isBeCoderInputCell(cell.metadata) ? { role: 'input', name: metadata?.name } : {}), attachments: describeNotebookMetadata(cell.metadata ?? {}).attachments };
-		})
-	}, null, 2);
+	return JSON.stringify({ cells: beCoderNotebookContentCells(data.cells.map(cell => ({ kind: cell.kind, language: cell.languageId, source: cell.value, metadata: cell.metadata }))) }, null, 2);
 }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
@@ -86,14 +81,14 @@ export function captureInputRun(data: NotebookData, index: number): { code: stri
 }
 
 export interface INotebookRunPlan {
-	programs: { code: string; language: 'c' | 'cpp'; codeIndex: number; codeNumber: number; codeCellId: string; inputs: { text: string; name: string; cellId: string; cellNumber: number; inputIndex: number }[] }[];
+	programs: { code: string; language: 'c' | 'cpp'; codeIndex: number; codeNumber: number; codeCellNumber: number; codeCellId: string; inputs: { text: string; name: string; cellId: string; cellNumber: number; inputIndex: number }[] }[];
 }
 export function captureNotebookRunPlan(data: NotebookData, selectedInputIndexes: readonly number[]): INotebookRunPlan {
 	const programs = new Map<number, INotebookRunPlan['programs'][number]>();
 	for (const index of [...new Set(selectedInputIndexes)].sort((a, b) => a - b)) {
 		const captured = captureInputRun(data, index);
 		let program = programs.get(captured.codeIndex);
-		if (!program) { program = { code: captured.code, language: captured.language, codeIndex: captured.codeIndex, codeNumber: captured.codeNumber, codeCellId: captured.codeCellId, inputs: [] }; programs.set(captured.codeIndex, program); }
+		if (!program) { program = { code: captured.code, language: captured.language, codeIndex: captured.codeIndex, codeNumber: captured.codeNumber, codeCellNumber: captured.codeIndex + 1, codeCellId: captured.codeCellId, inputs: [] }; programs.set(captured.codeIndex, program); }
 		program.inputs.push({ text: captured.input, name: captured.inputName, cellId: captured.inputCellId, cellNumber: index + 1, inputIndex: index });
 	}
 	return { programs: [...programs.values()] };

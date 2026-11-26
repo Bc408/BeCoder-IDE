@@ -1,4 +1,7 @@
-/* Copyright (c) 2026 BeCoder contributors. GPL-3.0-or-later. */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -6,8 +9,8 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { Terminal } = require('@xterm/headless');
-const { RunnerExecutor, finalizePublishedExecutable } = require('../out-test/src/runnerProcess');
-const { TerminalOutputBoundary } = require('../out-test/src/terminalOutputBoundary');
+const { RunnerExecutor, finalizePublishedExecutable } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/runnerProcess');
+const { TerminalOutputBoundary } = require('../out-test/extensions/danielpinto8zz6.c-cpp-compile-run/src/terminalOutputBoundary');
 
 if (process.argv[2] !== '--host') {
 	const child = spawn(process.execPath, [__filename, '--host', ...process.argv.slice(2)], { windowsHide: true, stdio: ['ignore', 'pipe', 'inherit'] });

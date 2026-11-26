@@ -1,10 +1,10 @@
 # Beacon 当前提示词全量清单与中文对照
 
-日期：2026-11-25。提示版本：`2026-11-25.3`。本文件是**当前工作区的源码快照和审阅材料**，不是新的生产提示或已批准修改方案。HEAD为`Beacon_Next@5dfd3eee3f892a221bd0af894559babea55cfa3a`，本轮英文提示、产品知识工具等尚未提交；不能从HEAD旧文本推定这里的当前内容。
+日期：2026-11-25。提示版本：`2026-11-25.3`。本文件是**源码快照和审阅材料**，不是新的生产提示。提示词／产品知识基线已提交至`Beacon_Next@950befec109132e25c190d896e8375a17a04ef0a`；本次run容量修复补充了T03的截断值说明及B07产品知识容量段，尚未提交。
 
 原文直接从当前源码字符串及七份产品资源抽取；翻译尽量保持原文的强度、条件和歧义，不擅自加“必要时”“仅限”等限定。每项给出位置和进入模型的方式，审阅意见单独标注。`${...}`表示源码运行时插值，不是实际向模型发送花括号；原文框展示模板的静态文字及原插值表达式。
 
-本轮只新增本清单和导航链接；不修改生产prompt、工具、业务逻辑，不进行新API测试、构建或Git发布。文档与源码核对通过不代表回答质量通过。
+最初编写清单时未修改生产行为；后续run容量修复的实际范围与验证见专项报告，不能把这份翻译当作该修复的验证。文档与源码核对通过不代表回答质量通过。
 
 [当前工具合同](../tool-contract.md) · [最新能力报告](../evaluation/2026-11-25-prompt-quality-report.md) · [完整问答原文](../evaluation/2026-11-25-prompt-quality-samples.md)
 
@@ -142,12 +142,12 @@ Read recent problems the user obtained or imported in BeCoder: OJ, problem ID, a
 **当前英文原文**
 
 ~~~~text
-Read recent Runner, CPH and Notebook runs, including executed code, compilation and each input/output and check. runs[].status is the student process outcome; runs[].check is the independent answer-checking outcome. They describe different stages.
+Read recent Runner, CPH and Notebook runs, including executed code, compilation and each input/output and check. Text values with {text,truncated:true} are incomplete prefixes. runs[].status is the student process outcome; runs[].check is the independent answer-checking outcome. They describe different stages.
 ~~~~
 
 **中文直译**
 
-读取近期Runner、CPH和Notebook运行，包括执行代码、编译以及每组输入／输出和检查。runs[].status是学生进程的结果；runs[].check是独立的答案检查结果。它们描述不同阶段。
+读取近期Runner、CPH和Notebook运行，包括执行代码、编译以及每组输入／输出和检查。形如{text,truncated:true}的文本值是不完整的前缀。runs[].status是学生进程的结果；runs[].check是独立的答案检查结果。它们描述不同阶段。
 
 ### T04 readVerdictRecord
 
@@ -530,7 +530,7 @@ The home-page control explicitly selects the Beacon workspace. It is managed sep
 
 Blackout is a temporary conversation. Beacon cannot read persistent activity records or other persistent sources in this mode; currently visible C/C++ drafts and five-OJ statement retrieval remain available. Spot limits ordinary file reads to the Beacon workspace. Flood expands the permitted local locations. Both exclude credentials and other conversations' internal data, and neither adds execution or write permission.
 
-With a valid Beacon workspace, the application continuously collects real user problem, run and final-verdict activity even while Blackout is selected. Modes determine whether the model can consume those records. No collection or later backfill occurs for an absent or unhealthy root. Recent problem records contain only identity, path and time. Run records contain the actual program and multiple input results. Final verdicts belong to the actual submission.
+With a valid Beacon workspace, the application continuously collects real user problem, run and final-verdict activity even while Blackout is selected. Modes determine whether the model can consume those records. No collection or later backfill occurs for an absent or unhealthy root. Recent problem records contain only identity, path and time. Run records contain the executed program and multiple input results. Code retains up to 8192 Unicode characters; each input, expected output and compilation or program output stream retains up to 4096, and each error up to 1024. Incomplete text is represented as {text,truncated:true}. Limits are independent. A complete serialized run exceeding 32 KB is not saved; execution is unaffected. Old oversized records cannot be read, but other records remain available. Final verdicts belong to the actual submission.
 
 Users can attach materials. Ask Beacon on an editor selection puts it in the draft before sending. A code tool call reads complete drafts in the currently visible C/C++ panes, including unsaved edits. Sending a message does not create a separate code snapshot. The chat search switch controls public search and webpage reads; it is independent of the five-OJ fetchProblem capability.
 
@@ -547,7 +547,7 @@ Beacon是BeCoder的算法与编程导师。用户配置DeepSeek、百炼、Moons
 
 Blackout是临时会话。Beacon在此模式不能读持久行为记录或其他持久来源；当前可见C/C++稿与五站题面获取仍可用。Spot限制普通文件读取在Beacon工作区。Flood扩大允许的本机位置。两者均排除凭据和其他对话内部数据，均不增加执行或写入权限。
 
-有合法Beacon工作区时，即使选择Blackout，应用也持续采集真实用户读题、运行和最终评测行为。模式决定模型能否消费这些记录。无根或根异常时不采集，也不在以后补采。近期读题记录只含身份、路径与时间。运行记录含实际程序与多组输入结果。最终评测属于实际提交。
+有合法Beacon工作区时，即使选择Blackout，应用也持续采集真实用户读题、运行和最终评测行为。模式决定模型能否消费这些记录。无根或根异常时不采集，也不在以后补采。近期读题记录只含身份、路径与时间。运行记录含执行程序与多组输入结果。源码最多保留8192个Unicode字符；每份输入、期望输出及编译或程序输出流最多4096字符，每处错误最多1024字符。不完整文本表示为{text,truncated:true}。各额度独立。完整序列化run超过32 KB则不保存，执行不受影响；旧超大记录不能读取，但其他记录仍可用。最终评测属于实际提交。
 
 用户可以添加材料。在编辑器选区使用Ask Beacon，会先放入草稿再发送。代码工具调用读取当前可见C/C++分屏的完整稿，含未保存修改。发送消息不创建独立代码快照。聊天搜索开关控制公开搜索与网页读取；它独立于五站fetchProblem能力。
 

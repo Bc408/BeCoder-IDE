@@ -10,6 +10,7 @@ import { randomUUID } from 'crypto';
 import type { IBeaconConversation, IBeaconHistoryItem, IBeaconStoredConversation, IBeaconResume } from '../common/beaconContext.js';
 import { acquireBeaconLease } from './beaconLease.js';
 import { appendBeaconRecord, validateBeaconRecord } from '../common/beaconRecords.js';
+import { checkRunRecordSize } from '../common/beaconRunRecord.js';
 import type { BeaconRecordKind, IBeaconRecordByKind, IBeaconRecordWrite } from '../common/beaconContextTypes.js';
 
 export interface IBeaconWorkspaceBinding { path: string; canonicalPath: string; assetsPath: string; identity: string; rootIdentity: string; assetsIdentity: string }
@@ -64,6 +65,7 @@ export class BeaconStore {
 		checkBeaconIdentifier(id);
 		const record = (await this.listRecords(kind)).find(record => record.id === id);
 		if (!record) { throw new Error('beacon-record-not-found'); }
+		if (kind === 'run') { checkRunRecordSize(record as IBeaconRecordByKind['run']); }
 		return record;
 	}
 	async appendRecord<K extends BeaconRecordKind>(kind: K, input: IBeaconRecordWrite<K>): Promise<string> {
@@ -71,7 +73,7 @@ export class BeaconStore {
 		const release = await acquireBeaconLease(this.binding.identity, `context:${kind}`);
 		try {
 			const id = randomUUID(), records = appendBeaconRecord(kind, await this.listRecords(kind), input, id);
-			await this.writeJson(['cache', 'context'], `${kind}.json`, { version: 1, records });
+			await this.writeJson(['cache', 'context'], `${kind}.json`, { version: 1, records }, undefined, true);
 			return id;
 		} finally { await release(); }
 	}
@@ -111,7 +113,7 @@ export class BeaconStore {
 		} finally { await handle.close(); }
 	}
 
-	private async writeJson(parts: string[], name: string, value: unknown, beforePublish?: () => void): Promise<void> {
+	private async writeJson(parts: string[], name: string, value: unknown, beforePublish?: () => void, recordPublication = false): Promise<void> {
 		const directory = await this.directory(parts, true);
 		const destination = path.join(directory, name);
 		let previous: BigIntStats | undefined;
@@ -121,6 +123,7 @@ export class BeaconStore {
 		const handle = await fs.open(temporary, 'wx', 0o600);
 		let owned: string | undefined;
 		let closed = false;
+		let published = false;
 		const failures: unknown[] = [];
 		try {
 			owned = fileIdentity(await handle.stat({ bigint: true }));
@@ -135,6 +138,7 @@ export class BeaconStore {
 			if ((previous && (!current || fileIdentity(current) !== fileIdentity(previous))) || (!previous && current)) { throw new Error('beacon-file-changed'); }
 			beforePublish?.();
 			await this.publication.rename(temporary, destination);
+			published = true;
 			await this.validate();
 			if (fileIdentity(await fs.lstat(destination, { bigint: true })) !== owned) { throw new Error('beacon-file-changed'); }
 		} catch (error) { failures.push(error); }
@@ -144,6 +148,7 @@ export class BeaconStore {
 				try { if (fileIdentity(await fs.lstat(temporary, { bigint: true })) === owned) { await this.publication.unlink(temporary); } } catch (error) { if (!missing(error)) { failures.push(error); } }
 			}
 		}
+		if (recordPublication && published && failures.length) { throw new Error('beacon-record-publication-uncertain', { cause: failures[0] }); }
 		if (failures.length === 1) { throw failures[0]; }
 		if (failures.length > 1) { throw new AggregateError(failures, failures[0] instanceof Error ? failures[0].message : 'beacon-save-failed', { cause: failures[0] }); }
 	}

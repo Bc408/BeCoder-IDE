@@ -9,22 +9,19 @@ import { ChatHistory, readHistory, type Conversation, type HistoryData } from '.
 import { BeaconContextClient } from '../src/context';
 import type { IBeaconContext } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { Attachment } from '../src/attachments';
-import type { ContextSnapshot } from '../src/contextTools';
 import type { Generate } from '../src/session';
 
 const attachment: Attachment = { id: 'one', path: 'C:\\chosen\\main.cpp', source: 'picker', name: 'main.cpp', kind: 'text', contents: 'int main() {}', truncated: false };
 const conversation = (): Conversation => ({ id: 'draft-one', title: '', updatedAt: 1, messages: [], error: '', workspace: [], draftOnly: true });
-const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, recent: [] };
+const context: IBeaconContext = { slot: 'one', root: 'C:\\chosen', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, recent: [] };
 
 suite('Beacon conversation drafts', () => {
-	test('effective PDF materials require tool facts in the retained branch', async () => {
+	test('PDF page results remain ordinary tool facts only in the retained branch', async () => {
 		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => data, () => {}, () => 'error');
-		const page = (pageNumber: number): ContextSnapshot => ({ key: `page:pdf:version:${pageNumber}`, raw: 'page ' + pageNumber, metadata: { source: { kind: 'page', id: 'pdf', version: 'version', pageNumber, capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded PDF page text' } } });
 		const readPage = (pageNumber: number): Generate => async function* () {
-			const snapshot = page(pageNumber); history.captureContext(snapshot);
 			yield { type: 'protocol', turn: { provider: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'synthetic', messages: [
-				{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'page-' + pageNumber, toolName: 'inspectContext', input: { operation: 'page', id: 'pdf', version: 'version', pageNumber } }] },
-				{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'page-' + pageNumber, toolName: 'inspectContext', output: { type: 'json', value: { ok: true, contents: snapshot.raw, source: { kind: 'page', id: 'pdf', version: 'version', pageNumber } } } }] }
+				{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'page-' + pageNumber, toolName: 'readPage', input: { id: 'pdf', pageNumber } }] },
+				{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'page-' + pageNumber, toolName: 'readPage', output: { type: 'json', value: { ok: true, contents: 'PDF body ' + pageNumber, source: { kind: 'page', id: 'pdf', version: 'version', pageNumber } } } }] }
 			] } };
 			yield { type: 'text', text: 'Read page ' + pageNumber };
 		};
@@ -32,16 +29,20 @@ suite('Beacon conversation drafts', () => {
 			await history.session.send('Original page one', readPage(1));
 			const firstReply = history.snapshot.messages[1].id;
 			await history.session.send('Later page two', readPage(2));
-			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), ['page:pdf:version:1', 'page:pdf:version:2']);
-			assert.deepEqual(history.effectiveContextSnapshots(firstReply).map(snapshot => snapshot.key), []);
-			await history.session.regenerate(firstReply, async function* () { yield { type: 'text', text: 'Replacement using original page' }; });
-			assert.deepEqual(history.effectiveContextSnapshots().map(snapshot => snapshot.key), []);
-			assert.deepEqual(history.contextSnapshots.map(snapshot => snapshot.key), ['page:pdf:version:1', 'page:pdf:version:2']);
+			const retained = JSON.stringify(history.session.effectiveContextUnits());
+			assert.match(retained, /PDF body 1/); assert.match(retained, /PDF body 2/);
+			assert.deepEqual(history.currentConversation?.contextSnapshots ?? [], []);
+			await history.session.regenerate(firstReply, async function* (messages) {
+				assert.doesNotMatch(JSON.stringify(messages), /PDF body [12]|page-[12]/);
+				yield { type: 'text', text: 'Replacement without the removed page results' };
+			});
+			assert.doesNotMatch(JSON.stringify(history.session.effectiveContextUnits()), /PDF body [12]|page-[12]/);
+			assert.deepEqual(history.currentConversation?.contextSnapshots ?? [], []);
 		} finally { await history.dispose(); }
 	});
 	test('obsolete discussion bindings are ignored without changing user history or granting material access', async () => {
 		const user = { id: 1, role: 'user', text: 'Discuss the other file', status: 'complete', activities: [], target: { id: 'closed', version: '1', title: 'old.cpp', capturedKeys: ['page:closed:1:'] }, targetSelection: { kind: 'page', id: 'closed' } };
-		const snapshot: ContextSnapshot = { key: 'page:closed:1:', raw: 'old private body', metadata: { source: { kind: 'page', id: 'closed', version: '1', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded page' } } };
+		const snapshot = { key: 'page:closed:1:', raw: 'old private body', metadata: { source: { kind: 'page', id: 'closed', version: '1', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded page' } } };
 		const data = { version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), pinnedTarget: { id: 'closed', title: 'old.cpp' }, messages: [user], contextSnapshots: [snapshot] }] };
 		const before = structuredClone(data), restored = readHistory(data);
 		assert.deepEqual(data, before);
@@ -50,27 +51,38 @@ suite('Beacon conversation drafts', () => {
 		assert.equal(Reflect.get(restored.conversations[0].messages[0], 'targetSelection'), undefined);
 		assert.equal(restored.conversations[0].messages[0].text, 'Discuss the other file');
 		const history = new ChatHistory(data, async value => value, () => {}, String);
-		try { assert.deepEqual(history.effectiveContextAccess().keys, []); } finally { await history.dispose(); }
+		try {
+			await history.session.send('Continue the ordinary conversation', async function* (messages) {
+				assert.match(JSON.stringify(messages), /Discuss the other file/);
+				assert.doesNotMatch(JSON.stringify(messages), /old private body|page:closed:1:/);
+				yield { type: 'text', text: 'continued' };
+			});
+			assert.deepEqual(history.currentConversation?.contextSnapshots, [snapshot]);
+		} finally { await history.dispose(); }
 	});
-	test('captured context persists independently and remains detached across restores and updates', async () => {
+	test('opaque legacy context data is passively preserved and detached across restores', async () => {
 		let saved: HistoryData | undefined;
-		const snapshot: ContextSnapshot = { key: 'page:one:2:', raw: 'captured complete page', metadata: { source: { kind: 'page', id: 'one', version: '2', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded editor text model' } } };
-		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [conversation()] }, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
-		history.captureContext(snapshot);
-		snapshot.raw = 'mutated input';
-		const detached = history.contextSnapshots; detached[0].raw = 'mutated output';
-		assert.equal(history.contextSnapshots[0].raw, 'captured complete page');
-		history.captureContext({ ...history.contextSnapshots[0], raw: 'updated captured page' });
-		assert.equal(history.contextSnapshots.length, 1);
+		const legacy = [{ key: '../obsolete', raw: 'legacy private body' }, { raw: 7 }, null, 3, 'opaque', { metadata: { source: null } }];
+		const original = structuredClone(legacy);
+		const history = new ChatHistory({ version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), contextSnapshots: legacy }] }, async data => { saved = structuredClone(data); }, () => {}, () => 'error');
+		legacy[0] = 'mutated input';
+		const detached = history.currentConversation!; detached.contextSnapshots![0] = 'mutated output';
+		assert.deepEqual(history.currentConversation?.contextSnapshots, original);
+		await history.session.send('An ordinary question', async function* (messages) {
+			assert.doesNotMatch(JSON.stringify(messages), /legacy private body|obsolete|opaque/);
+			yield { type: 'text', text: 'ordinary answer' };
+		});
 		await history.dispose();
 		const restored = new ChatHistory(saved, async () => {}, () => {}, () => 'error');
-		assert.equal(restored.contextSnapshots[0].raw, 'updated captured page');
-		assert.equal(restored.currentConversation?.contextSnapshots?.length, 1);
-		await restored.dispose();
+		try {
+			assert.deepEqual(restored.currentConversation?.contextSnapshots, original);
+			assert.equal(restored.snapshot.messages[1].text, 'ordinary answer');
+		} finally { await restored.dispose(); }
 	});
-	test('rejects malformed or oversized persisted context snapshots before restoring history', () => {
+	test('opaque legacy context data still requires an array within the history byte limit', () => {
 		const snapshot = { key: 'page:one:2:', raw: 'captured page', metadata: { source: { kind: 'page', id: 'one', version: '2', capturedAt: 1, contentSha256: 'a'.repeat(64), representation: 'loaded editor text model' } } };
-		for (const contextSnapshots of [null, {}, [snapshot, snapshot], [{ ...snapshot, raw: 7 }], [{ ...snapshot, key: '../file' }], [{ ...snapshot, metadata: {} }], [{ ...snapshot, metadata: { source: null } }], [{ ...snapshot, raw: 'x'.repeat(32 * 1024 * 1024) }]]) {
+		assert.deepEqual(readHistory({ version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), contextSnapshots: [snapshot, snapshot] }] }).conversations[0].contextSnapshots, [snapshot, snapshot]);
+		for (const contextSnapshots of [null, {}, [{ ...snapshot, raw: 'x'.repeat(32 * 1024 * 1024) }]]) {
 			assert.throws(() => readHistory({ version: 1, activeId: 'draft-one', conversations: [{ ...conversation(), contextSnapshots }] }), /invalid-history/);
 		}
 	});

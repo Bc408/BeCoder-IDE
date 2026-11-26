@@ -5,6 +5,7 @@
 
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
+import path from 'path';
 import type { IBeaconContext, IBeaconPageRead } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { IBeaconRecordByKind, BeaconRecordKind, IBeaconCurrentCodeFile } from 'becoder-beacon';
 import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
@@ -12,6 +13,8 @@ import type { BeaconContextClient, BeaconPage } from './context';
 import { isProtectedFilePath } from './fileTools';
 import { contextToolNames, contextInputValid, type BeaconContextToolName, type BeaconToolInputs } from './contextToolContract';
 import type { BeCoderInfoReader } from './productInfo';
+import { availableVerdict, codeHash, projectRecord, recordDirectory } from './recordProjection';
+import { checkRunRecordSize } from '../../../src/vs/platform/beacon/common/beaconRunRecord';
 
 export interface ContextSource { kind: 'page' | 'runtime'; id: string; origin?: string; version?: string; pageNumber?: number; revision?: number; producer?: 'runner' | 'cph' | 'notebook'; capturedAt: number; contentSha256: string; sourceSha256?: string; partial?: boolean; representation: string }
 export interface ContextOutput { ok?: boolean; contents?: string; error?: string | { code: string; message: string }; source?: ContextSource; [key: string]: unknown }
@@ -21,32 +24,11 @@ export interface ContextAccess {
 	readonly names?: readonly BeaconContextToolName[];
 	compactionView?(): ContextAccess | undefined;
 }
-export interface ContextSnapshot { key: string; raw: string; metadata: Record<string, unknown> }
 export interface ContextToolOptions {
 	readBeCoderInfo?: BeCoderInfoReader;
-	privateSnapshots?: readonly ContextSnapshot[]; allowedPrivateKeys?: readonly string[]; capturePrivate?: (snapshot: ContextSnapshot) => void;
 	authorizeLocal?: (path: string, signal: AbortSignal) => Promise<string>;
 	resolveProblemId?: (oj: BeaconToolInputs['fetchProblem']['oj'], problemId: string) => Promise<ProblemRef>;
 	readProblem?: (ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }) => Promise<ProblemDocument>;
-}
-
-/** Complete, already captured representations; never instructions or live reading grants. */
-export function validContextSnapshots(value: unknown): value is ContextSnapshot[] {
-	if (!Array.isArray(value) || value.length > 4096) { return false; }
-	const keys = new Set<string>();
-	try {
-		for (const item of value as ContextSnapshot[]) {
-			if (!item || typeof item.key !== 'string' || item.key.length > 4096 || !/^(page|material):.+/.test(item.key) || keys.has(item.key) || typeof item.raw !== 'string' || !item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) { return false; }
-			keys.add(item.key);
-			const source = item.metadata.source as ContextSource | undefined;
-			if (!source || !['page', 'runtime'].includes(source.kind) || typeof source.id !== 'string' || !source.id || !Number.isFinite(source.capturedAt) || source.capturedAt < 0 || typeof source.contentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(source.contentSha256) || typeof source.representation !== 'string') { return false; }
-			if (source.kind === 'runtime') {
-				const document = JSON.parse(item.raw) as { code?: unknown; events?: unknown };
-				if (!item.key.startsWith('material:') || item.key !== `material:${item.metadata.materialId}` || !Number.isSafeInteger(source.revision) || source.revision! < 1 || !document || typeof document.code !== 'string' || !Array.isArray(document.events)) { return false; }
-			} else if (!item.key.startsWith('page:') || typeof source.version !== 'string') { return false; }
-		}
-		return Buffer.byteLength(JSON.stringify(value), 'utf8') <= 32 * 1024 * 1024;
-	} catch { return false; }
 }
 
 // Apply to the complete representation before pagination, including decoded bytes.
@@ -80,26 +62,20 @@ const failure = (code: string, message: string): ContextOutput => ({ error: { co
 export class ContextTools implements ContextAccess {
 	private readonly fixed = new Map<string, IBeaconRecordByKind[BeaconRecordKind]>();
 	private readonly pending = new Map<string, Promise<IBeaconRecordByKind[BeaconRecordKind]>>();
-	private readonly materials = new Map<string, ContextSnapshot>();
 	private compacting = false;
-	constructor(private readonly client: BeaconContextClient, private readonly scope: IBeaconContext, private readonly protectedRoots: string[] = [], private readonly options: ContextToolOptions = {}) {
-		if (validContextSnapshots(options.privateSnapshots ?? [])) {
-			for (const snapshot of options.privateSnapshots ?? []) { if (options.allowedPrivateKeys?.includes(snapshot.key) && snapshot.metadata.source && (snapshot.metadata.source as ContextSource).kind === 'page') { this.materials.set(snapshot.key, structuredClone(snapshot)); } }
-		}
-	}
+	constructor(private readonly client: BeaconContextClient, private readonly scope: IBeaconContext, private readonly protectedRoots: string[] = [], private readonly options: ContextToolOptions = {}) { }
 	get names(): readonly BeaconContextToolName[] {
-		if (this.compacting) { return this.scope.usable && this.scope.mode !== 'blackout' ? ['readProblemRecord', 'readRunRecord', 'readVerdictRecord', 'readMaterial'] : []; }
-		return contextToolNames.filter(name => name === 'readBeCoderInfo' ? !!this.options.readBeCoderInfo : !recordKinds[name] && name !== 'readMaterial' || this.scope.usable && this.scope.mode !== 'blackout');
+		if (this.compacting) { return this.scope.usable && this.scope.mode !== 'blackout' ? ['readProblemRecord', 'readRunRecord', 'readVerdictRecord'] : []; }
+		return contextToolNames.filter(name => name === 'readBeCoderInfo' ? !!this.options.readBeCoderInfo : !recordKinds[name] || this.scope.usable && this.scope.mode !== 'blackout');
 	}
 	compactionView(): ContextAccess {
 		const view = new ContextTools(this.client, this.scope, this.protectedRoots, this.options); view.compacting = true;
 		for (const [key, value] of this.fixed) { view.fixed.set(key, structuredClone(value)); }
-		for (const [key, value] of this.materials) { view.materials.set(key, structuredClone(value)); }
 		return view;
 	}
 	private call<T>(operation: string, input: object, signal: AbortSignal): Promise<T> { return this.client.scopedCall(this.scope, operation, input, signal); }
 	private allowedMetadata(page: BeaconPage): boolean {
-		if (['oj-problem', 'oj-record', 'notebook', 'unsupported'].includes(page.kind)) { return false; }
+		if (['oj-problem', 'oj-record', 'unsupported'].includes(page.kind)) { return false; }
 		if (page.uri?.startsWith('file:')) {
 			const file = fileURLToPath(page.uri);
 			const normalized = file.replace(/\\/g, '/').toLowerCase();
@@ -107,10 +83,10 @@ export class ContextTools implements ContextAccess {
 		}
 		return true;
 	}
-	private allowedPage(page: BeaconPage): boolean { return this.allowedMetadata(page) && !(page.kind === 'text' && ['c', 'cpp'].includes(page.languageId ?? '')); }
+	private allowedPage(page: BeaconPage): boolean { return this.allowedMetadata(page) && page.kind !== 'notebook' && !(page.kind === 'text' && ['c', 'cpp'].includes(page.languageId ?? '')); }
 	async describe(signal: AbortSignal): Promise<string> {
 		const pages = (await this.call<BeaconPage[]>('pages', {}, signal)).filter(page => this.allowedMetadata(page));
-		return JSON.stringify(redactValues({ pages, materials: this.scope.mode === 'blackout' ? [] : [...this.materials.values()].map(item => ({ id: item.key, ...item.metadata, source: undefined })) }));
+		return JSON.stringify(redactValues({ pages }));
 	}
 	async execute(name: BeaconContextToolName, input: Record<string, unknown>, signal: AbortSignal): Promise<ContextOutput> {
 		signal.throwIfAborted();
@@ -124,27 +100,42 @@ export class ContextTools implements ContextAccess {
 			const kind = recordKinds[name];
 			if (kind) {
 				if (!this.scope.usable || this.scope.mode === 'blackout') { return failure('unavailable', 'Persistent records are unavailable in this mode.'); }
+				let selected: IBeaconRecordByKind[BeaconRecordKind] | undefined;
 				if (input.id === undefined) {
-					if (this.compacting) { return failure('unavailable', 'Compaction cannot acquire a new record directory.'); }
-					const records = await this.call<IBeaconRecordByKind[BeaconRecordKind][]>('listRecords', { kind }, signal);
-					return { records: records.slice().reverse().map(record => this.directory(kind, record)) };
+					if (this.compacting) { return failure('unavailable', 'Compaction can read only records already fixed by ID.'); }
+					const pathKey = (value: string) => path.win32.resolve(this.scope.root!, value).toLowerCase();
+					if (input.filePath !== undefined && (/[\0<>"|?*]/.test(String(input.filePath)) || /^[a-z]+:\/\//i.test(String(input.filePath)))) { return failure('invalid_arguments', 'Use a recorded local file path.'); }
+					const records = (await this.call<IBeaconRecordByKind[BeaconRecordKind][]>('listRecords', { kind }, signal))
+						.filter(record => kind !== 'verdict' || availableVerdict(record as IBeaconRecordByKind['verdict']))
+						.filter(record => input.filePath === undefined || (() => { const file = kind === 'run' ? (record as IBeaconRecordByKind['run']).program.filePath : (record as IBeaconRecordByKind['problem' | 'verdict']).filePath; return file !== null && pathKey(file) === pathKey(String(input.filePath)); })());
+					if (!input.latest) { return { records: records.slice().reverse().map(record => redactValues(recordDirectory(kind, record))) }; }
+					selected = records.at(-1);
+					if (!selected) { return failure('not_found', 'No matching recent record is available.'); }
+					input = { id: selected.id };
 				}
 				const key = `${kind}:${input.id}`;
 				if (!this.fixed.has(key)) {
 					if (this.compacting) { return failure('unavailable', 'Compaction can read only records already fixed in this answer.'); }
 					let pending = this.pending.get(key);
 					if (!pending) {
-						pending = this.call<IBeaconRecordByKind[BeaconRecordKind]>('readRecord', { kind, id: input.id }, signal).then(record => { if (record?.id !== input.id) { throw new Error('beacon-record-not-found'); } const fixed = redactValues(record) as IBeaconRecordByKind[BeaconRecordKind]; this.fixed.set(key, fixed); return fixed; }); this.pending.set(key, pending);
+						pending = (selected ? Promise.resolve(selected) : this.call<IBeaconRecordByKind[BeaconRecordKind]>('readRecord', { kind, id: input.id }, signal)).then(record => { if (record?.id !== input.id) { throw new Error('beacon-record-not-found'); } if (kind === 'run') { checkRunRecordSize(record as IBeaconRecordByKind['run']); } if (kind === 'verdict' && !availableVerdict(record as IBeaconRecordByKind['verdict'])) { throw new Error('beacon-verdict-source-mismatch'); } this.fixed.set(key, structuredClone(record)); return record; }); this.pending.set(key, pending);
 					}
 					try { await pending; } finally { this.pending.delete(key); }
 				}
 				await this.call('context', {}, signal);
-				return { record: structuredClone(this.fixed.get(key)) };
+				return { record: redactValues(projectRecord(kind, this.fixed.get(key)!)) };
 			}
 			if (name === 'readCurrentCode') {
 				if (this.compacting) { return failure('unavailable', 'Compaction cannot read live code.'); }
 				const files = await this.call<IBeaconCurrentCodeFile[]>('visibleCurrentCode', {}, signal);
-				return { files: redactValues(files) };
+				return { files: redactValues(files.map(file => {
+					const base = { fileName: file.fileName, filePath: file.filePath, isDirty: file.isDirty };
+					if (file.kind !== 'notebook') { return { ...base, kind: 'code', code: file.code, codeHash: codeHash(file.code) }; }
+					return { ...base, kind: 'notebook', cells: file.cells.map(cell => {
+						const { cellNumber, kind, language, source, id, name, attachments } = cell;
+						return { cellNumber, kind, language, source, ...(id === undefined ? {} : { id }), ...(kind === 'input' && name !== undefined ? { name } : {}), ...(attachments === undefined ? {} : { attachments }), ...(kind === 'code' && ['c', 'cpp'].includes(language) ? { codeHash: codeHash(source) } : {}) };
+					}) };
+				})) };
 			}
 			if (name === 'fetchProblem') {
 				if (this.compacting || !this.options.resolveProblemId || !this.options.readProblem) { return failure('unavailable', 'Problem fetching is unavailable.'); }
@@ -154,48 +145,29 @@ export class ContextTools implements ContextAccess {
 				signal.throwIfAborted(); await this.call('context', {}, signal);
 				return redactValues({ problem: request, document: { title: document.title, bodies: document.bodies, samples: document.samples, limits: document.limits, interactive: document.interactive, ...(document.difficulty ? { difficulty: document.difficulty } : {}), ...(document.tags ? { tags: document.tags } : {}) }, retrievedAt: new Date().toISOString() }) as ContextOutput;
 			}
-			if (name === 'readMaterial') {
-				if (!this.scope.usable || this.scope.mode === 'blackout') { return failure('unavailable', 'Persistent material is unavailable.'); }
-				const snapshot = this.materials.get(String(input.id));
-				if (!snapshot) { return failure('not_found', 'The material is not available to this conversation.'); }
-				await this.call('context', {}, signal); return this.text(snapshot.raw, input, { ...snapshot.metadata, snapshotKey: snapshot.key });
-			}
 			if (name === 'readPage') {
 				if (this.compacting) { return failure('unavailable', 'Compaction cannot read a new page.'); }
 				const page = (await this.call<BeaconPage[]>('pages', {}, signal)).find(page => page.id === input.id);
 				if (!page) { return failure('not_found', 'This page is no longer open.'); }
 				if (!this.allowedPage(page)) { return failure('unavailable', 'Use the dedicated code, problem or record tool for this source.'); }
 				if (page.reason) { throw new Error(page.reason); }
-				if (page.version !== input.version) { return failure('read_failed', 'The page changed; use its current listed version.'); }
 				if (page.kind === 'pdf' ? !input.pageNumber || !page.pageCount || Number(input.pageNumber) > page.pageCount : input.pageNumber !== undefined) { return failure('invalid_arguments', 'Use a valid physical PDF page number only for PDF pages.'); }
-				const key = `page:${page.id}:${page.version}:${input.pageNumber ?? ''}`;
-				const existing = this.materials.get(key);
-				if (existing) { return this.text(existing.raw, input, { ...existing.metadata, snapshotKey: key }); }
-				const captured = await this.call<IBeaconPageRead>('page', input, signal);
+				const captured = await this.call<IBeaconPageRead>('page', { ...input, version: page.version }, signal);
 				const current = (await this.call<BeaconPage[]>('pages', {}, signal)).find(value => value.id === page.id);
 				if (!current || current.version !== page.version || current.uri !== page.uri || !this.allowedPage(current)) { return failure('read_failed', 'The page changed or closed during reading.'); }
 				const source: ContextSource = { kind: 'page', id: page.id, origin: page.uri, version: page.version, ...(input.pageNumber ? { pageNumber: Number(input.pageNumber) } : {}), capturedAt: Date.now(), contentSha256: createHash('sha256').update(captured.contents).digest('hex'), representation: page.kind === 'pdf' ? 'PDF.js text extraction, no OCR' : 'authorized loaded page text' };
-				const snapshot = { key, raw: captured.contents, metadata: { ...page, ...(input.pageNumber ? { pageNumber: input.pageNumber } : {}), source } };
-				this.materials.set(key, snapshot);
-				if (this.scope.mode !== 'blackout') { this.options.capturePrivate?.(snapshot); }
-				return this.text(captured.contents, input, { ...snapshot.metadata, snapshotKey: key });
+				return this.text(captured.contents, input, { ...page, ...(input.pageNumber ? { pageNumber: input.pageNumber } : {}), source });
 			}
 			return failure('invalid_arguments', 'Unknown context tool.');
 		} catch (error) {
 			signal.throwIfAborted();
 			const message = error instanceof Error ? error.message : '';
-			return failure(/not-found|evicted|missing/.test(message) ? 'not_found' : /invalid-problem|invalid-data/.test(message) ? 'invalid_arguments' : /login|auth/.test(message) ? 'login_required' : /network|timeout|fetch/.test(message) ? 'network_error' : /parse/.test(message) ? 'parse_error' : /workspace|context-changed|protected|owner/.test(message) ? 'unavailable' : 'read_failed', 'The requested source could not be read. Do not infer its contents.');
+			if (message.includes('beacon-run-record-too-large')) { return failure('too_large', 'This run record exceeds 32 KB and cannot be read. Other records remain available.'); }
+			return failure(/not-found|evicted|missing/.test(message) ? 'not_found' : /invalid-problem|invalid-data/.test(message) ? 'invalid_arguments' : /login|auth/.test(message) ? 'login_required' : /network|timeout|fetch/.test(message) ? 'network_error' : /parse/.test(message) ? 'parse_error' : /workspace|context-changed|protected|owner|source-mismatch/.test(message) ? 'unavailable' : 'read_failed', 'The requested source could not be read. Do not infer its contents.');
 		}
 	}
 	private text(raw: string, input: Record<string, unknown>, metadata: Record<string, unknown>): ContextOutput {
-		const contents = redactContext(raw), offset = Number(input.offset ?? 0), end = Math.min(contents.length, offset + Number(input.limit ?? 32768));
-		return redactValues({ ok: true, ...metadata, contents: contents.slice(offset, end), redacted: raw !== contents, offset, totalCharacters: contents.length, truncated: offset > 0 || end < contents.length, ...(end < contents.length ? { nextOffset: end } : {}) }) as ContextOutput;
-	}
-	private directory(kind: BeaconRecordKind, record: IBeaconRecordByKind[BeaconRecordKind]): unknown {
-		if (kind === 'problem') { return redactValues(record); }
-		if (kind === 'verdict') { const value = record as IBeaconRecordByKind['verdict']; return redactValues({ id: value.id, problem: value.problem, filePath: value.filePath, observedAt: value.observedAt, result: { rawStatus: value.result.rawStatus, ...(value.result.score !== undefined ? { score: value.result.score } : {}) } }); }
-		const value = record as IBeaconRecordByKind['run'];
-		const checks = value.runs.filter(item => item.check !== undefined), passed = checks.filter(item => item.check === 'passed').length;
-		return redactValues({ id: value.id, source: value.source, operation: value.operation, startedAt: value.startedAt, endedAt: value.endedAt, status: value.status, program: { filePath: value.program.filePath, ...(value.program.codeBlockNumber ? { codeBlockNumber: value.program.codeBlockNumber } : {}) }, summary: `Compile: ${value.compile.status}; ${value.runs.length} input(s); ${checks.length ? `${passed}/${checks.length} checks passed` : 'no answer checking'}.` });
+		const contents = redactContext(raw), characters = Array.from(contents), offset = Number(input.offset ?? 0), end = Math.min(characters.length, offset + Number(input.limit ?? 32768));
+		return { ok: true, ...redactValues(metadata) as Record<string, unknown>, contents: characters.slice(offset, end).join(''), offsetUnit: 'character', redacted: raw !== contents, offset, totalCharacters: characters.length, truncated: offset > 0 || end < characters.length, ...(end < characters.length ? { nextOffset: end } : {}) };
 	}
 }

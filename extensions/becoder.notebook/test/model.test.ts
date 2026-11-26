@@ -19,6 +19,38 @@ test('Beacon content projection retains student content while excluding actual e
 	assert.deepEqual(encodeNotebook(data), before);
 });
 
+test('Beacon content projection uses semantic kinds and retains every cell without execution metadata', () => {
+	const result = JSON.parse(beaconNotebookContent({ cells: [
+		{ kind: 1, languageId: 'markdown', value: 'notes', metadata: { attachments: { 'a.png': { 'image/png': 'YQ==' } }, becoder: { attempt: { status: 'hidden' } } } },
+		{ kind: 2, languageId: 'cpp', value: 'same' },
+		{ kind: 2, languageId: 'becoder-input', value: '1', metadata: { becoder: { role: 'input', name: 'sample' } } },
+		{ kind: 2, languageId: 'c', value: 'same', outputs: [{ items: [{ mime: 'text/plain', data: Buffer.from('hidden') }] }] }
+	] }));
+	assert.deepEqual(result.cells.map((cell: { cellNumber: number; kind: string; source: string; name?: string }) => [cell.cellNumber, cell.kind, cell.source, cell.name]), [[1, 'markdown', 'notes', undefined], [2, 'code', 'same', undefined], [3, 'input', '1', 'sample'], [4, 'code', 'same', undefined]]);
+	assert.deepEqual(result.cells[0].attachments, { 'a.png': { mimeTypes: ['image/png'], byteLength: 1 } });
+	assert.doesNotMatch(JSON.stringify(result), /hidden|attempt|outputs|executionSummary|YQ==/);
+});
+
+test('Beacon content and selected run use whole Notebook cell coordinates without rewriting native data', () => {
+	const data = decodeNotebook(encodeNotebook({ cells: [
+		{ kind: 1, languageId: 'markdown', value: 'notes' },
+		{ kind: 2, languageId: 'cpp', value: 'first' },
+		{ kind: 2, languageId: 'becoder-input', value: '1' },
+		{ kind: 1, languageId: 'markdown', value: 'more notes' },
+		{ kind: 2, languageId: 'c', value: 'second' },
+		{ kind: 2, languageId: 'becoder-input', value: '2' }
+	] }));
+	const before = encodeNotebook(data);
+	const content = JSON.parse(beaconNotebookContent(data)) as { cells: { cellNumber: number; source: string }[] };
+	assert.deepEqual(content.cells.map(cell => [cell.cellNumber, cell.source]), [[1, 'notes'], [2, 'first'], [3, '1'], [4, 'more notes'], [5, 'second'], [6, '2']]);
+	const plan = notebookModel.captureNotebookRunPlan(data, [5]);
+	assert.equal(Reflect.get(plan.programs[0], 'codeCellNumber'), 5); assert.equal(plan.programs[0].codeNumber, 2);
+	assert.equal(plan.programs[0].inputs[0].cellNumber, 6);
+	data.cells.reverse();
+	assert.equal(Reflect.get(plan.programs[0], 'codeCellNumber'), 5); assert.equal(plan.programs[0].inputs[0].cellNumber, 6);
+	data.cells.reverse(); assert.deepEqual(encodeNotebook(data), before);
+});
+
 test('Notebook output heading uses actual phase timings and English states', () => {
 	assert.equal(typeof formatBeCoderRunHeading, 'function');
 	assert.equal(formatBeCoderRunHeading({ status: 'completed', compileMs: 592.4, runMs: 7 }), 'OK | compile 592 ms | run 7 ms');

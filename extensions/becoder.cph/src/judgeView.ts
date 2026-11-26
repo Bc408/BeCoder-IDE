@@ -86,6 +86,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 	private phase: 'compile' | 'running' | 'checking' | undefined;
 	private beaconActivity: string | undefined;
 	private evidence: RuntimeEvidence | undefined;
+	private reportEvidenceFailure: ((error: unknown) => void) | undefined;
 	private preparationCancelled = false;
 	get isBusy(): boolean { return this.busy || this.session.busy; }
 	get hasUnsavedEdits(): boolean { return this.dirty || this.saveRequested; }
@@ -95,12 +96,17 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		const helper = path.join(context.extensionPath, '..', 'danielpinto8zz6.c-cpp-compile-run', 'dist', 'runner-input.exe');
 		const executor = new CphExecutor({ prepareCompilation: async (source, output, session) => {
+			const handle = this.beaconActivity, failed = this.reportEvidenceFailure;
 			const runner = vscode.extensions.getExtension<RunnerCompilerApi>('becoder.runner');
 			if (!runner) { throw new Error(vscode.l10n.t('BeCoder Runner compiler is unavailable.')); }
 			const api = await runner.activate();
 			const plan = await api.prepareCapturedCompilation(source, output, session);
 			this.runHash = plan.sourceSnapshot ? this.textHash(Buffer.from(plan.sourceSnapshot.bytesBase64, 'base64').toString('utf8')) : this.sourceHash(source);
-			this.evidence = this.beaconActivity ? api.createEvidence(this.beaconActivity, 'cph', error => { console.warn('Beacon CPH evidence unavailable', error); }) : undefined;
+			this.evidence = undefined;
+			if (handle) {
+				try { this.evidence = api.createEvidence(handle, 'cph', error => failed?.(error)); }
+				catch (error) { failed?.(error); }
+			}
 			return plan;
 		}, dataRoot: path.join(context.globalStorageUri.fsPath, 'cph-sessions'), inputHelper: helper,
 			evidence: () => this.evidence,
@@ -130,6 +136,22 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(source));
 			if (!await document.save()) { throw new Error(vscode.l10n.t('Could not save the source file.')); }
 		}, () => { this.samplesSaved = true; });
+	}
+
+	private evidenceFailureReporter(): (error: unknown) => void {
+		let reported = false;
+		return error => {
+			if (reported) { return; }
+			reported = true;
+			const reason = String(error);
+			const message = reason.includes('beacon-record-publication-uncertain')
+				? vscode.l10n.t('Beacon could not confirm whether this CPH run record was saved. Sample results are unaffected.')
+				: reason.includes('beacon-run-record-too-large')
+					? vscode.l10n.t('This CPH run record exceeds 32 KB and was not saved to Beacon context. Sample results are unaffected.')
+					: vscode.l10n.t('This CPH run record could not be saved to Beacon context. Sample results are unaffected.');
+			try { void vscode.window.showWarningMessage(message); } catch { /* Optional evidence cannot control execution. */ }
+			try { console.warn('Beacon CPH evidence unavailable', error); } catch { /* Optional diagnostics. */ }
+		};
 	}
 
 	async open(problem: StoredProblem): Promise<void> {
@@ -291,9 +313,12 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 		let beaconActivity: string | undefined;
 		let runtimeActivity: string | undefined;
 		let collectionScope: unknown;
+		const reportEvidenceFailure = this.evidenceFailureReporter();
 		try {
 			if (request.command === 'run' || request.command === 'compile') {
-				try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch { /* Core execution does not require evidence storage. */ }
+				if (request.command === 'run') {
+					try { collectionScope = await vscode.commands.executeCommand('_becoder.beacon.context', 'captureCollectionScope'); } catch (error) { reportEvidenceFailure(error); }
+				}
 				try { runtimeActivity = await vscode.commands.executeCommand<string>('_becoder.beacon.context', 'beginRuntimeActivity'); }
 				catch (error) { console.warn('Beacon CPH runtime tracking unavailable', error); }
 			}
@@ -335,11 +360,15 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 				const source = this.session.current?.problem.srcPath;
 				if (source && request.command === 'run') {
 					try { beaconActivity = await vscode.commands.executeCommand<string | undefined>('_becoder.beacon.context', 'beginActivity', { source, collectionScope }); }
-					catch (error) { console.warn('Beacon CPH activity tracking unavailable', error); }
+					catch (error) {
+						if (collectionScope !== undefined) { reportEvidenceFailure(error); }
+						else { console.warn('Beacon CPH activity tracking unavailable', error); }
+					}
 				}
 				if (this.preparationCancelled) { throw new Error('CPH request cancelled.'); }
 				this.message = vscode.l10n.t('Compiling and running samples…');
 				this.beaconActivity = beaconActivity; this.evidence = undefined; this.runHash = undefined;
+				this.reportEvidenceFailure = reportEvidenceFailure;
 				const pending = this.session.run(request.revision, request.tests, request.id as number | undefined, request.command === 'compile', request.customCheckerPath as string | undefined);
 				this.selectedId = request.id as number | undefined;
 				const { run, ids } = await pending;
@@ -364,7 +393,7 @@ export class JudgeView implements vscode.WebviewViewProvider, vscode.Disposable 
 			this.message = vscode.l10n.t('CPH request failed: {0}', error instanceof Error ? error.message : String(error));
 		} finally {
 			if (this.samplesSaved) { this.dirty = this.dirtyVersion !== dirtyVersion; }
-			this.beaconActivity = undefined; this.evidence = undefined;
+			this.beaconActivity = undefined; this.evidence = undefined; this.reportEvidenceFailure = undefined;
 			if (beaconActivity) {
 				try { await vscode.commands.executeCommand('_becoder.beacon.context', 'endActivity', { handle: beaconActivity }); }
 				catch (error) { console.warn('Beacon CPH activity release unavailable', error); }

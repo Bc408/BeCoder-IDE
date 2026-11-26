@@ -1,6 +1,6 @@
 # Beacon 当前工具提示与产品知识审阅稿
 
-日期：2026-11-26。提示版本2026-11-26.2。英文工具说明从contextToolContract.ts、主题正文从当前product-info资源抽取；中文依据负责人已批准设计作语义对照。本文是当前源码清单，本轮按[实施计划](../../superpowers/plans/2026-11-26-beacon-context-availability-and-visible-notebook.md)推进，测试／模型／stage和负责人验收另见实现状态。前轮固定提示清单和访谈原答保留历史，核心导师原则与压缩指令未作本轮调优。
+日期：2026-11-26。本文固定保存提示版本2026-11-26.2的源码快照：英文工具说明从当次contextToolContract.ts、主题正文从当次product-info资源抽取，中文依据当次负责人已批准设计作语义对照。该轮按[实施计划](../../superpowers/plans/2026-11-26-beacon-context-availability-and-visible-notebook.md)实施，未调优导师核心与压缩指令。后续整套提示词已更新为2026-11-26.3，现行文本见[审定全文](2026-11-26-overall-prompt-refresh-candidate.md)；测试／模型／stage和负责人验收另见实现状态。下文保留原版本内容供追溯。
 
 ## 导师核心
 

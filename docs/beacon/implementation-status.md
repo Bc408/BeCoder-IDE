@@ -1,6 +1,6 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-26。当前起点为Beacon_Next@950befec及未提交工作树中的容量修复、工具清洗、上下文就绪／可见Notebook和硬能力工程审查修复。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-26。当前基线为Beacon_Next@aaf336cc；其上工作树已接入负责人审定的整套提示词2026-11-26.3。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
@@ -10,7 +10,7 @@
 
 | 范围 | 源码事实 |
 | --- | --- |
-| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-26.2 |
+| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-26.3 |
 | 产品知识 | 七固定主题随扩展发布，整篇返回version／topic／content；版本来自运行宿主IProductService，区别于扩展兼容号；三模式／无根可读，不读个人设置或扩大其他权限 |
 | 提示分层 | system仅保导师原则及宿主元数据；用途／参数／结果语义在工具定义，产品事实按需读取；不强制调用顺序，教学范例只在评测 |
 | 现场文档 | 调用时全部可见C/C++整稿和已加载BeCoder Notebook全本内容cells，含dirty／未命名／根外现场；同文档多视图合并，每个C/C++ cell独立codeHash；不读后台、磁盘替代稿或执行字段，不另存快照 |
@@ -23,6 +23,14 @@
 | 模式与工作区 | 有效根在Blackout也采集，模型持久来源关闭；无根／异常不采集、不补采 |
 | 历史与容量 | 完成工具交换保身份且不重演，代码／记录整读不二次裁剪；同模型同步摘要、有效前缀和一步一次恢复已接入 |
 | 退出能力 | inspectContext操作并集、codesnap及editNotebook模型入口已退出；旧磁盘数据不自动迁移／删除，Notebook独立用户功能保留 |
+
+## 2026-11-26整套提示词接入
+
+负责人审阅[英文全文与中文语义](review/2026-11-26-overall-prompt-refresh-candidate.md)并确认七处修改后，授权整套接入。导师核心补充BeCoder学习环境，围绕题面／代码／反馈和版本对应组织讲解；readProblemRecord明确用户看题行为，fetchProblem自身说明读取题面用途；Notebook概览说明Jupyter式交互及Code - OSS原生编辑器基础。七主题、宿主目录、摘要与继续包装通过既有入口接入，生产文案使用英文，中文只用于文档审阅。
+
+九工具名称、参数结构、结果字段、权限、采集、队列、压缩算法与预算均保持现行合同；本次没有新增工具、hook、快照或模型写入／执行能力。本文中的前轮stage和访谈均不代表2026-11-26.3的交付或效果；本版尚未作模型对照、stage构建、实例启动或负责人实际体验验收。
+
+本轮Beacon独立typecheck、扩展生产bundle及完整342项回归通过，无失败／跳过，strict lint通过。首轮完整回归的1项失败来自旧描述断言，已按审定文本更新并完整重跑；原有现场范围、工具配对、模式与文件权限、摘要及续答行为继续由现有测试覆盖。工程验证不等同于模型输出质量提升。
 
 ## 2026-11-26硬能力工程审查
 

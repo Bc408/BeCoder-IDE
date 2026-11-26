@@ -132,12 +132,11 @@ suite('Beacon concise tool information', () => {
 			requests++;
 			const body = JSON.parse(String(init?.body)) as { tools: { function: { name: string; description: string } }[] };
 			const descriptions = Object.fromEntries(body.tools.map(tool => [tool.function.name, tool.function.description]));
-			assert.match(descriptions.readCurrentCode, /currently visible C\/C\+\+ documents and BeCoder notebooks/);
+			assert.match(descriptions.readCurrentCode, /C\/C\+\+ documents and BeCoder notebooks currently visible/);
 			assert.match(descriptions.readCurrentCode, /Each document appears once/);
 			assert.match(descriptions.readCurrentCode, /all numbered content cells/);
-			assert.match(descriptions.readCurrentCode, /Execution results are excluded/);
-			assert.match(descriptions.readRunRecord, /Runner and Notebook execute without automatic answer checking/);
-			assert.match(descriptions.readRunRecord, /CPH provides local check results when checking completes/);
+			assert.match(descriptions.readRunRecord, /Runner\/Notebook do not check answers/);
+			assert.match(descriptions.readRunRecord, /CPH returns completed checks/);
 			assert.match(descriptions.readRunRecord, /output is merged for Runner\/Notebook and separate for CPH/);
 			return new Response('data: ' + JSON.stringify({ id: 'information', choices: [{ index: 0, delta: { content: 'answer' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 		}, 'none', [], false, undefined, {}, await setup());

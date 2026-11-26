@@ -161,7 +161,7 @@ export class ChatSession {
 	private async respond(generate: Generate, files: FileTool, source?: ResponseSource, resumedReply?: Message): Promise<void> {
 		const context = this.modelContext(source);
 		if (resumedReply) {
-			context.push({ role: 'user', content: 'The user paused the previous answer and explicitly asked to continue it. Continue the unfinished answer using the saved conversation and completed tool results. Your new text will be appended directly to the existing answer. Continue exactly where it ends, including any unfinished sentence, code fence or formula. Do not repeat the existing answer or add a new introduction. If no answer text exists, begin answering the original request.' });
+			context.push({ role: 'user', content: 'The user explicitly asked to continue the paused answer. New text is appended directly to the existing answer; continue at its ending, including any unfinished sentence, code fence or formula, without repeating it or adding an introduction. If no answer text exists, answer the original request. Completed tool results retain their original meaning; obtain additional permitted facts only if needed for the unfinished answer.' });
 		}
 		const startedAt = Date.now();
 		const reply: Message = resumedReply ?? { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', createdAt: startedAt, ...source };

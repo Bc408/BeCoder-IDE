@@ -16,7 +16,7 @@ browseWeb({ operation: 'search'|'fetch', query?: string, url?: string })
 readBeCoderInfo({ topic?: 'overview'|'problems'|'runner'|'cph'|'notebook'|'oj-connect'|'beacon' })
 ```
 
-成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。错误为小型明确结果，不以空正文冒充失败。id与latest／filePath互斥。英文上下文工具说明集中在contextToolContract.ts，提示版本2026-11-26.2；用途说明不规定调用顺序。
+成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。错误为小型明确结果，不以空正文冒充失败。id与latest／filePath互斥。英文上下文工具说明集中在contextToolContract.ts，提示版本2026-11-26.3；用途说明不规定调用顺序。
 
 <a id="5-problem和五站题面"></a>
 

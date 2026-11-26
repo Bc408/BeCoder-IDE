@@ -288,7 +288,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				})])) : {}),
 				...(permission === 'none' ? {} : {
 					inspectFile: tool<FileInput, FileOutput, Record<string, unknown>>({
-						description: `Read files, list a directory, find names or search text within the authorized file scope. Open text includes unsaved edits. Notebook files return numbered content cells without execution results. Long text reads return nextOffset. File scope: ${permission}; authorized roots: ${JSON.stringify(roots)}.`,
+						description: `Read file content, list a directory, find filenames or search text within the authorized file scope. Open text includes unsaved edits. Notebook files return numbered content cells without execution results. Long text reads provide nextOffset. File scope: ${permission}; authorized roots: ${JSON.stringify(roots)}.`,
 					inputSchema: fileSchema,
 					toModelOutput: ({ output }) => fileModelOutput(output),
 					execute: async (input, options): Promise<FileOutput> => {

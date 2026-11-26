@@ -6,7 +6,7 @@
 
 | 文档 | 职责 |
 | --- | --- |
-| [本轮英文工具与产品知识审阅稿](review/2026-11-26-tool-information-prompt-review.md) | 2026-11-26.2源码抽取，九工具参数及七主题正文，含本轮变更的中文语义对照 |
+| [整套提示词与中文语义对照](review/2026-11-26-overall-prompt-refresh-candidate.md) | 当前2026-11-26.3审定接入文本，覆盖导师核心、宿主包装、九工具参数、七主题、摘要与续答；模型对照待进行 |
 | [能力需求](prd.md) | 产品边界、141个稳定需求ID及后续能力；需求不等于已交付 |
 | [总体架构](architecture.md) | 模块所有者、数据流、模型与harness分工 |
 | [工具合同](tool-contract.md) | 九工具参数、结果、三来源run字段及JSON示例；含实时代码和产品知识读取 |
@@ -23,6 +23,8 @@
 
 | 证据与后续材料 | 身份 |
 | --- | --- |
+| [上一版工具与产品知识快照](review/2026-11-26-tool-information-prompt-review.md) | 2026-11-26.2源码抽取及中文对照，保留作版本追溯；当前审定文本见上表 |
+| [上下文工具专项报告](evaluation/2026-11-26-context-tools-interview-report.md) · [34轮完整问答](evaluation/2026-11-26-context-tools-interview-dialogue.md) · [问题矩阵](evaluation/2026-11-26-context-tools-interview-plan.md) | 新stage隔离原生流程、3次新会话复测、8题访谈及补核；58次调用配对，工具执行、必要来源取得和回答正确性分别计量，原始选材失败保留 |
 | [硬能力工程审查与修复](evaluation/2026-11-26-hard-capability-review-report.md) | 工具读取、采集发布、执行事实、会话归属和压缩请求的18项工程修复；回归、复审和本轮stage分别记录，不代表模型质量或真实流程已验收 |
 | [用户行为上下文就绪与可见文档设计](../superpowers/specs/2026-11-26-beacon-context-availability-and-visible-notebook-design.md) · [实施计划](../superpowers/plans/2026-11-26-beacon-context-availability-and-visible-notebook.md) | 负责人已批准设计并授权实施，源码和回归完成；保存门禁／失败通知、Notebook平权及按文档身份去重，新stage已交付，实际体验仍待验收 |
 | [工具与事实表达设计](../superpowers/specs/2026-11-26-beacon-tool-information-design.md) · [实施计划](../superpowers/plans/2026-11-26-beacon-tool-information.md) | 负责人已授权实施；九工具、最新／文件筛选、代码指纹与固定投影；实际验证和交付另列 |
@@ -34,7 +36,7 @@
 | [run容量修复报告](evaluation/2026-11-25-run-record-limits-report.md) · [模型复测原文](evaluation/2026-11-25-run-record-limits-samples.md) | 独立字段截断、32KB拒收及旧超大记录拒读；旧聊天压缩与整体教学质量不由此验收 |
 | [前轮能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md) · [问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md) | 2026-11-24工具重构观察与2026-11-25复审／构建历史 |
 | [输出质量要点](review/2026-11-23-output-quality-improvements.md) | 已观察的问题、当前适用建议和下一步审阅依据；不是已修复声明 |
-| [前轮提示词全文与中文对照](review/2026-11-25-prompt-inventory-and-translation.md) | 2026-11-25.3历史源码快照；当前源码提示版本为2026-11-26.2，英文说明与中文语义对照见本轮审阅稿 |
+| [前轮提示词全文与中文对照](review/2026-11-25-prompt-inventory-and-translation.md) | 2026-11-25.3历史源码快照；当前源码提示版本为2026-11-26.3，英文说明与中文语义对照见整套审定稿 |
 | [三项目源码研究](research/2026-11-22-compaction-comparison.md) | 固定提交研究，保留原项目事实，不能当作最新上游状态 |
 | [基础评测](evaluation/2026-11-23-context-foundation-report.md) · [旧工具专项报告](evaluation/2026-11-23-tool-information-flow-report.md) · [旧专项结论](evaluation/2026-11-23-tool-information-flow-conclusions.md) | 旧架构实测证据；不用于证明新工具已经稳定 |
 | [来源索引](sources.md) | 固定Git版本、历史原稿与需求来源代号 |

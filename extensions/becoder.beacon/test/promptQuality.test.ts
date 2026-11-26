@@ -10,7 +10,7 @@ import { ContextTools } from '../src/contextTools';
 test('registered_tools_do_not_duplicate_system_guidance', () => {
 	const withTools = composeBeaconPrompt({ currentTime: 'fixed', toolNames: ['readCurrentCode', 'readBeCoderInfo'] });
 	const without = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [] });
-	assert.equal(withTools.version, '2026-11-26.2');
+	assert.equal(withTools.version, '2026-11-26.3');
 	assert.equal(withTools.system, without.system);
 	assert.ok(!withTools.system.includes('Capability:'));
 	assert.ok(!withTools.sections.some(section => String(section.id) === 'capabilities'));

@@ -75,7 +75,11 @@ readBeCoderInfo在三模式和无根可用，只返回version／topic／content�
 
 readMaterial及专用页面正文／目录／采集回读链已退出；readPage只传id，宿主取得当前版本并校验单次读取，结果沿普通历史。旧私有副本不消费、不升级迁移，附件和摘要独立保留。
 
-system只承载导师原则和本回答开始时的宿主元数据；contextToolContract.ts集中维护英文上下文工具定义，承载用途、参数与结果含义，当前提示版本2026-11-26.3；产品主题承载固定事实。三者不重复堆放逐工具规则，不强制先读产品概览；教学范例只用于评测。压缩子请求不开放readBeCoderInfo，已读取产品知识仍按普通历史整理。
+system承载导师原则和本回答开始时的宿主事实：时间、真实模式、所选Beacon根及采集资格、过滤后的页面元数据。采集资格不授模型读权；无可靠scope时省略未知字段。contextToolContract.ts与Provider维护英文工具用途和普通参数；toolResultNotes按实际来源／字段生成相关外层短释义，toolModelOutput统一新模型投影。当前工作树提示版本2026-11-26.4，版本保内部身份，不进入system正文；七主题产品知识原文保持。各入口职责见[接入记录](review/2026-11-26-prompt-information-flow-installed.md)，不强制调用顺序或先读概览。
+
+新工具的即时结果、完成事实、封口协议及下一请求共用投影；SDK参数拒绝和执行异常也返回安全error:{code,message}，不把原始异常送给模型。UI沿原code，原FileOutput.error仍为字符串；旧协议按原内容回放，不补生成notes或重写错误。同ID的历史交换不被新step正规化覆盖。停止与结果完成竞争时保实际完成事实，取消中断不造完成失败。
+
+压缩子请求仅声明真实固定kind＋ID的记录工具，必需id枚举与执行／计量同源；无fixed或无hook时无工具。摘要不开放readBeCoderInfo，已读取知识按历史整理。用户附件归原消息，每份工具图片媒体前保原toolCallId／toolName，媒体包装不成为新用户请求或当前文件观察。
 
 [同步压缩](context-compaction.md)使用当前选定模型，90%触发、约60%目标，完整工具批次闭合后切换，每个普通待发步骤至多一次恢复。完整代码／记录不因剩余额度再次裁剪；压缩后仍装不下则容量失败，不删除记录或重演工具。
 

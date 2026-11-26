@@ -18,7 +18,7 @@ export interface WebSource {
 
 export interface WebInput { operation: 'search' | 'fetch'; query?: string; url?: string }
 export type WebError = 'unavailable' | 'rate-limit' | 'timeout' | 'invalid-response' | 'invalid-input' | 'budget';
-export type WebOutput = { ok: true; sources: WebSource[] } | { ok: false; error: WebError };
+export type WebOutput = { ok: true; sources: WebSource[]; sourcesOmittedByBudget?: true } | { ok: false; error: WebError };
 export type WebTool = (input: WebInput, signal: AbortSignal) => Promise<WebOutput>;
 
 const endpoint = 'https://mcp.exa.ai/mcp';
@@ -96,9 +96,7 @@ function sources(text: string, kind: WebSource['kind'], requestedURL?: string): 
 	return result;
 }
 
-export function webModelOutput(output: WebOutput) {
-	return { type: 'json' as const, value: output.ok ? { ok: true, sources: output.sources.map(source => ({ ...source })) } : { ok: false, error: output.error } };
-}
+export { webModelOutput } from './toolModelOutput';
 
 /** One bounded search owner per response. No keys, remote tool discovery, retries or local reads. */
 export function createWebTool(request: typeof fetch = fetch): WebTool {
@@ -123,14 +121,16 @@ export function createWebTool(request: typeof fetch = fetch): WebTool {
 			if (!response.ok) { await response.body?.cancel(); throw new LookupError(response.status === 429 ? 'rate-limit' : 'unavailable'); }
 			const found = sources(resultText(await boundedText(response), id), input.operation === 'search' ? 'search' : 'page', url);
 			const included: WebSource[] = [];
+			let sourcesOmittedByBudget = false;
 			for (const source of found) {
 				const overhead = source.id.length + source.title.length + source.url.length;
-				if (remaining <= overhead) { break; }
+				if (remaining <= overhead) { sourcesOmittedByBudget = true; break; }
 				const length = Math.min(source.text.length, remaining - overhead);
 				included.push({ ...source, text: source.text.slice(0, length), truncated: source.truncated || length < source.text.length });
 				remaining -= overhead + length;
 			}
-			return { ok: true, sources: included };
+			if (sourcesOmittedByBudget && !included.length) { return { ok: false, error: 'budget' }; }
+			return { ok: true, sources: included, ...(sourcesOmittedByBudget ? { sourcesOmittedByBudget: true } : {}) };
 		} catch (error) {
 			if (signal.aborted) { signal.throwIfAborted(); }
 			return { ok: false, error: error instanceof LookupError ? error.code : combinedSignal.aborted || (error instanceof Error && error.name === 'TimeoutError') ? 'timeout' : 'unavailable' };

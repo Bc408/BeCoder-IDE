@@ -5,7 +5,7 @@
 
 import { suite, test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createWebTool, publicWebURL, isWebSource, type WebInput } from '../src/webTools';
+import { createWebTool, publicWebURL, isWebSource, webModelOutput, type WebInput } from '../src/webTools';
 import { createGenerator } from '../src/provider';
 import { ChatHistory, readHistory, type HistoryData } from '../src/history';
 import { ChatSession } from '../src/session';
@@ -26,6 +26,28 @@ const webCall = (operation = 'search') => ({ tool_calls: [{ index: 0, id: 'actua
 const connection: Connection = { provider: 'deepseek', ...providers.deepseek, model: 'deepseek-v4-flash', apiKey: 'private-model-key', parameters: {}, capabilities: { purpose: 'chat', vision: true, reasoning: true, tools: true, source: 'service' } };
 
 suite('Beacon keyless web lookup', () => {
+	test('web_distinguishes_empty_partial_and_budget', async () => {
+		for (const partial of [false, true]) {
+			let calls = 0;
+			const execute = createWebTool(async (_url, init) => {
+				const first = Array.from({ length: 5 }, (_, n) => `Title: p\nURL: https://docs.example.com/${n}\nText: ${'x'.repeat(2000)}`).join('\n\n');
+				const huge = `Title: ${'t'.repeat(512)}\nURL: https://docs.example.com/${'a'.repeat(1800)}\nText: short`;
+				const last = (partial ? 'Title: p\nURL: https://docs.example.com/small\nText: small\n\n' : '') + huge;
+				return rpc(++calls < 4 ? first : last, JSON.parse(String(init?.body)).id);
+			});
+			for (let n = 0; n < 3; n++) { assert.equal((await execute({ operation: 'search', query: 'q' }, signal())).ok, true); }
+			const result = await execute({ operation: 'search', query: 'q' }, signal());
+			if (!partial) { assert.deepEqual(result, { ok: false, error: 'budget' }); }
+			else {
+				assert.ok(result.ok); assert.equal(result.sources.length, 1); assert.equal(result.sources[0].truncated, false);
+				const model = JSON.stringify(webModelOutput(result));
+				assert.match(model, /Some sources were omitted/); assert.doesNotMatch(model, /sourcesOmittedByBudget/);
+			}
+		}
+		const empty = await createWebTool(async () => rpc('No results found.'))({ operation: 'search', query: 'q' }, signal());
+		assert.deepEqual(empty, { ok: true, sources: [] });
+		assert.match(JSON.stringify(webModelOutput(empty)), /No sources were returned by this lookup/);
+	});
 	test('fixed endpoint receives only public query arguments, no credentials; verified JSON and SSE formats retain stable sources', async () => {
 		const execute = createWebTool(async (url, init) => {
 			assert.equal(url, 'https://mcp.exa.ai/mcp');

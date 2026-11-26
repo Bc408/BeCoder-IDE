@@ -22,12 +22,7 @@ export interface FileResult {
 	output: FileOutput;
 }
 
-export function fileModelOutput(output: FileOutput) {
-	if (output.ok && output.kind === 'image' && output.contents && output.mediaType) {
-		return { type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify({ ...output, contents: undefined }) }, { type: 'file' as const, mediaType: output.mediaType, data: { type: 'data' as const, data: output.contents } }] };
-	}
-	return { type: 'json' as const, value: { ...output } };
-}
+export { fileModelOutput } from './toolModelOutput';
 
 export interface Message {
 	transition?: 'temporary' | 'persistent';
@@ -161,7 +156,7 @@ export class ChatSession {
 	private async respond(generate: Generate, files: FileTool, source?: ResponseSource, resumedReply?: Message): Promise<void> {
 		const context = this.modelContext(source);
 		if (resumedReply) {
-			context.push({ role: 'user', content: 'The user explicitly asked to continue the paused answer. New text is appended directly to the existing answer; continue at its ending, including any unfinished sentence, code fence or formula, without repeating it or adding an introduction. If no answer text exists, answer the original request. Completed tool results retain their original meaning; obtain additional permitted facts only if needed for the unfinished answer.' });
+			context.push({ role: 'user', content: 'The user asked to resume the paused answer. Your text will be appended to the existing answer. Continue from its end, preserving any unfinished sentence, code block or formula, without repeating the existing text or adding an introduction. If no answer text exists, answer the original request. Reuse completed tool observations in their original context; obtain additional permitted context only as needed.' });
 		}
 		const startedAt = Date.now();
 		const reply: Message = resumedReply ?? { id: ++this.sequence, role: 'assistant', text: '', reasoning: '', activities: [], status: 'streaming', createdAt: startedAt, ...source };

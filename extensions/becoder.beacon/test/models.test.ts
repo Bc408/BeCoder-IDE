@@ -351,7 +351,7 @@ suite('Beacon durable protocol', () => {
 			const previous = body.messages.find((message: { role: string }) => message.role === 'assistant');
 			assert.equal(previous.reasoning_content, 'partial thought');
 			assert.equal(previous.content, 'prefix');
-			assert.ok(body.messages.at(-1).content.includes('appended directly'));
+			assert.ok(body.messages.at(-1).content.includes('appended to the existing answer'));
 			return response([{ content: ' suffix' }]);
 		}), source);
 		assert.equal(restored.snapshot.error, '');

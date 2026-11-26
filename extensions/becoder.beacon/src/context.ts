@@ -152,9 +152,11 @@ export class BeaconContextClient {
 			signal.throwIfAborted(); await this.refresh();
 			if (!this.matches(scope)) { throw new Error('beacon-context-changed'); }
 			return result;
-		} catch {
+		} catch (error) {
 			signal.throwIfAborted();
-			return { ok: false, path: input.path, code: 'context-changed', error: 'The Beacon workspace or permission changed during access. Read again under the current context.' };
+			return error instanceof Error && error.message === 'beacon-context-changed'
+				? { ok: false, path: input.path, code: 'context-changed', failureCode: 'beacon-context-changed', error: 'The Beacon workspace or permission changed during access. Read again under the current context.' }
+				: { ok: false, path: input.path, code: 'unavailable', failureCode: 'read_failed', error: 'The file read or its access context could not be verified.' };
 		}
 	}
 

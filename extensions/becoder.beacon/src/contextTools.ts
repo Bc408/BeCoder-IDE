@@ -23,6 +23,7 @@ export interface ContextAccess {
 	describe(signal: AbortSignal): Promise<string>;
 	readonly names?: readonly BeaconContextToolName[];
 	compactionView?(): ContextAccess | undefined;
+	fixedRecordIds?(): Readonly<Partial<Record<'readProblemRecord' | 'readRunRecord' | 'readVerdictRecord', readonly string[]>>>;
 }
 export interface ContextToolOptions {
 	readBeCoderInfo?: BeCoderInfoReader;
@@ -57,6 +58,52 @@ export function redactValues(value: unknown): unknown {
 }
 
 const recordKinds: Partial<Record<BeaconContextToolName, BeaconRecordKind>> = { readProblemRecord: 'problem', readRunRecord: 'run', readVerdictRecord: 'verdict' };
+
+/** Exact owner codes only; arbitrary exception prose is never a classifier. */
+function sourceFailure(error: unknown): ContextOutput {
+	const code = error instanceof Error ? error.message : '';
+	const messages: Record<string, string> = {
+		'beacon-context-changed': 'The workspace, mode or conversation changed during this request. This read is no longer valid.',
+		'beacon-conversation-owner': 'This request does not belong to the current conversation.',
+		'beacon-notebook-content-owner': 'This document has no available supported loaded Notebook content representation.',
+		'beacon-code-unavailable': 'No readable displayed code is available for this call.',
+		'beacon-page-closed': 'This page is closed. Its contents were not read.',
+		'beacon-page-changed': 'The page changed during reading. Read its current version if needed.',
+		'beacon-page-provider-unavailable': 'The open page has no available content provider.',
+		'beacon-page-not-ready': 'The open page is not ready to be read.',
+		'beacon-protected-page': 'This page is outside the permitted reading scope.',
+		'beacon-workspace-unavailable': 'No usable Beacon workspace is available for this source.',
+		'beacon-record-not-found': 'The requested record is not available.',
+		'beacon-record-evicted': 'The requested record has been evicted from the recent queue.',
+		'beacon-material-missing': 'The requested material is not available.',
+		'beacon-page-timeout': 'The page read timed out.',
+		'beacon-page-too-large': 'The page exceeds the reading capacity.',
+		'beacon-context-budget': 'The reading budget for this answer has been reached.',
+		'beacon-invalid-context-input': 'The requested context parameters are invalid.',
+		'beacon-verdict-source-mismatch': 'The recorded submission source did not match; this verdict is unavailable.',
+		'notebook-content-unavailable': 'The loaded Notebook content is unavailable.',
+		'notebook-execution-part-unavailable': 'Notebook execution results must be read from retained run records.',
+		'beacon-persisted-evidence-required': 'This source is available only through its retained activity records.',
+		'oj-connect-invalid-problem': 'The OJ or canonical problem ID is invalid.',
+		'oj-connect-invalid-host-response': 'OJ Connect returned an unreadable statement response.',
+		'atcoder-login-required': 'Reading this AtCoder problem requires the user to sign in on the website.',
+		'nowcoder-login-required': 'Reading this Nowcoder problem requires the user to sign in on the website.',
+		'lanqiao-login-required': 'Reading this Lanqiao problem requires the user to sign in on the website.',
+		'codeforces-login-required': 'Reading this Codeforces problem requires the user to sign in on the website.',
+		'codeforces-request-timeout': 'The Codeforces problem request timed out.',
+		'oj-statement-target': 'The canonical problem target is invalid.',
+		'oj-statement-timeout': 'The official problem statement request timed out.',
+		'oj-statement-parse-timeout': 'The official problem statement parser timed out.',
+		'oj-statement-request-failed': 'The official problem statement request failed.',
+		'oj-statement-response-body-read': 'The official problem response body could not be read.',
+		'oj-statement-response-type': 'The official problem response has an unsupported content type.',
+		'oj-statement-response-unavailable': 'The official problem response is unavailable.',
+		'oj-statement-redirect-unavailable': 'The official problem request was redirected to an unavailable target.',
+		'oj-connect-response-too-large': 'The official problem response exceeds the reading capacity.'
+	};
+	if (code === 'beacon-run-record-too-large') { return failure('too_large', 'This run record exceeds 32 KB and cannot be read. Other records remain available.'); }
+	return Object.hasOwn(messages, code) ? failure(code, messages[code]) : failure('read_failed', 'The requested source could not be read. Do not infer its contents.');
+}
 const failure = (code: string, message: string): ContextOutput => ({ error: { code, message } });
 
 export class ContextTools implements ContextAccess {
@@ -65,13 +112,20 @@ export class ContextTools implements ContextAccess {
 	private compacting = false;
 	constructor(private readonly client: BeaconContextClient, private readonly scope: IBeaconContext, private readonly protectedRoots: string[] = [], private readonly options: ContextToolOptions = {}) { }
 	get names(): readonly BeaconContextToolName[] {
-		if (this.compacting) { return this.scope.usable && this.scope.mode !== 'blackout' ? ['readProblemRecord', 'readRunRecord', 'readVerdictRecord'] : []; }
+		if (this.compacting) { return contextToolNames.filter(name => Object.hasOwn(this.fixedRecordIds(), name)); }
 		return contextToolNames.filter(name => name === 'readBeCoderInfo' ? !!this.options.readBeCoderInfo : !recordKinds[name] || this.scope.usable && this.scope.mode !== 'blackout');
 	}
 	compactionView(): ContextAccess {
 		const view = new ContextTools(this.client, this.scope, this.protectedRoots, this.options); view.compacting = true;
 		for (const [key, value] of this.fixed) { view.fixed.set(key, structuredClone(value)); }
 		return view;
+	}
+	fixedRecordIds(): Readonly<Partial<Record<'readProblemRecord' | 'readRunRecord' | 'readVerdictRecord', readonly string[]>>> {
+		if (!this.compacting || !this.scope.usable || this.scope.mode === 'blackout') { return {}; }
+		return Object.fromEntries(Object.entries(recordKinds).flatMap(([name, kind]) => {
+			const ids = [...this.fixed.keys()].filter(key => key.startsWith(kind + ':')).map(key => key.slice(kind.length + 1));
+			return ids.length ? [[name, ids]] : [];
+		}));
 	}
 	private call<T>(operation: string, input: object, signal: AbortSignal): Promise<T> { return this.client.scopedCall(this.scope, operation, input, signal); }
 	private allowedMetadata(page: BeaconPage): boolean {
@@ -86,7 +140,7 @@ export class ContextTools implements ContextAccess {
 	private allowedPage(page: BeaconPage): boolean { return this.allowedMetadata(page) && page.kind !== 'notebook' && !(page.kind === 'text' && ['c', 'cpp'].includes(page.languageId ?? '')); }
 	async describe(signal: AbortSignal): Promise<string> {
 		const pages = (await this.call<BeaconPage[]>('pages', {}, signal)).filter(page => this.allowedMetadata(page));
-		return JSON.stringify(redactValues({ pages }));
+		return JSON.stringify(redactValues({ beaconMode: this.scope.mode, beaconWorkspace: this.scope.root ? { path: this.scope.root, activityCollectionEligible: this.scope.usable } : null, pages }));
 	}
 	async execute(name: BeaconContextToolName, input: Record<string, unknown>, signal: AbortSignal): Promise<ContextOutput> {
 		signal.throwIfAborted();
@@ -154,16 +208,15 @@ export class ContextTools implements ContextAccess {
 				if (page.kind === 'pdf' ? !input.pageNumber || !page.pageCount || Number(input.pageNumber) > page.pageCount : input.pageNumber !== undefined) { return failure('invalid_arguments', 'Use a valid physical PDF page number only for PDF pages.'); }
 				const captured = await this.call<IBeaconPageRead>('page', { ...input, version: page.version }, signal);
 				const current = (await this.call<BeaconPage[]>('pages', {}, signal)).find(value => value.id === page.id);
-				if (!current || current.version !== page.version || current.uri !== page.uri || !this.allowedPage(current)) { return failure('read_failed', 'The page changed or closed during reading.'); }
+				if (!current) { return sourceFailure(new Error('beacon-page-closed')); }
+				if (current.version !== page.version || current.uri !== page.uri || !this.allowedPage(current)) { return sourceFailure(new Error('beacon-page-changed')); }
 				const source: ContextSource = { kind: 'page', id: page.id, origin: page.uri, version: page.version, ...(input.pageNumber ? { pageNumber: Number(input.pageNumber) } : {}), capturedAt: Date.now(), contentSha256: createHash('sha256').update(captured.contents).digest('hex'), representation: page.kind === 'pdf' ? 'PDF.js text extraction, no OCR' : 'authorized loaded page text' };
 				return this.text(captured.contents, input, { ...page, ...(input.pageNumber ? { pageNumber: input.pageNumber } : {}), source });
 			}
 			return failure('invalid_arguments', 'Unknown context tool.');
 		} catch (error) {
 			signal.throwIfAborted();
-			const message = error instanceof Error ? error.message : '';
-			if (message.includes('beacon-run-record-too-large')) { return failure('too_large', 'This run record exceeds 32 KB and cannot be read. Other records remain available.'); }
-			return failure(/not-found|evicted|missing/.test(message) ? 'not_found' : /invalid-problem|invalid-data/.test(message) ? 'invalid_arguments' : /login|auth/.test(message) ? 'login_required' : /network|timeout|fetch/.test(message) ? 'network_error' : /parse/.test(message) ? 'parse_error' : /workspace|context-changed|protected|owner|source-mismatch/.test(message) ? 'unavailable' : 'read_failed', 'The requested source could not be read. Do not infer its contents.');
+			return sourceFailure(error);
 		}
 	}
 	private text(raw: string, input: Record<string, unknown>, metadata: Record<string, unknown>): ContextOutput {

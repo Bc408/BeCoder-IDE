@@ -14,11 +14,75 @@ import { createGenerator } from '../src/provider';
 import { defaultCapabilities } from '../src/models';
 import { fileModelOutput } from '../src/session';
 import type { Connection } from '../src/connection';
+import { BeaconContextClient } from '../src/context';
+import { ContextTools, type ContextAccess } from '../src/contextTools';
 
 const response = (text: string) => new Response('data: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 
 const source = { provider: 'fixture', baseURL: 'https://fixture.example', model: 'one' };
 const messages = (): Message[] => Array.from({ length: 4 }, (_, index) => ({ id: index + 1, role: index % 2 ? 'assistant' : 'user', text: `original ${index}`, activities: [], status: 'complete' }));
+
+test('summary_declarations_use_kind_specific_fixed_ids', async () => {
+	const signal = new AbortController().signal;
+	const state = { slot: 'fixed', root: 'C:/practice', usable: true, workspaceState: 'ready', mode: 'spot', epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, recent: [] };
+	const client = new BeaconContextClient(async (operation, input) => {
+		if (operation === 'context') { return state; }
+		if (operation === 'listRecords') { return [{ id: 'unread', problem: { oj: 'luogu', problemId: 'P1001' }, filePath: null, viewedAt: 'now' }]; }
+		const { kind, id } = input as { kind: string; id: string };
+		return kind === 'run' ? { id, source: 'runner', operation: 'run', startedAt: '2026-11-26T00:00:00Z', status: 'completed', program: { filePath: null }, compile: { status: 'succeeded' }, runs: [] } : { id, problem: { oj: 'luogu', problemId: 'P1001' }, filePath: null, observedAt: 'now', submission: {}, result: { rawStatus: 'AC' } };
+	});
+	await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+	await tools.execute('readProblemRecord', {}, signal);
+	assert.deepEqual(tools.compactionView().names, []);
+	await tools.execute('readRunRecord', { id: 'run:a' }, signal);
+	await tools.execute('readVerdictRecord', { id: 'verdict:b' }, signal);
+	const view = tools.compactionView();
+	assert.deepEqual(view.names, ['readRunRecord', 'readVerdictRecord']);
+	let calls = 0;
+	const model = createOpenAICompatible({ name: 'fixture', baseURL: 'https://fixture.example', fetch: async (_url, init) => {
+		calls++; const body = JSON.parse(String(init?.body));
+		assert.deepEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['readRunRecord', 'readVerdictRecord']);
+		for (const entry of body.tools) {
+			assert.deepEqual(entry.function.parameters.required, ['id']);
+			assert.deepEqual(Object.keys(entry.function.parameters.properties), ['id']);
+			assert.deepEqual(entry.function.parameters.properties.id.enum, [entry.function.name === 'readRunRecord' ? 'run:a' : 'verdict:b']);
+		}
+		return response('{"summary":"The fixed historical records were preserved."}');
+	} })('one');
+	await compactBeaconContext({ model, units: effectiveUnits(messages()), tail: [], context: view, steps: { remaining: 20 }, prepared: { source, phase: 'compaction', limits: { contextWindow: 65536, maxInputTokens: 49152, maxOutputTokens: 4096 }, instructions: '', activeTools: [], messages: [], media: [], projectionFingerprint: '', contractFingerprint: '', unitFingerprints: [] } }, signal);
+	assert.equal(calls, 1);
+	assert.ok((await view.execute('readRunRecord', { id: 'verdict:b' }, signal)).error);
+	assert.ok((await view.execute('readRunRecord', { latest: true }, signal)).error);
+	assert.ok(tools.names.includes('readProblemRecord'));
+	assert.ok(!(await tools.execute('readProblemRecord', {}, signal)).error);
+});
+
+test('summary_without_fixed_records_has_no_tools', async () => {
+	const signal = new AbortController().signal;
+	const noHook: ContextAccess = { names: ['readRunRecord'], describe: async () => '', execute: async () => { assert.fail('no tool should execute'); } };
+	const model = createOpenAICompatible({ name: 'fixture', baseURL: 'https://fixture.example', fetch: async (_url, init) => {
+		assert.equal(JSON.parse(String(init?.body)).tools, undefined);
+		return response('{"summary":"History only."}');
+	} })('one');
+	await compactBeaconContext({ model, units: effectiveUnits(messages()), tail: [], context: noHook, steps: { remaining: 20 }, prepared: { source, phase: 'compaction', limits: { contextWindow: 65536, maxInputTokens: 49152, maxOutputTokens: 4096 }, instructions: '', activeTools: [], messages: [], media: [], projectionFingerprint: '', contractFingerprint: '', unitFingerprints: [] } }, signal);
+});
+
+test('summary_rejects_cross_kind_ids_before_execution_and_projects_success_notes', async () => {
+	let requests = 0, reads = 0;
+	const context: ContextAccess = { names: ['readRunRecord'], fixedRecordIds: () => ({ readRunRecord: ['run:a'] }), describe: async () => '', execute: async (name, input) => { reads++; assert.equal(name, 'readRunRecord'); assert.deepEqual(input, { id: 'run:a' }); return { record: { id: 'run:a', source: 'runner', compile: { status: 'succeeded' }, runs: [] } }; } };
+	const model = createOpenAICompatible({ name: 'fixture', baseURL: 'https://fixture.example', fetch: async (_url, init) => {
+		const body = JSON.parse(String(init?.body)); requests++;
+		if (requests > 1) {
+			const output = JSON.parse(body.messages.findLast((message: { role: string }) => message.role === 'tool').content);
+			if (requests === 2) { assert.deepEqual(output, { ok: false, error: { code: 'invalid_arguments', message: 'The tool arguments do not match its declared parameters. Supply the required fields and permitted values.' } }); }
+			else { assert.match(JSON.stringify(output.notes), /Runner does not automatically check answers/); }
+		}
+		if (requests === 3) { return response('{"summary":"A retained run was read, without an answer verdict."}'); }
+		return new Response('data: ' + JSON.stringify({ id: 'fixed-sdk', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'fixed-' + requests, type: 'function', function: { name: 'readRunRecord', arguments: JSON.stringify({ id: requests === 1 ? 'verdict:b' : 'run:a' }) } }] }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'fixed-sdk', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+	} })('one');
+	await compactBeaconContext({ model, units: effectiveUnits(messages()), tail: [], context, steps: { remaining: 20 }, prepared: { source, phase: 'compaction', limits: { contextWindow: 65536, maxInputTokens: 49152, maxOutputTokens: 4096 }, instructions: '', activeTools: [], messages: [], media: [], projectionFingerprint: '', contractFingerprint: '', unitFingerprints: [] } }, new AbortController().signal);
+	assert.equal(reads, 1); assert.equal(requests, 3);
+});
 test('compaction supplies the retained current question once when it also belongs to the covered prefix', async () => {
 	const question: ModelMessage = { role: 'user', content: 'CURRENT_QUESTION:' + 'x'.repeat(28500) };
 	const units = [{ key: '1:user', messageId: 1, unitIndex: 0, isUserQuestion: true, messages: [question], fingerprint: 'current' }];
@@ -76,7 +140,7 @@ for (const needsCompaction of [false, true]) {
 			for (const input of [...summaryInputs, ...answerInputs]) {
 				assert.ok(input.includes(question), 'Every prepared request retains the actual current user question');
 				assert.ok(input.includes(attachment), 'The current question retains its original attachment');
-				assert.ok(input.includes('appended directly'), 'The continuation instruction is retained alongside the question');
+				assert.ok(input.includes('appended to the existing answer'), 'The continuation instruction is retained alongside the question');
 			}
 			assert.equal(history.snapshot.messages[1].text, 'accepted prefix suffix');
 		} finally { await history.dispose(); }

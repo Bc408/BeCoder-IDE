@@ -304,6 +304,20 @@ suite('Beacon native context consumer', () => {
 		const result = await client.guardRead(scope, async () => { current = { ...current, epoch: 3, mode: 'flood' }; return { ok: true, path: 'C:\\chosen\\note.txt', contents: 'do-not-expose' }; }, { operation: 'read', path: 'note.txt' }, new AbortController().signal);
 		assert.equal(result.error !== undefined, true);
 		assert.equal(result.contents, undefined);
+		assert.equal(result.code, 'context-changed');
+		assert.equal(result.failureCode, 'beacon-context-changed');
+	});
+	test('context verification failure does not claim the workspace changed or expose a completed read', async () => {
+		for (const phase of ['before', 'after']) {
+			let fail = false, reads = 0;
+			const client = new BeaconContextClient(async () => { if (fail) { throw new Error('private IPC diagnostic'); } return selected(); });
+			await client.refresh(); const scope = client.captureScope();
+			if (phase === 'before') { fail = true; }
+			const result = await client.guardRead(scope, async () => { reads++; fail = true; return { ok: true, path: 'note.txt', contents: 'must not be exposed without verification' }; }, { operation: 'read', path: 'note.txt' }, new AbortController().signal);
+			assert.equal(result.code, 'unavailable'); assert.equal(result.failureCode, 'read_failed');
+			assert.equal(result.contents, undefined); assert.equal(reads, phase === 'before' ? 0 : 1);
+			assert.doesNotMatch(result.error!, /changed|private|IPC/);
+		}
 	});
 
 	test('does not turn an invalid native qualification into broader file permission', async () => {

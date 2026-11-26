@@ -22,6 +22,34 @@ async function fixture(run: (directory: string) => Promise<void>) {
 }
 
 suite('Beacon read-only permissions', () => {
+	test('continuation_uses_true_units_and_pdf_page', async () => fixture(async directory => {
+		await fs.writeFile(path.join(directory, 'unicode.txt'), '中😀xyz');
+		const tools = new FileTools('workspace', [{ name: 'root', path: directory }]);
+		const first = await tools.execute({ operation: 'read', path: 'unicode.txt', limit: 2 }, signal);
+		assert.equal(first.contents, '中😀'); assert.equal(first.nextOffset, 2);
+		assert.match(JSON.stringify(fileModelOutput(first)), /use offset=2/);
+		const last = await tools.execute({ operation: 'read', path: 'unicode.txt', offset: 2 }, signal);
+		assert.equal(last.contents, 'xyz'); assert.doesNotMatch(JSON.stringify(fileModelOutput(last)), /use offset=/);
+	}));
+	test('file_failure_keeps_ui_and_model_contracts_separate', async () => fixture(async directory => {
+		const raw = await new FileTools('workspace', [{ name: 'root', path: directory }]).execute({ operation: 'read', path: 'missing.cpp' }, signal);
+		assert.equal(raw.code, 'material-missing'); assert.equal(typeof raw.error, 'string');
+		const projected = fileModelOutput(raw);
+		assert.equal(projected.type, 'json');
+		assert.deepStrictEqual(Reflect.get(Reflect.get(projected, 'value') as object, 'error'), { code: 'file-not-found', message: raw.error });
+		assert.equal(Reflect.get(raw, 'failureCode'), 'file-not-found');
+		assert.equal(Reflect.get(Reflect.get(projected, 'value') as object, 'failureCode'), undefined);
+		assert.equal(Reflect.get(Reflect.get(projected, 'value') as object, 'code'), undefined);
+		assert.equal(Reflect.get(Reflect.get(projected, 'value') as object, 'path'), 'missing.cpp');
+	}));
+	test('image_projection_preserves_media', () => {
+		const result = fileModelOutput({ ok: true, path: 'pixel.png', kind: 'image', mediaType: 'image/png', contents: 'aW1hZ2U=' });
+		assert.equal(result.type, 'content');
+		const parts = Reflect.get(result, 'value');
+		assert.equal(parts[0].type, 'text');
+		assert.doesNotMatch(Reflect.get(parts[0], 'text'), /aW1hZ2U=/);
+		assert.deepStrictEqual(parts[1], { type: 'file', mediaType: 'image/png', data: { type: 'data', data: 'aW1hZ2U=' } });
+	});
 	test('Notebook owner validation includes the final file-handle close', async t => fixture(async directory => {
 		const file = path.join(directory, 'notes.bcnb'); await fs.writeFile(file, 'saved');
 		let version = 1;

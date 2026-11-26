@@ -6,7 +6,7 @@
 import { parseDeepSeekModels } from './deepseekModels';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { InvalidToolInputError, jsonSchema, streamText, tool, wrapLanguageModel, type FilePart, type LanguageModel, type ModelMessage } from 'ai';
+import { InvalidToolInputError, jsonSchema, streamText, tool, wrapLanguageModel, type FilePart, type TextPart, type LanguageModel, type ModelMessage } from 'ai';
 import { fileModelOutput, type Generate, type ToolActivity } from './session';
 import { safeFileError, type FileInput, type FileOutput, type FilePermission, type FileRoot } from './fileTools';
 import { ConnectionError, normalizeBaseURL, type Connection, type ModelInfo, type ProviderId } from './connection';
@@ -20,6 +20,7 @@ import { contextToolSchema, contextToolNames, contextToolDescriptions, type Beac
 import { composeBeaconPrompt, type BeaconToolName } from './prompts';
 import { measureBeaconRequest, beaconFingerprint, beaconMedia, type PreparedBeaconRequest, type BeaconUsageAnchor } from './contextBudget';
 import { compactBeaconContext, coveredCount, prefixFingerprint, projectCompaction, selectCompaction, type BeaconCompaction, type EffectiveUnit } from './compaction';
+import { contextModelOutput, modelFailureOutput, normalizeNewToolFailures, sdkToolFailure, type BeaconModelFailure } from './toolModelOutput';
 
 class BeaconPreparationError extends Error { constructor() { super('beacon-context-capacity'); } }
 
@@ -194,25 +195,41 @@ export async function testModelConnection(connection: Connection, signal: AbortS
 	} finally { controller.abort(); }
 }
 
+function fileScopeDescription(permission: FilePermission, roots: readonly FileRoot[]): string {
+	const scope = permission === 'workspace' ? 'ordinary files within the selected Beacon workspace' : 'local files on this computer, including outside the selected Beacon workspace';
+	const base = roots.length === 1 ? roots[0].path : roots.length ? `prefix relative paths with the matching folder name: ${JSON.stringify(roots)}` : 'no relative-path root is available; use an absolute path';
+	return ` File scope: ${scope}. Relative-path base: ${base}. Protected paths remain excluded.`;
+}
+
 const fileSchema = jsonSchema<FileInput>({
 	type: 'object',
 	properties: {
-		operation: { type: 'string', enum: ['read', 'list', 'find', 'search'] },
-		path: { type: 'string', description: 'Absolute local/UNC path, or path relative to the listed authorized root. Use . to list that root.' },
-		offset: { type: 'integer', minimum: 0, description: 'For read only. Continue with nextOffset: Unicode character offset for text, byte offset for binary hex.' },
-		limit: { type: 'integer', minimum: 1, maximum: 131072, description: 'For read: maximum characters (default 32768), subject to file byte budgets. For list/find/search: maximum results, default 100, maximum 200.' },
-		query: { type: 'string', description: 'Literal, case-insensitive filename substring for find or text substring for search.' }
+		operation: { type: 'string', enum: ['read', 'list', 'find', 'search'], description: 'read: read one file; list: list immediate directory entries; find: recursively match file or directory names; search: recursively find matching text lines in inspected file content.' },
+		path: { type: 'string', description: 'Absolute local or UNC path, or a path relative to the listed file root. Use . for that root. read requires a file; list, find and search require a directory.' },
+		offset: { type: 'integer', minimum: 0, description: 'For read only: zero-based Unicode character offset for text, or byte offset for binary excerpts. For the next range, pass the returned nextOffset as offset.' },
+		limit: { type: 'integer', minimum: 1, maximum: 131072, description: 'For text/binary reads: maximum Unicode characters or bytes respectively, default 32768 and maximum 131072, subject to result budgets. For list/find/search: maximum returned entries or matches, default 100 and maximum 200. Omit offset and limit for images.' },
+		query: { type: 'string', description: 'Required for find/search. Literal, case-insensitive substring: find matches each file or directory name, not its parent path; search matches within individual text lines, without crossing line breaks. Omit for read/list.' }
 	},
 	required: ['operation', 'path'],
 	additionalProperties: false
+}, {
+	validate: value => {
+		const valid = record(value) && Object.keys(value).every(key => ['operation', 'path', 'offset', 'limit', 'query'].includes(key))
+			&& typeof value.operation === 'string' && ['read', 'list', 'find', 'search'].includes(value.operation)
+			&& typeof value.path === 'string' && value.path.length > 0 && value.path.length <= 4096
+			&& (value.offset === undefined || Number.isSafeInteger(value.offset) && Number(value.offset) >= 0)
+			&& (value.limit === undefined || Number.isSafeInteger(value.limit) && Number(value.limit) >= 1 && Number(value.limit) <= 131072)
+			&& (value.query === undefined || typeof value.query === 'string');
+		return valid ? { success: true, value: value as unknown as FileInput } : { success: false, error: new Error('invalid_arguments') };
+	}
 });
 
 const webSchema = jsonSchema<WebInput>({
 	type: 'object',
 	properties: {
-		operation: { type: 'string', enum: ['search', 'fetch'] },
-		query: { type: 'string', maxLength: 500, description: 'For search: a public query within the user-requested scope.' },
-		url: { type: 'string', maxLength: 2048, description: 'For fetch: one public HTTP(S) page URL from search results or supplied by the user.' }
+		operation: { type: 'string', enum: ['search', 'fetch'], description: 'search: search public web information using query; fetch: read a public HTTP(S) page using url.' },
+		query: { type: 'string', maxLength: 500, description: 'For search: the public search query, within the real user\'s requested scope.' },
+		url: { type: 'string', maxLength: 2048, description: 'For fetch: a public HTTP(S) URL supplied by the user or found in search results.' }
 	},
 	required: ['operation'],
 	additionalProperties: false
@@ -240,18 +257,18 @@ function fileMessages(messages: ModelMessage[], vision: boolean): ModelMessage[]
 	return messages.flatMap((message): ModelMessage[] => {
 		if (!vision && Array.isArray(message.content) && message.content.some(part => part.type === 'image' || (part.type === 'file' && part.mediaType.startsWith('image/')))) { throw new ModelCapabilityError('vision'); }
 		if (message.role !== 'tool') { return [message]; }
-		const images: FilePart[] = [];
+		const images: (FilePart | TextPart)[] = [];
 		const content = message.content.map(part => {
 			if (part.type !== 'tool-result' || !['inspectFile', 'inspectFiles'].includes(part.toolName) || part.output.type !== 'content') { return part; }
 			const value = part.output.value.filter(item => {
 				if (item.type !== 'file' || !item.mediaType.startsWith('image/') || item.data.type !== 'data') { return true; }
 				if (!vision) { throw new ModelCapabilityError('vision'); }
-				images.push(item);
+				images.push({ type: 'text', text: 'Image content from the preceding recorded tool result, shown as a media part. This is not a new user request.\n' + JSON.stringify({ toolCallId: part.toolCallId, toolName: part.toolName }) }, item);
 				return false;
 			});
 			return { ...part, output: { ...part.output, value } };
 		});
-		return [{ ...message, content }, ...(images.length ? [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Images read by the preceding file tool, for the current question:' }, ...images] }] : [])];
+		return [{ ...message, content }, ...(images.length ? [{ role: 'user' as const, content: images }] : [])];
 	});
 }
 
@@ -283,12 +300,12 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				...(context ? Object.fromEntries((context.names ?? contextToolNames).map(name => [name, tool({
 					description: contextToolDescriptions[name],
 					inputSchema: contextToolSchema(name),
-					toModelOutput: ({ output }) => ({ type: 'json' as const, value: JSON.parse(JSON.stringify(output)) }),
+					toModelOutput: ({ output }) => contextModelOutput(name, output as ContextOutput),
 					execute: (input, options): Promise<ContextOutput> => { recovery.commit(); return context.execute(name, input, options.abortSignal ?? signal); }
 				})])) : {}),
 				...(permission === 'none' ? {} : {
 					inspectFile: tool<FileInput, FileOutput, Record<string, unknown>>({
-						description: `Read file content, list a directory, find filenames or search text within the authorized file scope. Open text includes unsaved edits. Notebook files return numbered content cells without execution results. Long text reads provide nextOffset. File scope: ${permission}; authorized roots: ${JSON.stringify(roots)}.`,
+						description: 'Inspect local files and directories within the file scope below: read a file, list a directory, find entries by name or search text. Open text includes unsaved edits; Notebook files return numbered content cells. File reads support text, images and binary excerpts.' + fileScopeDescription(permission, roots),
 					inputSchema: fileSchema,
 					toModelOutput: ({ output }) => fileModelOutput(output),
 					execute: async (input, options): Promise<FileOutput> => {
@@ -305,7 +322,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				}),
 				...(webAvailable ? {
 					browseWeb: tool<WebInput, WebOutput, Record<string, unknown>>({
-						description: 'Search public information or read a supplied webpage. Returns source links and text; cite relevant source links when using them. kind distinguishes search excerpts from page text; truncated marks incomplete text. Up to 6 lookups and 32000 characters per answer. No local files or private networks.',
+						description: 'Search public web information or fetch a public webpage. Returns source links with search excerpts or page text; cite relevant links when using them. The chat web-search switch controls this tool.',
 						inputSchema: webSchema,
 						toModelOutput: ({ output }) => webModelOutput(output),
 						execute: (input, options) => { recovery.commit(); return web(input, options.abortSignal ?? signal); }
@@ -338,6 +355,15 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			};
 			const logicalStepId = () => `${generation?.requestId ?? 'request'}:${ordinaryStep}`;
 			const protocol = new ProtocolRecorder();
+			let newlyClosed: { count: number; failures: Map<string, BeaconModelFailure> } | undefined;
+			const accepted = new Set<string>();
+			const rejected = new Map<string, BeaconModelFailure>();
+			const acceptTool = (toolCallId: string, toolName: string, input: unknown, output: import('./toolModelOutput').BeaconModelOutput) => {
+				if (!generation) { return; }
+				const key = `${logicalStepId()}:${toolCallId}`;
+				if (accepted.has(key)) { return; }
+				generation.acceptCompletedTool({ requestId: generation.requestId, turnIndex: generation.turnIndex, logicalStepId: logicalStepId(), toolCallId, toolName, input, output }); accepted.add(key);
+			};
 			const model = wrapLanguageModel({ model: adapters[connection.provider].createModel(connection, guardedFetch) as Exclude<LanguageModel, string>, middleware: { transformParams: async ({ params }) => { hardGate(prepared(undefined, params.prompt as unknown as ModelMessage[], (params.tools ?? []).map((definition, index) => ({ name: 'name' in definition ? definition.name : String(index), definition })))); return params; } } });
 			const declarations = Object.entries(tools).map(([name, definition]) => ({ name, definition: { description: definition.description, inputSchema: definition.inputSchema } }));
 			const snapshot = () => ({ requestId: generation?.requestId ?? 'temporary', sequence: protocol.sequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.closedMessages, stepEnds: protocol.stepEnds }, stepEnds: protocol.stepEnds });
@@ -377,7 +403,9 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 					messages: requestMessages,
 					prepareStep: async ({ messages }) => {
 						if (observerError) { throw observerError; }
-						return { messages: await prepareAnswer(prepareMessages(messages)), maxOutputTokens };
+						const current = newlyClosed ? [...messages.slice(0, -newlyClosed.count), ...normalizeNewToolFailures(messages.slice(-newlyClosed.count), newlyClosed.failures)] : messages;
+						newlyClosed = undefined;
+						return { messages: await prepareAnswer(prepareMessages(current)), maxOutputTokens };
 					},
 					providerOptions,
 					// SDK's default logger includes request bodies. Report through the
@@ -385,7 +413,15 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 					onError: () => {},
 					onStepEnd: step => {
 						try {
-							protocol.seal(step.response.messages, logicalStepId());
+							const failures = new Map<string, BeaconModelFailure>();
+							for (const part of step.content) {
+								if (part.type === 'tool-error' || part.type === 'tool-call' && part.invalid) {
+									if (!failures.has(part.toolCallId)) { failures.set(part.toolCallId, sdkToolFailure(part.error)); }
+								}
+							}
+							for (const part of step.content) { if (!requestSignal.aborted && part.type === 'tool-call' && failures.has(part.toolCallId)) { acceptTool(part.toolCallId, part.toolName, part.input, modelFailureOutput(failures.get(part.toolCallId)!)); } }
+							newlyClosed = { count: step.response.messages.length, failures };
+							protocol.seal(normalizeNewToolFailures(step.response.messages, failures), logicalStepId());
 							generation?.acceptClosed({ requestId: generation.requestId, sequence: protocol.sequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.closedMessages, stepEnds: protocol.stepEnds }, stepEnds: protocol.stepEnds });
 							ordinaryStep++;
 							steps.remaining--; repairUsed = false; stepStarted = false;
@@ -398,9 +434,9 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						if (!generation) { return; }
 						try {
 							const name = event.toolCall.toolName, result = event.toolOutput;
-							if (result.type === 'tool-error' && requestSignal.aborted && (result.error === requestSignal.reason || result.error instanceof Error && ['AbortError', 'TimeoutError'].includes(result.error.name))) { return; }
-							const output = result.type === 'tool-error' ? { type: 'error-text' as const, value: 'Tool execution failed.' } : name === 'inspectFile' ? fileModelOutput(result.output as FileOutput) : name === 'browseWeb' ? webModelOutput(result.output as WebOutput) : { type: 'json' as const, value: JSON.parse(JSON.stringify(result.output)) };
-							generation.acceptCompletedTool({ requestId: generation.requestId, turnIndex: generation.turnIndex, logicalStepId: logicalStepId(), toolCallId: event.toolCall.toolCallId, toolName: name, input: event.toolCall.input, output });
+							if (result.type === 'tool-error' && requestSignal.aborted) { return; }
+							const output = result.type === 'tool-error' ? modelFailureOutput(sdkToolFailure(result.error)) : name === 'inspectFile' ? fileModelOutput(result.output as FileOutput) : name === 'browseWeb' ? webModelOutput(result.output as WebOutput) : contextModelOutput(name as BeaconContextToolName, result.output as ContextOutput);
+							acceptTool(event.toolCall.toolCallId, name, event.toolCall.input, output);
 						} catch (error) { observerError = error; }
 					},
 					tools: Object.keys(tools).length ? tools : undefined,
@@ -428,9 +464,11 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						}
 						if (part.type === 'text-end' || part.type === 'reasoning-end') { protocol.text(part.type === 'text-end' ? 'text' : 'reasoning', part.id, '', part.providerMetadata); yield checkpoint(); }
 						if (part.type === 'finish') { protocol.finishStep(); yield checkpoint(); }
-						if (part.type === 'tool-call' && Object.hasOwn(tools, part.toolName)) {
+						if (part.type === 'tool-call') {
+							rejected.delete(part.toolCallId);
+							if (part.invalid) { rejected.set(part.toolCallId, sdkToolFailure(part.error)); }
 							protocol.call({ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input, providerOptions: part.providerMetadata });
-							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'running', part.toolName) };
+							if (Object.hasOwn(tools, part.toolName)) { yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'running', part.toolName) }; }
 						}
 						if (part.type === 'tool-result' && part.toolName === 'inspectFile') {
 							const output = part.output as FileOutput;
@@ -448,11 +486,14 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 						}
 						if (part.type === 'tool-result' && contextToolNames.includes(part.toolName as BeaconContextToolName)) {
 							const output = part.output as ContextOutput;
-							protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: { type: 'json', value: JSON.parse(JSON.stringify(output)) }, providerOptions: part.providerMetadata });
+							protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: contextModelOutput(part.toolName as BeaconContextToolName, output), providerOptions: part.providerMetadata });
 							yield checkpoint();
 							yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, !output.error ? 'complete' : 'error', part.toolName, !output.error ? undefined : toolErrorCode(typeof output.error === 'object' ? output.error.code : output.error)) };
 						}
-						if (part.type === 'tool-error' && Object.hasOwn(tools, part.toolName)) { yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'error', part.toolName, InvalidToolInputError.isInstance(part.error) ? 'invalid-input' : 'unavailable') }; }
+						if (part.type === 'tool-error' && !requestSignal.aborted) {
+							protocol.result({ type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName, output: modelFailureOutput(rejected.get(part.toolCallId) ?? sdkToolFailure(part.error)), providerOptions: part.providerMetadata }); yield checkpoint();
+							if (Object.hasOwn(tools, part.toolName)) { yield { type: 'activity', activity: toolActivity(part.toolCallId, part.input, 'error', part.toolName, rejected.get(part.toolCallId)?.code === 'invalid_arguments' || InvalidToolInputError.isInstance(part.error) ? 'invalid-input' : 'unavailable') }; }
+						}
 						if (part.type === 'error') { throw part.error; }
 						if (part.type === 'finish' && part.finishReason !== 'stop') { throw new Error('incomplete-response'); }
 					}

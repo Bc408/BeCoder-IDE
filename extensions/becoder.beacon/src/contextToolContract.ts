@@ -9,6 +9,7 @@ import type { WebInput, WebOutput } from './webTools';
 import type { IBeaconProblemIdentity, IBeaconCurrentCodeFile } from 'becoder-beacon';
 import type { ProblemDocument } from 'becoder-oj-connect';
 import { beCoderInfoTopics, type BeCoderInfoTopic, type BeCoderInfo } from './productInfo';
+import type { ContextAccess } from './contextTools';
 
 export const contextToolNames = ['readCurrentCode', 'readProblemRecord', 'readRunRecord', 'readVerdictRecord', 'fetchProblem', 'readPage', 'readBeCoderInfo'] as const;
 export type BeaconContextToolName = typeof contextToolNames[number];
@@ -24,7 +25,7 @@ export interface BeaconToolInputs {
 	inspectFile: FileInput;
 	browseWeb: WebInput;
 }
-export interface BeaconToolError { error: { code: 'invalid_arguments' | 'unavailable' | 'not_found' | 'read_failed' | 'network_error' | 'login_required' | 'parse_error' | 'too_large'; message: string } }
+export interface BeaconToolError { error: { code: string; message: string } }
 type RecordOutput = { records: readonly Record<string, unknown>[] } | { record: Record<string, unknown> } | BeaconToolError;
 export interface BeaconToolOutputs {
 	readBeCoderInfo: BeCoderInfo | BeaconToolError;
@@ -38,23 +39,35 @@ export interface BeaconToolOutputs {
 	browseWeb: WebOutput;
 }
 export const contextToolDescriptions: Record<BeaconContextToolName, string> = {
-	readBeCoderInfo: 'Read topic-specific BeCoder product facts and the running application\'s release version: features, terminology, usage and supported scope. This does not read personal settings or activity records.',
-	readCurrentCode: 'Read the complete contents of all C/C++ documents and BeCoder notebooks currently visible in this window, including unsaved changes, filenames and paths. Each document appears once; notebooks include all numbered content cells. C/C++ code has codeHash.',
-	readProblemRecord: 'Read the user\'s recent problem-viewing records: OJ, problem ID, associated code-file path and viewing time.',
-	readRunRecord: 'Read retained recent executions from Runner, CPH and Notebook. Lists give summaries; id or latest returns one record with captured code and input/results when available. Program status and answer check are separate: Runner/Notebook do not check answers; CPH returns completed checks. Program output is merged for Runner/Notebook and separate for CPH. {text,truncated:true} is an incomplete saved prefix.',
-	readVerdictRecord: 'Read retained final OJ verdicts with submitted code, diagnostics and named test-case details when available. Lists give summaries; id or latest returns one record. A verdict describes its submission; test-case results may omit test inputs.',
-	fetchProblem: 'Fetch the statement, samples and constraints from Luogu, Codeforces, AtCoder, Nowcoder or Lanqiao using its OJ and canonical problem ID. Use this tool when you need to read or confirm a supported problem\'s requirements.',
-	readPage: 'Read the current content of an eligible page by its ID in the host page directory. Text ranges use character offsets. PDF text extraction is not OCR.'
+	readBeCoderInfo: 'Read BeCoder product knowledge by topic, together with the running application\'s release version: features, terminology, usage and supported scope. This reads bundled product knowledge, not personal settings or activity records.',
+	readCurrentCode: 'Read the complete contents, at call time, of all C/C++ documents and BeCoder notebooks displayed in this window\'s editor panes. Includes unsaved changes, filenames and paths; each document appears once and notebooks include all numbered content cells.',
+	readProblemRecord: 'Read the user\'s recent problem-viewing activity: which OJ problem they viewed, its associated code-file path and viewing time.',
+	readRunRecord: 'Read the user\'s recent local run records from Runner (program runs), CPH (local test cases) and Notebook (code-cell runs). Records provide captured code, compilation results, inputs and outputs when available; CPH records may also include answer-check results.',
+	readVerdictRecord: 'Read retained final online-judge results for the user\'s submissions, with submitted code, diagnostics and per-test results when available. Each verdict describes its recorded submission.',
+	fetchProblem: 'Fetch a problem\'s statement, samples and constraints from Luogu, Codeforces, AtCoder, Nowcoder or Lanqiao. Use it to read or confirm a supported problem\'s requirements. This tool is independent of the chat web-search switch.',
+	readPage: 'Read the currently loaded content of an eligible text, browser or PDF page using its ID from the host page directory. C/C++ text documents and BeCoder notebooks are excluded from this tool; readCurrentCode reads those displayed in editor panes.'
 };
 export function contextToolParameters(name: BeaconContextToolName): JSONSchema7 {
 	const id = { type: 'string' as const, minLength: 1, maxLength: 256 };
-	const recordId = { ...id, description: 'Read this retained record by ID. Cannot be combined with latest or filePath.' };
-	const range = { offset: { type: 'integer' as const, minimum: 0, description: 'Zero-based Unicode character offset; continue with returned nextOffset.' }, limit: { type: 'integer' as const, minimum: 1, maximum: 131072, description: 'Maximum characters to return; default 32768.' } };
-	const properties: NonNullable<JSONSchema7['properties']> = name === 'readBeCoderInfo' ? { topic: { type: 'string', enum: [...beCoderInfoTopics], description: 'overview: product and topic directory (default); problems: obtaining tasks; runner: compilation and runs; cph: local tests; notebook: learning documents; oj-connect: five-site submission; beacon: workspaces, modes and recent records. Direct topic reads are supported.' } } : name === 'readCurrentCode' ? {} : name === 'fetchProblem' ? { oj: { type: 'string', enum: ['luogu', 'codeforces', 'atcoder', 'nowcoder', 'lanqiao'], description: 'Luogu (洛谷), Codeforces, AtCoder, Nowcoder (牛客 ACM), Lanqiao (蓝桥).' }, problemId: { ...id, description: 'Canonical IDs: Luogu P1001 or P1001@12345; Codeforces 2026/A; AtCoder abc300/abc300_a; Nowcoder problem/12345 or contest/12345/A; Lanqiao 12345.' } }
-		: name === 'readPage' ? { id: { ...id, description: 'Page ID from the host page directory.' }, ...range, pageNumber: { type: 'integer', minimum: 1, description: 'Required for PDFs only: 1-based physical page. Text extraction is not OCR.' } } : { id: recordId, latest: { type: 'boolean', const: true, description: 'Return the latest enqueued matching record in the selected Beacon workspace. Omit to list records.' }, filePath: { type: 'string', minLength: 1, maxLength: 4096, description: 'Filter by the recorded file path, absolute or relative to the selected Beacon root. Notebook runs use the notebook path.' } };
+	const recordId = { ...id, description: 'Read one retained record by its ID. Omit latest and filePath when using id.' };
+	const range = { offset: { type: 'integer' as const, minimum: 0, description: 'Zero-based Unicode character offset. Use the returned nextOffset to continue.' }, limit: { type: 'integer' as const, minimum: 1, maximum: 131072, description: 'Maximum Unicode characters to return; default 32768, maximum 131072.' } };
+	const properties: NonNullable<JSONSchema7['properties']> = name === 'readBeCoderInfo' ? { topic: { type: 'string', enum: [...beCoderInfoTopics], description: 'overview (default): product and topic directory; problems: obtaining tasks; runner: compilation and program runs; cph: local test cases and answer checking; notebook: learning documents and code-cell runs; oj-connect: supported OJs and submissions; beacon: workspace, modes and retained records. Any topic can be read directly.' } } : name === 'readCurrentCode' ? {} : name === 'fetchProblem' ? { oj: { type: 'string', enum: ['luogu', 'codeforces', 'atcoder', 'nowcoder', 'lanqiao'], description: 'Problem source: luogu (洛谷), codeforces, atcoder, nowcoder (牛客 ACM), or lanqiao (蓝桥).' }, problemId: { ...id, description: 'Canonical problem ID: Luogu P1001 or P1001@12345; Codeforces 2026/A; AtCoder abc300/abc300_a; Nowcoder problem/12345 or contest/12345/A; Lanqiao 12345.' } }
+		: name === 'readPage' ? { id: { ...id, description: 'ID of an eligible open page from the host page directory.' }, ...range, pageNumber: { type: 'integer', minimum: 1, description: 'For PDFs only: required 1-based physical page number. PDF reads extract text, not OCR.' } } : { id: recordId, latest: { type: 'boolean', const: true, description: 'Return the most recently enqueued record matching filePath, or the latest in this queue if filePath is omitted. Omit both id and latest to list records, newest first.' }, filePath: { type: 'string', minLength: 1, maxLength: 4096, description: 'Filter by the recorded path, absolute or relative to the selected Beacon root. For Notebook runs, use the notebook file path. Applies to listing and latest; omit when using id.' } };
 	return { type: 'object', properties, required: name === 'fetchProblem' ? ['oj', 'problemId'] : name === 'readPage' ? ['id'] : [], additionalProperties: false };
 }
-export function contextToolSchema(name: BeaconContextToolName) { return jsonSchema<Record<string, unknown>>(contextToolParameters(name)); }
+export function contextToolSchema(name: BeaconContextToolName) {
+	return jsonSchema<Record<string, unknown>>(contextToolParameters(name), { validate: value => contextInputValid(name, value) ? { success: true, value } : { success: false, error: new Error('invalid_arguments') } });
+}
+
+export interface BeaconContextToolDeclaration { name: BeaconContextToolName; description: string; parameters: JSONSchema7 }
+export function compactionToolDeclarations(ids: ReturnType<NonNullable<ContextAccess['fixedRecordIds']>>): readonly BeaconContextToolDeclaration[] {
+	return (['readProblemRecord', 'readRunRecord', 'readVerdictRecord'] as const).flatMap(name => {
+		const values = [...new Set(ids[name] ?? [])].filter(id => contextInputValid(name, { id }));
+		if (!values.length) { return []; }
+		const source = name === 'readRunRecord' ? 'local run record' : name === 'readProblemRecord' ? 'problem-viewing record' : 'online-judge result';
+		return [{ name, description: `Reread a ${source} using one of the fixed historical IDs listed for this summary.`, parameters: { type: 'object', properties: { id: { type: 'string', enum: values, description: 'One of the fixed historical record IDs available for this summary.' } }, required: ['id'], additionalProperties: false } }];
+	});
+}
 export function contextInputValid(name: BeaconContextToolName, input: unknown): input is Record<string, unknown> {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) { return false; }
 	const value = input as Record<string, unknown>, schema = contextToolParameters(name);

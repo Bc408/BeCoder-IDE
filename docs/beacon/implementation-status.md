@@ -1,18 +1,26 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-26。当前基线为Beacon_Next@aaf336cc；其上工作树已接入负责人审定的整套提示词2026-11-26.3。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-27。当前源码在Beacon_Next上接入负责人审定的信息流提示词2026-11-26.4，开发基线为eb48d147。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
 2026-11-25提示优化[设计](../superpowers/specs/2026-11-25-beacon-prompt-quality-design.md)和[实施计划](../superpowers/plans/2026-11-25-beacon-prompt-quality.md)已获批准，负责人选择Native实施。导师核心精简、逐工具capabilities退出和readBeCoderInfo均已接入；system、工具说明及产品主题正文统一英文，回答跟随用户语言。[能力报告](evaluation/2026-11-25-prompt-quality-report.md)及[完整问答](evaluation/2026-11-25-prompt-quality-samples.md)保改善、退化和失败；整体教学质量未全面通过。
 
+## 2026-11-26 信息流提示词重构
+
+负责人已批准IF-D1／IP-D1并选择Native实施。首层环境、九工具用途／参数、条件notes／具体失败、固定ID摘要及媒体／续答归属已接入；完整位置和中英文语义见[接入与验证记录](review/2026-11-26-prompt-information-flow-installed.md)。七主题、三队列、业务采集／执行owner、权限和容量算法保持。内部提示版本不进入模型正文，模型失败不携UI简码，原UI及旧历史保持兼容。
+
+两次里程碑和最终独立复审已完成，发现的UI分类兼容问题及完成结果停止竞态均已修复。初次接入的类型检查、扩展build、365项全套离线回归及严格lint退出0，无fail／cancelled／skipped；完整结果见接入记录。初次接入阶段没有模型请求或stage验收；后续复审与构建见下段。既有60%摘要目标尚未传入生成器的差距保留。旧stage与访谈是各自版本的历史证据。
+
+后续负责人授权独立code review、修复并构建新stage，见[复审记录](review/2026-11-26-prompt-information-flow-code-review.md)。已修复inspectFile不合法参数可能生成无法重开历史的P1，以及上下文验证失败被误报为确定变化的P2。修复后367项Beacon回归、类型／build／lint、客户端类型检查及OI统一编译通过。完整标准stage于2026-11-27 00:04:18退出0，用时160.982秒；首次Electron下载失败及校验一致的本地归档恢复分别留证。应用入口为`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/BeCoder.exe`。未启动GUI，不以构建替代模型效果或真实流程验收。
+
 ## 当前实现
 
 | 范围 | 源码事实 |
 | --- | --- |
-| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-26.3 |
+| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-26.4 |
 | 产品知识 | 七固定主题随扩展发布，整篇返回version／topic／content；版本来自运行宿主IProductService，区别于扩展兼容号；三模式／无根可读，不读个人设置或扩大其他权限 |
-| 提示分层 | system仅保导师原则及宿主元数据；用途／参数／结果语义在工具定义，产品事实按需读取；不强制调用顺序，教学范例只在评测 |
+| 提示分层 | system为导师原则及首层环境，工具定义交代用途／参数；结果短释义按实际条件随返回提供，新失败投影统一error对象，旧协议原样回放；产品事实按主题读取，不强制调用顺序 |
 | 现场文档 | 调用时全部可见C/C++整稿和已加载BeCoder Notebook全本内容cells，含dirty／未命名／根外现场；同文档多视图合并，每个C/C++ cell独立codeHash；不读后台、磁盘替代稿或执行字段，不另存快照 |
 | 用户行为上下文就绪 | 独立collectionPending覆盖适配／校验／发布，同根窗口共享；各模式的所有新回答入口在实际受理前复核，文案“正在保存用户行为上下文”；失败按动作通知，发布确认不明不误报未写入；执行退役和后续运行独立 |
 | 新查询与投影 | 三记录支持latest和filePath；编译只回standard／optimization等教学事实，运行毫秒取整且开始时间到秒；完整代码hash在截断前计算；verdict按站点具名行且隐藏工程核验状态 |
@@ -89,7 +97,7 @@ stage目标入口为`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/BeCoder.exe`�
 ## 已知缺口与待验收
 
 - **模型理解和教学尚不稳定。** 本轮仍有状态／check混说、来源错称、机制臆测和无关扩展，见[工具清洗报告](evaluation/2026-11-26-tool-information-report.md)。前轮二分与64位范围、空队列外推等缺陷未由本轮定向测试证明消除，见[提示质量报告](evaluation/2026-11-25-prompt-quality-report.md)与[前轮报告](evaluation/2026-11-24-context-tools-rebuild-report.md)。工具机械成功不等于有价值取材或正确回答；保留全部明显失败供负责人把关。
-- **压缩保留瓶颈与实现差距。** 同步摘要已有实现；前轮3次成功及本轮有限复测不推翻复杂长对话中的结构化摘要失败与语义连续性问题。执行层已拒绝整理阶段列目录／首次读取，但schema仍复用普通可选ID形态，未限定已固定ID。预算已计算60%目标，尚未传给摘要生成；当前发布只检查严格缩短、低于90%和硬容量。设计目标继续保留，不能写成全部完成或全场景稳定。
+- **压缩保留瓶颈与实现差距。** 同步摘要已有实现；前轮3次成功及本轮有限复测不推翻复杂长对话中的结构化摘要失败与语义连续性问题。本轮执行层与声明均按真实kind＋固定ID收紧，无fixed时无工具，已补齐此前普通可选ID schema的差距。预算已计算60%目标，尚未传给摘要生成；当前发布只检查严格缩短、低于90%和硬容量。设计目标继续保留，不能写成全部完成或全场景稳定。
 - **Runner交互输入存在缺口。** 不能可靠还原的stdin为null并标gaps，合流输出或回显不当完整输入。
 - **执行观察类型仍可收窄。** metadata／event／outcome含unknown，当前依赖适配与运行校验；尚不是计划曾建议的有限类型联合。
 - **后续能力仍保留。** 资产写入、tips/status、dream、完整视觉、本人同题历史增强及完整工具可视化未由本轮工具底座交付；CPH检查器代码沉淀、对拍检查器和随机生成器另行设计。

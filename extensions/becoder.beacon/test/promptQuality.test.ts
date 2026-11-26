@@ -6,11 +6,64 @@ import { createGenerator } from '../src/provider';
 import { ChatHistory } from '../src/history';
 import { BeaconContextClient } from '../src/context';
 import { ContextTools } from '../src/contextTools';
+import { ChatSession, fileModelOutput, type Message } from '../src/session';
+
+test('host_scope_distinguishes_collection_from_read_access', async () => {
+	for (const state of [
+		{ root: 'C:/practice', usable: true, workspaceState: 'ready', mode: 'spot' },
+		{ root: 'C:/practice', usable: true, workspaceState: 'ready', mode: 'flood' },
+		{ root: 'C:/practice', usable: true, workspaceState: 'blackout', mode: 'blackout' },
+		{ root: 'C:/practice', usable: false, workspaceState: 'unavailable', mode: 'blackout' },
+		{ usable: false, workspaceState: 'none', mode: 'blackout' }
+	]) {
+		const calls: string[] = [];
+		const client = new BeaconContextClient(async operation => { calls.push(operation); return operation === 'pages' ? [] : { ...state, slot: 'scope', epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, recent: [] }; });
+		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
+		const metadata = JSON.parse(await tools.describe(new AbortController().signal));
+		assert.equal(metadata.beaconMode, state.mode);
+		assert.deepEqual(metadata.beaconWorkspace, 'root' in state ? { path: state.root, activityCollectionEligible: state.usable } : null);
+		assert.deepEqual(calls, ['context', 'context', 'pages', 'context']);
+		assert.doesNotMatch(JSON.stringify(metadata), /busy|recent|activeId|epoch/);
+		assert.equal(tools.names.includes('readRunRecord'), state.mode !== 'blackout');
+	}
+	const prompt = composeBeaconPrompt({ currentTime: '2026-11-26T12:00:00Z', toolNames: [] });
+	assert.doesNotMatch(prompt.system, /2026-11-26\.\d|beaconMode|beaconWorkspace/);
+	assert.match(prompt.system, /currentTime/);
+});
+
+test('tool_images_keep_each_original_call_on_followup', async () => {
+	const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6AAAAABJRU5ErkJggg==';
+	const original: Message[] = [{ id: 1, role: 'user', text: 'old image question', activities: [], status: 'complete' }, { id: 2, role: 'assistant', text: 'old answer', activities: [], status: 'complete', protocol: [{ provider: 'ollama', baseURL: 'http://localhost:11434/v1', model: 'old-model', messages: [
+		{ role: 'assistant', content: ['first', 'second'].map(id => ({ type: 'tool-call', toolCallId: id, toolName: 'inspectFile', input: { operation: 'read', path: id + '.png' } })) },
+		{ role: 'tool', content: ['first', 'second'].map(id => ({ type: 'tool-result', toolCallId: id, toolName: 'inspectFile', output: fileModelOutput({ ok: true, path: id + '.png', kind: 'image', mediaType: 'image/png', contents: image }) })) },
+		{ role: 'assistant', content: 'old answer' }
+	] }] }];
+	const before = structuredClone(original);
+	const session = new ChatSession(() => {}, String); session.restore({ messages: original, error: '' });
+	let calls = 0;
+	const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://fixture.invalid', model: 'new-model', apiKey: 'synthetic', parameters: {}, capabilities: { purpose: 'chat', vision: true, tools: false, reasoning: false, source: 'service' } }), async (_url, init) => {
+		calls++; const body = JSON.parse(String(init?.body));
+		const media = body.messages.find((message: { role: string; content: unknown }) => message.role === 'user' && Array.isArray(message.content) && message.content.some((part: { type: string }) => part.type === 'image_url')).content;
+		assert.equal(media.length, 4);
+		for (const [index, id] of ['first', 'second'].entries()) {
+			assert.match(media[index * 2].text, /preceding recorded tool result/);
+			assert.match(media[index * 2].text, new RegExp(`"toolCallId":"${id}"`));
+			assert.match(media[index * 2].text, /"toolName":"inspectFile"/);
+			assert.equal(media[index * 2 + 1].image_url.url, 'data:image/png;base64,' + image);
+		}
+		assert.doesNotMatch(JSON.stringify(body.messages), /for the current question/);
+		assert.ok(body.messages.filter((message: { role: string }) => message.role === 'tool').every((message: { content: string }) => !message.content.includes(image)));
+		return stream({ content: 'use those earlier images' });
+	}, 'none', [], false);
+	await session.send('follow up', generator); assert.equal(session.snapshot.error, '');
+	assert.equal(calls, 1); assert.deepEqual(original, before);
+	assert.deepEqual(session.snapshot.messages[1].protocol, before[1].protocol);
+});
 
 test('registered_tools_do_not_duplicate_system_guidance', () => {
 	const withTools = composeBeaconPrompt({ currentTime: 'fixed', toolNames: ['readCurrentCode', 'readBeCoderInfo'] });
 	const without = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [] });
-	assert.equal(withTools.version, '2026-11-26.3');
+	assert.equal(withTools.version, '2026-11-26.4');
 	assert.equal(withTools.system, without.system);
 	assert.ok(!withTools.system.includes('Capability:'));
 	assert.ok(!withTools.sections.some(section => String(section.id) === 'capabilities'));

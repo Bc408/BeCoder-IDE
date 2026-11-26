@@ -34,9 +34,9 @@ export function isToolError(value: unknown): value is ToolError { return typeof 
 export function toolErrorMessage(code: ToolError, zh: boolean): string { return messages[code][zh ? 1 : 0]; }
 
 const nativeCodes: Record<string, ToolError> = {
-	'invalid_arguments': 'invalid-input', 'not_found': 'material-missing', 'read_failed': 'unavailable', 'network_error': 'unavailable', 'login_required': 'unavailable', 'parse_error': 'invalid-response', 'too_large': 'too-large',
+	'invalid_arguments': 'invalid-input', 'oj-connect-invalid-problem': 'invalid-input', 'not_found': 'material-missing', 'read_failed': 'unavailable', 'network_error': 'unavailable', 'login_required': 'unavailable', 'parse_error': 'invalid-response', 'too_large': 'too-large',
 	'beacon-code-unavailable': 'not-ready', 'beacon-part-unavailable': 'material-missing', 'beacon-notebook-content-owner': 'protected', 'beacon-persisted-evidence-required': 'protected', 'beacon-web-disabled': 'protected', 'notebook-content-unavailable': 'not-ready', 'notebook-execution-part-unavailable': 'protected',
-	'beacon-context-changed': 'context-changed', 'beacon-record-changed': 'record-changed', 'beacon-record-evicted': 'material-missing',
+	'beacon-context-changed': 'context-changed', 'beacon-record-changed': 'record-changed', 'beacon-record-evicted': 'material-missing', 'beacon-record-not-found': 'material-missing',
 	'beacon-page-closed': 'page-closed', 'beacon-page-changed': 'page-changed', 'beacon-page-provider-unavailable': 'not-ready', 'beacon-page-not-ready': 'not-ready',
 	'beacon-protected-page': 'protected', 'beacon-conversation-owner': 'owner', 'beacon-workspace-unavailable': 'workspace-unavailable', 'beacon-material-missing': 'material-missing',
 	'beacon-invalid-context-input': 'invalid-input', 'beacon-context-budget': 'budget', 'beacon-page-timeout': 'timeout', 'beacon-page-too-large': 'too-large',

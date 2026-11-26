@@ -27,6 +27,7 @@ export interface FileOutput {
 	nextOffset?: number;
 	truncated?: boolean;
 	error?: string;
+	failureCode?: string;
 	code?: ToolError;
 }
 export type FileTool = (input: FileInput, signal: AbortSignal) => Promise<FileOutput>;
@@ -77,6 +78,8 @@ class CharacterWindow {
 		return { contents: this.parts.join(''), offsetUnit: 'character', ...(this.more ? { nextOffset: this.offset + this.parts.length } : {}) };
 	}
 }
+
+const knownFileErrors = new Set(['files-disabled', 'no-workspace', 'beacon-assets', 'not-supplied-file', 'invalid-file-path', 'workspace-folder-required', 'outside-workspace', 'protected-file', 'file-changed', 'file-budget', 'image-too-large', 'invalid-file-input', 'not-ordinary-file', 'not-directory', 'file-not-found', 'file-permission-denied', 'image-range']);
 
 export function safeFileError(error: unknown): string {
 	const code = fileErrorName(error);
@@ -165,7 +168,7 @@ export class FileTools {
 		} catch (error) {
 			if (signal.aborted) { throw error; }
 			const name = fileErrorName(error);
-			return { ok: false, path: input?.path, code: name === 'file-not-found' ? 'material-missing' : name === 'file-permission-denied' ? 'protected' : ['not-directory', 'image-range'].includes(name) ? 'invalid-input' : toolErrorCode(name), error: safeFileError(error) };
+			return { ok: false, path: input?.path, code: name === 'file-not-found' ? 'material-missing' : name === 'file-permission-denied' ? 'protected' : ['not-directory', 'image-range'].includes(name) ? 'invalid-input' : toolErrorCode(name), failureCode: knownFileErrors.has(name) ? name : 'read_failed', error: safeFileError(error) };
 		}
 	};
 	private async read(file: string, input: FileInput, signal: AbortSignal): Promise<FileOutput> {

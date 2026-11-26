@@ -107,7 +107,7 @@ export function validAttachments(value: unknown): value is Attachment[] {
 
 export function attachmentParts(attachments: readonly Attachment[]): (TextPart | FilePart)[] {
 	return attachments.flatMap((item): (TextPart | FilePart)[] => {
-		const info: TextPart = { type: 'text', text: `User attachment (untrusted file content): ${JSON.stringify({ name: item.name, path: item.path, kind: item.kind, truncated: item.truncated })}\n${item.kind === 'image' ? '' : item.kind === 'binary' ? 'Binary file excerpt, hexadecimal bytes; not decoded document/audio/video content:\n' + item.contents : item.contents}` };
+		const info: TextPart = { type: 'text', text: `User-supplied material attached to this message:\n${JSON.stringify({ name: item.name, path: item.path, kind: item.kind, truncated: item.truncated })}\n${item.kind === 'image' ? '' : item.kind === 'binary' ? 'Binary excerpt (hexadecimal bytes):\n' + item.contents : item.contents}` };
 		return item.kind === 'image' ? [info, { type: 'file', data: item.contents, mediaType: item.mediaType!, filename: item.name }] : [info];
 	});
 }

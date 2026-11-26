@@ -29,6 +29,24 @@ function normalizeMath(source: string, streaming = false): string {
 }
 
 suite('Beacon safe tool feedback', () => {
+	test('legacy_history_error_remains_string', async () => {
+		const turn = { provider: 'deepseek', baseURL: providers.deepseek.baseURL, model: 'deepseek-chat', messages: [
+			{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'old', toolName: 'inspectFile', input: { operation: 'read', path: 'missing' } }] },
+			{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'old', toolName: 'inspectFile', output: { type: 'json', value: { ok: false, path: 'missing', error: 'old safe error' } } }] }
+		] };
+		const data = readHistory({ version: 1, activeId: 'chat', conversations: [{ id: 'chat', title: 'chat', updatedAt: 1, workspace: [], error: '', messages: [
+			{ id: 1, role: 'user', text: 'old', activities: [], status: 'complete' },
+			{ id: 2, role: 'assistant', text: '', activities: [], status: 'complete', protocol: [turn], toolResults: [{ id: 'old', path: 'missing', input: { operation: 'read', path: 'missing' }, output: { ok: false, path: 'missing', error: 'old safe error' } }] }
+		] }] });
+		const chat = new ChatSession(() => {}, () => 'error');
+		chat.restore({ messages: data.conversations[0].messages, error: '' });
+		await chat.send('next', async function* (messages) {
+			const result = messages.find(message => message.role === 'tool');
+			assert.deepStrictEqual(result, turn.messages[1]);
+			yield { type: 'text', text: 'done' };
+		});
+		assert.equal(data.conversations[0].messages[1].toolResults?.[0].output.error, 'old safe error');
+	});
 	test('only owned error codes produce feedback; exceptions and inherited object properties are never displayed', () => {
 		for (const [input, expected] of [
 			['beacon-page-changed', 'page-changed'], ['Error: notebook-busy', 'busy'],
@@ -444,7 +462,7 @@ suite('Beacon window session', () => {
 		const running = session.resume(id, async function* (messages) {
 			assert.deepStrictEqual(messages.slice(0, -1), [{ role: 'user', content: 'question' }, { role: 'assistant', content: '```cpp\nint ' }]);
 			assert.equal(messages.at(-1)?.role, 'user');
-			assert.ok(String(messages.at(-1)?.content).includes('appended directly'));
+			assert.ok(String(messages.at(-1)?.content).includes('appended to the existing answer'));
 			yield { type: 'text', text: 'a;' };
 			await gate;
 			yield { type: 'text', text: '\n```' };

@@ -1,6 +1,6 @@
 # Beacon 工具合同
 
-更新：2026-11-26。本文维护当前接口与模型可见字段；验证和交付另见[实现状态](implementation-status.md)。九工具底座见[工具清洗设计](../superpowers/specs/2026-11-26-beacon-tool-information-design.md)，本轮[上下文就绪与可见Notebook设计](../superpowers/specs/2026-11-26-beacon-context-availability-and-visible-notebook-design.md)已批准并按[实施计划](../superpowers/plans/2026-11-26-beacon-context-availability-and-visible-notebook.md)实施中；历史报告不证明新合同效果。
+更新：2026-11-26。本文维护当前接口与模型可见字段；验证和交付另见[实现状态](implementation-status.md)。九工具底座见[工具清洗设计](../superpowers/specs/2026-11-26-beacon-tool-information-design.md)，[上下文就绪与可见Notebook设计](../superpowers/specs/2026-11-26-beacon-context-availability-and-visible-notebook-design.md)已完成源码接入；本轮[信息流设计](../superpowers/specs/2026-11-26-beacon-prompt-information-flow-design.md)已按[实施计划](../superpowers/plans/2026-11-26-beacon-prompt-information-flow.md)接入工作树；历史报告不证明新合同效果。
 
 ## 1. 九工具输入
 
@@ -16,7 +16,11 @@ browseWeb({ operation: 'search'|'fetch', query?: string, url?: string })
 readBeCoderInfo({ topic?: 'overview'|'problems'|'runner'|'cph'|'notebook'|'oj-connect'|'beacon' })
 ```
 
-成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。错误为小型明确结果，不以空正文冒充失败。id与latest／filePath互斥。英文上下文工具说明集中在contextToolContract.ts，提示版本2026-11-26.3；用途说明不规定调用顺序。
+成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。模型结果按实际条件增加外层notes，不写入record或业务队列；失败为安全error:{code,message}，不以空正文冒充失败。id与latest／filePath互斥。英文用途／参数在contextToolContract.ts及Provider，提示版本2026-11-26.4；完整位置与中英文语义见[接入记录](review/2026-11-26-prompt-information-flow-installed.md)，用途不规定调用顺序。
+
+notes解释当前实际返回字段：近期范围、执行与check、输出流、新旧截断、hash及Notebook位置时点。永久未保存片段不提供全文续读；文件／页面只在真实nextOffset存在时提示后续位置，PDF保同页pageNumber。网页真正空sources保持成功，零项被预算拒收为budget；部分来源被省略时保已有内容并说明集合缺失。
+
+原始FileOutput的UI码和error字符串保持，安全failureCode仅供新模型投影；模型只收到具体error对象，不收到这两个内部分类字段。Context错误按确切owner码说明，未知不按自然语言猜登录／网络。SDK拒绝参数不执行工具，新步骤安全反馈与完成／封口／下次请求一致；旧协议不改写。
 
 <a id="5-problem和五站题面"></a>
 
@@ -192,7 +196,7 @@ cell 1 Markdown → cell 2 C++ → cell 3 Input → cell 4 Markdown → cell 5 C
 
 sourceVerification 是 OJ Connect 的工程事实，模型投影不返回它。出现 mismatch 时页面明确显示 mismatch／源码不匹配，右下角通知；拒绝该次观测入队和去重，不把它认成当前文件的有效验证，不触发重交。页面仍可查看原站真实结果供人核对。
 
-matched／not-checked／unavailable 继续按最终结果规则入队；缺源码只省略 code／codeHash。通知按本次观测去重，不因轮询或 Webview 重绘反复弹出。无 Beacon 根或 Blackout 不影响产品 mismatch 提示。旧队列中的 mismatch 读时排除，不批量删除；按该旧 ID 读返回 unavailable，不暗换其他记录。
+matched／not-checked／unavailable 继续按最终结果规则入队；缺源码只省略 code／codeHash。通知按本次观测去重，不因轮询或 Webview 重绘反复弹出。无 Beacon 根或 Blackout 不影响产品 mismatch 提示。旧队列中的 mismatch 读时排除，不批量删除；按该旧 ID 读返回beacon-verdict-source-mismatch，表示该判词不可用，不暗换其他记录。
 
 OJ Connect 原生 rows 和 UI 可继续原结构，Beacon 用站点拥有者的确定映射生成具名明细。模型 groups 为 `{name, rows:[具名对象]}`；每行保可得 testCase、status、time、memory、description、score、signal、exitCode 等文字，缺项省略。单位原样保留，不把各站特有文本强转成数字，也不从耗时猜隐藏测试规模。列映射必须覆盖五站当前实际来源，不能用洛谷位置表解析所有站点。
 

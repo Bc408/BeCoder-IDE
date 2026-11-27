@@ -185,7 +185,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	function receive(message: unknown): void {
 		if (!alive) { return; }
 		if (!message || typeof message !== 'object') { return; }
-		const value = message as { type?: string; root?: string; text?: string; viewKey?: string; editRevision?: number; id?: number | string; conversationId?: string; activeId?: string; url?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
+		const value = message as { type?: string; root?: string; text?: string; viewKey?: string; editRevision?: number; id?: number | string; conversationId?: string; activeId?: string; permission?: unknown; enabled?: unknown; images?: unknown; code?: unknown };
 		try { switch (value.type) {
 			case 'ready': publish(); break;
 			case 'draft': if (typeof value.text === 'string' && typeof value.viewKey === 'string') { updateDraft(value.text, value.viewKey); } break;
@@ -231,7 +231,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				if (item) { void vscode.env.clipboard.writeText(item.text); }
 				break;
 			}
-			case 'link': if (typeof value.url === 'string' && /^https?:\/\//i.test(value.url)) { void vscode.env.openExternal(vscode.Uri.parse(value.url)); } break;
 		} } catch (error) { attachmentNotice(error); }
 	}
 	async function setPermission(value: FilePermission): Promise<void> {

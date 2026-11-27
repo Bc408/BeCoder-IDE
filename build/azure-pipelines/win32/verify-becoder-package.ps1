@@ -919,8 +919,8 @@ if ($electronComponent.version -ne '43.7.3' -or
 }
 if ($languagePackComponent.version -ne $languagePackManifest.version -or
 	$languagePackComponent.sha256 -ne '265536b3db2bdcc01e764679da8fb6d7ceaa7a7f3bb35c8b53dd0db51e8707f0' -or
-	$languagePackComponent.contentSha256 -ne '8e39f8c1d6a4b3b3c76a95120b6cab0d2d5e88fa0ee5c2e60302ee99c9792391' -or
-	$languagePackComponent.packagedContentSha256 -ne '9689fec9673a50827297c423b9a6cf826fe07109f819d1efc09c3d4b640779cd') {
+	$languagePackComponent.contentSha256 -ne '6cd76065721c19dc576760c8d101695f2ab3f00c346adb3455a20229c24600e9' -or
+	$languagePackComponent.packagedContentSha256 -ne 'd29c21510a5bdc2782fc62ced80868b7fa301af059ed81034fa09b8883264fb2') {
 	throw 'The bundled component inventory does not pin the approved Simplified Chinese language pack snapshot.'
 }
 if ($mermaidComponent.version -ne '10.0.0' -or

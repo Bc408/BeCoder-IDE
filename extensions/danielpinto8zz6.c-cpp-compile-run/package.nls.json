@@ -1,9 +1,9 @@
 {
 	"displayName": "BeCoder Runner",
 	"description": "Compile and run C/C++ files with BeCoder's integrated toolchain.",
-	"command.openPanel": "BeCoder: Open BC Panel",
-	"command.run": "BeCoder: Run",
-	"command.runWithInput": "BeCoder: Run With Input",
+	"command.openPanel": "Open BC Panel",
+	"command.run": "Run",
+	"command.runWithInput": "Run With Input",
 	"configuration.title": "BeCoder Runner",
 	"configuration.cStandard": "C standard used by BeCoder Runner.",
 	"configuration.cppStandard": "C++ standard used by BeCoder Runner.",

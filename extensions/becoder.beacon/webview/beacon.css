@@ -140,7 +140,6 @@ header { gap: 16px; padding: 8px 16px; min-height: 44px; }
 .markdown .code-block.is-wrapped pre code { overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 /* Isolate each line's inline layout so appending a tail does not reshape the prefix. */
 .code-line { display: inline-block; min-height: 1lh; max-width: 100%; vertical-align: top; background: transparent; }
-.markdown .inline-code { font-size: .92em; }
 .markdown .katex-display { margin: 18px 0; }
 .math-pending { color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .math-pending.is-display { display: block; margin: 18px 0; text-align: center; }
@@ -192,24 +191,8 @@ main[data-navigation-lock] .send:disabled:not([data-unavailable]):hover { filter
 .history-actions svg { width: var(--icon-size); height: var(--icon-size); }
 .history-notice { margin: 8px 16px; padding: 10px; line-height: 1.6; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border)); border-radius: 6px; font-size: 12px; }
 .history-notice button { color: var(--vscode-textLink-foreground); }
-.model-parameters { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--vscode-panel-border, var(--border)); }
-.model-parameters h2 { margin: 0 0 8px; font-size: 14px; font-weight: 500; }
-.parameter-field { margin-top: 18px; }
 .parameter-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
 .parameter-heading > label:first-child { font-weight: 500; }
-.parameter-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
-.parameter-toggle input { appearance: none; position: relative; width: 28px; height: 16px; margin: 0; border-radius: 8px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); cursor: pointer; }
-.parameter-toggle input::before { content: ''; position: absolute; width: 10px; height: 10px; top: 2px; left: 2px; border-radius: 50%; background: var(--vscode-descriptionForeground); }
-.parameter-toggle input:checked { background: var(--vscode-button-background); border-color: var(--vscode-button-background); }
-.parameter-toggle input:checked::before { left: 14px; background: var(--vscode-button-foreground); }
-.parameter-toggle input:disabled { opacity: .4; cursor: default; }
-.parameter-toggle input:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
-.parameter-input { width: 100%; margin-top: 8px; padding: 7px 9px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 6px; }
-.parameter-input:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
-.parameter-field .configuration-hint { margin: 7px 0 0; }
-.parameter-fixed { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; font-size: 12px; }
-.parameter-fixed strong { color: var(--vscode-descriptionForeground); font-weight: 400; }
-.settings-link { width: 100%; margin-top: 12px; font-size: 12px; }
 .model-label { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--vscode-foreground); padding: 2px 0; }
 .composer-toolbar .send { flex-shrink: 0; }
 .message-actions { display: flex; align-items: center; gap: 2px; min-height: var(--icon-target); margin-top: 5px; color: var(--chat-muted); }
@@ -548,9 +531,9 @@ body[data-surface="configuration"] { background: var(--vscode-editor-background)
 .settings-v3 .settings-icon { width: 28px; height: 28px; }
 .connection-key-field { position: relative; flex: 1; min-width: 0; }
 .connection-key-actions { display: flex; gap: 1px; position: absolute; z-index: 1; right: 2px; top: 1px; bottom: 1px; align-items: center; padding-left: 4px; border-radius: 6px; pointer-events: none; }
-.connection-key-actions button { visibility: hidden; opacity: 0; pointer-events: none; }
-.connection-key-actions button[data-key-action="show"], .connection-key-field:hover .connection-key-actions button { visibility: visible; opacity: 1; pointer-events: auto; }
-.connection-key-field:hover .connection-key-actions, .connection-key-actions button[data-key-action="show"] { background: var(--vscode-input-background); }
+.connection-key-actions button { opacity: 0; pointer-events: none; }
+.connection-key-actions button[data-key-action="show"], .connection-key-field:hover .connection-key-actions button, .connection-key-field:has(:focus-visible) .connection-key-actions button { opacity: 1; pointer-events: auto; }
+.connection-key-field:hover .connection-key-actions, .connection-key-field:has(:focus-visible) .connection-key-actions, .connection-key-actions button[data-key-action="show"] { background: var(--vscode-input-background); }
 .settings-v3 .connection-key-actions .settings-icon { width: 26px; height: 26px; }
 .connection-key-actions svg { width: 16px; height: 16px; }
 .settings-v3 .connection-test { width: var(--settings-test-width); min-width: var(--settings-test-width); flex-shrink: 0; min-height: var(--settings-control-height); padding: 3px 10px; border-color: transparent; border-radius: 999px; background: var(--control-selected); font-size: 13px; }

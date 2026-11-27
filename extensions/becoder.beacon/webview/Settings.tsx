@@ -141,6 +141,7 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	const flowEpoch = useRef(0);
 	const closeFlowRef = useRef<() => void>(() => {});
 	const [busy, setBusy] = useState(false);
+	const busyRef = useRef(false);
 	const [editing, setEditing] = useState<ConfiguredModel | 'new'>();
 	const [modelsOpen, setModelsOpen] = useState(true);
 	const [discovering, setDiscovering] = useState(false);
@@ -169,7 +170,7 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	}, [snapshot?.discovery, snapshot?.pending, discovering, localPending, notify]);
 	useEffect(() => {
 		const listener = (event: MessageEvent) => {
-			if (event.data?.type === 'settingsSnapshot') { currentSnapshot.current = event.data.settings; setSnapshot(event.data.settings); setBusy(event.data.busy); }
+			if (event.data?.type === 'settingsSnapshot') { currentSnapshot.current = event.data.settings; setSnapshot(event.data.settings); busyRef.current = !!(event.data.busy || event.data.context?.runtimeBusy); setBusy(busyRef.current); }
 			if (event.data?.type !== 'settingsResult') { return; }
 			const value = event.data as SettingsResult;
 			const request = requests.current.get(value.requestId);
@@ -208,7 +209,10 @@ export function Settings({ post }: { post(message: unknown): void }) {
 		setKeyFlow(undefined); setResult(undefined);
 	};
 	closeFlowRef.current = closeFlow;
-	const startTests = () => { setKeyFlow('tests'); void run({ type: 'testProvider' }); };
+	const startTests = () => {
+		if (busyRef.current) { closeFlow(); notify(t('Settings saved. Busy now; test model connections when idle.', '设置已保存。当前正忙，请空闲后主动检测模型连接。')); return; }
+		setKeyFlow('tests'); void run({ type: 'testProvider' });
+	};
 	const fetchCandidates = () => { lastCandidate.current = undefined; setDiscovering(true); void run({ type: 'fetchModels' }); };
 	const keySaved = () => { if (provider === 'custom') { closeFlow(); } else if (keyFlow === 'replace') { if (currentSnapshot.current?.providers[provider].models.length) { startTests(); } else { setKeyFlow('tests'); } } else { setKeyFlow('models'); fetchCandidates(); } };
 	const confirmCandidates = async (ids: string[]) => {

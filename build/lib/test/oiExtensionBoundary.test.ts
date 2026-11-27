@@ -118,6 +118,34 @@ function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativ
 }
 
 suite('OI extension boundary', () => {
+	test('removes the duplicate browser history picker while retaining native and address-bar recents', () => {
+		const feature = fs.readFileSync(path.join(repositoryRoot, 'src/vs/workbench/contrib/browserView/electron-browser/features/browserHistoryFeature.ts'), 'utf8');
+		assert.doesNotMatch(feature, /showManagementPicker|showHistoryPicker|ShowBrowserHistoryAction|IWorkspacesService|IQuickInputService|buildPickerItems|dayLabel|dayKey/);
+		for (const consumer of ['urlSuggestionProviders', '_buildRecents', '_buildHistory', 'model.deleteHistory([entry.id])', 'BrowserMaxHistoryEntriesSettingId']) {
+			assert.ok(feature.includes(consumer), `Address-bar history consumer removed: ${consumer}`);
+		}
+		const commands = fs.readFileSync(path.join(repositoryRoot, 'src/vs/platform/browserView/common/browserView.ts'), 'utf8');
+		assert.doesNotMatch(commands, /ShowHistory|\.showHistory/);
+		const navigation = fs.readFileSync(path.join(repositoryRoot, 'src/vs/workbench/contrib/browserView/electron-browser/features/browserNavigationFeatures.ts'), 'utf8');
+		assert.doesNotMatch(navigation, /minItems:\s*1|History is the first action/);
+		const quickAccess = fs.readFileSync(path.join(repositoryRoot, 'src/vs/workbench/contrib/search/browser/anythingQuickAccess.ts'), 'utf8');
+		assert.ok(quickAccess.includes('this.historyService.getHistory()'));
+	});
+
+	test('built-in toolbar commands keep branding in palette categories rather than hover titles', () => {
+		for (const [folder, category] of [['danielpinto8zz6.c-cpp-compile-run', 'BeCoder'], ['becoder.setup', 'BeCoder IDE']]) {
+			const manifest = readJson<{ contributes: { commands: { title: string; category?: string }[] } }>(path.join(extensionsRoot, folder, 'package.json'));
+			for (const locale of ['package.nls.json', 'package.nls.zh-cn.json']) {
+				const labels = readJson<Record<string, string>>(path.join(extensionsRoot, folder, locale));
+				for (const command of manifest.contributes.commands) {
+					const label = labels[command.title.slice(1, -1)];
+					assert.ok(label && !/BeCoder(?: IDE)?[：:]/.test(label), `${folder} ${locale}: ${label}`);
+					assert.strictEqual(command.category, category, 'The command palette retains its category');
+				}
+			}
+		}
+	});
+
 	test('reuses the workbench icon for the native browser homepage', () => {
 		const iconPath = path.join(repositoryRoot, 'src', 'vs', 'workbench', 'browser', 'media', 'becoder-icon.png');
 		assert.ok(fs.existsSync(iconPath), 'BeCoder homepage icon is missing');

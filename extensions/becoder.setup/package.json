@@ -107,24 +107,29 @@
 			{
 				"command": "becoder.openSettings",
 				"title": "%command.openSettings%",
+				"category": "BeCoder IDE",
 				"icon": "$(settings-gear)"
 			},
 			{
 				"command": "becoder.configureAutoFormat",
-				"title": "%command.configureAutoFormat%"
+				"title": "%command.configureAutoFormat%",
+				"category": "BeCoder IDE"
 			},
 			{
 				"command": "becoder.generateGchCache",
-				"title": "%command.generateGchCache%"
+				"title": "%command.generateGchCache%",
+				"category": "BeCoder IDE"
 			},
 			{
 				"command": "becoder.showAllFiles",
 				"title": "%command.showAllFiles%",
+				"category": "BeCoder IDE",
 				"icon": "$(eye)"
 			},
 			{
 				"command": "becoder.hideSetupFiles",
 				"title": "%command.hideSetupFiles%",
+				"category": "BeCoder IDE",
 				"icon": "$(eye-closed)"
 			}
 		],

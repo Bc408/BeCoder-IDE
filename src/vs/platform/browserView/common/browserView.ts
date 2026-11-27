@@ -38,9 +38,6 @@ export enum BrowserViewCommandId {
 	// Favorites
 	ToggleFavorite = `${commandPrefix}.toggleFavorite`,
 
-	// History
-	ShowHistory = `${commandPrefix}.showHistory`,
-
 	// Permissions
 	ManagePermissions = `${commandPrefix}.managePermissions`,
 

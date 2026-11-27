@@ -6,6 +6,7 @@
 
 | 文档 | 职责 |
 | --- | --- |
+| [前端审查与外链修复](review/2026-11-27-frontend-review.md) | 删除绕过宿主确认的直开旁路，修复图片预览、键盘密钥操作、续答重连提示与运行中测试门禁；源码与headless回归，不代表新stage或原生体验验收 |
 | [Responses容量误判修复](implementation-status.md#2026-11-27-responses容量误判修复) | 修正加密推理的计量及原生input出站检查，保留真实载荷、工具配对与原有容量边界；离线回归和实际服务复测分别成立 |
 | [自定义 Responses 供应商实施计划](../superpowers/plans/2026-11-27-beacon-custom-responses-provider.md) | 单连接、多模型、手动添加与同步、HTTP／HTTPS、可选密钥和服务默认推理；源码和实际验证边界见实现状态 |
 | [人格提示词接入](implementation-status.md#2026-11-27-人格提示词接入) · [当前英文源码](../../extensions/becoder.beacon/src/prompts.ts) | 当前2026-11-27.2：18岁天才少女、傲娇导师、QQ式闲聊及直接简洁的教学口吻；负责人审定英文，动态宿主说明保持，模型效果待体验 |

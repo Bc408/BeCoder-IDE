@@ -12,9 +12,9 @@
 	"configuration.inlayHints.description": "Shows inferred types, parameter names, and other inlay hints provided by clangd.",
 	"displayName": "BeCoder IDE Features",
 	"description": "Competitive programming features, settings, and private toolchain management for BeCoder IDE.",
-	"command.openSettings": "BeCoder IDE: Settings",
-	"command.configureAutoFormat": "BeCoder IDE: Configure Automatic Formatting",
-	"command.generateGchCache": "BeCoder IDE: Generate gch Cache",
-	"command.showAllFiles": "BeCoder IDE: Show All Files",
-	"command.hideSetupFiles": "BeCoder IDE: Hide Configuration and Executable Files"
+	"command.openSettings": "Settings",
+	"command.configureAutoFormat": "Configure Automatic Formatting",
+	"command.generateGchCache": "Generate gch Cache",
+	"command.showAllFiles": "Show All Files",
+	"command.hideSetupFiles": "Hide Configuration and Executable Files"
 }

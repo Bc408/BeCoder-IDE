@@ -33,7 +33,7 @@ export function ResponseActivity({ message, retry }: { message: Message; retry?:
 		? `${message.status === 'stopped' ? (zh ? '暂停于' : 'Paused after') : (zh ? '用时' : 'Thought for')} ${formatDuration(duration)}`
 		: (zh ? 'Beacon 活动' : 'Beacon activity');
 	if (message.status === 'error' && !message.text && !message.reasoning && !message.activities.length) { return null; }
-	if (running && message.text && !message.reasoning && !message.activities.length) { return null; }
+	if (running && message.text && !message.reasoning && !message.activities.length && !retry) { return null; }
 	if (!running && !message.reasoning && !message.activities.length && duration === undefined) { return null; }
 	return <div className="thought">
 		{message.reasoning ? <details className="reasoning-details">

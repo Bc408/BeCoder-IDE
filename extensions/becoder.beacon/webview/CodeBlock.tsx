@@ -27,7 +27,7 @@ function CodeBlockView({ text, language, streaming }: { text: string; language: 
 	return <section className={`code-block${wrapped ? ' is-wrapped' : ''}${nativeSyntax ? ' becoder-syntax' : ''}`} data-streaming={streaming || undefined}>
 		<div className="code-toolbar"><span className="code-language"><Icon name="code" /><span>{resolved.label}</span></span><div className="code-actions">
 			<button className="code-wrap" type="button" aria-label={label('wrap')} aria-pressed={wrapped} onClick={() => setWrapped(value => !value)}><Icon name="codeWrap" /></button>
-			<button type="button" aria-label={label('copy')} onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false)); }}><Icon name={copied ? 'check' : 'codeCopy'} /></button>
+			<button type="button" aria-label={label('copy')} onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setCopied(false)); }}><Icon name={copied ? 'check' : 'copy'} /></button>
 		</div></div>
 		<div className="code-scroller"><pre><code ref={code} /></pre></div>
 	</section>;

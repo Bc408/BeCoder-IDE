@@ -51,6 +51,17 @@ function requestTarget(body: string): { id: string; version: string; unavailable
 }
 
 suite('Beacon attachments', () => {
+	test('obsolete link messages cannot bypass the native Webview opener', async t => fixture(async directory => {
+		const context = mock.reset(directory), view = mock.makeView();
+		const openExternal = t.mock.method(mock.env, 'openExternal', async () => true);
+		try {
+			await activate(context as unknown as vscode.ExtensionContext);
+			mock.viewProviders.get('becoder.beacon.chat')!.resolveWebviewView(view);
+			view.receive({ type: 'link', url: 'https://example.org/beacon' });
+			assert.equal(openExternal.mock.callCount(), 0, 'Links must go through the host opener and its confirmation');
+		} finally { await deactivate(); for (const item of context.subscriptions) { item.dispose(); } }
+	}));
+
 	for (const change of ['edit', 'close', 'replace'] as const) {
 		test(`ordinary dirty file ${change} during final verification rejects stale text`, async t => fixture(async directory => {
 			mock.reset(directory);

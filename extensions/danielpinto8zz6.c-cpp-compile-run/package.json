@@ -28,9 +28,9 @@
 			]
 		},
 		"commands": [
-			{ "command": "becoder.runner.openPanel", "title": "%command.openPanel%", "icon": "$(terminal)" },
-			{ "command": "becoder.runner.run", "title": "%command.run%", "icon": "$(play)" },
-			{ "command": "becoder.runner.runWithInput", "title": "%command.runWithInput%", "icon": "$(file)" }
+			{ "command": "becoder.runner.openPanel", "title": "%command.openPanel%", "category": "BeCoder", "icon": "$(terminal)" },
+			{ "command": "becoder.runner.run", "title": "%command.run%", "category": "BeCoder", "icon": "$(play)" },
+			{ "command": "becoder.runner.runWithInput", "title": "%command.runWithInput%", "category": "BeCoder", "icon": "$(file)" }
 		],
 		"menus": {
 			"editor/title": [

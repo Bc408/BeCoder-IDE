@@ -94,6 +94,12 @@ try {
 	await page.keyboard.press('0'); await page.keyboard.press('ArrowRight');
 	await page.getByText('2 / 2', { exact: true }).waitFor();
 	await page.waitForFunction(() => document.querySelector('.image-preview-picture')?.naturalWidth === 1600);
+	for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowLeft']) {
+		await page.keyboard.press(key);
+		await page.getByText(key === 'ArrowRight' ? '2 / 2' : '1 / 2', { exact: true }).waitFor();
+		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+		assert.ok(await page.locator('.image-preview-picture').evaluate(node => node.getBoundingClientRect().width > 100 && node.getBoundingClientRect().height > 50), 'Distinct attachments with the same bytes retain their dimensions when revisiting a cached preview');
+	}
 	await page.screenshot({ path: path.join(output, 'image-preview.png') });
 	await page.getByRole('button', { name: '关闭预览', exact: true }).click();
 	await page.waitForFunction(() => document.activeElement?.classList.contains('attachment-open'));
@@ -140,6 +146,13 @@ try {
 	await page.evaluate(() => { const state = window.fixture.snapshot(); window.fixture.update({ messages: [state.messages[0], { ...state.messages[1], failure: undefined }], error: '服务商拒绝了当前 API Key 或模型访问权限。' }); });
 	await page.locator('.error').waitFor();
 	assert.equal(await page.locator('.connection-notice').count(), 0);
+	await page.evaluate(() => window.fixture.update({ busy: true, responseBusy: true, error: '', retry: { attempt: 1, limit: 2 }, messages: [{ id: 1, role: 'user', text: 'continue', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: 'Saved partial reply', reasoning: '', activities: [], status: 'streaming', activeStartedAt: Date.now() }] }));
+	await page.locator('.assistant .markdown').filter({ hasText: /^Saved partial reply$/ }).waitFor();
+	await page.getByText('连接暂时中断，正在重连（1/2）…', { exact: true }).waitFor({ timeout: 3000 });
+	assert.equal(await page.locator('.assistant .markdown').textContent(), 'Saved partial reply', 'Continuing preserves earlier text while displaying the current reconnect status');
+	await page.evaluate(() => { const state = window.fixture.snapshot(); delete state.retry; window.fixture.update({ messages: [state.messages[0], { ...state.messages[1], text: 'Saved partial reply and continuation' }] }); });
+	await page.locator('.assistant .markdown').filter({ hasText: /^Saved partial reply and continuation$/ }).waitFor();
+	assert.equal(await page.getByText(/正在重连/).count(), 0, 'A resumed text-only response clears reconnect copy after recovery');
 	assert.deepStrictEqual(errors, []);
 	console.log('Attachment preview and request recovery status, cancellation routing, successful reset and failure severity passed.');
 } finally {

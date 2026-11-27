@@ -1,10 +1,18 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-27。当前源码在Beacon_Persona上接入负责人审定的人格提示词2026-11-27.2，保留前轮产品上下文及自定义Responses供应商；应用源码版本2.2.0，本轮开发基线为c3820032。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-27。当前源码在Beacon_Persona上接入负责人审定的人格提示词2026-11-27.2，保留前轮产品上下文及自定义Responses供应商；应用源码版本2.2.0，最新前端维护在a8d1dd9f之上实施，前轮人格及Responses修复基线见各段。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
 2026-11-25提示优化[设计](../superpowers/specs/2026-11-25-beacon-prompt-quality-design.md)和[实施计划](../superpowers/plans/2026-11-25-beacon-prompt-quality.md)已获批准，负责人选择Native实施。导师核心精简、逐工具capabilities退出和readBeCoderInfo均已接入；system、工具说明及产品主题正文统一英文，回答跟随用户语言。[能力报告](evaluation/2026-11-25-prompt-quality-report.md)及[完整问答](evaluation/2026-11-25-prompt-quality-samples.md)保改善、退化和失败；整体教学质量未全面通过。
+
+## 2026-11-27 前端审查与外链修复
+
+负责人授权修复搜索网页点击同时确认与直开的缺陷，并扩展为Beacon前端整体审查。已删除App自定义link消息及扩展env.openExternal旁路，正文和来源链接统一交由原生Webview及宿主opener；保留既有确认与可信域规则。另修同内容图片缓存往返缩为1px、密钥按钮键盘不可达、保有旧正文的继续请求隐藏重连提示，以及运行中设置页测试按钮和密钥流程自动检测的门禁遗漏，清理确认无消费者的旧样式和图标。负责人随后追加的Get Problem悬停变暗及Runner／Setup悬停品牌前缀也已修复，保留原生hover背景与命令面板分类。范围、根因与证据见[审查报告](review/2026-11-27-frontend-review.md)。
+
+Beacon类型／生产build／strict lint、404项完整Node回归及生产Webview／内容／附件／独立工作区回归退出0。每项缺陷有修复前失败及修复后通过证据；stylelint仍有既有自定义变量诊断和设计token建议，没有新增未知变量，不能称零诊断。本轮未构建stage或Setup、启动原生GUI、调用真实模型或取得负责人体验验收；前轮2.2.0安装包不包含本轮前端修改。
+
+负责人后续追加移除重复浏览器历史入口，并核对Explorer眼睛／Runner按钮悬停。已删除工具栏历史命令、快捷键、独立管理picker及专属服务／译文，保留Ctrl+P原生最近编辑器和地址栏历史建议。12项隔离Electron组件检查（含框架检查）核验历史建议保留与真实菜单项中英文hover传值；34项最终OI边界及404项Beacon回归通过。译文变更对应的组件／校验器哈希pin已同步，未构建或校验新安装包；原生组件测试也不替代安装版气泡视觉验收。详见同一[审查报告](review/2026-11-27-frontend-review.md#后续追加移除重复历史入口与指定悬停文案)。
 
 ## 2026-11-27 人格提示词接入
 

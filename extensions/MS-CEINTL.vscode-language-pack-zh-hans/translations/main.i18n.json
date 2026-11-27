@@ -5950,22 +5950,10 @@
 			"browser.urlIsFavorited": "当前浏览器 URL 是否为收藏项"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserHistoryFeature": {
-			"browser.history.unifiedTitle": "历史记录",
-			"browser.history.unifiedPlaceholder": "搜索最近文件与网页历史",
-			"browser.history.clearWeb": "清除网页历史",
-			"browser.history.recentFiles": "最近文件",
-			"browser.history.webGroup": "网页历史 · {0}",
 			"browser.history": "历史记录",
-			"browser.history.clearAll": "清除所有历史记录",
-			"browser.history.clearDay": "清除当天的条目",
-			"browser.history.placeholder": "筛选浏览器历史记录",
-			"browser.history.title": "浏览器历史记录",
-			"browser.history.today": "今天",
-			"browser.history.yesterday": "昨天",
 			"browser.maxHistoryEntries": "每个会话范围保留的最大历史记录项数。首先逐出较旧的条目。",
 			"browser.recents": "最近使用",
-			"browser.removeFromHistory": "从历史记录中移除",
-			"browser.showHistory": "历史记录"
+			"browser.removeFromHistory": "从历史记录中移除"
 		},
 		"vs/workbench/contrib/browserView/electron-browser/features/browserNavigationFeatures": {
 			"browser.canGoBack": "浏览器是否可以后退",

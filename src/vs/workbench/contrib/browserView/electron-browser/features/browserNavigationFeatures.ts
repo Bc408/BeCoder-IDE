@@ -122,8 +122,6 @@ class BrowserNavigationBar extends Disposable {
 				responsiveBehavior: {
 					enabled: true,
 					kind: 'last',
-					// History is the first action; retain it before overflowing other actions.
-					minItems: 1,
 
 					// The URL bar is the flexible element, so the actions toolbar's own
 					// element width does not reflect the room it could occupy.

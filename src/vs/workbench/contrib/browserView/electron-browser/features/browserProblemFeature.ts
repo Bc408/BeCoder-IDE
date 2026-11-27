@@ -55,7 +55,8 @@ export class BrowserProblemActionViewContribution extends Disposable {
 				.browser-root .browser-actions-toolbar [data-command-id="${BrowserViewCommandId.GetProblem}"] .action-label.icon {
 					background-image: none !important;
 					mask: ${asCSSUrl(ojIconUri)} center / 16px 16px no-repeat;
-					background-color: var(--vscode-icon-foreground);
+					/* This background fills the icon mask; native hover belongs to the split container. */
+					background-color: var(--vscode-icon-foreground) !important;
 				}
 			`;
 		}, this._store);

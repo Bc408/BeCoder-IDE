@@ -26,6 +26,85 @@ const server = createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true });
 
+async function checkLinkRouting(page) {
+	// Use the actual native Webview click handler, including its trusted-event
+	// and fragment behavior. A normal browser page otherwise misses this path.
+	const preload = fs.readFileSync(path.join(root, '../../src/vs/workbench/contrib/webview/browser/pre/index.html'), 'utf8');
+	const handler = preload.slice(preload.indexOf('const handleInnerClick ='), preload.indexOf('\n\t\t/**', preload.indexOf('const handleInnerClick =')));
+	assert.ok(handler.includes("hostMessaging.postMessage('did-click-link'"), 'Locate the current native link handler');
+	await page.evaluate(source => {
+		const script = document.createElement('script');
+		script.nonce = 'beacon-test';
+		script.textContent = `(() => {
+			window.nativeLinks = [];
+			const hostMessaging = { postMessage: (type, data) => window.nativeLinks.push({ type, ...data }) };
+			${source}
+			window.addEventListener('click', handleInnerClick);
+			window.removeNativeLinkHandler = () => window.removeEventListener('click', handleInnerClick);
+		})();`;
+		document.head.append(script);
+	}, handler);
+	try {
+		await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'link-routing', configured: true, messages: [{ id: 1, role: 'assistant', text: '# Section\n\n[Markdown link](https://example.org/markdown?q=beacon#answer)\n\n[Section link](#section)', status: 'complete', activities: [], sources: [{ id: 'web-0123456789abcdef', title: 'Search source', url: 'https://example.org/source', kind: 'search', text: 'excerpt', retrievedAt: 1, truncated: false }] }] }, '*'));
+		await page.locator('.web-sources summary').click();
+		const markdown = page.getByRole('link', { name: 'Markdown link', exact: true });
+		const source = page.locator('.web-sources a');
+		for (const [link, keyboard] of [[markdown, false], [source, false], [markdown, true], [source, true]]) {
+			await page.evaluate(() => { window.nativeLinks = []; window.messages = []; });
+			if (keyboard) { await link.focus(); await page.keyboard.press('Enter'); }
+			else { await link.locator('span').first().click(); }
+			const result = await page.evaluate(() => ({ native: window.nativeLinks, beacon: window.messages.filter(message => message.type === 'link') }));
+			assert.deepStrictEqual(result.native, [{ type: 'did-click-link', uri: await link.getAttribute('href') }], 'Each click reaches the host opener exactly once');
+			assert.deepStrictEqual(result.beacon, [], 'Beacon must not also ask its extension to open the link directly');
+		}
+		const section = page.getByRole('link', { name: 'Section link', exact: true });
+		await section.evaluate(link => { link.href = '#' + document.querySelector('.markdown h1').id; });
+		await page.evaluate(() => { window.nativeLinks = []; window.messages = []; });
+		await section.click();
+		assert.deepStrictEqual(await page.evaluate(() => ({ native: window.nativeLinks, beacon: window.messages.filter(message => message.type === 'link') })), { native: [], beacon: [] }, 'Page fragments remain inside the Webview');
+	} finally { await page.evaluate(() => window.removeNativeLinkHandler()); }
+}
+
+async function checkBusyKeySetup(context) {
+	for (const flow of ['replace', 'add']) {
+		const page = await context.newPage();
+		await page.addInitScript(flow => {
+			window.messages = [];
+			window.settings = { revision: 1, pending: false, error: '', keyConfigured: { deepseek: flow === 'replace' }, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: flow === 'replace' ? [{ id: 'fixture', name: 'Fixture', parameters: {}, settings: {} }] : [] } } };
+			window.acquireVsCodeApi = () => ({ postMessage: message => {
+				window.messages.push(message);
+				if (message.type === 'ready') { window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); }
+			} });
+		}, flow);
+		await page.goto(`http://127.0.0.1:${server.address().port}/configuration`);
+		const frame = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+		const publish = async (patch, runtimeBusy) => { await page.evaluate(({ patch, runtimeBusy }) => { Object.assign(window.settings, patch); window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false, context: { runtimeBusy } }, '*'); }, { patch, runtimeBusy }); await frame(); };
+		const ack = async () => { await page.evaluate(() => { const request = window.messages.findLast(message => message.requestId); window.postMessage({ type: 'settingsResult', requestId: request.requestId, ok: true }, '*'); }); await frame(); };
+		if (flow === 'replace') { await page.locator('.connection-key-field').hover(); await page.getByRole('button', { name: '编辑密钥', exact: true }).click(); }
+		else { await page.getByRole('button', { name: '添加 API 密钥', exact: true }).click(); }
+		await page.getByLabel('API 密钥', { exact: true }).fill('fixture-key');
+		await page.getByRole('button', { name: flow === 'replace' ? '保存并检测' : '下一步', exact: true }).click();
+		// The program may start while the save/confirmation callback is awaiting
+		// its acknowledgement. Automatic testing must consult the newest state.
+		await publish({ revision: 2, keyConfigured: { deepseek: true } }, flow === 'replace');
+		await ack();
+		if (flow === 'add') {
+			await page.waitForFunction(() => window.messages.at(-1).type === 'fetchModels');
+			await publish({ discovery: { id: 'new-key', revision: 2, provider: 'deepseek', models: [{ id: 'fixture', name: 'Fixture' }] } }, false); await ack();
+			await page.getByRole('checkbox', { name: /Fixture/ }).check();
+			await page.getByRole('button', { name: '添加所选模型并检测', exact: true }).click();
+			await publish({ revision: 3, discovery: undefined, providers: { deepseek: { baseURL: 'https://api.deepseek.com', enabled: true, models: [{ id: 'fixture', name: 'Fixture', parameters: {}, settings: {} }] } } }, true); await ack();
+		}
+		assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'testProvider').length), 0, `The ${flow} key flow saves without starting a blocked connection test`);
+		await page.getByRole('dialog').waitFor({ state: 'detached' });
+		await page.locator('.notification-text').filter({ hasText: /^设置已保存。当前正忙，请空闲后主动检测模型连接。$/ }).waitFor();
+		await publish({}, false);
+		assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'testProvider').length), 0, 'Becoming idle never replays the skipped test');
+		assert.ok(await page.getByRole('button', { name: '测试', exact: true }).isEnabled());
+		await page.close();
+	}
+}
+
 async function renderCustomSettings(context) {
 	for (const language of ['zh', 'en']) {
 		const page = await context.newPage();
@@ -111,6 +190,14 @@ async function renderCustomSettings(context) {
 		const providerSwitch = page.getByRole('switch', { name: t('Enable Custom', '启用 自定义'), exact: true });
 		assert.equal(await providerSwitch.getAttribute('aria-checked'), 'true');
 		assert.ok(await button('Test', '测试').isEnabled(), 'Saved-address custom testing works without a key');
+		await page.evaluate(() => window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false, context: { runtimeBusy: true } }, '*'));
+		await frame();
+		assert.ok(await button('Test', '测试').isDisabled(), 'An active user program blocks connection tests before the host rejects them');
+		assert.ok(await field('API address', 'API 地址').isEnabled(), 'Runtime activity still allows ordinary settings edits');
+		assert.ok(await button('Edit My custom model', '编辑 My custom model').isEnabled());
+		await page.evaluate(() => window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false, context: { runtimeBusy: false } }, '*'));
+		await frame();
+		assert.ok(await button('Test', '测试').isEnabled(), 'Connection tests become available after the program finishes');
 		await button('Test', '测试').click();
 		assert.equal((await latest()).type, 'testProvider'); assert.equal((await latest()).provider, 'custom');
 		await publish({ providerTest: { id: 'custom-test', provider: 'custom', revision: 4, running: false, models: [{ id: created.id, status: 'success' }] } }); await ack();
@@ -207,6 +294,7 @@ async function renderExistingUI(context) {
 	await page.setViewportSize({ width: 760, height: 1000 });
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.addStyleTag({ content: ':root { --vscode-sideBar-background:#21262d; --vscode-editor-background:#181b20; --vscode-foreground:#d4d4d4; --vscode-descriptionForeground:#999fa8; --vscode-input-background:#1b1f24; --vscode-input-foreground:#d4d4d4; --vscode-input-placeholderForeground:#8b919a; --vscode-textCodeBlock-background:#171b20; --vscode-font-family:Segoe UI, sans-serif; --vscode-editor-font-family:Consolas, monospace; --vscode-button-background:#505965; --vscode-button-foreground:#fff; --vscode-scrollbarSlider-background:#454c57; --vscode-widget-border:#343b44; --vscode-focusBorder:#629ad1; }' });
+	await checkLinkRouting(page);
 	// Editing stays local until the actual host has admitted this exact revision.
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'conversation', activeId: 'edit-admission', configured: true, canSend: true, busy: false, responseBusy: false, context: { slot: 'test', root: 'C:/fixture', usable: true, workspaceState: 'ready', mode: 'spot', busy: false, runtimeBusy: false, collectionPending: false, recent: [] }, messages: [{ id: 1, role: 'user', text: 'original question', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: 'original answer', status: 'complete', activities: [] }] }, '*'));
 	const editDraft = page.getByRole('textbox', { name: '编辑消息', exact: true });
@@ -1057,8 +1145,6 @@ async function renderExistingUI(context) {
 	await page.getByText('网页节选', { exact: true }).waitFor();
 	assert.equal(await page.locator('.web-sources a').count(), 2);
 	const sourceNode = await page.locator('.web-sources').elementHandle();
-	await page.getByRole('link', { name: /std::vector：容量/ }).click();
-	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'link', url: webSources[0].url });
 	await webToggle.click();
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'setWebEnabled', enabled: false });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: true, webEnabled: false, requestNotice: { id: 2, text: '联网开关将在下一轮回复中生效。' } }, '*'));
@@ -1248,8 +1334,23 @@ async function renderExistingUI(context) {
 	assert.equal(await page.locator('.settings-card').first().evaluate(element => getComputedStyle(element).borderRadius), '16px');
 	assert.equal(await page.locator('.settings-v3 .settings-switch').evaluate(element => getComputedStyle(element).width), '32px');
 	await page.setViewportSize({ width: 360, height: 1000 });
+	await page.mouse.move(0, 0);
+	await page.locator('#connection-address').focus();
+	for (const action of ['copy', 'edit', 'delete', 'show']) {
+		await page.keyboard.press('Tab');
+		assert.equal(await page.locator(`[data-key-action="${action}"]`).evaluate(button => document.activeElement === button && getComputedStyle(button).opacity === '1'), true, `The ${action} key action is visible and reachable using Tab`);
+		if (action === 'copy') {
+			await page.keyboard.press('Space');
+			assert.equal((await page.evaluate(() => window.messages.at(-1))).action, 'copy', 'Keyboard copy still goes through the host');
+		}
+	}
+	for (const action of ['delete', 'edit', 'copy']) {
+		await page.keyboard.press('Shift+Tab');
+		assert.equal(await page.locator(`[data-key-action="${action}"]`).evaluate(button => document.activeElement === button), true, `Shift+Tab reaches the ${action} key action`);
+	}
+	await page.locator('#connection-address').focus();
 	await page.locator('.connection-key-field').hover();
-	await page.getByRole('button', { name: '复制密钥', exact: true }).focus();
+	await page.getByRole('button', { name: '复制密钥', exact: true }).click();
 	await page.mouse.move(0, 0);
 	assert.ok(await page.locator('.connection-key-actions button:not([data-key-action="show"])').evaluateAll(buttons => buttons.every(button => getComputedStyle(button).opacity === '0' && getComputedStyle(button).pointerEvents === 'none')), 'Key actions hide after pointer leaves even when a button retains focus');
 	assert.equal(await page.getByRole('button', { name: '显示密钥', exact: true }).evaluate(button => getComputedStyle(button).opacity), '1');
@@ -1673,6 +1774,7 @@ async function renderExistingUI(context) {
 }
 try {
 	const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+	await checkBusyKeySetup(context);
 	await renderCustomSettings(context);
 	if (!process.argv.includes('--custom')) { await renderExistingUI(context); }
 } catch (error) {

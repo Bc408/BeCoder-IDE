@@ -31,6 +31,7 @@
 			"title": "%displayName%",
 			"properties": {
 				"becoder.notebook.pasteImagesAsAttachments.enabled": {
+					"title": "%becoder.notebook.pasteImagesAsAttachments.enabled.title%",
 					"type": "boolean",
 					"scope": "resource",
 					"default": true,

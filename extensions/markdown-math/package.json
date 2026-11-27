@@ -85,14 +85,16 @@
     ],
     "configuration": [
       {
-        "title": "Markdown Math",
+        "title": "%configuration.title%",
         "properties": {
           "markdown.math.enabled": {
+            "title": "%markdown.math.enabled.title%",
             "type": "boolean",
             "default": true,
             "description": "%config.markdown.math.enabled%"
           },
           "markdown.math.macros": {
+            "title": "%markdown.math.macros.title%",
             "type": "object",
             "additionalProperties": {
               "type": "string"

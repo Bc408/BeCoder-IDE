@@ -34,12 +34,14 @@
       {
         "properties": {
           "ipynb.pasteImagesAsAttachments.enabled": {
+            "title": "%ipynb.pasteImagesAsAttachments.enabled.title%",
             "type": "boolean",
             "scope": "resource",
             "markdownDescription": "%ipynb.pasteImagesAsAttachments.enabled%",
             "default": true
           },
           "ipynb.experimental.serialization": {
+            "title": "%ipynb.experimental.serialization.title%",
             "type": "boolean",
             "scope": "resource",
             "markdownDescription": "%ipynb.experimental.serialization%",

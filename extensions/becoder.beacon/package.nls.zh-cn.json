@@ -1,4 +1,6 @@
 {
+	"beacon.webEnabled.title": "联网搜索",
+	"beacon.modelConfiguration.title": "模型配置",
 	"command.askSelection": "询问 Beacon",
 	"description": "Beacon：面向算法竞赛的对话助手。",
 	"open": "打开/关闭 Beacon 侧边栏",

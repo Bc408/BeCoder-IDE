@@ -118,6 +118,16 @@ function computeDirectoryFilesSha256(directoryPath: string, transform?: (relativ
 }
 
 suite('OI extension boundary', () => {
+	test('Runner exposes one native split-menu entry with Run before Run With Input', () => {
+		const manifest = readJson<{ contributes: { commands: { command: string }[]; submenus?: { id: string; label: string; icon: string }[]; menus: Record<string, { command?: string; submenu?: string; group?: string }[]>; keybindings: { command: string; key: string }[] } }>(path.join(extensionsRoot, 'danielpinto8zz6.c-cpp-compile-run/package.json'));
+		const title = manifest.contributes.menus['editor/title'];
+		assert.strictEqual(title.length, 1, 'The source title bar has one Run control');
+		assert.strictEqual(title[0].submenu, 'becoder.runner.runMenu');
+		assert.deepStrictEqual(manifest.contributes.menus['becoder.runner.runMenu'].map(item => item.command), ['becoder.runner.run', 'becoder.runner.runWithInput']);
+		assert.strictEqual(manifest.contributes.submenus?.find(item => item.id === title[0].submenu)?.icon, '$(play)');
+		assert.deepStrictEqual(manifest.contributes.keybindings.map(item => [item.command, item.key]), [['becoder.runner.run', 'f6'], ['becoder.runner.runWithInput', 'shift+f6']]);
+	});
+
 	test('removes the duplicate browser history picker while retaining native and address-bar recents', () => {
 		const feature = fs.readFileSync(path.join(repositoryRoot, 'src/vs/workbench/contrib/browserView/electron-browser/features/browserHistoryFeature.ts'), 'utf8');
 		assert.doesNotMatch(feature, /showManagementPicker|showHistoryPicker|ShowBrowserHistoryAction|IWorkspacesService|IQuickInputService|buildPickerItems|dayLabel|dayKey/);
@@ -1668,7 +1678,7 @@ suite('OI extension boundary', () => {
 			'becoder.runner.run',
 			'becoder.runner.runWithInput'
 		]);
-		assert.deepStrictEqual(manifest.contributes?.menus?.['editor/title']?.map(item => item.command), [
+		assert.deepStrictEqual(manifest.contributes?.menus?.['becoder.runner.runMenu']?.map(item => item.command), [
 			'becoder.runner.run',
 			'becoder.runner.runWithInput'
 		]);

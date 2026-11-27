@@ -104,12 +104,14 @@
 			"title": "Beacon",
 			"properties": {
 				"beacon.webEnabled": {
+					"title": "%beacon.webEnabled.title%",
 					"type": "boolean",
 					"default": true,
 					"scope": "application",
 					"description": "%settings.webEnabled%"
 				},
 				"beacon.modelConfiguration": {
+					"title": "%beacon.modelConfiguration.title%",
 					"type": "object",
 					"default": {
 						"providers": {

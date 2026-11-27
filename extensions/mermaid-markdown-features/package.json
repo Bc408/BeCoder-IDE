@@ -76,6 +76,8 @@
       "title": "%config.title%",
       "properties": {
         "markdown-mermaid.lightModeTheme": {
+          "title": "%markdown-mermaid.lightModeTheme.title%",
+          "enumItemLabels": ["VS Code","%settings.enum.base%","%settings.enum.forest%","%settings.enum.dark%","%settings.enum.default%","%settings.enum.neutral%"],
           "order": 0,
           "type": "string",
           "enum": [
@@ -98,6 +100,8 @@
           "description": "%config.markdown-mermaid.lightModeTheme.description%"
         },
         "markdown-mermaid.darkModeTheme": {
+          "title": "%markdown-mermaid.darkModeTheme.title%",
+          "enumItemLabels": ["VS Code","%settings.enum.base%","%settings.enum.forest%","%settings.enum.dark%","%settings.enum.default%","%settings.enum.neutral%"],
           "order": 1,
           "type": "string",
           "enum": [
@@ -120,6 +124,7 @@
           "description": "%config.markdown-mermaid.darkModeTheme.description%"
         },
         "markdown-mermaid.languages": {
+          "title": "%markdown-mermaid.languages.title%",
           "order": 2,
           "type": "array",
           "default": [
@@ -128,12 +133,15 @@
           "description": "%config.markdown-mermaid.languages.description%"
         },
         "markdown-mermaid.maxTextSize": {
+          "title": "%markdown-mermaid.maxTextSize.title%",
           "order": 3,
           "type": "number",
           "default": 50000,
           "description": "%config.markdown-mermaid.maxTextSize.description%"
         },
         "markdown-mermaid.mouseNavigation.enabled": {
+          "title": "%markdown-mermaid.mouseNavigation.enabled.title%",
+          "enumItemLabels": ["%settings.enum.always%","%settings.enum.alt%","%settings.enum.never%"],
           "type": "string",
           "description": "%config.markdown-mermaid.mouseNavigation.enabled.description%",
           "enum": [
@@ -149,6 +157,8 @@
           ]
         },
         "markdown-mermaid.controls.show": {
+          "title": "%markdown-mermaid.controls.show.title%",
+          "enumItemLabels": ["%settings.enum.never%","%settings.enum.onHoverOrFocus%","%settings.enum.always%"],
           "type": "string",
           "description": "%config.markdown-mermaid.controls.show.description%",
           "enum": [
@@ -164,11 +174,13 @@
           "default": "onHoverOrFocus"
         },
         "markdown-mermaid.resizable": {
+          "title": "%markdown-mermaid.resizable.title%",
           "type": "boolean",
           "default": true,
           "description": "%config.markdown-mermaid.resizable.description%"
         },
         "markdown-mermaid.maxHeight": {
+          "title": "%markdown-mermaid.maxHeight.title%",
           "type": "string",
           "default": "",
           "markdownDescription": "%config.markdown-mermaid.maxHeight.markdownDescription%"

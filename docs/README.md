@@ -17,6 +17,8 @@
 ## 开发与维护
 
 - [开发指南](development.md)：工程入口、检查和构建。
+- [设置本地化修复](settings-localization-review-2026-11-27.md)：默认语言覆盖、118项随包配置标题与中英文切换的源码和组件验证边界。
+- [工具栏与 Notebook 调整](toolbar-notebook-ui-review-2026-11-27.md)：原生分体运行按钮、OJ 纸飞机、Markdown 入口与账户默认可见性的验证。
 - [Beacon 需求与架构入口](beacon/README.md)：完整能力、架构、九工具合同、三个业务队列与同步压缩；[实现状态](beacon/implementation-status.md)单列源码差距与验收边界。
 - [OJ Connect 产品与开发入口](oj-connect/README.md)：已确认的快捷键刷题流程、目录规则、内置扩展方向和当前实现状态；[技术架构](oj-connect/architecture.md)说明职责与迁移验收。
 - [OJ 接入技术可行性审查](oj-connect-feasibility.md)：候选路线、源码接点、证据范围和真实账号验证缺口；不代表已实现。

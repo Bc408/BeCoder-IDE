@@ -1,4 +1,6 @@
 {
+	"ipynb.pasteImagesAsAttachments.enabled.title": "Paste Images as Attachments",
+	"ipynb.experimental.serialization.title": "Worker Serialization (Experimental)",
 	"displayName": ".ipynb Support",
 	"description": "Provides basic support for opening and reading Jupyter's .ipynb notebook files",
 	"ipynb.pasteImagesAsAttachments.enabled": "Enable/disable pasting of images into Markdown cells in ipynb notebook files. Pasted images are inserted as attachments to the cell.",

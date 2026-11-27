@@ -1,4 +1,8 @@
 {
+	"becoder.runner.cStandard.title": "C Standard",
+	"becoder.runner.cppStandard.title": "C++ Standard",
+	"becoder.runner.cppFlags.title": "Additional C++ Compiler Flags",
+	"becoder.runner.cFlags.title": "Additional C Compiler Flags",
 	"displayName": "BeCoder Runner",
 	"description": "Compile and run C/C++ files with BeCoder's integrated toolchain.",
 	"command.openPanel": "Open BC Panel",

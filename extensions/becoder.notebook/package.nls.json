@@ -1,4 +1,5 @@
 {
+	"becoder.notebook.pasteImagesAsAttachments.enabled.title": "Paste Images as Attachments",
 	"displayName": ".bcnb Support",
 	"settings": "Settings",
 	"pasteImagesAsAttachments": "Enable pasting images as attachments into Markdown cells in .bcnb notebooks. Layout uses the native Notebook settings: `#notebook.compactView#`, `#notebook.insertToolbarLocation#` and `#notebook.cellToolbarLocation#`.",

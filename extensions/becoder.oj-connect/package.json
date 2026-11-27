@@ -58,12 +58,14 @@
 			"title": "%configurationTitle%",
 			"properties": {
 				"becoder.ojConnect.acmMode": {
+					"title": "%becoder.ojConnect.acmMode.title%",
 					"type": "boolean",
 					"default": false,
 					"scope": "application",
 					"description": "%acmMode%"
 				},
 				"becoder.ojConnect.directories": {
+					"title": "%becoder.ojConnect.directories.title%",
 					"type": "object",
 					"additionalProperties": false,
 					"description": "%directories%",
@@ -98,6 +100,7 @@
 					}
 				},
 				"becoder.ojConnect.luogu.cCompiler": {
+					"title": "%becoder.ojConnect.luogu.cCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -105,6 +108,7 @@
 					"description": "%luogu.cCompiler%"
 				},
 				"becoder.ojConnect.luogu.cppCompiler": {
+					"title": "%becoder.ojConnect.luogu.cppCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -112,6 +116,7 @@
 					"description": "%luogu.cppCompiler%"
 				},
 				"becoder.ojConnect.atcoder.cCompiler": {
+					"title": "%becoder.ojConnect.atcoder.cCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -119,6 +124,7 @@
 					"description": "%atcoder.cCompiler%"
 				},
 				"becoder.ojConnect.atcoder.cppCompiler": {
+					"title": "%becoder.ojConnect.atcoder.cppCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -126,6 +132,8 @@
 					"description": "%atcoder.cppCompiler%"
 				},
 				"becoder.ojConnect.atcoder.statementLanguage": {
+					"title": "%becoder.ojConnect.atcoder.statementLanguage.title%",
+					"enumItemLabels": ["%statementEnglish%","%statementJapanese%"],
 					"type": "string",
 					"enum": [
 						"en",
@@ -140,6 +148,8 @@
 					"description": "%statementLanguage%"
 				},
 				"becoder.ojConnect.panelLocation": {
+					"title": "%becoder.ojConnect.panelLocation.title%",
+					"enumItemLabels": ["%settings.enum.auto%","%settings.enum.active%","%settings.enum.beside%","%settings.enum.one%","%settings.enum.two%","%settings.enum.three%"],
 					"type": "string",
 					"enum": [
 						"auto",
@@ -162,6 +172,7 @@
 					"description": "%panelLocation%"
 				},
 				"becoder.ojConnect.codeforces.cCompiler": {
+					"title": "%becoder.ojConnect.codeforces.cCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -169,6 +180,7 @@
 					"description": "%codeforces.cCompiler%"
 				},
 				"becoder.ojConnect.codeforces.cppCompiler": {
+					"title": "%becoder.ojConnect.codeforces.cppCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -176,6 +188,7 @@
 					"description": "%codeforces.cppCompiler%"
 				},
 				"becoder.ojConnect.lanqiao.cCompiler": {
+					"title": "%becoder.ojConnect.lanqiao.cCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -183,6 +196,7 @@
 					"description": "%lanqiao.cCompiler%"
 				},
 				"becoder.ojConnect.lanqiao.cppCompiler": {
+					"title": "%becoder.ojConnect.lanqiao.cppCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -190,6 +204,7 @@
 					"description": "%lanqiao.cppCompiler%"
 				},
 				"becoder.ojConnect.nowcoder.cCompiler": {
+					"title": "%becoder.ojConnect.nowcoder.cCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",
@@ -197,6 +212,7 @@
 					"description": "%nowcoder.cCompiler%"
 				},
 				"becoder.ojConnect.nowcoder.cppCompiler": {
+					"title": "%becoder.ojConnect.nowcoder.cppCompiler.title%",
 					"type": "string",
 					"default": "",
 					"scope": "application",

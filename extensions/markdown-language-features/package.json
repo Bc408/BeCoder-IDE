@@ -1426,6 +1426,7 @@
         "order": 20,
         "properties": {
           "markdown.experimental.richLinks.enabled": {
+            "title": "%markdown.experimental.richLinks.enabled.title%",
             "type": "boolean",
             "default": true,
             "description": "%configuration.markdown.experimental.richLinks.enabled%",
@@ -1436,6 +1437,8 @@
             ]
           },
           "markdown.links.openLocation": {
+            "title": "%markdown.links.openLocation.title%",
+            "enumItemLabels": ["%settings.enum.currentGroup%","%settings.enum.beside%"],
             "type": "string",
             "default": "currentGroup",
             "description": "%configuration.markdown.links.openLocation.description%",
@@ -1450,12 +1453,15 @@
             ]
           },
           "markdown.suggest.paths.enabled": {
+            "title": "%markdown.suggest.paths.enabled.title%",
             "type": "boolean",
             "default": true,
             "description": "%configuration.markdown.suggest.paths.enabled.description%",
             "scope": "resource"
           },
           "markdown.suggest.paths.includeWorkspaceHeaderCompletions": {
+            "title": "%markdown.suggest.paths.includeWorkspaceHeaderCompletions.title%",
+            "enumItemLabels": ["%settings.enum.never%","%settings.enum.onDoubleHash%","%settings.enum.onSingleOrDoubleHash%"],
             "type": "string",
             "default": "onDoubleHash",
             "scope": "resource",
@@ -1472,6 +1478,8 @@
             ]
           },
           "markdown.editor.drop.enabled": {
+            "title": "%markdown.editor.drop.enabled.title%",
+            "enumItemLabels": ["%settings.enum.always%","%settings.enum.smart%","%settings.enum.never%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.editor.drop.enabled%",
@@ -1488,6 +1496,8 @@
             ]
           },
           "markdown.editor.drop.copyIntoWorkspace": {
+            "title": "%markdown.editor.drop.copyIntoWorkspace.title%",
+            "enumItemLabels": ["%settings.enum.mediaFiles%","%settings.enum.never%"],
             "type": "string",
             "markdownDescription": "%configuration.markdown.editor.drop.copyIntoWorkspace%",
             "default": "mediaFiles",
@@ -1501,6 +1511,8 @@
             ]
           },
           "markdown.editor.filePaste.enabled": {
+            "title": "%markdown.editor.filePaste.enabled.title%",
+            "enumItemLabels": ["%settings.enum.always%","%settings.enum.smart%","%settings.enum.never%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.editor.filePaste.enabled%",
@@ -1517,6 +1529,8 @@
             ]
           },
           "markdown.editor.filePaste.copyIntoWorkspace": {
+            "title": "%markdown.editor.filePaste.copyIntoWorkspace.title%",
+            "enumItemLabels": ["%settings.enum.mediaFiles%","%settings.enum.never%"],
             "type": "string",
             "markdownDescription": "%configuration.markdown.editor.filePaste.copyIntoWorkspace%",
             "default": "mediaFiles",
@@ -1530,16 +1544,20 @@
             ]
           },
           "markdown.editor.filePaste.videoSnippet": {
+            "title": "%markdown.editor.filePaste.videoSnippet.title%",
             "type": "string",
             "markdownDescription": "%configuration.markdown.editor.filePaste.videoSnippet%",
             "default": "<video controls src=\"${src}\" title=\"${title}\"></video>"
           },
           "markdown.editor.filePaste.audioSnippet": {
+            "title": "%markdown.editor.filePaste.audioSnippet.title%",
             "type": "string",
             "markdownDescription": "%configuration.markdown.editor.filePaste.audioSnippet%",
             "default": "<audio controls src=\"${src}\" title=\"${title}\"></audio>"
           },
           "markdown.editor.pasteUrlAsFormattedLink.enabled": {
+            "title": "%markdown.editor.pasteUrlAsFormattedLink.enabled.title%",
+            "enumItemLabels": ["%settings.enum.always%","%settings.enum.smart%","%settings.enum.smartWithSelection%","%settings.enum.never%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.editor.pasteUrlAsFormattedLink.enabled%",
@@ -1558,12 +1576,15 @@
             ]
           },
           "markdown.editor.updateLinksOnPaste.enabled": {
+            "title": "%markdown.editor.updateLinksOnPaste.enabled.title%",
             "type": "boolean",
             "markdownDescription": "%configuration.markdown.editor.updateLinksOnPaste.enabled%",
             "scope": "resource",
             "default": true
           },
           "markdown.updateLinksOnFileMove.enabled": {
+            "title": "%markdown.updateLinksOnFileMove.enabled.title%",
+            "enumItemLabels": ["%settings.enum.prompt%","%settings.enum.always%","%settings.enum.never%"],
             "type": "string",
             "enum": [
               "prompt",
@@ -1580,6 +1601,7 @@
             "scope": "window"
           },
           "markdown.updateLinksOnFileMove.include": {
+            "title": "%markdown.updateLinksOnFileMove.include.title%",
             "type": "array",
             "markdownDescription": "%configuration.markdown.updateLinksOnFileMove.include%",
             "scope": "window",
@@ -1593,18 +1615,21 @@
             ]
           },
           "markdown.updateLinksOnFileMove.enableForDirectories": {
+            "title": "%markdown.updateLinksOnFileMove.enableForDirectories.title%",
             "type": "boolean",
             "default": true,
             "description": "%configuration.markdown.updateLinksOnFileMove.enableForDirectories%",
             "scope": "window"
           },
           "markdown.occurrencesHighlight.enabled": {
+            "title": "%markdown.occurrencesHighlight.enabled.title%",
             "type": "boolean",
             "default": false,
             "description": "%configuration.markdown.occurrencesHighlight.enabled%",
             "scope": "resource"
           },
           "markdown.copyFiles.destination": {
+            "title": "%markdown.copyFiles.destination.title%",
             "type": "object",
             "markdownDescription": "%configuration.markdown.copyFiles.destination%",
             "additionalProperties": {
@@ -1612,6 +1637,8 @@
             }
           },
           "markdown.copyFiles.overwriteBehavior": {
+            "title": "%markdown.copyFiles.overwriteBehavior.title%",
+            "enumItemLabels": ["%settings.enum.nameIncrementally%","%settings.enum.overwrite%"],
             "type": "string",
             "markdownDescription": "%configuration.markdown.copyFiles.overwriteBehavior%",
             "default": "nameIncrementally",
@@ -1625,6 +1652,8 @@
             ]
           },
           "markdown.preferredMdPathExtensionStyle": {
+            "title": "%markdown.preferredMdPathExtensionStyle.title%",
+            "enumItemLabels": ["%settings.enum.auto%","%settings.enum.includeExtension%","%settings.enum.removeExtension%"],
             "type": "string",
             "default": "auto",
             "markdownDescription": "%configuration.markdown.preferredMdPathExtensionStyle%",
@@ -1646,6 +1675,7 @@
         "order": 22,
         "properties": {
           "markdown.validate.enabled": {
+            "title": "%markdown.validate.enabled.title%",
             "order": 0,
             "type": "boolean",
             "scope": "resource",
@@ -1653,6 +1683,8 @@
             "default": false
           },
           "markdown.validate.referenceLinks.enabled": {
+            "title": "%markdown.validate.referenceLinks.enabled.title%",
+            "enumItemLabels": ["%settings.enum.ignore%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.referenceLinks.enabled.description%",
@@ -1664,6 +1696,8 @@
             ]
           },
           "markdown.validate.fragmentLinks.enabled": {
+            "title": "%markdown.validate.fragmentLinks.enabled.title%",
+            "enumItemLabels": ["%settings.enum.ignore%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.fragmentLinks.enabled.description%",
@@ -1675,6 +1709,8 @@
             ]
           },
           "markdown.validate.fileLinks.enabled": {
+            "title": "%markdown.validate.fileLinks.enabled.title%",
+            "enumItemLabels": ["%settings.enum.ignore%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.fileLinks.enabled.description%",
@@ -1686,6 +1722,8 @@
             ]
           },
           "markdown.validate.fileLinks.markdownFragmentLinks": {
+            "title": "%markdown.validate.fileLinks.markdownFragmentLinks.title%",
+            "enumItemLabels": ["%settings.enum.inherit%","%settings.enum.ignore%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.fileLinks.markdownFragmentLinks.description%",
@@ -1698,6 +1736,7 @@
             ]
           },
           "markdown.validate.ignoredLinks": {
+            "title": "%markdown.validate.ignoredLinks.title%",
             "type": "array",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.ignoredLinks.description%",
@@ -1706,6 +1745,8 @@
             }
           },
           "markdown.validate.unusedLinkDefinitions.enabled": {
+            "title": "%markdown.validate.unusedLinkDefinitions.enabled.title%",
+            "enumItemLabels": ["%settings.enum.ignore%","%settings.enum.hint%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.unusedLinkDefinitions.description%",
@@ -1718,6 +1759,8 @@
             ]
           },
           "markdown.validate.duplicateLinkDefinitions.enabled": {
+            "title": "%markdown.validate.duplicateLinkDefinitions.enabled.title%",
+            "enumItemLabels": ["%settings.enum.ignore%","%settings.enum.warning%","%settings.enum.error%"],
             "type": "string",
             "scope": "resource",
             "markdownDescription": "%configuration.markdown.validate.duplicateLinkDefinitions.description%",
@@ -1735,6 +1778,7 @@
         "order": 23,
         "properties": {
           "markdown.styles": {
+            "title": "%markdown.styles.title%",
             "type": "array",
             "items": {
               "type": "string"
@@ -1744,66 +1788,78 @@
             "scope": "resource"
           },
           "markdown.preview.breaks": {
+            "title": "%markdown.preview.breaks.title%",
             "type": "boolean",
             "default": false,
             "markdownDescription": "%markdown.preview.breaks.desc%",
             "scope": "resource"
           },
           "markdown.preview.linkify": {
+            "title": "%markdown.preview.linkify.title%",
             "type": "boolean",
             "default": true,
             "description": "%markdown.preview.linkify%",
             "scope": "resource"
           },
           "markdown.preview.typographer": {
+            "title": "%markdown.preview.typographer.title%",
             "type": "boolean",
             "default": false,
             "description": "%markdown.preview.typographer%",
             "scope": "resource"
           },
           "markdown.preview.fontFamily": {
+            "title": "%markdown.preview.fontFamily.title%",
             "type": "string",
             "default": "-apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif",
             "description": "%markdown.preview.fontFamily.desc%",
             "scope": "resource"
           },
           "markdown.preview.fontSize": {
+            "title": "%markdown.preview.fontSize.title%",
             "type": "number",
             "default": 14,
             "description": "%markdown.preview.fontSize.desc%",
             "scope": "resource"
           },
           "markdown.preview.lineHeight": {
+            "title": "%markdown.preview.lineHeight.title%",
             "type": "number",
             "default": 1.6,
             "description": "%markdown.preview.lineHeight.desc%",
             "scope": "resource"
           },
           "markdown.preview.scrollPreviewWithEditor": {
+            "title": "%markdown.preview.scrollPreviewWithEditor.title%",
             "type": "boolean",
             "default": true,
             "description": "%markdown.preview.scrollPreviewWithEditor.desc%",
             "scope": "resource"
           },
           "markdown.preview.markEditorSelection": {
+            "title": "%markdown.preview.markEditorSelection.title%",
             "type": "boolean",
             "default": false,
             "description": "%markdown.preview.markEditorSelection.desc%",
             "scope": "resource"
           },
           "markdown.preview.scrollEditorWithPreview": {
+            "title": "%markdown.preview.scrollEditorWithPreview.title%",
             "type": "boolean",
             "default": true,
             "description": "%markdown.preview.scrollEditorWithPreview.desc%",
             "scope": "resource"
           },
           "markdown.preview.doubleClickToSwitchToEditor": {
+            "title": "%markdown.preview.doubleClickToSwitchToEditor.title%",
             "type": "boolean",
             "default": false,
             "description": "%markdown.preview.doubleClickToSwitchToEditor.desc%",
             "scope": "resource"
           },
           "markdown.preview.openMarkdownLinks": {
+            "title": "%markdown.preview.openMarkdownLinks.title%",
+            "enumItemLabels": ["%settings.enum.inPreview%","%settings.enum.inEditor%"],
             "type": "string",
             "default": "inPreview",
             "description": "%configuration.markdown.preview.openMarkdownLinks.description%",
@@ -1818,6 +1874,8 @@
             ]
           },
           "markdown.preview.frontMatter": {
+            "title": "%markdown.preview.frontMatter.title%",
+            "enumItemLabels": ["%settings.enum.hide%","%settings.enum.codeBlock%","%settings.enum.table%"],
             "type": "string",
             "default": "table",
             "scope": "resource",
@@ -1840,6 +1898,8 @@
         "order": 24,
         "properties": {
           "markdown.trace.server": {
+            "title": "%markdown.trace.server.title%",
+            "enumItemLabels": ["%settings.enum.off%","%settings.enum.messages%","%settings.enum.verbose%"],
             "type": "string",
             "scope": "window",
             "enum": [
@@ -1851,6 +1911,8 @@
             "description": "%markdown.trace.server.desc%"
           },
           "markdown.server.log": {
+            "title": "%markdown.server.log.title%",
+            "enumItemLabels": ["%settings.enum.off%","%settings.enum.debug%","%settings.enum.trace%"],
             "type": "string",
             "scope": "window",
             "enum": [

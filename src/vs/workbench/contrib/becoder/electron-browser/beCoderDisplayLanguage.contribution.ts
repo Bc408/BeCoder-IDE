@@ -43,6 +43,9 @@ export class BeCoderDisplayLanguageController {
 		private selectedLanguage: BeCoderDisplayLanguage,
 		private readonly applyLanguage: (language: BeCoderDisplayLanguage) => Promise<boolean>,
 		private readonly updateSetting: (language: BeCoderDisplayLanguage) => Promise<void>,
+		// Settings normalization belongs to this same latest-request loop, so
+		// a delayed default cleanup cannot discard a newer user selection.
+		private readonly prepareLanguage?: (language: BeCoderDisplayLanguage) => Promise<void>,
 	) { }
 
 	get selected(): BeCoderDisplayLanguage {
@@ -54,6 +57,9 @@ export class BeCoderDisplayLanguageController {
 	}
 
 	request(language: BeCoderDisplayLanguage): Promise<void> {
+		if (!this.processingPromise && language === this.selectedLanguage && !this.prepareLanguage) {
+			return Promise.resolve();
+		}
 		this.pendingLanguage = language;
 		this.processingPromise ??= this.process();
 		return this.processingPromise;
@@ -68,6 +74,12 @@ export class BeCoderDisplayLanguageController {
 			while (this.pendingLanguage) {
 				const language = this.pendingLanguage;
 				this.pendingLanguage = undefined;
+				if (this.prepareLanguage) {
+					await this.prepareLanguage(language);
+					if (!this.isLatestRequest(language)) {
+						continue;
+					}
+				}
 				if (language === this.selectedLanguage) {
 					continue;
 				}
@@ -87,11 +99,12 @@ export class BeCoderDisplayLanguageController {
 	}
 }
 
-class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenchContribution {
+export class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenchContribution {
 
 	static readonly ID = 'workbench.contrib.beCoderDisplayLanguage';
 
 	private updatingSetting = false;
+	private writingLanguage: BeCoderDisplayLanguage | undefined;
 	private initialized = false;
 	private readonly controller: BeCoderDisplayLanguageController;
 
@@ -108,9 +121,11 @@ class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenc
 			toBeCoderDisplayLanguage(Language.value()),
 			language => this.applyLanguage(language),
 			language => this.updateSetting(language),
+			language => this.updateSetting(language),
 		);
 		this._register(this.configurationService.onDidChangeConfiguration(event => {
-			if (this.initialized && !this.updatingSetting && event.affectsConfiguration(BeCoderDisplayLanguageSetting)) {
+			if (this.initialized && event.affectsConfiguration(BeCoderDisplayLanguageSetting)
+				&& (!this.updatingSetting || this.configurationService.getValue(BeCoderDisplayLanguageSetting) !== this.writingLanguage)) {
 				void this.requestConfiguredLanguage().catch(onUnexpectedError);
 			}
 		}));
@@ -136,7 +151,7 @@ class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenc
 	private async requestConfiguredLanguage(): Promise<void> {
 		const language = this.configurationService.getValue<unknown>(BeCoderDisplayLanguageSetting);
 		if (!isBeCoderDisplayLanguage(language)) {
-			await this.updateSetting(this.controller.selected);
+			await this.controller.request(this.controller.selected);
 			return;
 		}
 		await this.controller.request(language);
@@ -154,15 +169,19 @@ class BeCoderDisplayLanguageContribution extends Disposable implements IWorkbenc
 	}
 
 	private async updateSetting(language: BeCoderDisplayLanguage): Promise<void> {
-		const configuredLanguage = this.configurationService.inspect<BeCoderDisplayLanguage>(BeCoderDisplayLanguageSetting)?.userLocalValue;
-		if (configuredLanguage === language) {
+		const inspected = this.configurationService.inspect<BeCoderDisplayLanguage>(BeCoderDisplayLanguageSetting);
+		const value = language === inspected.defaultValue ? undefined : language;
+		const configuredLanguage = inspected.applicationValue ?? inspected.userLocalValue;
+		if (configuredLanguage === value && inspected.value === language) {
 			return;
 		}
 		this.updatingSetting = true;
+		this.writingLanguage = language;
 		try {
-			await this.configurationService.updateValue(BeCoderDisplayLanguageSetting, language, ConfigurationTarget.USER_LOCAL);
+			await this.configurationService.updateValue(BeCoderDisplayLanguageSetting, value, ConfigurationTarget.USER_LOCAL);
 		} finally {
 			this.updatingSetting = false;
+			this.writingLanguage = undefined;
 		}
 	}
 }

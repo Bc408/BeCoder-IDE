@@ -49,60 +49,71 @@
       "title": "CodeSnap",
       "properties": {
         "codesnap.backgroundColor": {
+          "title": "%codesnap.backgroundColor.title%",
           "scope": "resource",
           "type": "string",
           "default": "#abb8c3",
           "description": "%becoder.002%"
         },
         "codesnap.boxShadow": {
+          "title": "%codesnap.boxShadow.title%",
           "scope": "resource",
           "type": "string",
           "default": "rgba(0, 0, 0, 0.55) 0px 20px 68px",
           "description": "%becoder.003%"
         },
         "codesnap.containerPadding": {
+          "title": "%codesnap.containerPadding.title%",
           "scope": "resource",
           "type": "string",
           "default": "3em",
           "description": "%becoder.004%"
         },
         "codesnap.roundedCorners": {
+          "title": "%codesnap.roundedCorners.title%",
           "scope": "resource",
           "type": "boolean",
           "default": true,
           "description": "%becoder.005%"
         },
         "codesnap.showWindowControls": {
+          "title": "%codesnap.showWindowControls.title%",
           "scope": "resource",
           "type": "boolean",
           "default": true,
           "description": "%becoder.006%"
         },
         "codesnap.showWindowTitle": {
+          "title": "%codesnap.showWindowTitle.title%",
           "scope": "resource",
           "type": "boolean",
           "default": false,
           "description": "%becoder.007%"
         },
         "codesnap.showLineNumbers": {
+          "title": "%codesnap.showLineNumbers.title%",
           "scope": "resource",
           "type": "boolean",
           "default": true,
           "description": "%becoder.008%"
         },
         "codesnap.realLineNumbers": {
+          "title": "%codesnap.realLineNumbers.title%",
           "scope": "resource",
           "type": "boolean",
           "default": false,
           "description": "%becoder.009%"
         },
         "codesnap.transparentBackground": {
+          "title": "%codesnap.transparentBackground.title%",
           "scope": "resource",
           "type": "boolean",
           "default": false,
           "description": "%becoder.010%"
         },
         "codesnap.target": {
+          "title": "%codesnap.target.title%",
+          "enumItemLabels": ["%settings.enum.container%","%settings.enum.window%"],
           "scope": "resource",
           "type": "string",
           "enum": [
@@ -113,6 +124,8 @@
           "description": "%becoder.011%"
         },
         "codesnap.shutterAction": {
+          "title": "%codesnap.shutterAction.title%",
+          "enumItemLabels": ["%settings.enum.save%","%settings.enum.copy%"],
           "scope": "resource",
           "type": "string",
           "enum": [

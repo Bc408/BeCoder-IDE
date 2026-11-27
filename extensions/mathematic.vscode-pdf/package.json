@@ -42,6 +42,8 @@
 			"type": "object",
 			"properties": {
 				"pdf.defaultZoomValue": {
+					"title": "%pdf.defaultZoomValue.title%",
+					"enumItemLabels": ["%becoder.zoom.auto%","%becoder.zoom.actual%","%becoder.zoom.page%","%becoder.zoom.width%","50%","75%","100%","125%","150%","200%"],
 					"type": "string",
 					"default": "auto",
 					"scope": "resource",
@@ -72,6 +74,8 @@
 					"description": "%becoder.defaultZoom%"
 				},
 				"pdf.sidebarViewOnLoad": {
+					"title": "%pdf.sidebarViewOnLoad.title%",
+					"enumItemLabels": ["%becoder.sidebar.none%","%becoder.sidebar.thumbnails%","%becoder.sidebar.outline%"],
 					"type": "number",
 					"default": 0,
 					"scope": "resource",

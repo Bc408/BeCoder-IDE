@@ -1,4 +1,6 @@
 {
+	"pdf.defaultZoomValue.title": "Default Zoom",
+	"pdf.sidebarViewOnLoad.title": "Sidebar on Open",
 	"becoder.displayName": "BeCoder PDF Viewer",
 	"becoder.description": "BeCoder's built-in read-only PDF problem statement viewer.",
 	"becoder.configurationTitle": "PDF Viewer",

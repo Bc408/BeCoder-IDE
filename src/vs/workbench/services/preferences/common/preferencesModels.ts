@@ -713,6 +713,7 @@ export class DefaultSettings extends Disposable {
 
 		return {
 			key,
+			title: prop.title,
 			value,
 			description: descriptionLines,
 			descriptionIsMarkdown: !!prop.markdownDescription,
@@ -747,7 +748,7 @@ export class DefaultSettings extends Disposable {
 			order: prop.order,
 			nonLanguageSpecificDefaultValueSource: defaultValueSource,
 			isLanguageTagSetting,
-			categoryLabel: (isString(prop.source) ? undefined : prop.source?.id) === prop.section?.id ? prop.title : prop.section?.id
+			categoryLabel: prop.title ? prop.section?.title : (isString(prop.source) ? undefined : prop.source?.id) === prop.section?.id ? prop.title : prop.section?.id
 		};
 	}
 

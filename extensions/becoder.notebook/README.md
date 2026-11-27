@@ -8,6 +8,8 @@
 
 单元格支持 C、C++、Markdown 和独立 input（`becoder-input`）。Markdown 复用随包 KaTeX、字体与 Mermaid；图片在 Markdown 编辑态粘贴为附件，短 `attachment:` 引用和图片数据随同一次原生编辑进入撤销与保存。顶部“…”中的“设置”打开“.bcnb 支持”，可关闭图片附件粘贴；布局复用原生 Notebook 设置。其他语言可用 Markdown 围栏展示，普通编辑器及 ipynb 的语言支持不受此限制。
 
+Markdown 单元格保留编辑、完成和预览，不显示运行按钮；实际程序运行由 input 单元格发起。普通 ipynb 和其他 Notebook 的 Markdown 分节运行入口保留。
+
 C/C++ 编辑器右上角提供关联笔记入口，按打开根的 `.notebook/<源码相对路径及完整文件名>.bcnb` 定位。首次创建复制当前代码，之后双方内容独立；源码改名、移动或删除不带动笔记或备份。
 
 ## 用户运行 input

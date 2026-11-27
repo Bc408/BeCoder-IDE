@@ -1,4 +1,6 @@
 {
+	"beacon.webEnabled.title": "Web Search",
+	"beacon.modelConfiguration.title": "Model Configuration",
 	"command.askSelection": "Ask Beacon",
 	"description": "Beacon: conversations for competitive programming.",
 	"open": "Toggle Beacon Sidebar",

@@ -1,4 +1,8 @@
 {
+	"becoder.runner.cStandard.title": "C 语言标准",
+	"becoder.runner.cppStandard.title": "C++ 语言标准",
+	"becoder.runner.cppFlags.title": "C++ 附加编译参数",
+	"becoder.runner.cFlags.title": "C 附加编译参数",
 	"displayName": "BeCoder Runner",
 	"description": "使用 BeCoder 内置工具链编译并运行 C/C++ 文件。",
 	"command.openPanel": "打开 BC 面板",

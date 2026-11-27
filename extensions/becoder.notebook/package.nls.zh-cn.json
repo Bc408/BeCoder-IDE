@@ -1,4 +1,5 @@
 {
+	"becoder.notebook.pasteImagesAsAttachments.enabled.title": "将粘贴的图片保存为附件",
 	"displayName": ".bcnb 支持",
 	"settings": "设置",
 	"pasteImagesAsAttachments": "启用将图像作为附件粘贴到 .bcnb 笔记的 Markdown 单元格。布局复用原生 Notebook 设置：`#notebook.compactView#`、`#notebook.insertToolbarLocation#` 和 `#notebook.cellToolbarLocation#`。",

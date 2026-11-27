@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { localize, localize2 } from '../../../../../nls.js';
@@ -13,9 +16,10 @@ import { CellEditState, CellFoldingState, ICellViewModel, INotebookEditor } from
 import * as icons from '../notebookIcons.js';
 import { OutlineEntry } from '../viewModel/OutlineEntry.js';
 import { CellKind } from '../../common/notebookCommon.js';
+import { NOTEBOOK_CELL_TYPE, NOTEBOOK_VIEW_TYPE } from '../../common/notebookContextKeys.js';
 import { OutlineTarget } from '../../../../services/outline/browser/outline.js';
 import { CELL_TITLE_CELL_GROUP_ID, CellToolbarOrder } from './coreActions.js';
-import { executeSectionCondition } from './executeActions.js';
+import { beCoderNotebookType } from '../../../becoder/common/beCoderNotebook.js';
 
 export type NotebookOutlineEntryArgs = {
 	notebookEditor: INotebookEditor;
@@ -93,7 +97,10 @@ export class NotebookRunCellsInSection extends Action2 {
 					id: MenuId.NotebookCellTitle,
 					order: CellToolbarOrder.RunSection,
 					group: CELL_TITLE_CELL_GROUP_ID,
-					when: executeSectionCondition
+					when: ContextKeyExpr.and(
+						NOTEBOOK_CELL_TYPE.isEqualTo('markup'),
+						NOTEBOOK_VIEW_TYPE.notEqualsTo(beCoderNotebookType),
+					)
 				}
 			]
 		});

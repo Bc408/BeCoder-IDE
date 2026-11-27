@@ -22,6 +22,33 @@ suite('DefaultSettings', () => {
 		configurationService = new TestConfigurationService();
 	});
 
+	for (const [title, category] of [['界面语言', '产品设置'], ['Display Language', 'Product Settings']]) {
+		test(`preserves the localized property title and its distinct category: ${title}`, () => {
+			const config: IConfigurationNode = {
+				id: 'test.localizedExtension', title: category, extensionInfo: { id: 'test.localizedExtension' },
+				properties: { 'test.displayLanguage': { type: 'string', title, description: 'Language', default: 'zh-cn', enum: ['zh-cn', 'en'], enumItemLabels: ['简体中文', 'English'] } }
+			};
+			configurationRegistry.registerConfiguration(config);
+			disposables.add(toDisposable(() => configurationRegistry.deregisterConfigurations([config])));
+			const model = disposables.add(new DefaultSettings([], ConfigurationTarget.USER, configurationService));
+			const setting = model.getRegisteredGroups().flatMap(group => group.sections).flatMap(section => section.settings).find(setting => setting.key === 'test.displayLanguage')!;
+			assert.strictEqual(setting.title, title);
+			assert.strictEqual(setting.categoryLabel, category);
+			assert.strictEqual(setting.value, 'zh-cn');
+			assert.deepStrictEqual(setting.enum, ['zh-cn', 'en']);
+		});
+	}
+
+	test('settings without an explicit title retain the key-derived category and label', () => {
+		const config: IConfigurationNode = { id: 'test.fallback', title: 'Fallback', properties: { 'test.fallback.enabled': { type: 'boolean', default: true } } };
+		configurationRegistry.registerConfiguration(config);
+		disposables.add(toDisposable(() => configurationRegistry.deregisterConfigurations([config])));
+		const model = disposables.add(new DefaultSettings([], ConfigurationTarget.USER, configurationService));
+		const setting = model.getRegisteredGroups().flatMap(group => group.sections).flatMap(section => section.settings).find(setting => setting.key === 'test.fallback.enabled')!;
+		assert.strictEqual(setting.title, undefined);
+		assert.strictEqual(setting.key, 'test.fallback.enabled');
+	});
+
 	test('preserves deprecation message severity', () => {
 		const config: IConfigurationNode = {
 			id: 'deprecatedSettings',

@@ -44,6 +44,7 @@
       "title": "JSON",
       "properties": {
         "json.schemas": {
+          "title": "%json.schemas.title%",
           "type": "array",
           "scope": "resource",
           "description": "%json.schemas.desc%",
@@ -79,24 +80,29 @@
           }
         },
         "json.validate.enable": {
+          "title": "%json.validate.enable.title%",
           "type": "boolean",
           "scope": "window",
           "default": true,
           "description": "%json.validate.enable.desc%"
         },
         "json.format.enable": {
+          "title": "%json.format.enable.title%",
           "type": "boolean",
           "scope": "window",
           "default": true,
           "description": "%json.format.enable.desc%"
         },
         "json.format.keepLines": {
+          "title": "%json.format.keepLines.title%",
           "type": "boolean",
           "scope": "window",
           "default": false,
           "description": "%json.format.keepLines.desc%"
         },
         "json.trace.server": {
+          "title": "%json.trace.server.title%",
+          "enumItemLabels": ["%settings.enum.off%","%settings.enum.messages%","%settings.enum.verbose%"],
           "type": "string",
           "scope": "window",
           "enum": [
@@ -108,6 +114,7 @@
           "description": "%json.tracing.desc%"
         },
         "json.colorDecorators.enable": {
+          "title": "%json.colorDecorators.enable.title%",
           "type": "boolean",
           "scope": "window",
           "default": true,
@@ -115,11 +122,13 @@
           "deprecationMessage": "%json.colorDecorators.enable.deprecationMessage%"
         },
         "json.maxItemsComputed": {
+          "title": "%json.maxItemsComputed.title%",
           "type": "number",
           "default": 5000,
           "description": "%json.maxItemsComputed.desc%"
         },
         "json.schemaDownload.enable": {
+          "title": "%json.schemaDownload.enable.title%",
           "type": "boolean",
           "default": true,
           "description": "%json.enableSchemaDownload.desc%",
@@ -128,6 +137,7 @@
           ]
         },
         "json.schemaDownload.trustedDomains": {
+          "title": "%json.schemaDownload.trustedDomains.title%",
           "type": "object",
           "default": {
             "https://schemastore.azurewebsites.net/": true,

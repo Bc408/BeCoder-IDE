@@ -5,9 +5,31 @@
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { settingKeyToDisplayFormat, parseQuery, IParsedQuery, sanitizeId } from '../../browser/settingsTreeModels.js';
+import { settingKeyToDisplayFormat, parseQuery, IParsedQuery, sanitizeId, SettingsTreeGroupElement, SettingsTreeSettingElement } from '../../browser/settingsTreeModels.js';
+import { ConfigurationTarget } from '../../../../../platform/configuration/common/configuration.js';
+import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
+import { DefaultSettings } from '../../../../services/preferences/common/preferencesModels.js';
+import { Extensions, IConfigurationRegistry, IConfigurationNode } from '../../../../../platform/configuration/common/configurationRegistry.js';
+import { Registry } from '../../../../../platform/registry/common/platform.js';
+import { toDisposable } from '../../../../../base/common/lifecycle.js';
 
 suite('SettingsTree', () => {
+	const disposables = ensureNoDisposablesAreLeakedInTestSuite();
+	for (const [title, category] of [['界面语言', '产品设置'], ['Display Language', 'Product Settings'], [undefined, 'Product Settings']]) {
+		test(`localized registered titles reach the visible settings labels: ${title ?? 'fallback'}`, () => {
+			const registry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
+			const config: IConfigurationNode = { id: 'test.localizedExtension', title: category, extensionInfo: { id: 'test.localizedExtension' }, properties: { 'test.localizedExtension.displayLanguage': { type: 'string', title, default: 'zh-cn' } } };
+			registry.registerConfiguration(config);
+			disposables.add(toDisposable(() => registry.deregisterConfigurations([config])));
+			const configuration = new TestConfigurationService();
+			const model = disposables.add(new DefaultSettings([], ConfigurationTarget.USER, configuration));
+			const setting = model.getRegisteredGroups().flatMap(group => group.sections).flatMap(section => section.settings).find(setting => setting.key === 'test.localizedExtension.displayLanguage')!;
+			const group = disposables.add(new SettingsTreeGroupElement('test.localizedExtension', undefined, category!, 0, false));
+			const element = disposables.add(new SettingsTreeSettingElement(setting, group, ConfigurationTarget.USER_LOCAL, true, undefined, {} as never, {} as never, {} as never, configuration as never));
+			assert.strictEqual(element.displayLabel, title ?? 'Display Language');
+			assert.strictEqual(element.displayCategory, title ? category : '');
+		});
+	}
 	test('settingKeyToDisplayFormat', () => {
 		assert.deepStrictEqual(
 			settingKeyToDisplayFormat('foo.bar'),
@@ -353,5 +375,4 @@ suite('SettingsTree', () => {
 		);
 	});
 
-	ensureNoDisposablesAreLeakedInTestSuite();
 });

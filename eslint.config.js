@@ -196,6 +196,7 @@ export default defineConfig(
 			'src/vs/workbench/contrib/notebook/common/notebookContextKeys.ts',
 			'src/vs/workbench/contrib/notebook/common/model/notebookCellOutputTextModel.ts',
 			'src/vs/workbench/contrib/notebook/browser/controller/executeActions.ts',
+			'src/vs/workbench/contrib/notebook/browser/controller/sectionActions.ts',
 			'src/vs/workbench/contrib/notebook/browser/controller/cellOperations.ts',
 			'src/vs/workbench/contrib/notebook/browser/view/cellParts/cellContextKeys.ts',
 			'src/vs/workbench/contrib/notebook/browser/services/notebookExecutionServiceImpl.ts',

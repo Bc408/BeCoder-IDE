@@ -10,7 +10,7 @@ import { BeaconContextClient } from '../src/context';
 import { ContextTools } from '../src/contextTools';
 import { contextInputValid, contextToolNames } from '../src/contextToolContract';
 import { createGenerator } from '../src/provider';
-import { contextModelOutput } from '../src/toolModelOutput';
+import { contextModelOutput, fileModelOutput } from '../src/toolModelOutput';
 import { toolErrorCode } from '../src/toolFeedback';
 import type { IBeaconRunRecord, IBeaconVerdictRecord } from 'becoder-beacon';
 
@@ -32,6 +32,22 @@ async function setup(records: IBeaconRunRecord[] = [run('one')], verdicts: IBeac
 }
 
 suite('Beacon concise tool information', () => {
+	test('notebook association guidance is scoped to live and file notebook content', () => {
+		const notes = (output: ReturnType<typeof contextModelOutput>) => (Reflect.get(Reflect.get(output, 'value') as object, 'notes') ?? []) as string[];
+		const live = { files: [{ kind: 'notebook', cells: [{ cellNumber: 1, kind: 'input', source: 'input text' }] }] };
+		const file = { ok: true, path: 'practice.bcnb', kind: 'text' as const, representation: 'notebook-content' as const, contents: 'numbered notebook content', nextOffset: 20 };
+		const before = structuredClone({ live, file });
+		const liveNotes = notes(contextModelOutput('readCurrentCode', live));
+		const fileNotes = notes(fileModelOutput(file));
+		const association = liveNotes.find(note => note.includes('nearest preceding C/C++ code cell'));
+		assert.ok(association); assert.ok(association.includes('Markdown'));
+		assert.ok(fileNotes.includes(association));
+		assert.ok(fileNotes.some(note => note.includes('offset=20')));
+		for (const output of [contextModelOutput('readCurrentCode', { files: [{ kind: 'code', code: 'nearest preceding C/C++ code cell' }] }), fileModelOutput({ ...file, representation: undefined }), fileModelOutput({ ...file, ok: false, error: 'missing' })]) {
+			assert.ok(!notes(output).includes(association));
+		}
+		assert.deepStrictEqual({ live, file }, before);
+	});
 	test('notes_follow_actual_run_source_and_fields', async () => {
 		for (const source of ['runner', 'cph', 'notebook'] as const) {
 			const record = { ...run(source), source, operation: source === 'notebook' ? 'run-inputs' as const : 'run' as const };

@@ -4,7 +4,13 @@
 
 本文维护当前安装与载荷约束，取代已完成的安装器、gch 和包体积专项执行记录。具体实现以 [Inno Setup 脚本](../build/win32/becoder.iss)、[工具链组装](../build/lib/becoderToolchain.ts)及直接验证器为依据；本文不是一次新构建、安装或运行验收的证明。
 
-## v2.1.1 发行范围
+## v2.2.0 源码版本
+
+2026-11-27，负责人确认将应用源码版本更新为`2.2.0`，本轮接入已审定的Beacon上下文提示词：旧观察与新活动、共享队列及latest、Notebook输入配对、Runner／CPH编译稿来源、CPH配置路径与长文本截断取舍。提示内部版本为`2026-11-27.1`，具体接入和验证见[记录](beacon/review/2026-11-27-product-context-prompts-installed.md)。
+
+本轮只进行离线工程验证与对应分支的源码提交／推送，不进行Beacon模型问答或API测试，不新构建stage、Setup或创建GitHub Release。先前stage及访谈对应其原始版本，不代表2.2.0安装包或新提示效果已验收。
+
+## v2.1.1 发行范围（历史）
 
 - `feat(oj-connect)`：新增默认关闭的 ACM 模式。开启后隐藏题目难度、标签和逐测试点评测详情，保留整体评测状态和源码入口。已打开的 OJ Connect 页面会随个人设置即时更新。完整显示规则见 [OJ Connect 使用说明](../extensions/becoder.oj-connect/README.md)。
 - `fix(workbench)`：编辑器布局菜单在菜单项变化时复用已有监听器，避免刷新时反复重建菜单。

@@ -1,10 +1,16 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-27。当前源码在Beacon_Next上接入负责人审定的信息流提示词2026-11-26.4，开发基线为eb48d147。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-27。当前源码在Beacon_Next上接入负责人审定的产品上下文提示词2026-11-27.1，应用源码版本2.2.0，开发基线为10efc351。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
 2026-11-25提示优化[设计](../superpowers/specs/2026-11-25-beacon-prompt-quality-design.md)和[实施计划](../superpowers/plans/2026-11-25-beacon-prompt-quality.md)已获批准，负责人选择Native实施。导师核心精简、逐工具capabilities退出和readBeCoderInfo均已接入；system、工具说明及产品主题正文统一英文，回答跟随用户语言。[能力报告](evaluation/2026-11-25-prompt-quality-report.md)及[完整问答](evaluation/2026-11-25-prompt-quality-samples.md)保改善、退化和失败；整体教学质量未全面通过。
+
+## 2026-11-27 产品上下文提示词接入
+
+负责人逐项审定system取材原则、队列动态及共享run的latest含义、Notebook输入配对／执行捕获、Runner和CPH显式保存／编译稿、CPH配置路径及长文本截断取舍，授权统一接入并将应用源码版本更新为2.2.0。正文与中文语义见[接入记录](review/2026-11-27-product-context-prompts-installed.md)。Notebook内容从现场或语义文件返回时附同一条配对短释义；普通文本及失败不附。工具schema、权限、采集、执行与容量规则保持。
+
+本轮类型检查、扩展生产bundle、24项定向回归、368项完整离线回归及strict lint通过。应用清单和根锁文件版本同步；API兼容号、扩展版本、第三方依赖及历史记录保持。本轮不运行新Beacon问答／模型API，不构建stage或Setup，不以当前源码推送代表新安装包、Release或模型效果通过；此前stage与访谈分别属于其原始版本。
 
 ## 2026-11-26 信息流提示词重构
 
@@ -14,11 +20,19 @@
 
 后续负责人授权独立code review、修复并构建新stage，见[复审记录](review/2026-11-26-prompt-information-flow-code-review.md)。已修复inspectFile不合法参数可能生成无法重开历史的P1，以及上下文验证失败被误报为确定变化的P2。修复后367项Beacon回归、类型／build／lint、客户端类型检查及OI统一编译通过。完整标准stage于2026-11-27 00:04:18退出0，用时160.982秒；首次Electron下载失败及校验一致的本地归档恢复分别留证。应用入口为`C:/Users/Bc/Desktop/BeCoder/VSCode-win32-x64/BeCoder.exe`。未启动GUI，不以构建替代模型效果或真实流程验收。
 
+## 2026-11-27 信息流提示词原生访谈
+
+负责人授权启动完整隔离stage副本并登录洛谷，使用原生DeepSeek Flash完成真实Get／Import、CPH官方样例错答与复测、Runner编译失败／诊断／大输入、Notebook双程序与dirty调序、单次洛谷提交及提交后改稿、普通页面／产品知识和模式切换。生产代码、工具和提示固定；不用computer use，不伪造行为队列。详见[Beacon访谈原文](evaluation/2026-11-27-prompt-information-flow-interview.md)、[33轮完整问答](evaluation/2026-11-27-prompt-information-flow-interview-dialogue.md)与[核验报告](evaluation/2026-11-27-prompt-information-flow-interview-report.md)。
+
+33轮中32轮完整结束：19主工作、3工作补问、8主访谈、3补核；W19服务连接错误保留，W19A另作续问。49次工具交换配对，47次非错误结果，2次readPage明确拒绝，均未返回目标正文；未见参数校验失败。最终队列2／9／1，含Runner5、CPH2、Notebook2及单次洛谷AC／100分／六点结果。约1.93MB输入生成的证据副本11,244字节，截断明确，聊天可继续；Blackout仍采集，切Spot不重跑即可读取原记录。
+
+Beacon认可分层执行事实、代码身份、Notebook身份及即时截断释义；其编译源码来源建议仍待负责人把关。材料已具备时仍发生新Runner误用旧事件、Notebook末尾操作串位、版本哈希混同和隐藏测试覆盖外推。I03的产品知识因果时间倒置经F02修正，自述不是工程事实。W03未保存前提受自动保存影响，另以W03A取得真实dirty稿，原回合不充当dirty验收。未改生产实现、未新构建或提交推送；本轮不是随机对照，也未验收压缩、媒体、其他四站、保存失败／退出竞态或完整产品体验。
+
 ## 当前实现
 
 | 范围 | 源码事实 |
 | --- | --- |
-| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-26.4 |
+| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-27.1 |
 | 产品知识 | 七固定主题随扩展发布，整篇返回version／topic／content；版本来自运行宿主IProductService，区别于扩展兼容号；三模式／无根可读，不读个人设置或扩大其他权限 |
 | 提示分层 | system为导师原则及首层环境，工具定义交代用途／参数；结果短释义按实际条件随返回提供，新失败投影统一error对象，旧协议原样回放；产品事实按主题读取，不强制调用顺序 |
 | 现场文档 | 调用时全部可见C/C++整稿和已加载BeCoder Notebook全本内容cells，含dirty／未命名／根外现场；同文档多视图合并，每个C/C++ cell独立codeHash；不读后台、磁盘替代稿或执行字段，不另存快照 |

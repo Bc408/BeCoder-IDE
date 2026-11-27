@@ -24,7 +24,7 @@ function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], fin
 suite('Beacon pure prompt composition', () => {
 	test('always supplies the mentor principles and captured time', () => {
 		const prompt = composeBeaconPrompt({ currentTime: '2026-11-21T00:00:00Z', toolNames: [] });
-		assert.equal(prompt.version, '2026-11-26.4');
+		assert.equal(prompt.version, '2026-11-27.1');
 		assert.ok(prompt.system.includes('Beacon mentor core'));
 		assert.ok(prompt.system.includes('2026-11-21T00:00:00Z'));
 		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }, { id: 'context', source: 'host' }]);

@@ -1,12 +1,13 @@
 # Beacon 文档入口
 
-更新：2026-11-26。Beacon 是编辑器内可选的算法与编程导师。本轮上下文就绪、可见Notebook及源头去重已完成源码实施和回归；最新stage结果、模型回答质量与负责人真实流程验收另见[实现状态](implementation-status.md)。
+更新：2026-11-27。Beacon 是编辑器内可选的算法与编程导师。访谈后审定的产品上下文提示已接入2.2.0源码，提示版本2026-11-27.1；本轮只作离线验证，既有stage与访谈属于原版本。实际结果另见[实现状态](implementation-status.md)。
 
 先读根目录[仓库规则](../../AGENTS.md)和[产品方向](../../VISION.md)，负责人最新决定优先。按下列职责阅读，现行文档不混入已完成的实施待办。
 
 | 文档 | 职责 |
 | --- | --- |
-| [信息流提示词接入与中英文语义](review/2026-11-26-prompt-information-flow-installed.md) | 当前工作树2026-11-26.4：首层环境、九工具用途／参数、条件notes／具体失败、固定ID摘要、材料与续答；模型对照待进行 |
+| [产品上下文提示词接入与中文语义](review/2026-11-27-product-context-prompts-installed.md) | 当前工作树2026-11-27.1：旧观察与新活动、共享队列与latest、Notebook配对、编译稿来源、CPH配置路径及截断取舍；2.2.0源码，离线验证，无新问答测试 |
+| [信息流提示词接入与中英文语义](review/2026-11-26-prompt-information-flow-installed.md) | 上一版2026-11-26.4：首层环境、九工具用途／参数、条件notes／具体失败、固定ID摘要、材料与续答；其原生访谈见下表 |
 | [上一版整套提示词与中文语义对照](review/2026-11-26-overall-prompt-refresh-candidate.md) | 2026-11-26.3审定快照；其中七主题原文在本轮保持 |
 | [能力需求](prd.md) | 产品边界、141个稳定需求ID及后续能力；需求不等于已交付 |
 | [总体架构](architecture.md) | 模块所有者、数据流、模型与harness分工 |
@@ -24,6 +25,7 @@
 
 | 证据与后续材料 | 身份 |
 | --- | --- |
+| [本轮信息流访谈原文](evaluation/2026-11-27-prompt-information-flow-interview.md) · [核验报告](evaluation/2026-11-27-prompt-information-flow-interview-report.md) · [33轮完整问答](evaluation/2026-11-27-prompt-information-flow-interview-dialogue.md) | 10efc351／提示.4的真实拿题、三来源运行、单次洛谷终态及开放访谈；32回合完整结束、49次配对；保留服务错误、旧事件误用及自述的时间因果修正，不作为全场景验收 |
 | [提示词与模型信息流统一设计](../superpowers/specs/2026-11-26-beacon-prompt-information-flow-design.md) · [实施计划](../superpowers/plans/2026-11-26-beacon-prompt-information-flow.md) | IF-D1／IP-D1已获负责人批准并按Native接入工作树；源码验证与模型效果／stage验收分别记录 |
 | [信息流实现复审与修复](review/2026-11-26-prompt-information-flow-code-review.md) | 修复inspectFile非法参数导致历史不可重开、读取验证失败误报上下文变化；最终源码检查与本次stage结果分列 |
 | [上一版工具与产品知识快照](review/2026-11-26-tool-information-prompt-review.md) | 2026-11-26.2源码抽取及中文对照，保留作版本追溯；当前审定文本见上表 |
@@ -39,7 +41,7 @@
 | [run容量修复报告](evaluation/2026-11-25-run-record-limits-report.md) · [模型复测原文](evaluation/2026-11-25-run-record-limits-samples.md) | 独立字段截断、32KB拒收及旧超大记录拒读；旧聊天压缩与整体教学质量不由此验收 |
 | [前轮能力报告](evaluation/2026-11-24-context-tools-rebuild-report.md) · [问答原文](evaluation/2026-11-24-context-tools-rebuild-samples.md) | 2026-11-24工具重构观察与2026-11-25复审／构建历史 |
 | [输出质量要点](review/2026-11-23-output-quality-improvements.md) | 已观察的问题、当前适用建议和下一步审阅依据；不是已修复声明 |
-| [前轮提示词全文与中文对照](review/2026-11-25-prompt-inventory-and-translation.md) | 2026-11-25.3历史源码快照；当前工作树提示版本为2026-11-26.4，接入位置与中英文语义见上表 |
+| [前轮提示词全文与中文对照](review/2026-11-25-prompt-inventory-and-translation.md) | 2026-11-25.3历史源码快照；当前工作树提示版本为2026-11-27.1，接入位置与中英文语义见上表 |
 | [三项目源码研究](research/2026-11-22-compaction-comparison.md) | 固定提交研究，保留原项目事实，不能当作最新上游状态 |
 | [基础评测](evaluation/2026-11-23-context-foundation-report.md) · [旧工具专项报告](evaluation/2026-11-23-tool-information-flow-report.md) · [旧专项结论](evaluation/2026-11-23-tool-information-flow-conclusions.md) | 旧架构实测证据；不用于证明新工具已经稳定 |
 | [来源索引](sources.md) | 固定Git版本、历史原稿与需求来源代号 |

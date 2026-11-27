@@ -63,7 +63,7 @@ test('tool_images_keep_each_original_call_on_followup', async () => {
 test('registered_tools_do_not_duplicate_system_guidance', () => {
 	const withTools = composeBeaconPrompt({ currentTime: 'fixed', toolNames: ['readCurrentCode', 'readBeCoderInfo'] });
 	const without = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [] });
-	assert.equal(withTools.version, '2026-11-26.4');
+	assert.equal(withTools.version, '2026-11-27.1');
 	assert.equal(withTools.system, without.system);
 	assert.ok(!withTools.system.includes('Capability:'));
 	assert.ok(!withTools.sections.some(section => String(section.id) === 'capabilities'));

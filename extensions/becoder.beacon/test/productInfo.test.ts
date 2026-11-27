@@ -82,15 +82,16 @@ test('product_info_stage_rejects_missing_empty_or_changed_topics', async () => {
 	const { verifyProductInfo } = await import(pathToFileURL(path.join(__dirname, '../test/verify-product-info.mts')).href);
 	const root = await mkdtemp(path.join(tmpdir(), 'becoder-info-stage-'));
 	const source = path.resolve(__dirname, '..');
+	const version = (JSON.parse(await readFile(path.resolve(source, '../../package.json'), 'utf8')) as { version: string }).version;
 	const info = path.join(root, 'resources/app/extensions/becoder.beacon/resources/product-info');
 	try {
 		await mkdir(info, { recursive: true });
 		await mkdir(path.join(root, 'resources/app/extensions/becoder.beacon/dist'));
-		await writeFile(path.join(root, 'resources/app/package.json'), '{"version":"2.1.1"}');
+		await writeFile(path.join(root, 'resources/app/package.json'), JSON.stringify({ version }));
 		await writeFile(path.join(root, 'resources/app/extensions/becoder.beacon/dist/extension.cjs'), await readFile(path.join(source, 'dist/extension.cjs')));
 		await assert.rejects(verifyProductInfo(root, source));
 		for (const topic of beCoderInfoTopics) { await writeFile(path.join(info, topic + '.md'), await readFile(path.join(source, 'resources/product-info', topic + '.md'))); }
-		assert.equal((await verifyProductInfo(root, source)).version, '2.1.1');
+		assert.equal((await verifyProductInfo(root, source)).version, version);
 		await writeFile(path.join(info, 'cph.md'), ''); await assert.rejects(verifyProductInfo(root, source));
 		await writeFile(path.join(info, 'cph.md'), 'different'); await assert.rejects(verifyProductInfo(root, source));
 	} finally { await rm(root, { recursive: true, force: true }); }

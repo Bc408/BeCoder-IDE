@@ -9,6 +9,7 @@ import type { FileOutput } from './fileTools';
 import type { WebOutput } from './webTools';
 
 const hashNote = 'codeHash identifies the complete captured code after CRLF-to-LF normalization.';
+const notebookInputNote = 'Each input cell uses the nearest preceding C/C++ code cell, ignoring intervening Markdown cells.';
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const objects = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.filter(object) : [];
 const has = (value: unknown, field: string) => object(value) && Object.hasOwn(value, field);
@@ -46,7 +47,7 @@ export function contextResultNotes(name: BeaconContextToolName, output: ContextO
 		const files = objects(output.files), cells = files.flatMap(file => objects(file.cells));
 		return [...(!files.length ? ["No C/C++ document or BeCoder notebook is currently displayed in this window's editor panes."] : []),
 			...(files.some(file => has(file, 'codeHash')) || cells.some(cell => has(cell, 'codeHash')) ? [hashNote] : []),
-			...(files.some(file => file.kind === 'notebook') ? ['cellNumber is the 1-based position among all cells in the notebook as read by this call.'] : [])];
+			...(files.some(file => file.kind === 'notebook') ? ['cellNumber is the 1-based position among all cells in the notebook as read by this call.', notebookInputNote] : [])];
 	}
 	if (name === 'readPage') { return rangeNotes(output); }
 	if (!object(output.record)) { return []; }
@@ -74,7 +75,7 @@ export function contextResultNotes(name: BeaconContextToolName, output: ContextO
 
 function rangeNotes(output: { [key: string]: unknown }): string[] {
 	return [...(output.kind === 'binary' ? ['contents contains hexadecimal bytes; offset and nextOffset use byte positions.'] : []),
-		...(output.representation === 'notebook-content' ? ['Notebook text contains numbered content cells, without execution results.'] : []),
+		...(output.representation === 'notebook-content' ? ['Notebook text contains numbered content cells, without execution results.', notebookInputNote] : []),
 		...(typeof output.nextOffset === 'number' ? [typeof output.pageNumber === 'number' ? `To read the next text range on this PDF page, keep pageNumber=${output.pageNumber} and use offset=${output.nextOffset}.` : `To read the next range, use offset=${output.nextOffset}.`] : []),
 		...((output.kind === 'entries' || output.kind === 'matches') && output.truncated === true ? ['This listing or search is incomplete; it provides no continuation cursor.'] : [])];
 }

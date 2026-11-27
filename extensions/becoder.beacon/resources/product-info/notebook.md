@@ -1,6 +1,10 @@
 # notebook
 
-Notebook is an independent .bcnb learning document with C/C++, Markdown and input cells. An input runs the nearest preceding C/C++ cell. Run All/Selection captures the code and input associations when clicked, compiles each program once, and runs its inputs in separate processes. A failed input does not stop the others; a compile failure skips that program's inputs; explicit cancellation stops the batch.
+Notebook is an independent .bcnb learning document with C/C++, Markdown and input cells.
+
+Each input cell uses the nearest preceding C/C++ code cell, ignoring intervening Markdown cells. Multiple inputs can use the same program until another C/C++ code cell appears. Running an input executes that program with the input's text.
+
+Run All or Run Selection captures the selected inputs, their associated code and their positions at the start, including unsaved edits. Each associated code cell is compiled once for that action, and its inputs run in separate processes. Later edits or reordering affect subsequent runs, not the captured execution. A failed input does not stop the others; a compile failure skips that program's inputs; explicit cancellation stops the batch.
 
 Every cell has a 1-based position in the whole notebook, including Markdown and inputs. Recorded codeCellNumber/inputCellNumber are positions at execution time. Later reordering changes current positions, not past records. Names can repeat. Distinct cells remain distinct when their source text matches; codeHash describes the code text, not a cell identity or an execution.
 

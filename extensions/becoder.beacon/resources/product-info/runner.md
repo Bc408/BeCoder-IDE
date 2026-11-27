@@ -1,6 +1,10 @@
 # runner
 
-Runner compiles and runs C/C++ with bundled GCC. The editor run action or F6 saves the source and runs it in its directory. Run With Input (Shift+F6) captures the bytes of a file named input, without an extension, beside the source and pipes them to stdin; stdin closes at the end. Interactive Run supports terminal input and getch(). Terminal echoes do not reconstruct reliable stdin.
+Runner compiles and runs C/C++ with bundled GCC. The editor run action or F6 runs the program in the source directory.
+
+Runner explicitly saves unsaved changes in the target source document before compilation, even when editor auto-save is off. If saving fails, the run does not proceed. Compilation uses a captured copy of the main source file, and the run record describes that captured version. Later editor changes do not alter the recorded execution.
+
+Run With Input (Shift+F6) captures the bytes of a file named input, without an extension, beside the source and pipes them to stdin; stdin closes at the end. Interactive Run supports terminal input and getch(). Terminal echoes do not reconstruct reliable stdin.
 
 Runner executes without automatic answer checking. Normal completion describes the process, not answer correctness. Inputs left unstarted after compilation failure or cancellation have not executed.
 

@@ -39,7 +39,8 @@ suite('Browser navigation homepage', () => {
 		const feature = disposables.add(new BrowserWelcomeFeature(editor,
 			{ getValue: (key: string) => values[key], onDidChangeConfiguration: change.event } as unknown as IConfigurationService,
 			{ executeCommand: async (id: string, ...args: unknown[]) => { commands.push({ id, args }); } } as unknown as ICommandService,
-			{ error: (error: unknown) => errors.push(error) } as unknown as INotificationService));
+			{ error: (error: unknown) => errors.push(error) } as unknown as INotificationService,
+			{ setupManagedHover: () => ({ dispose() { } }) } as never));
 		const container = feature.widgets[0].element;
 		browserContainer.appendChild(container);
 		return { feature, container, input, editor, values, navigations, errors, commands, change, modelChange, browserContainer };

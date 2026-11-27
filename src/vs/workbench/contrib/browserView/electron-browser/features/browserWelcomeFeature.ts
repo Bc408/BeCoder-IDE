@@ -10,6 +10,8 @@ import { Checkbox } from '../../../../../base/browser/ui/toggle/toggle.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
+import { getDefaultHoverDelegate } from '../../../../../base/browser/ui/hover/hoverDelegateFactory.js';
+import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
@@ -42,6 +44,7 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICommandService private readonly commandService: ICommandService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IHoverService private readonly hoverService: IHoverService,
 	) {
 		super(editor);
 
@@ -61,7 +64,8 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 		this._search = $('input', { type: 'search', autocomplete: 'off', spellcheck: 'false' });
 		form.appendChild(this._search);
 		const clearLabel = localize('browser.home.searchClear', "Clear");
-		this._searchClear = $('button.browser-home-search-clear', { type: 'button', 'aria-label': clearLabel, title: clearLabel });
+		this._searchClear = $('button.browser-home-search-clear', { type: 'button', 'aria-label': clearLabel });
+		this._register(this.hoverService.setupManagedHover(getDefaultHoverDelegate('mouse'), this._searchClear, clearLabel));
 		this._searchClear.appendChild(renderIcon(Codicon.close));
 		this._searchClear.hidden = true;
 		form.appendChild(this._searchClear);
@@ -74,7 +78,8 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 			this._search.focus();
 		}));
 		const submitLabel = localize('browser.home.searchSubmit', "Search");
-		const submit = $('button.browser-home-search-submit', { type: 'submit', 'aria-label': submitLabel, title: submitLabel });
+		const submit = $('button.browser-home-search-submit', { type: 'submit', 'aria-label': submitLabel });
+		this._register(this.hoverService.setupManagedHover(getDefaultHoverDelegate('mouse'), submit, submitLabel));
 		submit.appendChild(renderIcon(Codicon.search));
 		form.appendChild(submit);
 		content.appendChild(form);
@@ -171,8 +176,9 @@ export class BrowserWelcomeFeature extends BrowserEditorContribution {
 		this._siteDisposables.clear();
 		reset(this._sites);
 		for (const { name, url } of getOnlineJudgeLinks(this.configurationService.getValue(onlineJudgeSitesSetting), this.configurationService.getValue(onlineJudgesSetting))) {
-			const button = $('button.browser-home-site', { type: 'button', title: url }, name);
+			const button = $('button.browser-home-site', { type: 'button' }, name);
 			this._sites.appendChild(button);
+			this._siteDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('mouse'), button, url));
 			this._siteDisposables.add(addDisposableListener(button, 'click', () => { void this._navigate(url); }));
 		}
 	}

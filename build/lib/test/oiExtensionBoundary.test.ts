@@ -125,7 +125,7 @@ suite('OI extension boundary', () => {
 		assert.strictEqual(title[0].submenu, 'becoder.runner.runMenu');
 		assert.deepStrictEqual(manifest.contributes.menus['becoder.runner.runMenu'].map(item => item.command), ['becoder.runner.run', 'becoder.runner.runWithInput']);
 		assert.strictEqual(manifest.contributes.submenus?.find(item => item.id === title[0].submenu)?.icon, '$(play)');
-		assert.deepStrictEqual(manifest.contributes.keybindings.map(item => [item.command, item.key]), [['becoder.runner.run', 'f6'], ['becoder.runner.runWithInput', 'shift+f6']]);
+		assert.deepStrictEqual(manifest.contributes.keybindings.map(item => [item.command, item.key]), [['becoder.runner.run', 'f5'], ['becoder.runner.runWithInput', 'shift+f5']]);
 	});
 
 	test('removes the duplicate browser history picker while retaining native and address-bar recents', () => {

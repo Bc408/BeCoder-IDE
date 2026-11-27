@@ -185,6 +185,8 @@ export default defineConfig(
 	{
 		files: [
 			'src/vs/code/electron-main/app.ts',
+			'src/vs/code/electron-utility/sharedProcess/contrib/languagePackCachedDataCleaner.ts',
+			'src/vs/code/test/electron-utility/sharedProcess/contrib/languagePackCachedDataCleaner.test.ts',
 			'src/vs/platform/window/common/window.ts',
 			'src/vs/platform/windows/electron-main/{windows,windowsMainService,windowsStateHandler}.ts',
 			'src/vs/platform/windows/test/electron-main/windowsStateHandler.test.ts',

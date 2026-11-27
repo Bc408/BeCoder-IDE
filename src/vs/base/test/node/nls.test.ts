@@ -7,6 +7,7 @@ import assert from 'assert';
 import { createHash } from 'crypto';
 import { promises } from 'fs';
 import { tmpdir } from 'os';
+import sinon from 'sinon';
 import { ILanguagePacks } from '../../../nls.js';
 import { join } from '../../common/path.js';
 import { IResolveNLSConfigurationContext, resolveNLSConfiguration } from '../../node/nls.js';
@@ -163,6 +164,59 @@ suite('NLS configuration', () => {
 			sameCache: true,
 			messages: ['Erste']
 		});
+	});
+
+	test('a core message cache hit repairs a missing extension translation map', async () => {
+		const metadata = await writeMetadata('server', [['vs/base/test', ['first']]], ['First']);
+		const first = await resolveMessages(metadata);
+		await promises.unlink(first.translationsConfigFile);
+		const cached = await resolveMessages(metadata);
+		assert.deepStrictEqual(cached.messages, ['Erste']);
+		assert.deepStrictEqual(JSON.parse(await promises.readFile(cached.translationsConfigFile, 'utf8')), {
+			vscode: join(testDir, 'main.i18n.json')
+		});
+	});
+
+	test('a core message cache hit refreshes extension paths after a portable move', async () => {
+		const metadata = await writeMetadata('server', [['vs/base/test', ['first']]], ['First']);
+		const first = await resolveMessages(metadata);
+		const movedMain = join(testDir, 'moved-main.i18n.json');
+		await promises.copyFile(join(testDir, 'main.i18n.json'), movedMain);
+		await promises.writeFile(join(userDataPath, 'languagepacks.json'), JSON.stringify({
+			de: { hash: 'test-language-pack', label: 'Deutsch', extensions: [], translations: { vscode: movedMain, 'vscode.ipynb': join(testDir, 'moved-ipynb.i18n.json') } }
+		}));
+		const cached = await resolveMessages(metadata);
+		assert.strictEqual(cached.messagesFile, first.messagesFile);
+		assert.deepStrictEqual(JSON.parse(await promises.readFile(cached.translationsConfigFile, 'utf8')), {
+			vscode: movedMain, 'vscode.ipynb': join(testDir, 'moved-ipynb.i18n.json')
+		});
+	});
+
+	test('refreshing translations keeps the published map readable during the write', async () => {
+		const metadata = await writeMetadata('server', [['vs/base/test', ['first']]], ['First']);
+		const first = await resolveMessages(metadata);
+		const expected = JSON.parse(await promises.readFile(first.translationsConfigFile, 'utf8'));
+		const open = promises.open.bind(promises);
+		let reads = 0;
+		const writing = sinon.stub(promises, 'open').callsFake(async (file, flags, mode) => {
+			const handle = await open(file, flags, mode);
+			const write = handle.writeFile.bind(handle);
+			sinon.stub(handle, 'writeFile').callsFake(async (data, options) => {
+				// Read from another window after the writer opens its destination,
+				// before the complete replacement map has been published.
+				assert.deepStrictEqual(JSON.parse(await promises.readFile(first.translationsConfigFile, 'utf8')), expected);
+				reads++;
+				await write(data, options);
+			});
+			return handle;
+		});
+		try {
+			const cached = await resolveMessages(metadata);
+			assert.deepStrictEqual(cached.messages, ['Erste']);
+			assert.strictEqual(reads, 1);
+		} finally {
+			writing.restore();
+		}
 	});
 
 	test('does not reuse or overwrite a legacy commit-only cache', async () => {

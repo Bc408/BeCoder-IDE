@@ -189,24 +189,32 @@
 	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
+	align-self: center;
 	border: 0;
+	border-radius: var(--vscode-cornerRadius-small);
 	padding: 0;
 	background: transparent;
-	width: var(--editor-group-tab-height);
-	height: var(--editor-group-tab-height);
+	width: 24px;
+	height: 24px;
+	margin-left: 0;
 	margin-right: auto;
 	cursor: pointer;
 	color: var(--vscode-tab-inactiveForeground);
 }
 
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab::before {
+	/* Center the add glyph's ink bounds within its 16px font cell. */
+	transform: translate(0.5px, 0.5px);
+}
+
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab:hover {
 	color: var(--vscode-tab-hoverForeground);
-	background-color: var(--vscode-tab-hoverBackground);
+	background-color: var(--vscode-toolbar-hoverBackground);
 }
 
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-bar-new-tab:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: -3px;
+	outline-offset: -1px;
 }
 
 .monaco-workbench .part.editor > .content .editor-group-container > .title > .tabs-and-actions-container.wrapping .tabs-container {

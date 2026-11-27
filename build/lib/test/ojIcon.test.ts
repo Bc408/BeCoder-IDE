@@ -43,6 +43,8 @@ test('the native OJ Connect icon uses the same paper plane geometry as the submi
 			paths: [...document.querySelectorAll('path')].map(element => element.getAttribute('d'))
 		});
 		assert.deepStrictEqual(geometry(native.window.document), geometry(submit.window.document));
+		assert.strictEqual(native.window.document.querySelector('g')?.getAttribute('transform'), 'translate(43.2 38.4) scale(0.85)', 'Native entry points share the centered 85% icon');
+		assert.strictEqual(submit.window.document.querySelector('[transform]'), null, 'The problem-page submission icon retains its original size');
 		assert.strictEqual(native.window.document.querySelectorAll('rect, image, foreignObject').length, 0, 'The resource must keep a transparent background for native icon masks');
 	} finally {
 		native.window.close();

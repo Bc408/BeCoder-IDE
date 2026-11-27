@@ -54,7 +54,9 @@ Source: @fortawesome/free-solid-svg-icons 7.1.0, faPaperPlane.js
 https://www.npmjs.com/package/@fortawesome/free-solid-svg-icons/v/7.1.0
 
 The original icon path and viewBox are embedded in webview/luogu/presentation.tsx
-and resources/oj-connect.svg without geometry changes. The resource is shared by
+and resources/oj-connect.svg with the original path geometry. The native resource
+centers that path at 85% scale; the submission button retains its original size.
+The resource is shared by
 the native OJ Connect activity-bar container and browser problem actions. Button
 size and color follow OJ Connect styling; native masks follow the workbench theme.
 No Font Awesome font or runtime is bundled.

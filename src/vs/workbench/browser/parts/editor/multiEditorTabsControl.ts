@@ -63,6 +63,8 @@ import { applyDragImage } from '../../../../base/browser/ui/dnd/dnd.js';
 import { IsTopRightEditorGroupContext } from '../../../common/contextkeys.js';
 import { nextCharLength } from '../../../../base/common/strings.js';
 import { BrowserViewCommandId } from '../../../../platform/browserView/common/browserView.js';
+import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { getDefaultHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 
 interface IEditorInputLabel {
 	readonly editor: EditorInput;
@@ -303,12 +305,13 @@ export class MultiEditorTabsControl extends EditorTabsControl {
 		} else {
 			// Keep the normal add button outside the indexed tab children so it
 			// cannot take part in tab drag, wrapping or sticky-tab bookkeeping.
+			const newTabLabel = localize('becoder.newHomeTab', 'New Tab');
 			const addTabButton = $('button.tabs-bar-new-tab.codicon.codicon-add', {
 				type: 'button',
-				title: localize('becoder.newHomeTab', 'New Tab'),
-				'aria-label': localize('becoder.newHomeTab', 'New Tab'),
+				'aria-label': newTabLabel,
 			});
 			this.tabsAndActionsContainer.appendChild(addTabButton);
+			this._register(this.instantiationService.invokeFunction(accessor => accessor.get(IHoverService).setupManagedHover(getDefaultHoverDelegate('mouse'), addTabButton, newTabLabel)));
 			this._register(addDisposableListener(addTabButton, EventType.CLICK, event => {
 				EventHelper.stop(event, true);
 				this.openNewTabPage();

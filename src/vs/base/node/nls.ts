@@ -5,6 +5,7 @@
 
 import { join } from '../common/path.js';
 import { promises } from 'fs';
+import { randomUUID } from 'crypto';
 import { mark } from '../common/performance.js';
 import { ILanguagePack, ILanguagePacks, INLSConfiguration } from '../../nls.js';
 import { Promises } from './pfs.js';
@@ -113,6 +114,9 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 		};
 
 		if (await Promises.exists(languagePackMessagesFile)) {
+			// Core messages can be reused after a Portable move, but extension
+			// translations use absolute paths and must reflect this launch.
+			await writeTranslationsConfig(translationsConfigFile, languagePack.translations);
 			touch(commitLanguagePackCachePath).catch(() => { }); // We don't wait for this. No big harm if we can't touch
 			mark('code/didGenerateNls');
 			return result;
@@ -151,7 +155,7 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 
 		await Promise.all([
 			promises.writeFile(languagePackMessagesFile, JSON.stringify(nlsResult), 'utf-8'),
-			promises.writeFile(translationsConfigFile, JSON.stringify(languagePack.translations), 'utf-8')
+			writeTranslationsConfig(translationsConfigFile, languagePack.translations)
 		]);
 
 		mark('code/didGenerateNls');
@@ -162,6 +166,31 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 	}
 
 	return defaultNLSConfiguration(userLocale, osLocale, nlsMetadataPath);
+}
+
+async function writeTranslationsConfig(file: string, translations: ILanguagePack['translations']): Promise<void> {
+	// Other windows can scan extensions during startup. Never expose a
+	// truncated map, and give concurrent launches independent temporary files.
+	const temporary = `${file}.${randomUUID()}.tmp`;
+	const handle = await promises.open(temporary, 'wx');
+	let published = false;
+	try {
+		try {
+			await handle.writeFile(JSON.stringify(translations), 'utf-8');
+		} finally {
+			await handle.close();
+		}
+		await promises.rename(temporary, file);
+		published = true;
+	} finally {
+		if (!published) {
+			await promises.unlink(temporary).catch(error => {
+				if (error.code !== 'ENOENT') {
+					throw error;
+				}
+			});
+		}
+	}
 }
 
 /**
@@ -207,6 +236,7 @@ async function getLanguagePackConfigurations(userDataPath: string, nlsMetadataPa
 				const version = manifest.version ?? 'builtin';
 				const builtInPack: ILanguagePack = {
 					hash: `builtin-zh-hans-${version}`,
+					// allow-any-unicode-next-line
 					label: localization.localizedLanguageName ?? '中文(简体)',
 					extensions: [{ extensionIdentifier: { id: 'ms-ceintl.vscode-language-pack-zh-hans' }, version }],
 					translations

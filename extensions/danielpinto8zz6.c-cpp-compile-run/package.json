@@ -50,8 +50,8 @@
 			]
 		},
 		"keybindings": [
-			{ "key": "f6", "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp" },
-			{ "key": "shift+f6", "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp" }
+			{ "key": "f5", "command": "becoder.runner.run", "when": "editorLangId == c || editorLangId == cpp" },
+			{ "key": "shift+f5", "command": "becoder.runner.runWithInput", "when": "editorLangId == c || editorLangId == cpp" }
 		],
 		"configuration": {
 			"title": "%configuration.title%",

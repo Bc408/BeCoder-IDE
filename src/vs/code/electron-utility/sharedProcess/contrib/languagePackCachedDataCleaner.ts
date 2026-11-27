@@ -1,6 +1,9 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *---------------------------------------------------------------------------------------------
+ *  Modifications Copyright (c) 2026 BeCoder contributors.
+ *  Licensed under the GPL-3.0-or-later license. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { promises } from 'fs';
@@ -8,8 +11,9 @@ import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { IStringDictionary } from '../../../../base/common/collections.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { join } from '../../../../base/common/path.js';
+import { basename, dirname, isAbsolute, join, relative } from '../../../../base/common/path.js';
 import { Promises } from '../../../../base/node/pfs.js';
+import { INLSConfiguration } from '../../../../nls.js';
 import { INativeEnvironmentService } from '../../../../platform/environment/common/environment.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
@@ -72,6 +76,31 @@ export class LanguagePackCachedDataCleaner extends Disposable {
 
 			// Cleanup entries for language packs that aren't installed anymore
 			const cacheDir = join(this.environmentService.userDataPath, 'clp');
+			let activeLanguagePack: string | undefined;
+			let activeMessagesFolder: string | undefined;
+			try {
+				// The runtime can select a bundled pack whose identity differs from
+				// installed-extension metadata. Keep only its exact owned cache root.
+				const nlsConfiguration: INLSConfiguration | null = JSON.parse(process.env['VSCODE_NLS_CONFIG'] ?? 'null');
+				const translationsConfigFile = nlsConfiguration?.languagePack?.translationsConfigFile;
+				if (typeof translationsConfigFile === 'string' && isAbsolute(translationsConfigFile) && basename(translationsConfigFile) === 'tcf.json') {
+					const cacheRoot = dirname(translationsConfigFile);
+					if (relative(cacheDir, dirname(cacheRoot)) === '') {
+						const [cacheDirStat, cacheRootStat] = await Promise.all([promises.lstat(cacheDir), promises.lstat(cacheRoot)]);
+						if (cacheDirStat.isDirectory() && !cacheDirStat.isSymbolicLink() && cacheRootStat.isDirectory() && !cacheRootStat.isSymbolicLink()) {
+							activeLanguagePack = basename(cacheRoot);
+							installed[activeLanguagePack] = true;
+							const messagesFile = nlsConfiguration?.languagePack?.messagesFile;
+							if (typeof messagesFile === 'string' && isAbsolute(messagesFile) && basename(messagesFile) === 'nls.messages.json'
+								&& relative(cacheRoot, dirname(dirname(messagesFile))) === '') {
+								activeMessagesFolder = basename(dirname(messagesFile));
+							}
+						}
+					}
+				}
+			} catch {
+				// Missing or malformed runtime NLS data does not alter normal cleanup.
+			}
 			const cacheDirExists = await Promises.exists(cacheDir);
 			if (!cacheDirExists) {
 				return;
@@ -102,7 +131,7 @@ export class LanguagePackCachedDataCleaner extends Disposable {
 					throw error;
 				}
 				for (const entry of entries) {
-					if (entry === 'tcf.json') {
+					if (entry === 'tcf.json' || packEntry === activeLanguagePack && entry === activeMessagesFolder) {
 						continue;
 					}
 

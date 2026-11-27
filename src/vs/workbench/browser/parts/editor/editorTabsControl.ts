@@ -6,7 +6,7 @@
 import './media/editortabscontrol.css';
 import { localize } from '../../../../nls.js';
 import { DataTransfers } from '../../../../base/browser/dnd.js';
-import { $, Dimension, getActiveWindow, getWindow, isMouseEvent, setVisibility } from '../../../../base/browser/dom.js';
+import { $, Dimension, getActiveWindow, getWindow, getWindowId, isMouseEvent, setVisibility } from '../../../../base/browser/dom.js';
 import { StandardMouseEvent } from '../../../../base/browser/mouseEvent.js';
 import { ActionsOrientation, IActionViewItem, prepareActions } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { IAction, ActionRunner, toAction } from '../../../../base/common/actions.js';
@@ -15,7 +15,8 @@ import { DisposableStore, IDisposable } from '../../../../base/common/lifecycle.
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { createActionViewItem, getFlatActionBarActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
 
-import { IMenuService, MenuId } from '../../../../platform/actions/common/actions.js';
+import { IMenuService, MenuId, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
+import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { IContextKeyService, IContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -356,7 +357,7 @@ export abstract class EditorTabsControl extends Themable implements IEditorTabsC
 		// Toolbar Widget (no overflow, no hidden-item "..." button so layout actions
 		// are always rendered inline after the primary toolbar's own overflow).
 		this.editorLayoutActionsToolbar = this.editorLayoutActionsToolbarDisposables.add(this.instantiationService.createInstance(WorkbenchToolBar, container, {
-			actionViewItemProvider: (action, options) => this.actionViewItemProvider(action, options),
+			actionViewItemProvider: (action, options) => this.actionViewItemProvider(action, options, MenuId.LayoutControlMenu),
 			orientation: ActionsOrientation.HORIZONTAL,
 			ariaLabel: localize('ariaLabelEditorActionsLayout', "Editor layout actions"),
 			getKeyBinding: action => this.getKeybinding(action),
@@ -382,7 +383,15 @@ export abstract class EditorTabsControl extends Themable implements IEditorTabsC
 		}));
 	}
 
-	private actionViewItemProvider(action: IAction, options: IBaseActionViewItemOptions): IActionViewItem | undefined {
+	private actionViewItemProvider(action: IAction, options: IBaseActionViewItemOptions, menuId = this.menuIds?.editorActions ?? MenuId.EditorTitle): IActionViewItem | undefined {
+		const customViewItem = this.instantiationService.invokeFunction(accessor => {
+			const provider = accessor.get(IActionViewItemService).lookUp(menuId, action instanceof SubmenuItemAction ? action.item.submenu.id : action.id);
+			return provider?.(action, options, this.instantiationService, getWindowId(getWindow(this.parent)));
+		});
+		if (customViewItem) {
+			return customViewItem;
+		}
+
 		const activeEditorPane = this.groupView.activeEditorPane;
 
 		// Check Active Editor

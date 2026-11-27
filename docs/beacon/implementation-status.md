@@ -1,10 +1,36 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-27。当前源码在Beacon_Next上接入负责人审定的产品上下文提示词2026-11-27.1，并新增自定义Responses供应商；应用源码版本2.2.0，本轮开发基线为19f715f1。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-27。当前源码在Beacon_Persona上接入负责人审定的人格提示词2026-11-27.2，保留前轮产品上下文及自定义Responses供应商；应用源码版本2.2.0，本轮开发基线为c3820032。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
 
 2026-11-25提示优化[设计](../superpowers/specs/2026-11-25-beacon-prompt-quality-design.md)和[实施计划](../superpowers/plans/2026-11-25-beacon-prompt-quality.md)已获批准，负责人选择Native实施。导师核心精简、逐工具capabilities退出和readBeCoderInfo均已接入；system、工具说明及产品主题正文统一英文，回答跟随用户语言。[能力报告](evaluation/2026-11-25-prompt-quality-report.md)及[完整问答](evaluation/2026-11-25-prompt-quality-samples.md)保改善、退化和失败；整体教学质量未全面通过。
+
+## 2026-11-27 人格提示词接入
+
+负责人审定中文人格及英文翻译，明确授权建立并切换本地Beacon_Persona、建立对应GitHub分支、接入提示词和构建新stage。分支从Beacon_Next@c3820032建立，已设置origin/Beacon_Persona为上游。首次建远端分支遭遇TLS连接错误，原命令重试成功。
+
+prompts.ts以审定英文替换主对话core，保留PERSONA_LOAD标签、18岁天才少女和算法竞赛导师身份、BeCoder工位、傲娇与QQ式闲聊习惯、教学和证据边界及禁止客服腔。英文保留tsundere、slightly condescending toward humans及不主动自称AI但不刻意回避身份的语义；动态宿主说明、JSON装配和core/context来源分层保持。内部提示版本更新为2026-11-27.2，不进入system正文。
+
+本轮不修改工具提示词、schema、权限、三队列、Provider协议或压缩算法，不增加记忆、资产写入或人格开关。应用版本、依赖和历史资料保持。本轮未调用真实模型，未作人格效果、长对话连续性或Setup验收；本次stage须以实际构建结果交付，前轮stage不能替代。
+
+审定人格正文长于前版。现有UTF-8保守估算及输出预留下，声明4K上下文的合成模型连首轮短问候也会在本地报容量不足，零网络请求；8K无工具短问候仍可发送。这是本轮实际容量边界，不代表模型真实token计量结果，不通过缩短审定正文或放宽预算门禁规避。
+
+Beacon独立类型检查、生产bundle、397项完整离线回归及strict lint均退出0，无失败／跳过／取消；客户端类型检查和OI扩展统一编译退出0。首轮完整回归394通过／3失败，分别为两项4K旧容量预期及一项旧导师措辞，核对后更新现有断言并完整重跑；未改容量算法。检查过程另有一次定向名称过滤未命中及控制台编码错误，属于验证编排失败，不作为回归通过证据。标准stage使用npm run gulp vscode-win32-x64-min及300秒外部超时，实际结果由本次交付回复和校验台账记录；本页不预写构建成功，也不以离线检查证明人格表现。
+
+## 2026-11-27 Responses容量误判修复
+
+负责人报告自定义Responses在完成工具读取后提示上下文容量不足，而DeepSeek可用，并授权排查修复。实际自定义模型配置为32768／24576／8192，DeepSeek为约1M上下文，两者容量差异保留；不按模型ID猜容量，不修改个人配置。截图不能单独证明具体内部错误，原失败协议未在当前保留会话中找到；结论来自当前源码与真实SDK的离线复现，不把用户另开DeepSeek对话说成重答覆盖。
+
+已复现并修复两处问题：reasoningEncryptedContent／encrypted_content整段密文曾按普通文本字节触发本地容量，最终请求检查又只识别Chat Completions的messages而漏掉Responses的input。计量现按原生input／instructions／顶层工具建立真实指纹，密文只在计量投影替换为包络，并明确unknownReasoning；实际历史、出站载荷和工具配对完整保留。同步识别input_image／input_file，普通工具JSON及用户正文不适用协议豁免。提示词、权限、队列、容量阈值及同步压缩恢复次数保持。
+
+新增回归先确认旧实现失败，再验证大密文下连续对话及历史重载、正文仍受容量保护、原生序列化后的大工具结果在出站前被阻止、媒体原文保留，以及Responses真实SDK的同步摘要。83项定向回归、403项完整离线回归、Beacon类型／生产bundle／strict lint、客户端类型检查和OI统一编译退出0，无失败／跳过／取消；独立只读复核未发现阻塞问题。另在外部临时bundle中装入原始Provider源码，确认最终出站回归仍会失败，没有改回工作树。未调用真实自定义模型服务；负责人已关闭stage实例，构建时原data目录须移出并原样恢复，stage结果和用户复测以本次实际交付为准。
+
+## 2026-11-27 2.2.0 Setup交付
+
+负责人随后授权从当前源码构建全新2.2.0 Setup，并允许清除stage运行数据。构建前stage目录已不存在，本次重新生成纯净发行目录；未将个人运行数据打包。客户端类型检查、OI扩展统一编译、stage构建、IncludeCompiler=true的完整包校验、Setup构建及管理员隔离安装校验均退出0。Setup校验覆盖载荷与stage逐文件哈希一致、两份Portable隔离、覆盖同意、外来目录和路径保护、原生快捷方式／卸载登记及卸载后的状态恢复。
+
+交付文件为`.build/win32-x64/becoder-setup/BeCoderSetup-x64-2.2.0.exe`，172231084字节，SHA-256为`6f454d620a66f8a7baa396df6479f883875a04dd239744fab6af013400871d1e`。北京时间2026-11-27 19:58完成直接Setup验证。本次未启动产品GUI、调用真实模型或取得人格及修复后自定义服务的实际体验验收；前述工程验证不能替代这些边界。负责人随后授权本地正式提交并推送Beacon_Persona分支，未要求创建Release或上传安装包。
 
 ## 2026-11-27 自定义 Responses 供应商
 
@@ -44,9 +70,9 @@ Beacon认可分层执行事实、代码身份、Notebook身份及即时截断释
 
 | 范围 | 源码事实 |
 | --- | --- |
-| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-27.1 |
+| 九工具 | readCurrentCode、三个记录工具、fetchProblem、inspectFile、readPage、browseWeb及readBeCoderInfo；readMaterial及专用副本链退出；提示版本2026-11-27.2 |
 | 产品知识 | 七固定主题随扩展发布，整篇返回version／topic／content；版本来自运行宿主IProductService，区别于扩展兼容号；三模式／无根可读，不读个人设置或扩大其他权限 |
-| 提示分层 | system为导师原则及首层环境，工具定义交代用途／参数；结果短释义按实际条件随返回提供，新失败投影统一error对象，旧协议原样回放；产品事实按主题读取，不强制调用顺序 |
+| 提示分层 | system为审定导师人格、工作原则及首层环境，工具定义交代用途／参数；结果短释义按实际条件随返回提供，新失败投影统一error对象，旧协议原样回放；产品事实按主题读取，不强制调用顺序 |
 | 现场文档 | 调用时全部可见C/C++整稿和已加载BeCoder Notebook全本内容cells，含dirty／未命名／根外现场；同文档多视图合并，每个C/C++ cell独立codeHash；不读后台、磁盘替代稿或执行字段，不另存快照 |
 | 用户行为上下文就绪 | 独立collectionPending覆盖适配／校验／发布，同根窗口共享；各模式的所有新回答入口在实际受理前复核，文案“正在保存用户行为上下文”；失败按动作通知，发布确认不明不误报未写入；执行退役和后续运行独立 |
 | 新查询与投影 | 三记录支持latest和filePath；编译只回standard／optimization等教学事实，运行毫秒取整且开始时间到秒；完整代码hash在截断前计算；verdict按站点具名行且隐藏工程核验状态 |

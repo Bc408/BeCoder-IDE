@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in this directory's extension root.
  *--------------------------------------------------------------------------------------------*/
 
-export function responsesStream(text = 'answer', call?: { id: string; name: string; input: string }, reasoning: boolean | 'encrypted-only' = false): Response {
+export function responsesStream(text = 'answer', call?: { id: string; name: string; input: string }, reasoning: boolean | 'encrypted-only' = false, options: { encryptedContent?: string; inputTokens?: number } = {}): Response {
 	const events: Record<string, unknown>[] = [{ type: 'response.created', response: { id: 'resp_fixture', created_at: 1, model: 'fixture' } }];
 	if (reasoning) {
 		events.push({ type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_fixture', encrypted_content: null } });
@@ -14,7 +14,7 @@ export function responsesStream(text = 'answer', call?: { id: string; name: stri
 				{ type: 'response.reasoning_summary_part.done', item_id: 'rs_fixture', output_index: 0, summary_index: 0, part: { type: 'summary_text', text: 'inspect the evidence' } }
 			);
 		}
-		events.push({ type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs_fixture', summary: reasoning === true ? [{ type: 'summary_text', text: 'inspect the evidence' }] : [], encrypted_content: 'encrypted-fixture' } });
+		events.push({ type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs_fixture', summary: reasoning === true ? [{ type: 'summary_text', text: 'inspect the evidence' }] : [], encrypted_content: options.encryptedContent ?? 'encrypted-fixture' } });
 	}
 	const outputIndex = reasoning ? 1 : 0;
 	if (call) {
@@ -33,6 +33,6 @@ export function responsesStream(text = 'answer', call?: { id: string; name: stri
 			{ type: 'response.output_item.done', output_index: outputIndex, item: { type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] } }
 		);
 	}
-	events.push({ type: 'response.completed', response: { id: 'resp_fixture', status: 'completed', usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 }, output: [] } });
+	events.push({ type: 'response.completed', response: { id: 'resp_fixture', status: 'completed', usage: { input_tokens: options.inputTokens ?? 20, output_tokens: 4, total_tokens: (options.inputTokens ?? 20) + 4 }, output: [] } });
 	return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
 }

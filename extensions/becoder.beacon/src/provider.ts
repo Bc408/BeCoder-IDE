@@ -361,7 +361,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			let requestMessages = prepareMessages(messages);
 			let usageAnchor: BeaconUsageAnchor | undefined, lastPrepared: PreparedBeaconRequest | undefined;
 			const anchors = new Map<string, BeaconUsageAnchor>(), measuredRequests = new Map<string, PreparedBeaconRequest>();
-			const prepared = (instructions: unknown, messages: readonly ModelMessage[], definitions: readonly { name: string; definition: unknown }[]): PreparedBeaconRequest => ({ source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, phase: requestPhase, limits, instructions, activeTools: definitions, messages, media: beaconMedia(messages), projectionFingerprint: beaconFingerprint(messages), contractFingerprint: beaconFingerprint({ instructions, definitions }), unitFingerprints: messages.map(beaconFingerprint) });
+			const prepared = (instructions: unknown, messages: readonly unknown[], definitions: readonly { name: string; definition: unknown }[]): PreparedBeaconRequest => ({ source: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model }, phase: requestPhase, limits, instructions, activeTools: definitions, messages, media: beaconMedia(messages), projectionFingerprint: beaconFingerprint(messages), contractFingerprint: beaconFingerprint({ instructions, definitions }), unitFingerprints: messages.map(beaconFingerprint) });
 			const hardGate = (request: PreparedBeaconRequest) => {
 				measuredRequests.set(request.contractFingerprint, request);
 				const measured = measureBeaconRequest(request, anchors.get(request.contractFingerprint) ?? usageAnchor);
@@ -370,9 +370,12 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 			};
 			const guardedFetch: typeof fetch = async (url, init) => {
 				if (typeof init?.body === 'string') {
-					const body = JSON.parse(init.body) as { messages?: ModelMessage[]; tools?: { function?: { name?: string } }[] };
+					const body = JSON.parse(init.body) as { messages?: ModelMessage[]; input?: unknown[]; instructions?: string; tools?: { name?: string; function?: { name?: string } }[] };
+					const responses = connection.provider === 'custom';
 					const input = body.messages ?? [];
-					lastPrepared = prepared(input.filter(message => message.role === 'system'), input.filter(message => message.role !== 'system'), (body.tools ?? []).map((definition, index) => ({ name: definition.function?.name ?? String(index), definition })));
+					lastPrepared = responses
+						? prepared(body.instructions, body.input ?? [], (body.tools ?? []).map((definition, index) => ({ name: definition.name ?? String(index), definition })))
+						: prepared(input.filter(message => message.role === 'system'), input.filter(message => message.role !== 'system'), (body.tools ?? []).map((definition, index) => ({ name: definition.function?.name ?? String(index), definition })));
 					hardGate(lastPrepared);
 				}
 				return recovery.fetch(url, init);
@@ -388,7 +391,7 @@ export function createGenerator(readConnection: () => PromiseLike<Connection>, f
 				if (accepted.has(key)) { return; }
 				generation.acceptCompletedTool({ requestId: generation.requestId, turnIndex: generation.turnIndex, logicalStepId: logicalStepId(), toolCallId, toolName, input, output }); accepted.add(key);
 			};
-			const model = wrapLanguageModel({ model: adapters[connection.provider].createModel(connection, guardedFetch) as Exclude<LanguageModel, string>, middleware: { transformParams: async ({ params }) => { hardGate(prepared(undefined, params.prompt as unknown as ModelMessage[], (params.tools ?? []).map((definition, index) => ({ name: 'name' in definition ? definition.name : String(index), definition })))); return params; } } });
+			const model = wrapLanguageModel({ model: adapters[connection.provider].createModel(connection, guardedFetch) as Exclude<LanguageModel, string>, middleware: { transformParams: async ({ params }) => { hardGate(prepared(undefined, params.prompt, (params.tools ?? []).map((definition, index) => ({ name: 'name' in definition ? definition.name : String(index), definition })))); return params; } } });
 			const declarations = Object.entries(tools).map(([name, definition]) => ({ name, definition: { description: definition.description, inputSchema: definition.inputSchema } }));
 			const snapshot = () => ({ requestId: generation?.requestId ?? 'temporary', sequence: protocol.sequence, turn: { provider: connection.provider, baseURL: connection.baseURL, model: connection.model, messages: protocol.closedMessages, stepEnds: protocol.stepEnds }, stepEnds: protocol.stepEnds });
 			const prepareAnswer = async (current: readonly ModelMessage[], force = false): Promise<ModelMessage[]> => {

@@ -16,6 +16,7 @@ import { fileModelOutput } from '../src/session';
 import type { Connection } from '../src/connection';
 import { BeaconContextClient } from '../src/context';
 import { ContextTools, type ContextAccess } from '../src/contextTools';
+import { responsesStream } from './responsesFixture';
 
 const response = (text: string) => new Response('data: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: { content: text }, finish_reason: null }] }) + '\n\ndata: ' + JSON.stringify({ id: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 
@@ -147,7 +148,7 @@ for (const needsCompaction of [false, true]) {
 	});
 }
 
-for (const provider of ['deepseek', 'bailian'] as const) {
+for (const provider of ['deepseek', 'bailian', 'custom'] as const) {
 	test(`compaction respects unsupported model tools in the final SDK input (${provider})`, async () => {
 		const history = new ChatHistory(undefined, async data => data, () => { }, String);
 		const connection = { provider, baseURL: 'https://fixture.example', model: 'one', apiKey: 'synthetic', parameters: {}, capabilities: { ...defaultCapabilities, tools: false } };
@@ -155,9 +156,12 @@ for (const provider of ['deepseek', 'bailian'] as const) {
 		try {
 			for (let index = 0; index < 4; index++) { await history.session.send('Q' + index + 'x'.repeat(2500), async function* () { yield { type: 'text', text: 'A' + index + 'y'.repeat(2500) }; }); }
 			await history.session.send('current question', createGenerator(async () => connection, async (_url, init) => {
-				const body = JSON.parse(String(init?.body)), summary = body.messages[0].content.startsWith('Summarize');
+				const body = JSON.parse(String(init?.body));
+				const messages = provider === 'custom' ? body.input : body.messages;
+				const summary = JSON.stringify(messages[0].content).includes('Summarize the earlier Beacon conversation');
 				requests.push({ summary, tools: body.tools ?? [] });
-				return response(summary ? JSON.stringify({ summary: 'Earlier conceptual questions were explained.' }) : 'new answer');
+				const text = summary ? JSON.stringify({ summary: 'Earlier conceptual questions were explained.' }) : 'new answer';
+				return provider === 'custom' ? responsesStream(text) : response(text);
 			}, 'none', [], false, fetch, {}, {
 				describe: async () => '', execute: async () => { throw new Error('No tool call is expected'); },
 				compactionView: () => ({ names: ['readRunRecord'], describe: async () => '', execute: async () => { throw new Error('No compaction tool call is expected'); } })

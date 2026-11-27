@@ -26,7 +26,7 @@ Beacon跟随学生当前学习活动，取得必要代码、题意和真实结�
 | 工具／Provider | 语义接口、参数校验、真实结果、当前回答内同版读取、模型装配与预算 |
 | 产品知识／版本桥 | 七主题随包英文产品事实；固定topic读取；运行宿主IProductService.version提供发行号，不访问用户配置或工作区服务 |
 | 会话／协议 | 原消息、工具交换、有效分支、材料、摘要和恢复；重放不重新执行 |
-| 系统提示 | 精简英文导师原则：教学深度、按需取材、证据与未知、自然讲解及权限；回答跟随用户语言 |
+| 系统提示 | 负责人审定的英文人格与导师原则：BeCoder工位、傲娇口吻、自然闲聊、教学深度、按需取材、证据及权限；回答跟随用户语言 |
 
 ## 3. 材料身份与生命周期
 
@@ -79,7 +79,7 @@ Responses以store:false发送本地有效历史，不使用previous_response_id�
 
 readMaterial及专用页面正文／目录／采集回读链已退出；readPage只传id，宿主取得当前版本并校验单次读取，结果沿普通历史。旧私有副本不消费、不升级迁移，附件和摘要独立保留。
 
-system承载导师原则和本回答开始时的宿主事实：时间、真实模式、所选Beacon根及采集资格、过滤后的页面元数据。采集资格不授模型读权；无可靠scope时省略未知字段。contextToolContract.ts与Provider维护英文工具用途和普通参数；toolResultNotes按实际来源／字段生成相关外层短释义，toolModelOutput统一新模型投影。当前工作树提示版本2026-11-27.1，版本保内部身份，不进入system正文；七主题结构保持，按负责人审定补充beacon／runner／cph／notebook的产品事实。Notebook现场与语义文件内容同附配对短释义。各入口职责见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)和[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)，不强制调用顺序或先读概览。
+system承载审定导师人格、工作原则和本回答开始时的宿主事实：时间、真实模式、所选Beacon根及采集资格、过滤后的页面元数据。采集资格不授模型读权；无可靠scope时省略未知字段。contextToolContract.ts与Provider维护英文工具用途和普通参数；toolResultNotes按实际来源／字段生成相关外层短释义，toolModelOutput统一新模型投影。当前工作树提示版本2026-11-27.2，版本保内部身份，不进入system正文；人格只替换主对话core，宿主说明和装配保持。七主题结构保持，按负责人审定补充beacon／runner／cph／notebook的产品事实。Notebook现场与语义文件内容同附配对短释义。各入口职责见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)、[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)及[人格接入状态](implementation-status.md#2026-11-27-人格提示词接入)，不强制调用顺序或先读概览。
 
 新工具的即时结果、完成事实、封口协议及下一请求共用投影；SDK参数拒绝和执行异常也返回安全error:{code,message}，不把原始异常送给模型。UI沿原code，原FileOutput.error仍为字符串；旧协议按原内容回放，不补生成notes或重写错误。同ID的历史交换不被新step正规化覆盖。停止与结果完成竞争时保实际完成事实，取消中断不造完成失败。
 

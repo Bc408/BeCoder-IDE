@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { measureBeaconRequest, type PreparedBeaconRequest } from '../src/contextBudget';
+import { beaconMedia, beaconTextRepresentation, measureBeaconRequest, type PreparedBeaconRequest } from '../src/contextBudget';
 import { createGenerator } from '../src/provider';
 import { defaultCapabilities, resolveCapabilities } from '../src/models';
 import { ChatSession } from '../src/session';
@@ -15,7 +15,7 @@ import type { Connection } from '../src/connection';
 const prepared = (): PreparedBeaconRequest => ({ source: { provider: 'fixture', baseURL: 'https://fixture.example', model: 'one' }, phase: 'answer', limits: { contextWindow: 32768, maxInputTokens: 24576, maxOutputTokens: 8192 }, instructions: 'mentor', activeTools: [], messages: [{ role: 'user', content: '中文与 code {}' }], media: [], projectionFingerprint: 'p', contractFingerprint: 'c', unitFingerprints: ['u'] });
 for (const contextWindow of [4096, 8192]) {
 	for (const explicitOutputLimit of [false, true]) {
-		test(`request preparation: default output leaves input capacity (${contextWindow}, ${explicitOutputLimit ? 'declared output limit' : 'missing output limit'})`, async () => {
+		test(`request preparation: default output respects complete persona capacity (${contextWindow}, ${explicitOutputLimit ? 'declared output limit' : 'missing output limit'})`, async () => {
 			const capabilities = resolveCapabilities('ollama', 'http://localhost:11434/v1', 'fixture', { ...defaultCapabilities, source: 'service', tools: false, contextWindow, ...(explicitOutputLimit ? { maxOutputTokens: contextWindow } : {}) });
 			const connection: Connection = { provider: 'ollama', baseURL: 'http://localhost:11434/v1', model: 'fixture', parameters: {}, capabilities };
 			const before = structuredClone(connection);
@@ -26,10 +26,16 @@ for (const contextWindow of [4096, 8192]) {
 			};
 			const session = new ChatSession(() => { }, String);
 			await session.send('Hi', createGenerator(async () => connection, request, 'none', [], false), connection);
-			assert.equal(session.snapshot.error, '');
-			assert.equal(session.snapshot.messages.at(-1)?.text, 'Hello');
-			assert.equal(outputs.length, 1);
-			assert.ok(outputs[0] > 0 && outputs[0] < contextWindow);
+			if (contextWindow === 4096) {
+				assert.match(session.snapshot.error, /beacon-context-capacity/, 'The approved persona exceeds the conservative 4K input allowance');
+				assert.equal(session.snapshot.messages.at(-1)?.text, '');
+				assert.equal(outputs.length, 0, 'An oversized initial prompt must fail before transport');
+			} else {
+				assert.equal(session.snapshot.error, '');
+				assert.equal(session.snapshot.messages.at(-1)?.text, 'Hello');
+				assert.equal(outputs.length, 1);
+				assert.ok(outputs[0] > 0 && outputs[0] < contextWindow);
+			}
 			assert.deepEqual(connection, before, 'Request defaults must not rewrite discovered capacities');
 			if (explicitOutputLimit) { assert.equal(connection.capabilities?.maxOutputTokens, contextWindow); }
 
@@ -37,14 +43,14 @@ for (const contextWindow of [4096, 8192]) {
 			const explicit = new ChatSession(() => { }, String);
 			await explicit.send('Hi', createGenerator(async () => overridden, request, 'none', [], false), overridden);
 			assert.ok(explicit.snapshot.error, 'An explicit output reservation must still obey the hard budget');
-			assert.equal(outputs.length, 1);
+			assert.equal(outputs.length, contextWindow === 4096 ? 0 : 1);
 
 			if (contextWindow === 4096 && !explicitOutputLimit) {
 				const withTools = { ...connection, capabilities: { ...capabilities, tools: true } };
 				const full = new ChatSession(() => { }, String);
 				await full.send('Hi', createGenerator(async () => withTools, request, 'workspace', [], true, request, {}, { describe: async () => '', execute: async () => { assert.fail('Oversized schemas must fail before tool execution'); } }), withTools);
 				assert.ok(full.snapshot.error, 'A 4K window must still reject its complete oversized tool contract');
-				assert.equal(outputs.length, 1);
+				assert.equal(outputs.length, 0);
 			}
 		});
 	}
@@ -72,6 +78,29 @@ test('full tool definitions are counted and unknown image coverage does not disc
 	const result = measureBeaconRequest({ ...input, activeTools: [{ name: 'inspect', definition: { description: 'x'.repeat(10000), schema: { type: 'object' } } }], messages: [{ role: 'user', content: [image] }], media: [{ key: 'image-1', kind: 'image' }] });
 	assert.ok(result.estimatedInput > before.estimatedInput); assert.deepEqual(result.unknownMedia, ['image-1']); assert.equal(result.coverage, 'unknown-media');
 	assert.equal(image.image, 'https://fixture.example/image.png');
+});
+
+test('encrypted reasoning is unknown input rather than ciphertext-sized text, while learner JSON remains counted', () => {
+	const encrypted = 'opaque-protocol-payload'.repeat(3000);
+	const messages: PreparedBeaconRequest['messages'] = [{ role: 'assistant', content: [{ type: 'reasoning', text: 'Inspect the current code.', providerOptions: { openai: { itemId: 'rs_budget', reasoningEncryptedContent: encrypted } } }] }];
+	const before = structuredClone(messages);
+	const measured = measureBeaconRequest({ ...prepared(), messages });
+	assert.ok(measured.estimatedInput < 2000, 'Ciphertext bytes are not a text-token estimate');
+	assert.deepEqual(Reflect.get(measured, 'unknownReasoning'), ['messages.0.content.0']);
+	assert.equal(measured.coverage, 'unknown-reasoning');
+	assert.deepEqual(messages, before, 'Measurement must not alter the replay payload');
+	const learnerJSON: PreparedBeaconRequest['messages'] = [{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'ordinary', toolName: 'readCurrentCode', output: { type: 'json', value: { type: 'reasoning', encrypted_content: encrypted } } }] }];
+	const ordinary = measureBeaconRequest({ ...prepared(), messages: learnerJSON });
+	assert.ok(ordinary.estimatedInput > encrypted.length, 'A tool JSON field cannot disguise ordinary input as protocol metadata');
+	assert.deepEqual(Reflect.get(ordinary, 'unknownReasoning'), []);
+});
+
+test('native Responses opaque items retain their envelope without counting encoded payload as text', () => {
+	const raw = [{ type: 'reasoning', id: 'rs_wire', encrypted_content: 'opaque'.repeat(10000), summary: [{ type: 'summary_text', text: 'Keep this summary.' }] }, { role: 'user', content: [{ type: 'input_image', image_url: 'data:image/png;base64,' + 'A'.repeat(80000) }, { type: 'input_file', filename: 'scan.pdf', file_data: 'data:application/pdf;base64,' + 'B'.repeat(80000) }] }];
+	const before = structuredClone(raw);
+	assert.deepEqual(beaconTextRepresentation(raw), [{ type: 'reasoning', id: 'rs_wire', encrypted_content: '[encrypted reasoning payload]', summary: [{ type: 'summary_text', text: 'Keep this summary.' }] }, { role: 'user', content: [{ type: 'input_image', image_url: '[media payload]' }, { type: 'input_file', filename: 'scan.pdf', file_data: '[media payload]' }] }]);
+	assert.deepEqual(beaconMedia(raw), [{ key: 'input.1.content.0', kind: 'input_image' }, { key: 'input.1.content.1', kind: 'input_file' }]);
+	assert.deepEqual(raw, before);
 });
 test('real request output budget matches resolved defaults for both model adapters', async () => {
 	for (const provider of ['deepseek', 'bailian'] as const) {

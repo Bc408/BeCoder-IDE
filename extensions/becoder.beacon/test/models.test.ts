@@ -104,20 +104,70 @@ suite('Beacon custom Responses provider', () => {
 		assert.equal(restored.snapshot.error, ''); assert.equal(restored.snapshot.messages.at(-1)?.text, 'Earlier observation retained.');
 		assert.equal(executions, 1); assert.equal(calls, 3); await Promise.all([history.dispose(), restored.dispose()]);
 	});
+	for (const restart of [false, true]) {
+		test(`custom Responses continues after tools with a large opaque reasoning payload (restart=${restart})`, async () => {
+			const encryptedContent = 'opaque-encrypted-reasoning-'.repeat(2400);
+			const connection = custom({ capabilities: { ...defaultCapabilities, contextWindow: 32768, maxInputTokens: 24576, maxOutputTokens: 8192 } });
+			let saved: HistoryData | undefined, calls = 0, reads = 0;
+			const request: typeof fetch = async (_url, init) => {
+				const body = JSON.parse(String(init?.body)); calls++;
+				assert.equal(body.store, false);
+				if (calls === 1) { return responsesStream('', { id: 'opaque_read', name: 'readCurrentCode', input: '{}' }, true, { encryptedContent }); }
+				assert.ok(body.input.some((item: { type: string; encrypted_content?: string }) => item.type === 'reasoning' && item.encrypted_content === encryptedContent));
+				assert.ok(body.input.some((item: { type: string; call_id?: string; output?: string }) => item.type === 'function_call_output' && item.call_id === 'opaque_read' && item.output?.includes('int main() {}')));
+				return responsesStream('The captured code is available.');
+			};
+			const context = { names: ['readCurrentCode'] as const, describe: async () => '', execute: async () => { reads++; return { files: [{ kind: 'code', fileName: 'main.cpp', filePath: 'C:/practice/main.cpp', isDirty: false, code: 'int main() {}' }] }; } };
+			const generate = createGenerator(async () => connection, request, 'none', [], false, request, {}, context);
+			const history = new ChatHistory(undefined, async value => { saved = structuredClone(value); return value; }, () => {}, String);
+			let restored: ChatHistory | undefined;
+			try {
+				await history.session.send('Explain the current code.', generate, connection);
+				assert.equal(history.snapshot.error, ''); assert.equal(calls, 2); assert.equal(reads, 1);
+				await history.flush();
+				assert.ok(JSON.stringify(saved).includes(encryptedContent));
+				if (restart) { restored = new ChatHistory(saved, async value => value, () => {}, String); }
+				const next = restored ?? history;
+				await next.session.send('Continue from that observation.', generate, connection);
+				assert.equal(next.snapshot.error, ''); assert.equal(calls, 3); assert.equal(reads, 1);
+				assert.equal(next.snapshot.messages.at(-1)?.text, 'The captured code is available.');
+			} finally { await history.dispose(); await restored?.dispose(); }
+		});
+	}
+	test('custom Responses final capacity check counts escaped native function outputs before transport', async () => {
+		const connection = custom({ parameters: { maxOutputTokens: 1024 }, capabilities: { ...defaultCapabilities, contextWindow: 16384, maxInputTokens: 16384, maxOutputTokens: 1024 } });
+		let calls = 0, reads = 0;
+		const oversized: number[] = [];
+		const request: typeof fetch = async (_url, init) => {
+			const body = JSON.parse(String(init?.body)); calls++;
+			const inputBytes = Buffer.byteLength(JSON.stringify({ instructions: body.instructions, input: body.input, tools: body.tools }), 'utf8');
+			if (inputBytes > 15360) { oversized.push(inputBytes); }
+			return calls === 1 ? responsesStream('', { id: 'escaped_read', name: 'readCurrentCode', input: '{}' }, false, { inputTokens: 6000 }) : responsesStream('answer');
+		};
+		const history = new ChatHistory(undefined, async value => value, () => {}, String);
+		try {
+			await history.session.send('Read the escaped source.', createGenerator(async () => connection, request, 'none', [], false, request, {}, { names: ['readCurrentCode'], describe: async () => '', execute: async () => { reads++; return { files: [{ code: '\\'.repeat(3200) }] }; } }), connection);
+			assert.deepEqual(oversized, [], 'The wire representation must be checked before it reaches fetch');
+			assert.equal(reads, 1);
+			assert.ok(JSON.stringify(history.snapshot.messages.at(-1)?.protocol).includes('escaped_read'));
+			assert.ok(history.snapshot.error, 'The latest complete exchange cannot fit and must remain a bounded failure');
+		} finally { await history.dispose(); }
+	});
 	test('custom Responses authentication failures are not retried', async () => {
 		let calls = 0;
 		await assert.rejects(collect(createGenerator(async () => custom(), async () => { calls++; return Response.json({ error: { code: 'invalid_api_key', message: 'fixture auth rejection' } }, { status: 401 }); })));
 		assert.equal(calls, 1);
 	});
 	test('custom Responses carries image input through the native protocol', async () => {
+		const image = 'data:image/png;base64,' + 'A'.repeat(80000);
 		const generate = createGenerator(async () => custom(), async (_url, init) => {
 			const body = JSON.parse(String(init?.body));
 			const input = body.input.find((item: { role: string }) => item.role === 'user');
-			assert.ok(input.content.some((part: { type: string; image_url: string }) => part.type === 'input_image' && part.image_url.startsWith('data:image/png;base64,')));
+			assert.ok(input.content.some((part: { type: string; image_url: string }) => part.type === 'input_image' && part.image_url === image));
 			return responsesStream('image received');
 		});
 		const parts: Delta[] = [];
-		for await (const part of generate([{ role: 'user', content: [{ type: 'text', text: 'Explain this image' }, { type: 'image', image: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }] }], new AbortController().signal, async input => ({ ok: false, path: input.path }))) { parts.push(part); }
+		for await (const part of generate([{ role: 'user', content: [{ type: 'text', text: 'Explain this image' }, { type: 'image', image, mediaType: 'image/png' }] }], new AbortController().signal, async input => ({ ok: false, path: input.path }))) { parts.push(part); }
 		assert.equal(parts.filter(part => part.type === 'text').map(part => part.text).join(''), 'image received');
 	});
 	test('custom Responses cancellation does not start another request', async () => {

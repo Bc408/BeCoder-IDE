@@ -16,7 +16,7 @@ browseWeb({ operation: 'search'|'fetch', query?: string, url?: string })
 readBeCoderInfo({ topic?: 'overview'|'problems'|'runner'|'cph'|'notebook'|'oj-connect'|'beacon' })
 ```
 
-成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。模型结果按实际条件增加外层notes，不写入record或业务队列；Notebook现场与语义文件内容同附input向上关联最近C/C++格、跳过Markdown的短释义。失败为安全error:{code,message}，不以空正文冒充失败。id与latest／filePath互斥。英文用途／参数在contextToolContract.ts及Provider，当前提示版本2026-11-27.1；位置与中英文语义见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)和[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)，用途不规定调用顺序。
+成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。模型结果按实际条件增加外层notes，不写入record或业务队列；Notebook现场与语义文件内容同附input向上关联最近C/C++格、跳过Markdown的短释义。失败为安全error:{code,message}，不以空正文冒充失败。id与latest／filePath互斥。英文用途／参数在contextToolContract.ts及Provider，当前提示版本2026-11-27.2（本轮仅替换主对话人格core）；工具位置与中英文语义见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)和[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)，用途不规定调用顺序。
 
 notes解释当前实际返回字段：近期范围、执行与check、输出流、新旧截断、hash及Notebook位置时点。永久未保存片段不提供全文续读；文件／页面只在真实nextOffset存在时提示后续位置，PDF保同页pageNumber。网页真正空sources保持成功，零项被预算拒收为budget；部分来源被省略时保已有内容并说明集合缺失。
 

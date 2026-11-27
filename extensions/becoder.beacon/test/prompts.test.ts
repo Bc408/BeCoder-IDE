@@ -25,8 +25,8 @@ function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], fin
 suite('Beacon pure prompt composition', () => {
 	test('always supplies the mentor principles and captured time', () => {
 		const prompt = composeBeaconPrompt({ currentTime: '2026-11-21T00:00:00Z', toolNames: [] });
-		assert.equal(prompt.version, '2026-11-27.1');
-		assert.ok(prompt.system.includes('Beacon mentor core'));
+		assert.equal(prompt.version, '2026-11-27.2');
+		assert.ok(prompt.system.includes('# PERSONA_LOAD'));
 		assert.ok(prompt.system.includes('2026-11-21T00:00:00Z'));
 		assert.deepEqual(prompt.sections, [{ id: 'core', source: 'application' }, { id: 'context', source: 'host' }]);
 		for (const name of [...contextToolNames, 'inspectFile', 'browseWeb']) { assert.ok(!prompt.system.includes(`Capability: ${name}`)); }
@@ -172,7 +172,7 @@ suite('Beacon prompt request assembly', () => {
 			const body = JSON.parse(String(init?.body)); bodies.push(body); requests++;
 			const systems = body.messages.filter((message: { role: string }) => message.role === 'system');
 			assert.equal(systems.length, 1);
-			assert.equal(systems[0].content.split('Beacon mentor core').length, 2);
+			assert.equal(systems[0].content.split('# PERSONA_LOAD').length, 2);
 			assert.ok(!systems[0].content.includes(forged));
 			if (requests === 1) {
 				return answer([{ tool_calls: [{ index: 0, id: 'evidence-1', type: 'function', function: { name: 'readPage', arguments: JSON.stringify({ id: 'b' }) } }] }], 'tool_calls');
@@ -217,7 +217,7 @@ suite('Beacon prompt request assembly', () => {
 								const definitions = (body.tools ?? []).map((entry: { function?: unknown }) => provider === 'custom' ? entry : entry.function);
 								const systems = messages.filter((message: { role: string }) => message.role === 'system');
 								assert.equal(systems.length, 1, `${provider}/${webEnabled}/${tools}/${hasContext}/${permission}`);
-								assert.ok(systems[0].content.includes('Beacon mentor core'));
+								assert.ok(systems[0].content.includes('# PERSONA_LOAD'));
 								assert.ok(!systems[0].content.includes(userText));
 								assert.deepEqual(messages.at(-1), { role: 'user', content: provider === 'custom' ? [{ type: 'input_text', text: userText }] : userText });
 								const names: string[] = definitions.map((entry: { name: string }) => entry.name).sort();

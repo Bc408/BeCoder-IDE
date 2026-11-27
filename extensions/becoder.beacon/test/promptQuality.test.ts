@@ -63,7 +63,7 @@ test('tool_images_keep_each_original_call_on_followup', async () => {
 test('registered_tools_do_not_duplicate_system_guidance', () => {
 	const withTools = composeBeaconPrompt({ currentTime: 'fixed', toolNames: ['readCurrentCode', 'readBeCoderInfo'] });
 	const without = composeBeaconPrompt({ currentTime: 'fixed', toolNames: [] });
-	assert.equal(withTools.version, '2026-11-27.1');
+	assert.equal(withTools.version, '2026-11-27.2');
 	assert.equal(withTools.system, without.system);
 	assert.ok(!withTools.system.includes('Capability:'));
 	assert.ok(!withTools.sections.some(section => String(section.id) === 'capabilities'));
@@ -146,7 +146,7 @@ test('completed_readMaterial_history_replays_without_registration_or_private_mat
 test('no_tools_keeps_mentor_core', async () => {
 	const generator = createGenerator(async () => ({ provider: 'deepseek', baseURL: 'https://fixture.invalid', apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat', vision: false, tools: false, reasoning: false, source: 'service' } }), async (_url, init) => {
 		const body = JSON.parse(String(init?.body)); assert.equal(body.tools, undefined);
-		assert.ok(body.messages[0].content.includes('algorithm and programming tutor'));
+		assert.ok(body.messages[0].content.includes('competitive programming tutor'));
 		assert.ok(!body.messages[0].content.includes('CPH'));
 		return stream({ content: '概念解释' });
 	});

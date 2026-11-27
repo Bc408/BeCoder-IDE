@@ -4,6 +4,8 @@ BeCoder 内置的算法与编程学习助手。点击编辑器右上角 Beacon �
 
 本说明对应2026-11-27的当前源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
 
+当前接入负责人审定的18岁天才少女与算法竞赛导师人格：将BeCoder作为工位，傲娇、闲聊随性，教学直接简洁。system使用英文，回答跟随用户语言；人格效果待实际体验，不增加工具或操作权限。
+
 ## 模型连接与设置
 
 支持 DeepSeek、百炼、Moonshot、Ollama 和“自定义”。每家只有一组连接和密钥配置，同一模型 ID 只有一份配置；不同服务商的地址、密钥、开关和同名模型相互独立。切换设置页供应商只改变正在查看的配置，不改变聊天模型；有未完成地址草稿、弹窗、发现或测试时不能切换。
@@ -102,15 +104,21 @@ PDF 使用已加载 PDF.js 文档按物理页提取文字；扫描页可能为�
 
 回答失败保留实际完成的工具调用／结果；失败正文不投影给后续模型。停止保留已接收文字及兼容思考，拒绝迟到正文；不补造未完成工具结果。切换供应商、端点或模型后过滤私有思考字段，业务JSON保留。
 
+自定义Responses按原生input、instructions和工具定义检查最终请求。加密推理回放保留完整载荷，计量仅保协议包络并标明未知，不按密文字节当作文本token；原生图片／文件同样保持媒体身份。普通正文和工具结果仍受容量限制，不自动提高模型容量或丢弃材料。
+
 ## 开发与验证
 
 仓库根执行 `npm run compile-oi-extensions`。本目录可执行 `npm run typecheck`、`npm run build`、`npm test`；正式检查按 [AGENTS.md](../../AGENTS.md)预检。模拟 SSE/宿主测试不证明真实账号连通、模型效果或桌面验收；生产渲染也不代替负责人验收。第三方来源见 [UPSTREAM.md](UPSTREAM.md)。
 
 ## English
 
-Beacon is BeCoder's programming tutor. Open it from the upper-right editor button or **Beacon: Toggle Beacon Sidebar**; **Beacon: Open Settings** opens its separate settings editor. DeepSeek, Bailian, Moonshot, Ollama and Custom use isolated provider records, one connection/key configuration per provider, temporary model discovery with explicit confirmation, provider-level enable switches and user-selected chat models. Custom uses native OpenAI Responses with an explicit HTTP/HTTPS API base URL, optional credentials, manual model IDs or model discovery, and service-default reasoning. Empty custom credentials never fall back to environment keys. Local Ollama does not require a key. Saved keys remain in SecretStorage; explicit reveal is temporary. Tests send small text requests to all added models and may consume provider credits.
+Beacon is BeCoder's programming tutor. Its owner-approved persona is an 18-year-old genius girl and competitive programming tutor who treats BeCoder as her workstation: tsundere, relaxed in casual conversation, and direct and concise when teaching. The system prompt is English; replies follow the user's language. Persona quality awaits actual experience and grants no additional tools or operational permissions.
+
+Open it from the upper-right editor button or **Beacon: Toggle Beacon Sidebar**; **Beacon: Open Settings** opens its separate settings editor. DeepSeek, Bailian, Moonshot, Ollama and Custom use isolated provider records, one connection/key configuration per provider, temporary model discovery with explicit confirmation, provider-level enable switches and user-selected chat models. Custom uses native OpenAI Responses with an explicit HTTP/HTTPS API base URL, optional credentials, manual model IDs or model discovery, and service-default reasoning. Empty custom credentials never fall back to environment keys. Local Ollama does not require a key. Saved keys remain in SecretStorage; explicit reveal is temporary. Tests send small text requests to all added models and may consume provider credits.
 
 Model capabilities are boolean and default to supported unless explicitly denied; missing capacities use editable defaults of 32768 context, 24576 input and 8192 output tokens. These defaults do not verify a model's actual abilities. Confirmation replaces membership/capabilities, clears manual capability corrections and retains same-ID names/generation settings. Invalid retained parameters block the next request; active replies keep their original configuration snapshot.
+
+Custom Responses capacity checks include the native input, instructions and tool definitions. Encrypted reasoning is replayed intact; measurement retains its envelope and marks its token contribution as unknown rather than treating ciphertext bytes as text tokens. Native image and file payloads retain their media identity. Ordinary text and tool results remain subject to capacity checks; model capacities are not raised automatically and material is not silently discarded.
 
 Each window selects an independent Beacon workspace. Blackout keeps temporary chat in memory and can use supplied material, authorized pages, loaded conversation and fetchProblem; persistent-source reads are unavailable. All modes, including without a root, can read complete visible C/C++ documents and BeCoder notebooks, including unsaved, untitled and root-external content. Background tabs and execution fields are excluded. Spot confines ordinary file reads to the selected root; Flood broadens allowed file locations while preserving credential and conversation restrictions. There is no model asset writer. fetchProblem is independent of the search switch; browseWeb follows it. Mode changes preserve the composer and create independent inherited snapshots on the first accepted cross-category send. Execution and required cleanup retain their sending gate; independent collectionPending blocks every new request while required activity facts are prepared and published, with “Saving user activity context” (正在保存用户行为上下文). This saving gate applies in every mode and is shared by windows on the same healthy root. It does not delay execution cleanup or the next user run. A save failure produces at most one notification per action in the originating window and ends the wait; drafts remain, with no queued send, replay or automatic collection retry. Uncertain publication is reported as unconfirmed. Waiting for a remote judgment alone adds no saving gate. Open-page access never grants backing-file or hidden-record access.
 

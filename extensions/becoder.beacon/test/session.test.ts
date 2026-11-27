@@ -345,7 +345,7 @@ suite('Beacon window session', () => {
 			assert.equal(body.model, 'deepseek-chat');
 			assert.deepStrictEqual(body.messages.filter((message: { role: string }) => message.role !== 'system'), [{ role: 'user', content: 'hello' }]);
 			assert.equal(body.messages.filter((message: { role: string }) => message.role === 'system').length, 1);
-			assert.ok(body.messages[0].content.includes('Beacon mentor core'));
+			assert.ok(body.messages[0].content.includes('# PERSONA_LOAD'));
 			assert.deepStrictEqual(body.tools.map((entry: { function: { name: string } }) => entry.function.name), ['inspectFile']);
 			assert.equal(body.temperature, 0.7);
 			assert.equal(body.top_p, 0.9);

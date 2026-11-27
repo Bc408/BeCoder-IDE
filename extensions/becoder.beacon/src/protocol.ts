@@ -71,11 +71,15 @@ export function replayProtocol(turn: ProtocolTurn, source?: { provider: string; 
 		const paired: ModelMessage[] = [];
 		let calls: AssistantContent = [];
 		for (const message of messages) {
-			if (message.role === 'assistant' && Array.isArray(message.content)) { calls.push(...message.content.filter(part => part.type === 'tool-call')); }
+			if (message.role === 'assistant' && Array.isArray(message.content)) {
+				calls.push(...message.content.filter(part => part.type === 'tool-call' || part.type === 'reasoning' && typeof part.providerOptions?.openai?.reasoningEncryptedContent === 'string'));
+			}
 			if (message.role !== 'tool') { continue; }
 			const results = message.content.filter((result): result is ToolResult => result.type === 'tool-result' && calls.some(call => call.type === 'tool-call' && call.toolCallId === result.toolCallId && call.toolName === result.toolName));
 			const complete = calls.filter(call => call.type === 'tool-call' && results.some(result => result.toolCallId === call.toolCallId));
-			if (complete.length) { paired.push({ role: 'assistant', content: complete }, { ...message, content: results }); }
+			// Stateless Responses needs the encrypted reasoning belonging to the
+			// completed tool step. Failed prose and unpaired later thoughts stay out.
+			if (complete.length) { paired.push({ role: 'assistant', content: calls.filter(part => part.type === 'reasoning' || complete.includes(part)) }, { ...message, content: results }); }
 			calls = [];
 		}
 		messages = paired;

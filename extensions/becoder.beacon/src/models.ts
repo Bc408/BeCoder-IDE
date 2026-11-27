@@ -100,6 +100,12 @@ export class ModelCapabilityError extends Error {
 }
 
 export function reasoningOptions(provider: ProviderId, _model: string, capabilities: ModelCapabilities, settings: ModelSettings): ProviderMetadata {
+	if (provider === 'custom') {
+		// The custom endpoint owns its reasoning defaults. Avoid SDK name-based
+		// reasoning assumptions that would silently discard explicit sampling.
+		// Encrypted reasoning is replayed with local history, never remote IDs.
+		return { openai: { store: false, forceReasoning: false, include: ['reasoning.encrypted_content'] } };
+	}
 	if (settings.thinking === 'enabled' && !capabilities.reasoning) { throw new ModelCapabilityError('thinking'); }
 	if (!capabilities.reasoning) {
 		if (provider === 'bailian') { return { bailian: { enable_thinking: false } }; }

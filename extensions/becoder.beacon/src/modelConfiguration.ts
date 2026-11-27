@@ -52,7 +52,7 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 
 export function emptyConfiguration(): ModelConfiguration {
 	const profile = (id: ProviderId): ProviderConfiguration => ({ baseURL: providers[id].baseURL, models: [] });
-	return { providers: { deepseek: profile('deepseek'), bailian: profile('bailian'), moonshot: profile('moonshot'), ollama: profile('ollama') } };
+	return { providers: { deepseek: profile('deepseek'), bailian: profile('bailian'), moonshot: profile('moonshot'), ollama: profile('ollama'), custom: profile('custom') } };
 }
 export function parseModel(value: unknown): ConfiguredModel {
 	if (!record(value) || typeof value.id !== 'string' || !value.id.trim() || value.id.trim().length > 256 || typeof value.name !== 'string' || !value.name.trim() || value.name.trim().length > 120 || (value.enabled !== undefined && typeof value.enabled !== 'boolean') || !record(value.parameters)) { throw new Error('invalid-model'); }
@@ -71,12 +71,13 @@ export function parseConfiguration(value: unknown): ModelConfiguration {
 	if (!record(value) || !record(value.providers)) { throw new Error('invalid-configuration'); }
 	const result = emptyConfiguration();
 	for (const id of Object.keys(providers) as ProviderId[]) {
+		if (id === 'custom' && !Object.hasOwn(value.providers, id)) { continue; }
 		const stored = value.providers[id];
 		if (!record(stored) || typeof stored.baseURL !== 'string' || !Array.isArray(stored.models) || stored.models.length > 2000) { throw new Error('invalid-configuration'); }
 		const models = stored.models.map(parseModel);
 		if (new Set(models.map(model => model.id)).size !== models.length) { throw new Error('duplicate-model'); }
 		if (stored.enabled !== undefined && typeof stored.enabled !== 'boolean') { throw new Error('invalid-configuration'); }
-		result.providers[id] = { baseURL: normalizeBaseURL(stored.baseURL, id), models, ...(stored.enabled !== undefined ? { enabled: stored.enabled as boolean } : {}) };
+		result.providers[id] = { baseURL: id === 'custom' && stored.baseURL === '' ? '' : normalizeBaseURL(stored.baseURL, id), models, ...(stored.enabled !== undefined ? { enabled: stored.enabled as boolean } : {}) };
 	}
 	if (value.selection !== undefined) {
 		if (!record(value.selection) || !isProvider(value.selection.provider) || typeof value.selection.model !== 'string') { throw new Error('invalid-selection'); }
@@ -104,7 +105,7 @@ export function replaceDiscoveredModels(current: ProviderConfiguration, candidat
 export function parameterPolicy(provider: ProviderId, model: string, capabilities: ModelCapabilities, settings: ModelSettings) {
 	const defaultThinking = model === 'deepseek-reasoner' || model.includes('deepseek-v4') || model.startsWith('deepseek-flash') || model.startsWith('deepseek-pro');
 	const sampling = !(capabilities.reasoning && provider === 'deepseek' && settings.thinking !== 'disabled' && (settings.thinking === 'enabled' || defaultThinking));
-	return { thinking: capabilities.reasoning, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
+	return { thinking: provider !== 'custom' && capabilities.reasoning, efforts: provider === 'deepseek' ? capabilities.reasoningEfforts ?? [] : [], sampling, outputMaximum: capabilities.maxOutputTokens ?? 10000000 };
 }
 export function modelParameterIssues(provider: ProviderId, baseURL: string, model: ConfiguredModel): ParameterIssue[] {
 	const capabilities = resolveCapabilities(provider, baseURL, model.id, model.discovered, model.settings);

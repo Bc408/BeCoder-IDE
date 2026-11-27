@@ -1,11 +1,12 @@
 # Beacon 文档入口
 
-更新：2026-11-27。Beacon 是编辑器内可选的算法与编程导师。访谈后审定的产品上下文提示已接入2.2.0源码，提示版本2026-11-27.1；本轮只作离线验证，既有stage与访谈属于原版本。实际结果另见[实现状态](implementation-status.md)。
+更新：2026-11-27。Beacon 是编辑器内可选的算法与编程导师。2.2.0源码已接入审定产品上下文提示2026-11-27.1及自定义Responses供应商；新stage已构建，负责人确认自定义服务商验收通过。此前访谈仍属于各自原版本。实际结果另见[实现状态](implementation-status.md)。
 
 先读根目录[仓库规则](../../AGENTS.md)和[产品方向](../../VISION.md)，负责人最新决定优先。按下列职责阅读，现行文档不混入已完成的实施待办。
 
 | 文档 | 职责 |
 | --- | --- |
+| [自定义 Responses 供应商实施计划](../superpowers/plans/2026-11-27-beacon-custom-responses-provider.md) | 单连接、多模型、手动添加与同步、HTTP／HTTPS、可选密钥和服务默认推理；源码和实际验证边界见实现状态 |
 | [产品上下文提示词接入与中文语义](review/2026-11-27-product-context-prompts-installed.md) | 当前工作树2026-11-27.1：旧观察与新活动、共享队列与latest、Notebook配对、编译稿来源、CPH配置路径及截断取舍；2.2.0源码，离线验证，无新问答测试 |
 | [信息流提示词接入与中英文语义](review/2026-11-26-prompt-information-flow-installed.md) | 上一版2026-11-26.4：首层环境、九工具用途／参数、条件notes／具体失败、固定ID摘要、材料与续答；其原生访谈见下表 |
 | [上一版整套提示词与中文语义对照](review/2026-11-26-overall-prompt-refresh-candidate.md) | 2026-11-26.3审定快照；其中七主题原文在本轮保持 |

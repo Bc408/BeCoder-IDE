@@ -7,16 +7,17 @@ import assert from 'node:assert/strict';
 
 // Exercise the production Webview bundle with an isolated mock host, never a provider key.
 const root = path.resolve(import.meta.dirname, '..');
-const output = path.resolve(root, '../../tmp/beacon-render');
+const distribution = path.resolve(process.env.BEACON_RENDER_DIST ?? path.join(root, 'dist'));
+const output = path.resolve(process.env.BEACON_RENDER_OUTPUT ?? path.join(root, '../../tmp/beacon-render'));
 fs.mkdirSync(output, { recursive: true });
 const server = createServer((request, response) => {
-	if (request.url === '/' || request.url === '/english' || request.url === '/configuration') {
+	if (request.url === '/' || request.url === '/english' || request.url === '/configuration' || request.url === '/configuration-english') {
 		response.setHeader('Content-Type', 'text/html');
-		response.end(`<!doctype html><html lang="${request.url === '/english' ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-beacon-test' 'wasm-unsafe-eval'; worker-src blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;"><link rel="stylesheet" href="/beacon.css"></head><body class="vscode-dark" data-surface="${request.url === '/configuration' ? 'configuration' : 'chat'}"><div id="root"></div><script nonce="beacon-test" src="/beacon.js"></script></body></html>`);
+		response.end(`<!doctype html><html lang="${request.url.includes('english') ? 'en' : 'zh-CN'}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-beacon-test' 'wasm-unsafe-eval'; worker-src blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;"><link rel="stylesheet" href="/beacon.css"></head><body class="vscode-dark" data-surface="${request.url.startsWith('/configuration') ? 'configuration' : 'chat'}"><div id="root"></div><script nonce="beacon-test" src="/beacon.js"></script></body></html>`);
 		return;
 	}
-	const file = path.resolve(root, 'dist', '.' + request.url);
-	if (!file.startsWith(path.join(root, 'dist') + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { response.writeHead(404).end(); return; }
+	const file = path.resolve(distribution, '.' + request.url);
+	if (!file.startsWith(distribution + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { response.writeHead(404).end(); return; }
 	response.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'application/octet-stream');
 	// Model the real Webview boundary: resource fetches from blob workers cannot
 	// resolve a Webview owner. Assets must be loaded by the window and transferred.
@@ -24,8 +25,161 @@ const server = createServer((request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true });
-try {
-	const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+async function renderCustomSettings(context) {
+	for (const language of ['zh', 'en']) {
+		const page = await context.newPage();
+		const errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		const t = (en, zh) => language === 'zh' ? zh : en;
+		await page.addInitScript(() => {
+			window.messages = [];
+			window.settings = { revision: 1, pending: false, error: '', keyConfigured: {}, providers: {
+				deepseek: { baseURL: 'https://api.deepseek.com', models: [] }, bailian: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [] }, moonshot: { baseURL: 'https://api.moonshot.cn/v1', models: [] }, ollama: { baseURL: 'http://localhost:11434/v1', models: [] }, custom: { baseURL: '', models: [] }
+			} };
+			window.acquireVsCodeApi = () => ({ postMessage: message => {
+				window.messages.push(message);
+				if (message.type === 'ready' && document.body.dataset.surface === 'configuration') { window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); }
+			} });
+		});
+		await page.setViewportSize({ width: 900, height: 900 });
+		await page.goto(`http://127.0.0.1:${server.address().port}/configuration${language === 'en' ? '-english' : ''}`);
+		await page.addStyleTag({ content: ':root{--vscode-font-family:Segoe UI,sans-serif;--vscode-editor-font-family:Consolas,monospace;--vscode-button-foreground:#fff}' });
+		const frame = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+		const publish = async patch => { await page.evaluate(patch => { Object.assign(window.settings, patch); window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); }, patch); await frame(); };
+		const ack = async (ok = true, error) => { await page.evaluate(({ ok, error }) => { const request = window.messages.findLast(message => message.requestId); window.postMessage({ type: 'settingsResult', requestId: request.requestId, ok, error }, '*'); }, { ok, error }); await frame(); };
+		const latest = () => page.evaluate(() => window.messages.at(-1));
+		const picker = page.getByRole('combobox', { name: t('Provider', '供应商'), exact: true });
+		const choose = async name => { await picker.click(); await page.getByRole('option', { name, exact: true }).click(); };
+		const button = (en, zh) => page.getByRole('button', { name: t(en, zh), exact: true });
+		const field = (en, zh) => page.getByLabel(t(en, zh), { exact: true });
+		await picker.click();
+		assert.deepStrictEqual(await page.getByRole('option').allTextContents(), ['DeepSeek', t('Bailian', '百炼'), 'Moonshot', 'Ollama', t('Custom', '自定义')], 'Custom is the last localized provider');
+		await page.getByRole('option', { name: t('Custom', '自定义'), exact: true }).click();
+		assert.equal(await field('API address', 'API 地址').inputValue(), '');
+		assert.match(await field('API address', 'API 地址').getAttribute('placeholder'), /^https:\/\//);
+		assert.doesNotMatch(await field('API address', 'API 地址').getAttribute('placeholder'), /\/responses\/?$/);
+		assert.ok(await button('Sync models', '同步模型').isDisabled(), 'A blank custom address cannot sync');
+		assert.ok(await button('Test', '测试').isDisabled());
+		await button('Add model', '添加模型').click();
+		assert.equal(await field('Model ID', '模型 ID').getAttribute('readonly'), null);
+		assert.equal(await field('Model ID', '模型 ID').getAttribute('required'), '');
+		assert.equal(await field('Model ID', '模型 ID').evaluate(input => input.checkValidity()), false, 'A new model requires an ID');
+		assert.equal(await page.locator('.model-thinking-settings, .model-inapplicable').count(), 0, 'Custom omits thinking controls without denying reasoning capability');
+		await button('Cancel', '取消').click();
+		for (const address of ['https://custom.example/api/v1', 'http://192.0.2.1:8080/tenant/v1']) {
+			await field('API address', 'API 地址').fill(address);
+			assert.ok(await field('API address', 'API 地址').evaluate(input => input.checkValidity()));
+			await button('Save address', '保存地址').click();
+			assert.equal((await latest()).type, 'saveConnection'); assert.equal((await latest()).baseURL, address);
+			await publish({ revision: address.startsWith('https') ? 2 : 3, providers: { ...await page.evaluate(() => window.settings.providers), custom: { baseURL: address, models: [] } } }); await ack();
+		}
+		assert.ok(await button('Sync models', '同步模型').isEnabled(), 'Custom sync does not require an API key');
+		assert.equal(await page.getByRole('dialog').count(), 0, 'Saving the address never forces key setup');
+		await button('Sync models', '同步模型').click();
+		assert.equal((await latest()).type, 'fetchModels'); assert.equal((await latest()).provider, 'custom');
+		assert.ok(await picker.isDisabled(), 'Discovery keeps provider ownership');
+		await publish({ discovery: { id: 'custom-discovery', provider: 'custom', revision: 3, models: [{ id: 'listed', provider: 'custom', name: 'Listed model' }] } }); await ack();
+		await page.getByRole('checkbox', { name: /Listed model/ }).check();
+		await button('Cancel', '取消').click();
+		assert.equal((await latest()).type, 'cancelDiscovery'); assert.equal((await latest()).provider, 'custom');
+		await publish({ discovery: undefined });
+		await button('Sync models', '同步模型').click();
+		await ack(false, t('Model listing is unavailable.', '模型列表不可用。'));
+		await page.getByRole('dialog').waitFor({ state: 'detached' });
+		assert.ok(await button('Add model', '添加模型').isEnabled(), 'Manual creation remains available when discovery fails');
+		await button('Add model', '添加模型').click();
+		await field('Model ID', '模型 ID').fill('manual-model');
+		assert.equal(await field('Display name', '显示名称').inputValue(), 'manual-model', 'A usable display name follows a new ID');
+		await field('Display name', '显示名称').fill('My custom model');
+		await button('Save model', '保存模型').click();
+		const create = await latest();
+		assert.equal(create.type, 'saveModel'); assert.equal(create.provider, 'custom'); assert.equal(create.originalId, undefined);
+		assert.deepStrictEqual(create.model, { id: 'manual-model', name: 'My custom model', parameters: {}, settings: {} });
+		await ack(false, t('A model with this ID already exists.', '模型 ID 已存在。'));
+		await page.getByRole('dialog').getByRole('alert').waitFor();
+		assert.equal(await field('Model ID', '模型 ID').inputValue(), 'manual-model');
+		assert.equal(await field('Display name', '显示名称').inputValue(), 'My custom model', 'A host duplicate error preserves the full draft');
+		await field('Model ID', '模型 ID').fill('manual-model-2');
+		assert.equal(await field('Display name', '显示名称').inputValue(), 'My custom model');
+		await button('Save model', '保存模型').click();
+		const created = (await latest()).model;
+		const customProfile = { baseURL: 'http://192.0.2.1:8080/tenant/v1', enabled: true, models: [created] };
+		await publish({ revision: 4, providers: { ...await page.evaluate(() => window.settings.providers), custom: customProfile } }); await ack();
+		await page.getByRole('dialog').waitFor({ state: 'detached' });
+		assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'selectModel').length), 0, 'Adding and enabling a model never selects it');
+		const providerSwitch = page.getByRole('switch', { name: t('Enable Custom', '启用 自定义'), exact: true });
+		assert.equal(await providerSwitch.getAttribute('aria-checked'), 'true');
+		assert.ok(await button('Test', '测试').isEnabled(), 'Saved-address custom testing works without a key');
+		await button('Test', '测试').click();
+		assert.equal((await latest()).type, 'testProvider'); assert.equal((await latest()).provider, 'custom');
+		await publish({ providerTest: { id: 'custom-test', provider: 'custom', revision: 4, running: false, models: [{ id: created.id, status: 'success' }] } }); await ack();
+		await providerSwitch.click(); assert.equal((await latest()).type, 'toggleProvider'); assert.equal((await latest()).enabled, false); await ack();
+		customProfile.enabled = false;
+		await publish({ providers: { ...await page.evaluate(() => window.settings.providers), custom: customProfile } });
+		assert.equal(await providerSwitch.getAttribute('aria-checked'), 'false');
+		await providerSwitch.click(); assert.equal((await latest()).enabled, true); await ack();
+		customProfile.enabled = true;
+		await publish({ providers: { ...await page.evaluate(() => window.settings.providers), custom: customProfile } });
+		await button('Edit My custom model', '编辑 My custom model').click();
+		await page.getByRole('switch', { name: t('Customize Temperature', '自定义温度'), exact: true }).click();
+		await field('Temperature', '温度').fill('0.7');
+		await button('Save model', '保存模型').click();
+		assert.equal((await latest()).originalId, created.id, 'Editing preserves the original ID');
+		assert.deepStrictEqual((await latest()).model.parameters, { temperature: 0.7 });
+		assert.deepStrictEqual((await latest()).model.settings, {}, 'Ordinary generation edits add no reasoning controls');
+		customProfile.models = [(await latest()).model];
+		await publish({ providers: { ...await page.evaluate(() => window.settings.providers), custom: customProfile } }); await ack();
+		await button('Add API key', '添加 API 密钥').click();
+		await field('API key', 'API 密钥').fill('fixture-custom-key');
+		await button('Save key', '保存密钥').click();
+		assert.equal((await latest()).type, 'saveKey'); assert.equal((await latest()).provider, 'custom');
+		const keySaveCount = await page.evaluate(() => window.messages.length);
+		await publish({ revision: 5, keyConfigured: { custom: true }, keyPreview: { custom: 'fixture••••' } }); await ack();
+		await page.getByRole('dialog').waitFor({ state: 'detached' });
+		assert.equal(await page.evaluate(() => window.messages.length), keySaveCount, 'Saving an optional key does not start discovery or testing');
+		while (await button('Dismiss notification', '关闭通知').count()) {
+			await button('Dismiss notification', '关闭通知').first().click();
+			await page.locator('.notification-card[data-closing]').waitFor({ state: 'detached' });
+		}
+		for (const theme of ['dark', 'light']) {
+			await page.evaluate(theme => { document.body.className = 'vscode-' + theme; }, theme);
+			await page.addStyleTag({ content: theme === 'dark' ? ':root{--vscode-editor-background:#282c34;--vscode-foreground:#d4d5d8;--vscode-input-background:#21252b;--vscode-input-foreground:#d4d5d8;--vscode-button-background:#365f88;--vscode-widget-border:#3a3e46}' : ':root{--vscode-editor-background:#fff;--vscode-foreground:#24292e;--vscode-input-background:#f4f5f6;--vscode-input-foreground:#24292e;--vscode-button-background:#1670c5;--vscode-widget-border:#d0d7de}' });
+			for (const width of [900, 360]) {
+				await page.setViewportSize({ width, height: 900 });
+				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Custom settings fit the viewport');
+				await page.screenshot({ path: path.join(output, `custom-${language}-${theme}-${width}.png`), fullPage: true, animations: 'disabled' });
+				await button('Edit My custom model', '编辑 My custom model').click();
+				assert.equal(await field('Model ID', '模型 ID').getAttribute('readonly'), '');
+				assert.equal(await field('Model ID', '模型 ID').inputValue(), created.id);
+				assert.equal(await page.locator('.model-thinking-settings, .model-inapplicable').count(), 0);
+				assert.equal(await page.getByRole('button', { name: t('Reasoning', '推理'), exact: true }).getAttribute('aria-pressed'), 'true');
+				assert.ok(await page.evaluate(() => document.querySelector('.settings-dialog').getBoundingClientRect().right <= innerWidth));
+				await page.screenshot({ path: path.join(output, `custom-model-${language}-${theme}-${width}.png`), fullPage: true, animations: 'disabled' });
+				assert.equal(await page.getByRole('switch', { name: t('Customize Response token budget', '自定义本次回复 Token 预算'), exact: true }).count(), 1);
+				await page.locator('.model-form-body').evaluate(element => { element.scrollTop = element.scrollHeight; });
+				await page.screenshot({ path: path.join(output, `custom-generation-${language}-${theme}-${width}.png`), fullPage: true, animations: 'disabled' });
+				await button('Cancel', '取消').click();
+			}
+		}
+		for (const name of ['DeepSeek', t('Bailian', '百炼'), 'Moonshot', 'Ollama']) {
+			await choose(name); assert.equal(await button('Add model', '添加模型').count(), 0, 'Existing providers do not gain a manual-add action');
+		}
+		await choose(t('Custom', '自定义'));
+		assert.equal(await field('API address', 'API 地址').inputValue(), customProfile.baseURL);
+		await page.goto(`http://127.0.0.1:${server.address().port}/${language === 'en' ? 'english' : ''}`);
+		await page.evaluate(created => window.postMessage({ type: 'snapshot', screen: 'home', activeId: '', canSend: true, configured: false, temporary: true, viewKey: 'custom::', attachments: [], messages: [], history: [], busy: false, error: '', permission: 'none', webEnabled: true, connection: { provider: 'deepseek', model: '', baseURL: 'https://api.deepseek.com', parameters: {}, keyConfigured: false, loading: false, error: '', revision: 5, choices: [{ provider: 'custom', id: created.id, name: created.name }], capabilities: { purpose: 'chat', vision: true, reasoning: true, tools: true, source: 'manual' } }, context: { slot: 'custom', usable: false, workspaceState: 'none', mode: 'blackout', busy: false, runtimeBusy: false, collectionPending: false, recent: [] } }, '*'), created);
+		assert.equal(await page.evaluate(() => window.messages.filter(message => message.type === 'selectModel').length), 0);
+		await button('Select a model', '选择模型').click();
+		assert.equal(await page.locator('.model-picker-menu small').textContent(), t('Custom', '自定义'));
+		await page.locator('.model-picker-menu button').filter({ hasText: created.name }).click();
+		assert.equal((await latest()).type, 'selectModel'); assert.equal((await latest()).provider, 'custom'); assert.equal((await latest()).id, created.id);
+		assert.deepStrictEqual(errors, []);
+		await page.close();
+	}
+	console.log('Production Custom UI: optional key, addresses, manual model drafts, duplicate errors, selection, thinking omission, en/zh, light/dark and narrow/wide passed. Screenshots: ' + output);
+}
+async function renderExistingUI(context) {
 	const page = await context.newPage();
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -462,6 +616,7 @@ try {
 	await page.getByRole('textbox').press('Enter');
 	assert.deepStrictEqual(await page.evaluate(() => window.messages.at(-1)), { type: 'send', text: '解释这段代码', editRevision: await page.evaluate(() => window.messages.at(-1).editRevision), viewKey: await page.evaluate(() => window.fixtureState().viewKey) });
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', configured: true, busy: true, messages: [] }, '*'));
+	await page.locator('.permission-trigger:disabled').waitFor();
 	assert.ok(await page.getByRole('button', { name: 'Spot', exact: true }).isDisabled(), 'Permission changes are unavailable while a response is running');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', busy: false }, '*'));
 	await page.getByRole('button', { name: 'Spot', exact: true }).click();
@@ -1003,7 +1158,7 @@ try {
 	const providerPicker = page.getByRole('combobox', { name: '供应商', exact: true });
 	await providerPicker.click();
 	await page.getByRole('option', { name: 'DeepSeek', exact: true }).waitFor();
-	assert.equal(await page.getByRole('option').count(), 4);
+	assert.equal(await page.getByRole('option').count(), 5);
 	await page.keyboard.press('Escape');
 	assert.equal(await providerPicker.getAttribute('aria-expanded'), 'false');
 	await providerPicker.press('ArrowDown');
@@ -1495,8 +1650,8 @@ try {
 		}
 	}
 	await providerPicker.click();
-	assert.equal(await page.getByRole('option').count(), 4);
-	await page.waitForFunction(() => [...document.querySelectorAll('#settings-providers .provider-mark')].length === 4 && [...document.querySelectorAll('#settings-providers .provider-mark')].every(image => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0));
+	assert.equal(await page.getByRole('option').count(), 5);
+	await page.waitForFunction(() => document.querySelectorAll('#settings-providers .provider-mark').length === 5 && [...document.querySelectorAll('#settings-providers img.provider-mark')].length === 4 && [...document.querySelectorAll('#settings-providers img.provider-mark')].every(image => image.complete && image.naturalWidth > 0));
 	await page.screenshot({ path: path.join(output, 'providers-menu-light-360.png') });
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => { document.body.className = 'vscode-dark'; });
@@ -1515,6 +1670,11 @@ try {
 	assert.equal(await page.getByLabel('API 地址', { exact: true }).inputValue(), providerProfiles.deepseek.baseURL);
 	assert.deepStrictEqual(errors, []);
 	console.log('Production UI: Captain Who-style Markdown/code blocks, exact clipboard, GFM/math, activity lifecycle/timer, reduced motion, scroll escape/return/resize, Chinese/English, themes, history and four-provider settings passed. Screenshots: ' + output);
+}
+try {
+	const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+	await renderCustomSettings(context);
+	if (!process.argv.includes('--custom')) { await renderExistingUI(context); }
 } catch (error) {
 	const page = browser.contexts()[0]?.pages()[0];
 	if (page) {

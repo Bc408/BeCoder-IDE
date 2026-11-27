@@ -92,7 +92,7 @@ export function SettingsDialog({ title, heading, close, children }: { title: str
 	}, []);
 	return <div className="settings-overlay"><div ref={ref} className="settings-dialog" role="dialog" aria-modal="true" aria-label={title}><header><h2>{heading ?? title}</h2><button className="settings-icon" aria-label={t('Close dialog', '关闭弹窗')} onClick={close}><Icon name="close" /></button></header>{children}</div></div>;
 }
-export function ModelDiscoveryDialog({ discovery, configuredIds, pending, error, confirm, cancel, setup, retry }: { discovery?: ModelDiscovery; configuredIds: string[]; pending: boolean; error?: string; confirm(ids: string[]): void; cancel(): void; setup?: boolean; retry?(): void }) {
+export function ModelDiscoveryDialog({ provider, discovery, configuredIds, pending, error, confirm, cancel, setup, retry }: { provider: ProviderId; discovery?: ModelDiscovery; configuredIds: string[]; pending: boolean; error?: string; confirm(ids: string[]): void; cancel(): void; setup?: boolean; retry?(): void }) {
 	const [query, setQuery] = useState('');
 	const [selected, setSelected] = useState<string[]>([]);
 	useEffect(() => { if (discovery) { setSelected(discovery.models.filter(model => configuredIds.includes(model.id)).map(model => model.id)); } }, [discovery?.id]);
@@ -100,7 +100,7 @@ export function ModelDiscoveryDialog({ discovery, configuredIds, pending, error,
 	const all = !!visible.length && visible.every(model => selected.includes(model.id));
 	return <SettingsDialog title={setup ? t('Choose models', '选择模型') : t('Fetch models', '获取模型')} close={cancel}><div className="settings-dialog-body">
 		{error && <p className="settings-warning" role="alert">{error}</p>}
-		{!discovery ? <p role="status">{pending ? t('Fetching models…', '正在获取模型…') : t('Could not fetch models. Your saved key is kept.', '未能获取模型，已保存的密钥仍保留。')}</p> : <>
+		{!discovery ? <p role="status">{pending ? t('Fetching models…', '正在获取模型…') : provider === 'custom' ? t('Could not fetch models. You can still add a model ID manually.', '未能获取模型，仍可手动添加模型 ID。') : t('Could not fetch models. Your saved key is kept.', '未能获取模型，已保存的密钥仍保留。')}</p> : <>
 		<div className="discovery-tools"><label className="discovery-search"><Icon name="search" /><input type="search" aria-label={t('Search models', '搜索模型')} placeholder={t('Search models...', '搜索模型...')} value={query} onChange={event => setQuery(event.target.value)} /></label><button disabled={!visible.length} onClick={() => setSelected(all ? selected.filter(id => !visible.some(model => model.id === id)) : [...new Set([...selected, ...visible.map(model => model.id)])])}>{all ? t('Deselect all', '取消全选') : t('Select all', '选择所有')}</button></div>
 		<div className="discovery-list">{visible.map(model => <label key={model.id} className="discovery-row"><input type="checkbox" checked={selected.includes(model.id)} onChange={event => setSelected(event.target.checked ? [...selected, model.id] : selected.filter(id => id !== model.id))} /><span><strong>{model.name ?? model.id}</strong><small>{model.id}</small></span></label>)}{!visible.length && <p className="settings-empty">{discovery.models.length ? t('No matching models.', '没有匹配的模型。') : t('The service returned no models.', '服务端未返回模型。')}</p>}</div>
 		</>}

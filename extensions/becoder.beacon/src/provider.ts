@@ -5,11 +5,12 @@
 
 import { parseDeepSeekModels } from './deepseekModels';
 import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { InvalidToolInputError, jsonSchema, streamText, tool, wrapLanguageModel, type FilePart, type TextPart, type LanguageModel, type ModelMessage } from 'ai';
 import { fileModelOutput, type Generate, type ToolActivity } from './session';
 import { safeFileError, type FileInput, type FileOutput, type FilePermission, type FileRoot } from './fileTools';
-import { ConnectionError, normalizeBaseURL, type Connection, type ModelInfo, type ProviderId } from './connection';
+import { ConnectionError, normalizeBaseURL, requiresApiKey, type Connection, type ModelInfo, type ProviderId } from './connection';
 import { defaultCapabilities, ModelCapabilityError, reasoningOptions, resolveCapabilities, serviceCapabilities, validCapability, type ModelCapabilities } from './models';
 import { ProtocolRecorder } from './protocol';
 import { createWebTool, webModelOutput, type WebInput, type WebOutput } from './webTools';
@@ -44,6 +45,25 @@ function compatibleAdapter(name: ProviderId, listModels = listCompatibleModels):
 	};
 }
 
+function customResponsesModel(connection: Connection, request: typeof fetch): LanguageModel {
+	const model = createOpenAI({
+		...options(connection, request), name: 'custom',
+		// An explicit empty value prevents SDK environment fallback. Remove its
+		// generated empty Bearer header before the request reaches any endpoint.
+		apiKey: connection.apiKey ?? '',
+		fetch: (url, init) => {
+			const headers = new Headers(init?.headers);
+			if (!connection.apiKey) { headers.delete('authorization'); }
+			return request(url, { ...init, headers, redirect: 'error' });
+		}
+	}).responses(connection.model);
+	return wrapLanguageModel({ model, middleware: {
+		// Responses otherwise normalizes omitted strict to true. Beacon's tools
+		// deliberately have optional parameters (for example an empty list query).
+		transformParams: async ({ params }) => ({ ...params, tools: params.tools?.map(tool => tool.type === 'function' ? { ...tool, strict: false } : tool) })
+	} });
+}
+
 const adapters: Record<ProviderId, ProviderAdapter> = {
 	deepseek: {
 		createModel: (connection, request) => createDeepSeek(options(connection, request))(connection.model),
@@ -51,7 +71,11 @@ const adapters: Record<ProviderId, ProviderAdapter> = {
 	},
 	bailian: compatibleAdapter('bailian', listBailianModels),
 	moonshot: compatibleAdapter('moonshot'),
-	ollama: compatibleAdapter('ollama')
+	ollama: compatibleAdapter('ollama'),
+	custom: {
+		createModel: customResponsesModel,
+		listModels: listCompatibleModels
+	}
 };
 
 function headers(connection: Connection): Record<string, string> {
@@ -149,7 +173,7 @@ async function listBailianModels(connection: Connection, signal: AbortSignal, re
  * implement provider-specific chat payloads or stream parsers.
  */
 export async function listModels(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<ModelInfo[]> {
-	if (connection.provider !== 'ollama' && !connection.apiKey) { throw new ConnectionError(401); }
+	if (requiresApiKey(connection.provider) && !connection.apiKey) { throw new ConnectionError(401); }
 	const models = await adapters[connection.provider].listModels(connection, signal, request);
 	if (connection.provider === 'ollama') {
 		for (let start = 0; start < models.length; start += 4) {
@@ -185,7 +209,7 @@ export async function inspectModel(connection: Pick<Connection, 'provider' | 'ba
 /** A user-triggered probe never receives conversation context or generation overrides. */
 export async function testModelConnection(connection: Connection, signal: AbortSignal, request: typeof fetch = fetch): Promise<void> {
 	const controller = new AbortController();
-	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), messages: [{ role: 'user', content: 'Reply with OK.' }], abortSignal: AbortSignal.any([signal, controller.signal]), maxRetries: 0, onError: () => {} });
+	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), messages: [{ role: 'user', content: 'Reply with OK.' }], ...(connection.provider === 'custom' ? { providerOptions: reasoningOptions('custom', connection.model, defaultCapabilities, {}) } : {}), abortSignal: AbortSignal.any([signal, controller.signal]), maxRetries: 0, onError: () => {} });
 	try {
 		for await (const part of result.fullStream) {
 			if (part.type === 'error') { throw part.error; }
@@ -275,7 +299,7 @@ function fileMessages(messages: ModelMessage[], vision: boolean): ModelMessage[]
 export function createGenerator(readConnection: () => PromiseLike<Connection>, fetchImplementation: typeof fetch = fetch, permission: FilePermission = 'none', roots: FileRoot[] = [], webEnabled = true, webRequest: typeof fetch = fetchImplementation, recoveryOptions: Omit<RecoveryOptions, 'progress'> = {}, context?: ContextAccess): Generate {
 	return async function* (messages, signal, files, progress, generation) {
 		const connection = await readConnection();
-		if (connection.provider !== 'ollama' && !connection.apiKey) { throw new Error('missing-key'); }
+		if (requiresApiKey(connection.provider) && !connection.apiKey) { throw new Error('missing-key'); }
 		if (!connection.model.trim()) { throw new Error('missing-model'); }
 		if (signal.aborted) { return; }
 		const capabilities = resolveCapabilities(connection.provider, connection.baseURL, connection.model, connection.capabilities, connection.modelSettings);

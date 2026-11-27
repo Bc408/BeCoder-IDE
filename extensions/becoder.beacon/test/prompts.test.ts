@@ -16,6 +16,7 @@ import { FileTools } from '../src/fileTools';
 import { readHistory } from '../src/history';
 import { contextToolNames } from '../src/contextToolContract';
 import { composeBeaconPrompt, type BeaconToolName } from '../src/prompts';
+import { responsesStream } from './responsesFixture';
 
 function answer(deltas: Record<string, unknown>[] = [{ content: 'answer' }], finish = 'stop'): Response {
 	return new Response([...deltas, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'prompt-test', choices: [{ index: 0, delta, finish_reason: index === deltas.length ? finish : null }] }) + '\n\n').join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
@@ -205,31 +206,33 @@ suite('Beacon prompt request assembly', () => {
 				for (const tools of [false, true]) {
 					for (const hasContext of [false, true]) {
 						for (const permission of ['none', 'workspace'] as const) {
-							const connection: Connection = { provider, baseURL: providers[provider].baseURL, apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat', vision: false, reasoning: false, tools, source: 'service' } };
+							const connection: Connection = { provider, baseURL: provider === 'custom' ? 'http://192.0.2.1/v1' : providers[provider].baseURL, apiKey: 'synthetic', model: 'fixture', parameters: {}, capabilities: { purpose: 'chat', vision: false, reasoning: false, tools, source: 'service' } };
 							let sent = 0;
 							const context: ContextAccess | undefined = hasContext ? { describe: async () => 'Synthetic host directory: b.cpp version 2; no body supplied.', execute: async () => ({ ok: false, error: 'not read' }) } : undefined;
 
 							const generate = createGenerator(async () => connection, async (_url, init) => {
 								sent++;
 								const body = JSON.parse(String(init?.body));
-								const systems = body.messages.filter((message: { role: string }) => message.role === 'system');
+								const messages = provider === 'custom' ? body.input : body.messages;
+								const definitions = (body.tools ?? []).map((entry: { function?: unknown }) => provider === 'custom' ? entry : entry.function);
+								const systems = messages.filter((message: { role: string }) => message.role === 'system');
 								assert.equal(systems.length, 1, `${provider}/${webEnabled}/${tools}/${hasContext}/${permission}`);
 								assert.ok(systems[0].content.includes('Beacon mentor core'));
 								assert.ok(!systems[0].content.includes(userText));
-								assert.deepEqual(body.messages.at(-1), { role: 'user', content: userText });
-								const names: string[] = (body.tools ?? []).map((entry: { function: { name: string } }) => entry.function.name).sort();
+								assert.deepEqual(messages.at(-1), { role: 'user', content: provider === 'custom' ? [{ type: 'input_text', text: userText }] : userText });
+								const names: string[] = definitions.map((entry: { name: string }) => entry.name).sort();
 								const expected = tools ? [...(webEnabled ? ['browseWeb'] : []), ...(hasContext ? contextToolNames : []), ...(permission === 'workspace' ? ['inspectFile'] : [])].sort() : [];
 								assert.deepEqual(names, expected);
 								if (tools && hasContext) {
-									const inspection = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'readCurrentCode').function;
+									const inspection = definitions.find((entry: { name: string }) => entry.name === 'readCurrentCode');
 									assert.deepEqual(inspection.parameters.properties, {});
 									assert.equal(inspection.parameters.additionalProperties, false);
-									const page = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'readPage').function;
+									const page = definitions.find((entry: { name: string }) => entry.name === 'readPage');
 									assert.deepEqual(page.parameters.required, ['id']);
 									assert.equal(page.parameters.properties.version, undefined);
 								}
 								if (tools && webEnabled) {
-									const browsing = body.tools.find((entry: { function: { name: string } }) => entry.function.name === 'browseWeb').function;
+									const browsing = definitions.find((entry: { name: string }) => entry.name === 'browseWeb');
 									assert.match(browsing.parameters.properties.query.description, /query.*scope/);
 									assert.match(browsing.parameters.properties.url.description, /public HTTP/);
 								}
@@ -237,7 +240,7 @@ suite('Beacon prompt request assembly', () => {
 									assert.equal(systems[0].content.includes(`Capability: ${name}`), false);
 								}
 								if (hasContext) { assert.ok(systems[0].content.includes('Synthetic host directory')); }
-								return answer();
+								return provider === 'custom' ? responsesStream() : answer();
 							}, permission, [], webEnabled, undefined, {}, context);
 							for await (const delta of generate([{ role: 'user', content: userText }], new AbortController().signal, async input => ({ ok: false, path: input.path, error: 'disabled' }))) { void delta; }
 							assert.equal(sent, 1);

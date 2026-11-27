@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { suite, test } from 'node:test';
+import { responsesStream } from './responsesFixture';
 import * as assert from 'node:assert/strict';
-import { createGenerator, inspectModel, listModels } from '../src/provider';
+import { createGenerator, inspectModel, listModels, testModelConnection } from '../src/provider';
 import { parseDeepSeekModels } from '../src/deepseekModels';
 import { providers, type Connection } from '../src/connection';
 import { ModelCapabilityError, resolveCapabilities, serviceCapabilities, defaultCapabilities } from '../src/models';
@@ -22,6 +23,173 @@ async function collect(generate: Generate): Promise<Delta[]> {
 	for await (const part of generate([{ role: 'user', content: 'question' }], new AbortController().signal, async input => ({ ok: true, path: input.path, kind: 'image', contents: 'private-image-data', mediaType: 'image/png' }))) { parts.push(part); }
 	return parts;
 }
+
+suite('Beacon custom Responses provider', () => {
+	const custom = (overrides: Partial<Connection> = {}): Connection => ({ provider: 'custom', baseURL: 'http://192.0.2.1:8000/api/v1', model: 'opaque-model', parameters: {}, ...overrides });
+	test('custom discovery uses the saved prefix and optional explicit credentials', async () => {
+		for (const apiKey of [undefined, 'fixture-key']) {
+			const models = await listModels(custom({ apiKey }), new AbortController().signal, async (url, init) => {
+				assert.equal(String(url), 'http://192.0.2.1:8000/api/v1/models'); assert.equal(init?.redirect, 'error');
+				assert.equal(new Headers(init?.headers).get('authorization'), apiKey ? 'Bearer fixture-key' : null);
+				return Response.json({ data: [{ id: 'opaque-model' }, { id: 'embedding', purpose: 'embedding' }] });
+			});
+			assert.deepStrictEqual(models.map(model => [model.provider, model.id]), [['custom', 'opaque-model']]);
+		}
+	});
+	test('custom Responses request never adopts ambient credentials or remote conversation state', async () => {
+		const previous = process.env.OPENAI_API_KEY;
+		process.env.OPENAI_API_KEY = 'ambient-fixture-must-not-leave';
+		try {
+			for (const apiKey of [undefined, 'fixture-key']) {
+				const parts = await collect(createGenerator(async () => custom({ apiKey }), async (url, init) => {
+					assert.equal(String(url), 'http://192.0.2.1:8000/api/v1/responses'); assert.equal(init?.redirect, 'error');
+					assert.equal(new Headers(init?.headers).get('authorization'), apiKey ? 'Bearer fixture-key' : null);
+					const body = JSON.parse(String(init?.body));
+					assert.equal(body.model, 'opaque-model'); assert.equal(body.stream, true); assert.equal(body.store, false);
+					assert.equal(body.previous_response_id, undefined); assert.equal(body.conversation, undefined); assert.equal(body.messages, undefined);
+					assert.equal(body.reasoning, undefined); assert.equal(body.thinking, undefined); assert.equal(body.reasoning_effort, undefined);
+					assert.equal(body.temperature, undefined); assert.equal(body.top_p, undefined);
+					assert.ok(body.input.some((item: { role: string }) => item.role === 'user'));
+					assert.ok(body.include.includes('reasoning.encrypted_content'));
+					return responsesStream();
+				}));
+				assert.equal(parts.filter(part => part.type === 'text').map(part => part.text).join(''), 'answer');
+			}
+		} finally { if (previous === undefined) { delete process.env.OPENAI_API_KEY; } else { process.env.OPENAI_API_KEY = previous; } }
+	});
+	test('custom Responses preserves explicit sampling and output budgets without guessing the model', async () => {
+		for (const model of ['opaque-model', 'gpt-5']) {
+			await collect(createGenerator(async () => custom({ model, parameters: { temperature: 0.4, topP: 0.8, maxOutputTokens: 512 }, capabilities: { ...defaultCapabilities, reasoning: false } }), async (_url, init) => {
+				const body = JSON.parse(String(init?.body));
+				assert.equal(body.temperature, 0.4); assert.equal(body.top_p, 0.8); assert.equal(body.max_output_tokens, 512);
+				assert.equal(body.reasoning, undefined); assert.equal(body.thinking, undefined); assert.equal(body.reasoning_effort, undefined);
+				return responsesStream();
+			}));
+		}
+	});
+	test('custom connection test uses native Responses without learner context', async () => {
+		let calls = 0;
+		await testModelConnection(custom(), new AbortController().signal, async (url, init) => {
+			calls++; assert.ok(String(url).endsWith('/responses')); assert.equal(new Headers(init?.headers).get('authorization'), null);
+			const body = JSON.parse(String(init?.body)); assert.equal(body.store, false); assert.equal(body.tools, undefined); assert.equal(body.reasoning, undefined);
+			assert.ok(JSON.stringify(body.input).includes('Reply with OK.')); assert.equal(body.input.length, 1);
+			return responsesStream('OK');
+		});
+		assert.equal(calls, 1);
+	});
+	test('custom Responses pairs tools and preserves encrypted reasoning across disk reload', async () => {
+		let saved: HistoryData | undefined;
+		let calls = 0; let executions = 0;
+		const connection = custom();
+		const mock: typeof fetch = async (_url, init) => {
+			calls++;
+			const body = JSON.parse(String(init?.body)); assert.equal(body.store, false); assert.equal(body.previous_response_id, undefined);
+			assert.ok(!body.input.some((item: { type: string }) => item.type === 'item_reference'));
+			if (calls === 1) {
+				assert.ok(body.tools.some((item: { name: string; strict: boolean }) => item.name === 'readCurrentCode' && item.strict === false));
+				return responsesStream('', { id: 'call_read', name: 'readCurrentCode', input: '{}' }, true);
+			}
+			const outputs = body.input.filter((item: { type: string }) => item.type === 'function_call_output');
+			assert.equal(outputs.length, 1); assert.equal(outputs[0].call_id, 'call_read'); assert.ok(JSON.stringify(outputs[0]).includes('int main() {}'));
+			assert.ok(body.input.some((item: { type: string; encrypted_content: string }) => item.type === 'reasoning' && item.encrypted_content === 'encrypted-fixture'));
+			return responsesStream(calls === 2 ? 'Observed the current code.' : 'Earlier observation retained.');
+		};
+		const context = { names: ['readCurrentCode'] as const, describe: async () => '', execute: async () => { executions++; return { ok: true, contents: 'int main() {}' }; } };
+		const history = new ChatHistory(undefined, async data => { saved = JSON.parse(JSON.stringify(data)); }, () => {}, error => String(error));
+		await history.session.send('Read the current code', createGenerator(async () => connection, mock, 'none', [], false, fetch, {}, context), connection);
+		await history.flush(); assert.equal(history.snapshot.error, ''); assert.equal(history.snapshot.messages.at(-1)?.text, 'Observed the current code.');
+		assert.equal(executions, 1); assert.equal(calls, 2); assert.ok(JSON.stringify(saved).includes('encrypted-fixture'));
+		const restored = new ChatHistory(saved, async () => {}, () => {}, error => String(error));
+		await restored.session.send('Explain that observation', createGenerator(async () => connection, mock, 'none', [], false, fetch, {}, context), connection);
+		assert.equal(restored.snapshot.error, ''); assert.equal(restored.snapshot.messages.at(-1)?.text, 'Earlier observation retained.');
+		assert.equal(executions, 1); assert.equal(calls, 3); await Promise.all([history.dispose(), restored.dispose()]);
+	});
+	test('custom Responses authentication failures are not retried', async () => {
+		let calls = 0;
+		await assert.rejects(collect(createGenerator(async () => custom(), async () => { calls++; return Response.json({ error: { code: 'invalid_api_key', message: 'fixture auth rejection' } }, { status: 401 }); })));
+		assert.equal(calls, 1);
+	});
+	test('custom Responses carries image input through the native protocol', async () => {
+		const generate = createGenerator(async () => custom(), async (_url, init) => {
+			const body = JSON.parse(String(init?.body));
+			const input = body.input.find((item: { role: string }) => item.role === 'user');
+			assert.ok(input.content.some((part: { type: string; image_url: string }) => part.type === 'input_image' && part.image_url.startsWith('data:image/png;base64,')));
+			return responsesStream('image received');
+		});
+		const parts: Delta[] = [];
+		for await (const part of generate([{ role: 'user', content: [{ type: 'text', text: 'Explain this image' }, { type: 'image', image: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }] }], new AbortController().signal, async input => ({ ok: false, path: input.path }))) { parts.push(part); }
+		assert.equal(parts.filter(part => part.type === 'text').map(part => part.text).join(''), 'image received');
+	});
+	test('custom Responses cancellation does not start another request', async () => {
+		let calls = 0; let executions = 0;
+		const controller = new AbortController();
+		const generate = createGenerator(async () => custom(), async () => { calls++; return responsesStream('', { id: 'call_cancel', name: 'readCurrentCode', input: '{}' }); }, 'none', [], false, fetch, {}, {
+			names: ['readCurrentCode'], describe: async () => '', execute: async () => { executions++; controller.abort(); return { ok: true, contents: 'completed evidence' }; }
+		});
+		const parts: Delta[] = [];
+		try { for await (const part of generate([{ role: 'user', content: 'read current code' }], controller.signal, async input => ({ ok: false, path: input.path }))) { parts.push(part); } } catch (error) { assert.equal((error as Error).name, 'AbortError'); }
+		assert.equal(calls, 1); assert.equal(executions, 1);
+		assert.ok(!parts.some(part => part.type === 'text'));
+	});
+	for (const restart of [false, true]) {
+		test(`custom Responses failure recovery retains completed encrypted reasoning (restart=${restart})`, async () => {
+			let saved: HistoryData | undefined; let calls = 0; let executions = 0;
+			const connection = custom();
+			const request: typeof fetch = async (_url, init) => {
+				calls++;
+				if (calls === 1) { return responsesStream('', { id: 'call_before_failure', name: 'readCurrentCode', input: '{}' }, true); }
+				if (calls === 2) { return Response.json({ error: { code: 'invalid_api_key', message: 'fixture rejection after tool' } }, { status: 401 }); }
+				const body = JSON.parse(String(init?.body));
+				assert.ok(body.input.some((item: { type: string; encrypted_content: string }) => item.type === 'reasoning' && item.encrypted_content === 'encrypted-fixture'));
+				assert.equal(body.input.filter((item: { type: string }) => item.type === 'function_call_output').length, 1);
+				return responsesStream('Recovered without repeating the tool.');
+			};
+			const context = { names: ['readCurrentCode'] as const, describe: async () => '', execute: async () => { executions++; return { ok: true, contents: 'int main() {}' }; } };
+			const generate = () => createGenerator(async () => connection, request, 'none', [], false, fetch, {}, context);
+			const history = new ChatHistory(undefined, async data => { saved = JSON.parse(JSON.stringify(data)); }, () => {}, String);
+			await history.session.send('Read code', generate(), connection); await history.flush();
+			assert.equal(history.snapshot.messages.at(-1)?.status, 'error'); assert.equal(calls, 2); assert.equal(executions, 1);
+			assert.ok(JSON.stringify(saved).includes('encrypted-fixture'));
+			const active = restart ? new ChatHistory(saved, async () => {}, () => {}, String) : history;
+			await active.session.send('Continue from that read', generate(), connection);
+			assert.equal(active.snapshot.error, ''); assert.equal(active.snapshot.messages.at(-1)?.text, 'Recovered without repeating the tool.');
+			assert.equal(calls, 3); assert.equal(executions, 1); await history.dispose(); if (restart) { await active.dispose(); }
+		});
+	}
+	test('custom completed tool projection retains only its encrypted reasoning and strips it on a source switch', () => {
+		const connection = custom();
+		const turn = { ...connection, messages: [
+			{ role: 'assistant' as const, content: [
+				{ type: 'reasoning' as const, text: 'paired thought', providerOptions: { openai: { itemId: 'rs_fixture', reasoningEncryptedContent: 'paired-encrypted' } } },
+				{ type: 'text' as const, text: 'failed prose' },
+				{ type: 'tool-call' as const, toolCallId: 'paired', toolName: 'readCurrentCode', input: {} },
+				{ type: 'tool-call' as const, toolCallId: 'unfinished', toolName: 'readCurrentCode', input: {} }
+			] },
+			{ role: 'tool' as const, content: [{ type: 'tool-result' as const, toolCallId: 'paired', toolName: 'readCurrentCode', output: { type: 'json' as const, value: { contents: 'actual code' } } }] },
+			{ role: 'assistant' as const, content: [{ type: 'reasoning' as const, text: 'unpaired failed thought', providerOptions: { openai: { itemId: 'rs_failed', reasoningEncryptedContent: 'unpaired-encrypted' } } }] }
+		] };
+		const same = replayProtocol(turn, connection, 'completed-tools');
+		assert.ok(JSON.stringify(same).includes('paired-encrypted')); assert.ok(!JSON.stringify(same).includes('unpaired-encrypted'));
+		assert.ok(!JSON.stringify(same).includes('failed prose')); assert.ok(!JSON.stringify(same).includes('unfinished'));
+		for (const source of [undefined, { ...connection, model: 'other' }, { ...connection, baseURL: 'https://other.example/v1' }]) {
+			const switched = JSON.stringify(replayProtocol(turn, source, 'completed-tools'));
+			assert.ok(!switched.includes('encrypted')); assert.ok(!switched.includes('paired thought')); assert.ok(switched.includes('actual code'));
+		}
+	});
+	test('custom Responses retains encrypted reasoning when the service returns no reasoning summary', async () => {
+		let calls = 0;
+		const connection = custom();
+		const context = { names: ['readCurrentCode'] as const, describe: async () => '', execute: async () => ({ ok: true, contents: 'code' }) };
+		const parts = await collect(createGenerator(async () => connection, async (_url, init) => {
+			if (++calls === 1) { return responsesStream('', { id: 'call_without_summary', name: 'readCurrentCode', input: '{}' }, 'encrypted-only'); }
+			const body = JSON.parse(String(init?.body));
+			assert.ok(body.input.some((item: { type: string; encrypted_content: string }) => item.type === 'reasoning' && item.encrypted_content === 'encrypted-fixture'));
+			return responsesStream();
+		}, 'none', [], false, fetch, {}, context));
+		assert.equal(calls, 2); assert.ok(JSON.stringify(parts).includes('encrypted-fixture'));
+		assert.equal(parts.filter(part => part.type === 'text').map(part => part.text).join(''), 'answer');
+	});
+});
 
 suite('Beacon model capabilities', () => {
 	test('explicit unsupported tools override a service feature alias', () => {

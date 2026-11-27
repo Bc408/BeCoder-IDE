@@ -17,6 +17,7 @@ import { readFileSync } from 'fs';
 import { createSyntaxRegistry as createRegistry, IncrementalSyntax } from '../../becoder.shared/browser/content/syntax';
 import { languages, grammars } from 'beacon-syntax-assets';
 import { toolErrorCode, toolErrorMessage } from '../src/toolFeedback';
+import { responsesStream } from './responsesFixture';
 
 const createSyntaxRegistry = (wasm: ArrayBuffer) => createRegistry(wasm, async scope => grammars.find(grammar => grammar.scopeName === scope) ?? null);
 const mathStructureParser = unified().use(remarkParse);
@@ -567,7 +568,7 @@ suite('Beacon window session', () => {
 suite('Beacon provider connections', () => {
 	for (const provider of Object.keys(providers) as ProviderId[]) {
 		test(provider + ' lists models with isolated credentials and no credential redirects', async () => {
-			const selection = { provider, ...providers[provider], parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' };
+			const selection = { provider, ...providers[provider], baseURL: provider === 'custom' ? 'http://192.0.2.1/v1' : providers[provider].baseURL, parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' };
 			let pages = 0;
 			const inspected: string[] = [];
 			const result = await listModels(selection, new AbortController().signal, async (url, options) => {
@@ -583,7 +584,7 @@ suite('Beacon provider connections', () => {
 					assert.ok(String(url).includes('/api/v1/models?page_no=' + pages));
 					return Response.json({ output: { total: 2, models: [{ model: pages === 1 ? 'b' : 'a' }] } });
 				}
-				assert.equal(String(url), providers[provider].baseURL + '/models');
+				assert.equal(String(url), selection.baseURL + '/models');
 				return Response.json({ data: [{ id: 'b' }, { id: 'a' }, { id: 'b' }] });
 			});
 			assert.deepStrictEqual(result.map(({ id, provider }) => ({ id, provider })), [{ id: 'a', provider }, { id: 'b', provider }]);
@@ -593,24 +594,26 @@ suite('Beacon provider connections', () => {
 		if (provider === 'deepseek') { continue; }
 		test(provider + ' streams only answer text through the installed adapter', async () => {
 			const session = new ChatSession(() => { }, () => 'error');
-			await session.send('hello', createGenerator(async () => ({ provider, ...providers[provider], model: 'selected-model', parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' }), async (url, options) => {
-				assert.equal(String(url), providers[provider].baseURL + '/chat/completions');
+			const baseURL = provider === 'custom' ? 'http://192.0.2.1/v1' : providers[provider].baseURL;
+			await session.send('hello', createGenerator(async () => ({ provider, baseURL, model: 'selected-model', parameters: {}, apiKey: provider === 'ollama' ? undefined : 'test-key' }), async (url, options) => {
+				assert.equal(String(url), baseURL + (provider === 'custom' ? '/responses' : '/chat/completions'));
 				const body = JSON.parse(String(options?.body));
 				assert.equal(body.model, 'selected-model');
 				assert.equal(body.temperature, undefined);
 				assert.equal(body.top_p, undefined);
-				assert.equal(body.max_tokens, 8192);
+				assert.equal(provider === 'custom' ? body.max_output_tokens : body.max_tokens, 8192);
 				assert.equal(options?.redirect, 'error');
+				if (provider === 'custom') { return responsesStream('answer', undefined, true); }
 				const chunks = [{ reasoning_content: 'thinking' }, { content: 'answer' }, {}].map((delta, index) => 'data: ' + JSON.stringify({ id: 'test', model: 'selected-model', choices: [{ index: 0, delta, finish_reason: index === 2 ? 'stop' : null }] }) + '\n\n');
 				return new Response(chunks.join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
 			}));
 			assert.equal(session.snapshot.error, '');
 			assert.equal(session.snapshot.messages[1].text, 'answer');
-			assert.equal(session.snapshot.messages[1].reasoning, 'thinking');
+			assert.equal(session.snapshot.messages[1].reasoning, provider === 'custom' ? 'inspect the evidence' : 'thinking');
 		});
 	}
 	test('invalid URLs, unauthorized responses and malformed model lists are rejected', async () => {
-		assert.equal(new Set(Object.keys(providers).map(id => secretName(id as ProviderId))).size, 4);
+		assert.equal(new Set(Object.keys(providers).map(id => secretName(id as ProviderId))).size, 5);
 		assert.equal(normalizeBaseURL('http://localhost:11434/v1/', 'ollama'), 'http://localhost:11434/v1');
 		for (const url of ['http://api.deepseek.com', 'https://user:secret@example.com', 'https://example.com?key=secret']) { assert.throws(() => normalizeBaseURL(url, 'deepseek')); }
 		const connection = { provider: 'deepseek' as const, ...providers.deepseek, parameters: {}, apiKey: 'test-key' };

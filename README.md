@@ -24,7 +24,7 @@ BeCoder 将看题、写代码、本地样例测试、交题和查看评测结果
 | 本地样例测试 | 题面显式关联同一源码的 CPH 样例；也可从浏览器导入更多题源，编辑样例、批量运行并对比输出 |
 | 主页与浏览器 | 从统一主页搜索、打开 OJ 或新建 C/C++、NoteBook；网站登录、题面与源码在同一工作台切换 |
 | 阅读与笔记 | 离线 PDF 阅读、Markdown / Mermaid，以及可运行 C/C++ 程序块的 BeCoder NoteBook |
-| Beacon | 接入 DeepSeek、阿里云百炼、月之暗面与 Ollama，支持流式回答、公式、图片输入和可控的文件访问与联网 |
+| Beacon | 接入 DeepSeek、阿里云百炼、月之暗面、Ollama 与自定义 Responses 服务，支持流式回答、公式、图片输入和可控的文件访问与联网 |
 | 熟悉的编辑体验 | 简体中文 / 英文、One Monokai、Modern UI 与紧凑布局；通过 Open VSX 或本地 VSIX 安装扩展 |
 
 Beacon 需要自行配置模型服务；模型与网络能力取决于服务商。编辑、编译和样例测试无需配置 AI。Beacon当前能力见[扩展说明](extensions/becoder.beacon/README.md)，安装与核心编程流程见[使用指南](docs/getting-started.md)。

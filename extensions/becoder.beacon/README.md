@@ -2,13 +2,15 @@
 
 BeCoder 内置的算法与编程学习助手。点击编辑器右上角 Beacon 按钮，或运行 **Beacon: 打开/关闭 Beacon 侧边栏**；聊天设置按钮、**Beacon: 打开设置**和扩展“功能”页打开同一个独立设置标签页。
 
-本说明对应2026-11-25的当前源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
+本说明对应2026-11-27的当前源码；源码检查、模型观察、staged应用与负责人运行验收分别成立。[设计入口](../../docs/beacon/README.md)、[能力需求](../../docs/beacon/prd.md)和[实现状态](../../docs/beacon/implementation-status.md)分别维护，后续记忆／dream和完整视觉仍未交付。
 
 ## 模型连接与设置
 
-支持 DeepSeek、百炼、Moonshot、Ollama。每家只有一组连接和一串密钥，同一模型 ID 只有一份配置；不同服务商的地址、密钥、开关和同名模型相互独立。切换设置页供应商只改变正在查看的配置，不改变聊天模型；有未完成地址草稿、弹窗、发现或测试时不能切换。
+支持 DeepSeek、百炼、Moonshot、Ollama 和“自定义”。每家只有一组连接和密钥配置，同一模型 ID 只有一份配置；不同服务商的地址、密钥、开关和同名模型相互独立。切换设置页供应商只改变正在查看的配置，不改变聊天模型；有未完成地址草稿、弹窗、发现或测试时不能切换。
 
 Ollama 本地同步和测试无需密钥，代理服务可选填。回环地址下会额外只读查询已安装模型的 `/api/show` 元数据，不下载模型或修改服务配置。百炼使用账户提供的 API 地址，业务空间地址中的 WorkspaceId 由用户提供。
+
+“自定义”固定使用 OpenAI 原生 Responses 协议。先保存服务的 API 基础地址（例如 `https://example.com/v1`，不含 `/responses`），再手动添加模型 ID 或同步服务列表；同步失败不妨碍手动添加。地址允许 HTTPS 和 HTTP，包含本机、局域网和公网；HTTP 明文传输请求及所填密钥。密钥可留空，留空时不发送鉴权头，也不使用环境密钥或占位密钥。首次添加模型默认启用供应商，明确关闭后不会自动开启；添加和测试不自动选择聊天模型。推理参数使用服务默认，不提供思考模式／强度设置；推理能力标识与普通参数仍可配置。对话由 Beacon 本地管理，以 `store:false` 发送完整有效历史，不依赖远端会话 ID。实际工具、图片和模型参数支持取决于服务，连接测试仅证明文本连通。
 
 ### 地址与密钥
 
@@ -34,7 +36,7 @@ Ollama 本地同步和测试无需密钥，代理服务可选填。回环地址�
 
 模型 ID 不可在详情中改名，显示名称可改。详情有独立保存/取消，失败保留草稿。温度、Top-P、回复预算和适用的思考模式/强度属于生成参数；关闭推理会清除其思考设置，显示降权的“不适用”摘要。能力刷新保留同 ID 参数，即使冲突也允许同步成功；下次正式请求前提示具体冲突并拒绝非法参数，不静默删改或降档。调用失败不自动改能力或切服务。
 
-设置页使用“模型配置”导航、四家供应商选择、横向设置行和可折叠模型组。已添加模型无搜索，候选保留搜索；详情不提供模型类型、音视频、价格或无功能占位。下拉使用自定义菜单，图标动作复用现有图标系统，密钥显隐图标随显示状态切换。浅/深色、宽/窄窗口、长名称、错误、禁用态、焦点及弹窗滚动仍需按每次 UI 改动检查实际渲染。
+设置页使用“模型配置”导航、五项供应商选择、横向设置行和可折叠模型组。已添加模型无搜索，候选保留搜索；详情不提供模型类型、音视频、价格或无功能占位。下拉使用自定义菜单，图标动作复用现有图标系统，密钥显隐图标随显示状态切换。浅/深色、宽/窄窗口、长名称、错误、禁用态、焦点及弹窗滚动仍需按每次 UI 改动检查实际渲染。
 
 ### 连接测试与活动回复
 
@@ -106,7 +108,7 @@ PDF 使用已加载 PDF.js 文档按物理页提取文字；扫描页可能为�
 
 ## English
 
-Beacon is BeCoder's programming tutor. Open it from the upper-right editor button or **Beacon: Toggle Beacon Sidebar**; **Beacon: Open Settings** opens its separate settings editor. DeepSeek, Bailian, Moonshot and Ollama use isolated provider records, one connection/key per provider, temporary model discovery with explicit confirmation, provider-level enable switches and user-selected chat models. Local Ollama does not require a key. Saved keys remain in SecretStorage; explicit reveal is temporary. Tests send small text requests to all added models and may consume provider credits.
+Beacon is BeCoder's programming tutor. Open it from the upper-right editor button or **Beacon: Toggle Beacon Sidebar**; **Beacon: Open Settings** opens its separate settings editor. DeepSeek, Bailian, Moonshot, Ollama and Custom use isolated provider records, one connection/key configuration per provider, temporary model discovery with explicit confirmation, provider-level enable switches and user-selected chat models. Custom uses native OpenAI Responses with an explicit HTTP/HTTPS API base URL, optional credentials, manual model IDs or model discovery, and service-default reasoning. Empty custom credentials never fall back to environment keys. Local Ollama does not require a key. Saved keys remain in SecretStorage; explicit reveal is temporary. Tests send small text requests to all added models and may consume provider credits.
 
 Model capabilities are boolean and default to supported unless explicitly denied; missing capacities use editable defaults of 32768 context, 24576 input and 8192 output tokens. These defaults do not verify a model's actual abilities. Confirmation replaces membership/capabilities, clears manual capability corrections and retains same-ID names/generation settings. Invalid retained parameters block the next request; active replies keep their original configuration snapshot.
 

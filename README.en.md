@@ -24,7 +24,7 @@ BeCoder brings problem reading, coding, local sample testing, submission and jud
 | Local sample testing | Explicitly import problem samples into CPH for the same source; import more problem sources from the browser, edit samples, run them in batches and compare output |
 | Home and browser | Search, open an OJ or create C/C++ files and NoteBooks from Home; switch between website login, problems and source in one workbench |
 | Reading and notes | Offline PDF reading, Markdown / Mermaid and BeCoder NoteBook with user-run C/C++ code blocks |
-| Beacon | DeepSeek, Alibaba Cloud Bailian, Moonshot and Ollama; streamed responses, formulas, image input and controllable file access and web search |
+| Beacon | DeepSeek, Alibaba Cloud Bailian, Moonshot, Ollama and custom Responses services; streamed responses, formulas, image input and controllable file access and web search |
 | Familiar editing | Simplified Chinese / English, One Monokai, Modern UI and compact layout; extensions through Open VSX or local VSIX files |
 
 Beacon requires your own model configuration. Model and network features depend on the provider; editing, compilation and ordinary sample testing do not require AI. See [Beacon usage](extensions/becoder.beacon/README.md) for current capabilities and the [user guide (Chinese)](docs/getting-started.md) for installation and core programming workflows.

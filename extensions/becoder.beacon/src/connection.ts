@@ -9,7 +9,8 @@ export const providers = {
 	deepseek: { name: 'DeepSeek', baseURL: 'https://api.deepseek.com', model: '' },
 	bailian: { name: 'Alibaba Cloud Bailian', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: '' },
 	moonshot: { name: 'Moonshot', baseURL: 'https://api.moonshot.cn/v1', model: '' },
-	ollama: { name: 'Ollama', baseURL: 'http://localhost:11434/v1', model: '' }
+	ollama: { name: 'Ollama', baseURL: 'http://localhost:11434/v1', model: '' },
+	custom: { name: 'Custom', baseURL: '', model: '' }
 } as const;
 
 export type ProviderId = keyof typeof providers;
@@ -52,6 +53,7 @@ export function isProvider(value: unknown): value is ProviderId {
 	return typeof value === 'string' && Object.hasOwn(providers, value);
 }
 export function secretName(provider: ProviderId): string { return `beacon.modelConfiguration.${provider}.apiKey`; }
+export function requiresApiKey(provider: ProviderId): boolean { return provider !== 'ollama' && provider !== 'custom'; }
 
 const parameterRanges: Record<ModelParameterName, { minimum: number; maximum: number; integer?: boolean }> = {
 	temperature: { minimum: 0, maximum: 2 },
@@ -67,7 +69,7 @@ export function validParameter(name: ModelParameterName, value: unknown): value 
 export function normalizeBaseURL(value: string, provider: ProviderId): string {
 	const url = new URL(value.trim());
 	const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-	if (url.username || url.password || url.search || url.hash || !(url.protocol === 'https:' || (provider === 'ollama' && local && url.protocol === 'http:'))) { throw new Error('invalid-url'); }
+	if (url.username || url.password || url.search || url.hash || !(url.protocol === 'https:' || ((provider === 'custom' || provider === 'ollama' && local) && url.protocol === 'http:'))) { throw new Error('invalid-url'); }
 	return url.href.replace(/\/+$/, '');
 }
 

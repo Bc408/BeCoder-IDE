@@ -8,8 +8,8 @@ import * as assert from 'node:assert/strict';
 import type * as vscode from 'vscode';
 import { Connections, connectionError } from '../src/connections';
 import { RequestRecovery } from '../src/requestRecovery';
-import { secretName, type ProviderId } from '../src/connection';
-import { emptyConfiguration, replaceDiscoveredModels, modelParameterIssues, parseConfiguration, parseModel, validateModel, type SettingsCommand } from '../src/modelConfiguration';
+import { isProvider, normalizeBaseURL, providers, requiresApiKey, secretName, type ProviderId } from '../src/connection';
+import { emptyConfiguration, replaceDiscoveredModels, parameterPolicy, modelParameterIssues, parseConfiguration, parseModel, validateModel, type SettingsCommand } from '../src/modelConfiguration';
 import * as mock from './vscodeMock';
 
 async function fixture(run: (connections: Connections, context: ReturnType<typeof mock.reset>) => Promise<void>) {
@@ -22,6 +22,222 @@ function apply(connections: Connections, command: Omit<SettingsCommand, 'revisio
 }
 
 suite('Beacon settings', () => {
+	test('custom defaults preserve a valid four-provider document and its selected model', () => {
+		const data = emptyConfiguration();
+		data.providers.deepseek.models = [parseModel({ id: 'saved', name: 'My model', parameters: { topP: 0.7 }, settings: { thinking: 'disabled' } })];
+		data.selection = { provider: 'deepseek', model: 'saved' };
+		const legacy = { ...data, providers: Object.fromEntries(Object.entries(data.providers).filter(([id]) => id !== 'custom')) };
+		const before = structuredClone(legacy);
+		const parsed = parseConfiguration(legacy);
+		assert.equal(isProvider('custom'), true);
+		assert.deepStrictEqual(providers.custom, { name: 'Custom', baseURL: '', model: '' });
+		assert.deepStrictEqual(parsed.providers.custom, { baseURL: '', models: [] });
+		assert.deepStrictEqual(parsed.selection, legacy.selection);
+		for (const id of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) { assert.deepStrictEqual(parsed.providers[id], data.providers[id]); }
+		assert.deepStrictEqual(legacy, before);
+	});
+	test('custom omission alone is migrated; explicit malformed profiles remain invalid', () => {
+		const data = emptyConfiguration();
+		assert.deepStrictEqual(parseConfiguration(data).providers.custom, { baseURL: '', models: [] });
+		for (const custom of [undefined, null, [], {}, { baseURL: '', models: null }, { baseURL: '', models: [], enabled: 'yes' }, { baseURL: ' ', models: [] }, { baseURL: 'ftp://host.test', models: [] }]) {
+			assert.throws(() => parseConfiguration({ providers: { ...data.providers, custom } }));
+		}
+		const { deepseek: _deepseek, ...missing } = data.providers;
+		void _deepseek;
+		assert.throws(() => parseConfiguration({ providers: missing }), /invalid-configuration/);
+	});
+	test('custom accepts HTTP and HTTPS on all hosts without relaxing original provider URL rules', () => {
+		for (const address of ['http://public.example/api', 'http://192.168.1.2:8080/v1', 'http://localhost:9000', 'https://public.example/prefix', 'http://[::1]:9000/v2']) {
+			assert.equal(normalizeBaseURL('  ' + address + '///  ', 'custom'), address);
+		}
+		for (const address of ['', ' ', 'ftp://host.test', 'file:///tmp/test', 'https://user:pass@host.test', 'https://host.test/?secret=1', 'https://host.test/#fragment']) {
+			assert.throws(() => normalizeBaseURL(address, 'custom'));
+		}
+		for (const id of ['deepseek', 'bailian', 'moonshot'] as const) { assert.throws(() => normalizeBaseURL('http://localhost:9000/v1', id)); }
+		assert.throws(() => normalizeBaseURL('http://192.168.1.2:9000/v1', 'ollama'));
+		assert.equal(normalizeBaseURL('http://localhost:9000/v1', 'ollama'), 'http://localhost:9000/v1');
+	});
+	test('custom manual first addition enables the provider without selecting a chat model', async () => fixture(async connections => {
+		const selection = connections.settings.selection;
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: ' manual ', name: ' My model ', parameters: { temperature: 0.4 }, settings: {} } });
+		assert.equal(connections.enabled('custom'), true);
+		assert.deepStrictEqual(connections.settings.providers.custom.models.map(model => [model.id, model.name, model.parameters]), [['manual', 'My model', { temperature: 0.4 }]]);
+		assert.deepStrictEqual(connections.settings.selection, selection);
+		await assert.rejects(apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'manual', name: 'Duplicate', parameters: {}, settings: {} } }), /duplicate-model/);
+		await apply(connections, { type: 'toggleProvider', provider: 'custom', enabled: false });
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'second', name: 'Second', parameters: {}, settings: {} } });
+		assert.equal(connections.enabled('custom'), false);
+		assert.deepStrictEqual(connections.settings.selection, selection);
+	}));
+	test('custom blank saved address blocks sync, testing, selection and sending even with a key', async () => fixture(async (connections, context) => {
+		const data = emptyConfiguration();
+		data.providers.custom = { baseURL: '', enabled: true, models: [parseModel({ id: 'manual', name: 'Manual', parameters: {}, settings: {} })] };
+		data.selection = { provider: 'custom', model: 'manual' };
+		mock.values.set('modelConfiguration', data);
+		await context.secrets.store(secretName('custom'), 'custom-credential'); await connections.refresh();
+		assert.equal(connections.settings.error, '');
+		assert.equal(connections.configured, false);
+		for (const command of [{ type: 'fetchModels' }, { type: 'testProvider' }, { type: 'selectModel', id: 'manual' }] as const) {
+			await assert.rejects(apply(connections, { ...command, provider: 'custom' }), /model-unavailable/);
+		}
+		assert.throws(() => connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false), /model-unavailable/);
+		await assert.rejects(apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: '', key: 'replacement' }));
+		assert.equal(await context.secrets.get(secretName('custom')), 'custom-credential');
+		assert.equal(connections.settings.providers.custom.baseURL, '');
+	}));
+	test('custom saved endpoint and manual model can be selected without an API key', async () => fixture(async connections => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'http://192.168.1.2:8080/api/' });
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'private-model', name: 'Private', parameters: {}, settings: {} } });
+		assert.equal(connections.settings.selection?.provider, 'deepseek');
+		await apply(connections, { type: 'selectModel', provider: 'custom', id: 'private-model' });
+		assert.equal(connections.configured, true);
+		assert.equal(connections.snapshot.keyConfigured, false);
+		assert.deepStrictEqual(connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false).source, { provider: 'custom', baseURL: 'http://192.168.1.2:8080/api', model: 'private-model' });
+	}));
+	test('custom reasoning capabilities do not permit thinking or effort overrides', () => {
+		const model = parseModel({ id: 'private-model', name: 'Private', parameters: {}, settings: { overrides: { reasoning: true, reasoningEfforts: ['low', 'high', 'max'] } } });
+		const capabilities = { purpose: 'chat' as const, vision: true, tools: true, reasoning: true, source: 'manual' as const, reasoningEfforts: ['low', 'high', 'max'] as ('low' | 'high' | 'max')[] };
+		assert.equal(parameterPolicy('custom', model.id, capabilities, model.settings).thinking, false);
+		assert.deepStrictEqual(parameterPolicy('custom', model.id, capabilities, model.settings).efforts, []);
+		for (const thinking of ['enabled', 'disabled'] as const) { assert.throws(() => validateModel('custom', 'https://host.test/api', { ...model, settings: { ...model.settings, thinking } }), /invalid-thinking/); }
+		assert.throws(() => validateModel('custom', 'https://host.test/api', { ...model, settings: { ...model.settings, effort: 'high' } }), /invalid-effort/);
+		validateModel('custom', 'https://host.test/api', model);
+	});
+	test('custom and Ollama alone permit a connection without an API key', () => {
+		assert.equal(requiresApiKey('custom'), false);
+		assert.equal(requiresApiKey('ollama'), false);
+		for (const provider of ['deepseek', 'bailian', 'moonshot'] as const) { assert.equal(requiresApiKey(provider), true); }
+	});
+	test('custom first addition preserves explicit disable and existing models do not imply first addition', async () => fixture(async connections => {
+		const data = parseConfiguration(mock.values.get('modelConfiguration'));
+		data.providers.custom.enabled = false;
+		mock.values.set('modelConfiguration', data); await connections.refresh();
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'first', name: 'First', parameters: {}, settings: {} } });
+		assert.equal(connections.enabled('custom'), false);
+		const legacy = parseConfiguration(mock.values.get('modelConfiguration'));
+		delete legacy.providers.custom.enabled;
+		mock.values.set('modelConfiguration', legacy); await connections.refresh();
+		await apply(connections, { type: 'saveModel', provider: 'custom', originalId: 'first', model: { id: 'first', name: 'Edited', parameters: { topP: 0.5 }, settings: {} } });
+		assert.equal(connections.enabled('custom'), false);
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'second', name: 'Second', parameters: {}, settings: {} } });
+		assert.equal(connections.enabled('custom'), false);
+		assert.deepStrictEqual(connections.settings.providers.custom.models.map(model => [model.id, model.name]), [['first', 'Edited'], ['second', 'Second']]);
+		assert.equal(connections.settings.selection?.provider, 'deepseek');
+	}));
+	test('custom model IDs retain validation, immutability and duplicate ownership', async () => fixture(async connections => {
+		const model = { id: 'first', name: 'First', parameters: {}, settings: {} };
+		for (const id of ['', ' ', 'x'.repeat(257)]) { await assert.rejects(apply(connections, { type: 'saveModel', provider: 'custom', model: { ...model, id } }), /invalid-model/); }
+		await apply(connections, { type: 'saveModel', provider: 'custom', model });
+		await apply(connections, { type: 'saveModel', model });
+		await assert.rejects(apply(connections, { type: 'saveModel', provider: 'custom', model: { ...model, id: ' first ' } }), /duplicate-model/);
+		await assert.rejects(apply(connections, { type: 'saveModel', provider: 'custom', originalId: 'first', model: { ...model, id: 'renamed' } }), /invalid-model/);
+		assert.deepStrictEqual(connections.settings.providers.custom.models.map(model => model.id), ['first']);
+		assert.ok(connections.settings.providers.deepseek.models.some(model => model.id === 'first'));
+	}));
+	test('custom host rejects thinking edits and blocks conflicts loaded from settings', async () => fixture(async connections => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://host.test/api' });
+		const model = { id: 'manual', name: 'Manual', parameters: {}, settings: {} };
+		await apply(connections, { type: 'saveModel', provider: 'custom', model });
+		await apply(connections, { type: 'selectModel', provider: 'custom', id: model.id });
+		for (const settings of [{ thinking: 'enabled' }, { thinking: 'disabled' }, { effort: 'high' }]) {
+			await assert.rejects(apply(connections, { type: 'saveModel', provider: 'custom', originalId: model.id, model: { ...model, settings } }), /invalid-(thinking|effort)/);
+			assert.deepStrictEqual(connections.settings.providers.custom.models[0].settings, {});
+		}
+		const data = parseConfiguration(mock.values.get('modelConfiguration'));
+		data.providers.custom.models[0].settings = { thinking: 'disabled', effort: 'high', overrides: { reasoning: true } };
+		mock.values.set('modelConfiguration', data); await connections.refresh();
+		assert.deepStrictEqual(connections.settings.parameterIssues?.custom?.manual, [{ field: 'thinking', code: 'unsupported' }, { field: 'effort', code: 'unsupported' }]);
+		assert.throws(() => connections.request(async input => ({ ok: false, path: input.path }), 'none', [], false), /invalid-thinking/);
+	}));
+	test('custom failed connection saves preserve its key, models and the selected provider', async () => fixture(async (connections, context) => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://host.test/api', key: 'custom-original-secret' });
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'manual', name: 'Manual', parameters: { topP: 0.6 }, settings: {} } });
+		const before = connections.settings;
+		mock.controls.updateError = new Error('disk-full');
+		await assert.rejects(apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'http://other.test/prefix', key: 'custom-replacement-secret' }), /disk-full/);
+		delete mock.controls.updateError;
+		assert.equal(await context.secrets.get(secretName('custom')), 'custom-original-secret');
+		assert.deepStrictEqual(connections.settings.providers, before.providers);
+		assert.deepStrictEqual(connections.settings.selection, before.selection);
+		mock.controls.secretError = new Error('secret-storage');
+		await assert.rejects(apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://host.test/api', clearKey: true }), /secret-storage/);
+		delete mock.controls.secretError;
+		assert.equal(connections.settings.keyConfigured.custom, true);
+		await apply(connections, { type: 'saveKey', provider: 'custom', clearKey: true });
+		assert.equal(connections.settings.keyConfigured.custom, false);
+		assert.deepStrictEqual(connections.settings.providers, before.providers);
+		assert.ok(!JSON.stringify(connections.settings).includes('custom-original-secret'));
+		assert.ok(!JSON.stringify(connections.snapshot).includes('custom-replacement-secret'));
+	}));
+	test('custom sync and connection tests use only the saved endpoint and optional explicit credentials', async () => fixture(async connections => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'http://public.example/prefix/' });
+		const original = globalThis.fetch;
+		const calls: { url: string; key: string | null }[] = [];
+		try {
+			globalThis.fetch = async (url, options) => {
+				calls.push({ url: String(url), key: new Headers(options?.headers).get('authorization') });
+				return options?.method === 'POST' ? Response.json({ error: { code: 'invalid_api_key', message: 'Explicit fixture rejection' } }, { status: 401 }) : Response.json({ data: [{ id: 'manual' }] });
+			};
+			for (const key of [undefined, 'custom-explicit-credential']) {
+				if (key) { await apply(connections, { type: 'saveKey', provider: 'custom', key }); }
+				await apply(connections, { type: 'fetchModels', provider: 'custom' });
+				assert.equal(connections.settings.discovery?.provider, 'custom');
+				await apply(connections, { type: 'confirmModels', provider: 'custom', discoveryId: connections.settings.discovery!.id, ids: ['manual'] });
+				await apply(connections, { type: 'testProvider', provider: 'custom' });
+				assert.deepStrictEqual(connections.settings.providerTest?.models.map(model => model.status), ['failure']);
+				assert.equal(connections.settings.selection?.provider, 'deepseek');
+			}
+			assert.deepStrictEqual(calls, [
+				{ url: 'http://public.example/prefix/models', key: null }, { url: 'http://public.example/prefix/responses', key: null },
+				{ url: 'http://public.example/prefix/models', key: 'Bearer custom-explicit-credential' }, { url: 'http://public.example/prefix/responses', key: 'Bearer custom-explicit-credential' }
+			]);
+		} finally { globalThis.fetch = original; }
+	}));
+	test('custom synchronization cancellation, disabled state and stale endpoints preserve saved models', async () => fixture(async connections => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://host.test/api' });
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'manual', name: 'Mine', parameters: { topP: 0.7 }, settings: { overrides: { vision: false } } } });
+		await apply(connections, { type: 'toggleProvider', provider: 'custom', enabled: false });
+		const before = connections.settings.providers.custom;
+		const original = globalThis.fetch;
+		try {
+			globalThis.fetch = async () => Response.json({ data: [{ id: 'manual', vision: true }, { id: 'added' }] });
+			await apply(connections, { type: 'fetchModels', provider: 'custom' });
+			const cancelled = connections.settings.discovery!;
+			await apply(connections, { type: 'cancelDiscovery', discoveryId: cancelled.id, provider: 'custom' });
+			assert.deepStrictEqual(connections.settings.providers.custom, before);
+			await assert.rejects(apply(connections, { type: 'confirmModels', provider: 'custom', discoveryId: cancelled.id, ids: ['added'] }), /settings-stale/);
+			await apply(connections, { type: 'fetchModels', provider: 'custom' });
+			await apply(connections, { type: 'confirmModels', provider: 'custom', discoveryId: connections.settings.discovery!.id, ids: ['manual', 'added'] });
+			assert.equal(connections.enabled('custom'), false);
+			assert.deepStrictEqual(connections.settings.providers.custom.models[0].parameters, { topP: 0.7 });
+			assert.equal(connections.settings.providers.custom.models[0].settings.overrides, undefined);
+			assert.equal(connections.settings.providers.custom.models[0].name, 'Mine');
+			await apply(connections, { type: 'fetchModels', provider: 'custom' });
+			const stale = connections.settings.discovery!;
+			await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://other.test/new-prefix' });
+			await assert.rejects(apply(connections, { type: 'confirmModels', provider: 'custom', discoveryId: stale.id, ids: ['manual'] }), /settings-stale/);
+			assert.equal(connections.settings.providers.custom.models[0].discovered, undefined);
+			assert.deepStrictEqual(connections.settings.providers.custom.models[0].parameters, { topP: 0.7 });
+		} finally { globalThis.fetch = original; }
+	}));
+	test('custom key changes during synchronization invalidate late discovery results', async () => fixture(async (connections, context) => {
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'https://host.test/api' });
+		const original = globalThis.fetch;
+		let release!: () => void;
+		let started!: () => void;
+		const ready = new Promise<void>(resolve => { started = resolve; });
+		const waiting = new Promise<void>(resolve => { release = resolve; });
+		try {
+			globalThis.fetch = async () => { started(); await waiting; return Response.json({ data: [{ id: 'late' }] }); };
+			const discovery = apply(connections, { type: 'fetchModels', provider: 'custom' });
+			await ready;
+			await context.secrets.store(secretName('custom'), 'new-custom-credential');
+			release(); await assert.rejects(discovery, /settings-stale/);
+			assert.equal(connections.settings.keyConfigured.custom, true);
+			assert.equal(connections.settings.discovery, undefined);
+			assert.deepStrictEqual(connections.settings.providers.custom.models, []);
+		} finally { release(); globalThis.fetch = original; }
+	}));
 	test('provider state, keys and equal model IDs retain their provider identity', async () => fixture(async (connections, context) => {
 		const data = emptyConfiguration();
 		for (const provider of ['deepseek', 'bailian', 'moonshot', 'ollama'] as const) {

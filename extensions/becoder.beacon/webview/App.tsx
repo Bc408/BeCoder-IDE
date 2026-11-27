@@ -22,6 +22,7 @@ import { readClipboardImages } from './clipboard';
 import type { FilePermission } from '../src/fileTools';
 import type { Attachment } from '../src/attachments';
 import { providers, type ConnectionState } from '../src/connection';
+import { providerName } from './ProviderIdentity';
 import 'katex/dist/katex.min.css';
 import './beacon.css';
 
@@ -318,7 +319,7 @@ function ModelPicker({ connection }: { connection: ConnectionState }) {
 	}, [open]);
 	return <div className="model-picker" ref={node} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { setOpen(false); } }} onKeyDown={event => { if (event.key === 'Escape') { setOpen(false); node.current?.querySelector('button')?.focus(); } }}>
 		<button className="model-label" type="button" aria-label={modelName} aria-expanded={hasChoices ? open : undefined} onClick={() => { if (!hasChoices) { api.postMessage({ type: 'settings' }); return; } if (!open) { document.dispatchEvent(new CustomEvent('beacon-menu-open', { detail: 'model' })); } setOpen(!open); }} data-becoder-tooltip={modelName + '\n' + t('Choose provider and model', '选择服务商和模型') + '\n' + (connection.capabilities ? capabilitySummary(connection.capabilities) : '')}><span className="model-compact-icon"><Icon name="chat" /></span><span className="model-picker-name">{modelName}</span>{hasChoices && <Icon name="chevron" />}</button>
-		{open && <div className="model-picker-menu">{connection.choices?.map(model => <button type="button" key={model.provider + ':' + model.id} disabled={connection.loading} onClick={() => { setOpen(false); api.postMessage({ type: 'selectModel', provider: model.provider, id: model.id, revision: connection.revision, requestId: Date.now() }); }}><span>{model.name}<small>{providers[model.provider].name}</small></span>{connection.provider === model.provider && connection.model === model.id && <Icon name="check" />}</button>)}<button type="button" onClick={() => { setOpen(false); api.postMessage({ type: 'settings' }); }}><Icon name="settings" />{t('Manage models', '管理模型')}</button></div>}
+		{open && <div className="model-picker-menu">{connection.choices?.map(model => <button type="button" key={model.provider + ':' + model.id} disabled={connection.loading} onClick={() => { setOpen(false); api.postMessage({ type: 'selectModel', provider: model.provider, id: model.id, revision: connection.revision, requestId: Date.now() }); }}><span>{model.name}<small>{model.provider === 'custom' ? providerName(model.provider) : providers[model.provider].name}</small></span>{connection.provider === model.provider && connection.model === model.id && <Icon name="check" />}</button>)}<button type="button" onClick={() => { setOpen(false); api.postMessage({ type: 'settings' }); }}><Icon name="settings" />{t('Manage models', '管理模型')}</button></div>}
 	</div>;
 }
 

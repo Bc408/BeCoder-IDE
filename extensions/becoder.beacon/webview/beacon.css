@@ -557,7 +557,7 @@ body[data-surface="configuration"] { background: var(--vscode-editor-background)
 .settings-v3 .settings-models { margin-top: 32px; }
 .settings-v3 .settings-section-title { margin-bottom: 12px; }
 .settings-v3 .settings-section-title h2 { font-size: 14px; font-weight: 600; }
-.settings-v3 .settings-section-title > button { display: flex; gap: 6px; align-items: center; min-height: var(--settings-control-height); border: 1px solid var(--control-border); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.settings-v3 .settings-section-title > div > button { display: flex; gap: 6px; align-items: center; min-height: var(--settings-control-height); border: 1px solid var(--control-border); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
 .settings-v3 .settings-model-list { border: 1px solid var(--control-border); border-radius: 14px; overflow: hidden; background: color-mix(in srgb, var(--vscode-foreground) 2%, var(--vscode-editor-background)); }
 .settings-model-group { display: flex; gap: 20px; align-items: center; justify-content: space-between; padding: 7px 16px; border-bottom: 1px solid var(--control-border); }
 .settings-model-group button { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 500; }

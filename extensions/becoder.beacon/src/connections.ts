@@ -5,7 +5,7 @@
 
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
-import { isProvider, normalizeBaseURL, providers, secretName, type Connection, type ConnectionState, type ProviderId } from './connection';
+import { isProvider, normalizeBaseURL, providers, requiresApiKey, secretName, type Connection, type ConnectionState, type ProviderId } from './connection';
 import { createGenerator, listModels, testModelConnection } from './provider';
 import { ProviderTests } from './providerTests';
 import { ModelCapabilityError, resolveCapabilities } from './models';
@@ -104,7 +104,11 @@ export class Connections implements vscode.Disposable {
 		const selection = this.data.selection;
 		if (!selection || this.pending || this.refreshing || this.error) { return false; }
 		const state = this.snapshot;
-		return this.enabled(selection.provider) && this.data.providers[selection.provider].models.some(item => item.id === selection.model && item.enabled !== false) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && (state.provider === 'ollama' || state.keyConfigured);
+		return this.enabled(selection.provider) && this.data.providers[selection.provider].models.some(item => item.id === selection.model && item.enabled !== false) && ['chat', 'unknown'].includes(state.capabilities!.purpose) && this.connectionReady(selection.provider);
+	}
+	private connectionReady(provider: ProviderId): boolean {
+		if (requiresApiKey(provider) && !this.keys[provider]) { return false; }
+		try { normalizeBaseURL(this.data.providers[provider].baseURL, provider); return true; } catch { return false; }
 	}
 	enabled(provider: ProviderId): boolean { return this.data.providers[provider].enabled ?? (this.data.selection?.provider === provider); }
 	async accessKey(action: 'copy' | 'reveal', revision: number, provider: ProviderId): Promise<string | undefined> {
@@ -146,7 +150,7 @@ export class Connections implements vscode.Disposable {
 		if (this.error) { throw new Error('settings-unreadable'); }
 		if (value.type === 'testProvider') {
 			const profile = this.data.providers[value.provider];
-			if (!profile.models.length || (value.provider !== 'ollama' && !this.keys[value.provider])) { throw new Error('model-unavailable'); }
+			if (!profile.models.length || !this.connectionReady(value.provider)) { throw new Error('model-unavailable'); }
 			await this.tests.start(profile.models.map(model => ({ provider: value.provider, baseURL: profile.baseURL, model: model.id, apiKey: this.keys[value.provider], parameters: {} })), this.revision); return;
 		}
 		this.pending = true; this.changed();
@@ -189,11 +193,16 @@ export class Connections implements vscode.Disposable {
 
 					validateModel(value.provider, profile.baseURL, model);
 					if (original && original.id !== model.id) { throw new Error('invalid-model'); }
-					if (original) { profile.models[profile.models.indexOf(original)] = model; } else { if (profile.models.length >= 2000) { throw new Error('model-limit'); } profile.models.push(model); }
+					if (original) { profile.models[profile.models.indexOf(original)] = model; } else {
+						if (profile.models.length >= 2000) { throw new Error('model-limit'); }
+						if (value.provider === 'custom' && profile.enabled === undefined && !profile.models.length) { profile.enabled = true; }
+						profile.models.push(model);
+					}
 					this.clearInvalidSelection(data, value.provider);
 					await this.persist(data); break;
 				}
 				case 'fetchModels': {
+					if (value.provider === 'custom' && !this.connectionReady(value.provider)) { throw new Error('model-unavailable'); }
 					this.cancelDiscovery();
 					const job = new AbortController(); this.discoveryJob = job;
 					const revision = this.revision;
@@ -224,7 +233,7 @@ export class Connections implements vscode.Disposable {
 					const model = profile.models.find(item => item.id === value.id);
 					if (!model) { throw new Error('settings-stale'); }
 					if (value.type === 'selectModel') {
-						if (!this.enabled(value.provider) || model.enabled === false || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || (value.provider !== 'ollama' && !this.keys[value.provider])) { throw new Error('model-unavailable'); }
+						if (!this.enabled(value.provider) || model.enabled === false || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose) || !this.connectionReady(value.provider)) { throw new Error('model-unavailable'); }
 						if (data.selection && data.providers[data.selection.provider].enabled === undefined) { data.providers[data.selection.provider].enabled = true; }
 						data.selection = { provider: value.provider, model: model.id };
 					} else { profile.models.splice(profile.models.indexOf(model), 1); this.clearInvalidSelection(data, value.provider); }

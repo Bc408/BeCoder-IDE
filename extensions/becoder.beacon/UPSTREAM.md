@@ -23,6 +23,13 @@ Modifications: replaced Tailwind/shadcn styling and buttons with the BeCoder Web
 
 Pinned npm sources and integrity hashes are in `package-lock.json`. `build.mjs` bundles the extension and generates `dist/ThirdPartyNotices.txt` from licenses of all bundled dependency packages, with exact package versions and source tarball URLs. React, AI SDK, its DeepSeek and OpenAI-compatible providers, unified/remark/rehype, KaTeX and their bundled transitive dependencies retain their own licenses.
 
+The custom provider uses the pinned `@ai-sdk/openai` native Responses implementation
+for request conversion and stream parsing. BeCoder configures the endpoint, optional
+explicit credentials and local-history replay (`store: false`); it does not copy an
+OpenAI transport implementation. This Apache-2.0 dependency and its transitive notices
+are emitted by the existing notice generator. Model-specific reasoning controls are
+not overridden for custom connections.
+
 No Codex or Trae proprietary code or assets are included.
 
 `webview/ImagePreview.tsx` and the clipboard paste route independently implement

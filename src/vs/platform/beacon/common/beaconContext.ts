@@ -13,6 +13,7 @@ export interface IBeaconContextService {
 	readonly _serviceBrand: undefined;
 	readonly onDidChange: Event<number>;
 	getContext(windowId: number): Promise<IBeaconContext>;
+	getProtectedResourceRoots(windowId: number): Promise<readonly string[]>;
 	getResume(windowId: number): Promise<IBeaconResume | undefined>;
 	setView(windowId: number, view: IBeaconResume): Promise<void>;
 	selectWorkspace(windowId: number, root: string): Promise<IBeaconContext>;

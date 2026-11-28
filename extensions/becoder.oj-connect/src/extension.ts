@@ -10,6 +10,8 @@ import * as vscode from 'vscode';
 import type { IBeaconAcquisition, IBeaconCollectionScope, IBeaconOjCapture } from 'becoder-beacon';
 import { toBeaconProblemRecord, toBeaconVerdictRecord } from './beaconRecords';
 import { resolveBeaconProblemId } from './browserProblem';
+import { StatementCacheClient } from './statementCache';
+import type { StatementTranslationTicket, StatementVersion } from 'becoder-oj-connect';
 import { CommandBrowserHost, CommandLuoguHost, CommandNowcoderHost, CommandCodeforcesHost, CommandLanqiaoHost } from './browserHost';
 import { LanqiaoAdapter } from './adapters/lanqiao/adapter';
 import { AtCoderAdapter } from './adapters/atcoder/adapter';
@@ -65,6 +67,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		void vscode.window.showWarningMessage(vscode.l10n.t('OJ Connect could not migrate saved preferences. Unmigrated choices are kept; check your user settings and reload to retry.'));
 	}
 	const execute = async (command: string, ...args: unknown[]) => vscode.commands.executeCommand(command, ...args);
+	const translationProgress = new Map<string, (completed: number, total: number) => void>();
+	context.subscriptions.push(vscode.commands.registerCommand('_becoder.ojConnect.translationProgress', (value: { requestId: string; completed: number; total: number }) => {
+		if (value && Number.isSafeInteger(value.completed) && Number.isSafeInteger(value.total)) { translationProgress.get(value.requestId)?.(value.completed, value.total); }
+	}));
+	const statements = new StatementCacheClient((operation, input) => execute('_becoder.ojConnect.statementCache', operation, input), async (ticket: StatementTranslationTicket, signal, progress) => {
+		const requestId = randomUUID(); translationProgress.set(requestId, progress);
+		const cancel = () => { void execute('_becoder.beacon.cancelProblemTranslation', requestId).catch(() => { }); };
+		signal.addEventListener('abort', cancel, { once: true });
+		try {
+			const beacon = vscode.extensions.getExtension('becoder.beacon');
+			if (!beacon) { throw new Error('translation-model-unavailable'); }
+			await beacon.activate(); signal.throwIfAborted();
+			return await vscode.commands.executeCommand<StatementVersion>('_becoder.beacon.translateProblem', ticket, requestId) as StatementVersion;
+		} finally { signal.removeEventListener('abort', cancel); translationProgress.delete(requestId); }
+	});
 	const collectionScope = async (): Promise<IBeaconCollectionScope | undefined> => {
 		try { return await vscode.commands.executeCommand<IBeaconCollectionScope>('_becoder.beacon.context', 'captureCollectionScope'); }
 		catch { void vscode.window.showWarningMessage(vscode.l10n.t('Beacon could not prepare this activity context. The requested OJ action will continue.')); return undefined; }
@@ -97,10 +114,13 @@ export async function activate(context: vscode.ExtensionContext) {
 				: kind === 'problem' ? vscode.l10n.t('The problem was opened, but Beacon could not save its context.') : vscode.l10n.t('The submission continues, but Beacon could not save its context.');
 		void vscode.window.showWarningMessage(notice);
 	};
-	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, _trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
-		if (!scope) { return; }
-		try { await completeCollection(beginCollection(scope, sourceUri), async () => execute('_becoder.beacon.context', 'captureProblemRecord', { record: toBeaconProblemRecord(document, sourceUri, viewedAt), collectionScope: scope })); }
-		catch (error) { reportCollectionFailure('problem', error); }
+	const publishAcquiredProblem = async (document: ProblemDocument, sourceUri: string, viewedAt: number, trigger: IBeaconAcquisition['trigger'], scope: IBeaconCollectionScope | undefined): Promise<void> => {
+		const behavior = scope ? completeCollection(beginCollection(scope, sourceUri), async () => execute('_becoder.beacon.context', 'captureProblemRecord', { record: toBeaconProblemRecord(document, sourceUri, viewedAt), collectionScope: scope })).catch(error => reportCollectionFailure('problem', error)) : Promise.resolve();
+		if (trigger === 'get-problem') {
+			try { await statements.publishAcquired(document); }
+			catch { void vscode.window.showWarningMessage(vscode.l10n.t('The problem was opened, but its statement could not be saved to the application cache.')); }
+		}
+		await behavior;
 	};
 	const mismatchNotices = new Set<string>();
 	context.subscriptions.push({ dispose: () => mismatchNotices.clear() });
@@ -256,6 +276,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 	const problems = new ProblemPanel(context, {
 		loadLanguages: readProblemLanguages,
+		mergeStatement: document => statements.merge(document),
+		translateStatement: (source, target, signal, progress) => statements.translate(source, target, signal, progress),
 		preferredLanguage: (site, family) => controller!.preferredLanguage(site, family),
 		selectLanguage: (site, family, languageId) => controller!.selectLanguage(site, family, languageId),
 		submit: async (source, document) => submitDocument(source, document.ref),
@@ -329,6 +351,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('becoder.ojConnect.refreshAccounts', () => login.refresh())
 	);
 	return {
+		readCachedBeaconProblem: (ref: ProblemRef, language: import('becoder-oj-connect').StatementLanguage) => statements.read(ref, language),
 		resolveBeaconProblemId,
 		resolveBeaconUrl: (url: string) => adapters.map(adapter => adapter.resolve(url)).find(ref => !!ref),
 		resolveBeaconProblem: (sourceUri: string) => {

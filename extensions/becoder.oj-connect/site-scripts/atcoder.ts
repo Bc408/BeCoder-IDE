@@ -26,10 +26,7 @@ export function parseAtCoderProblem(problem: ProblemRef, html: string): import('
 		}
 		// Official top-level task sections share Luogu's hierarchy; prose stays in its selected language.
 		const headings: Record<string, string> = {
-			'Problem Statement': '\u9898\u76ee\u63cf\u8ff0', '\u554f\u984c\u6587': '\u9898\u76ee\u63cf\u8ff0',
-			Input: '\u8f93\u5165\u683c\u5f0f', '\u5165\u529b': '\u8f93\u5165\u683c\u5f0f',
-			Output: '\u8f93\u51fa\u683c\u5f0f', '\u51fa\u529b': '\u8f93\u51fa\u683c\u5f0f',
-			Notes: '\u8bf4\u660e/\u63d0\u793a'
+			'Problem Statement': 'Problem Statement', Input: 'Input', Output: 'Output', Notes: 'Notes'
 		};
 		const notes: Section[] = [];
 		for (const heading of clone.querySelectorAll('section > h3')) {
@@ -48,11 +45,14 @@ export function parseAtCoderProblem(problem: ProblemRef, html: string): import('
 		for (const node of [...clone.children]) { if (node.tagName === 'HR' || (!node.textContent?.trim() && !node.querySelector('img,pre,table,var'))) { node.remove(); } }
 		return [{ format: 'html' as const, content: clone.innerHTML }, ...explanations, ...notes];
 	};
-	const bodies = (['ja', 'en'] as const).flatMap(locale => {
+	const bodies = (['en'] as const).flatMap(locale => {
 		const element = statement.querySelector('.lang-' + locale);
 		return element ? [{ locale, sections: bodyHTML(element) }] : [];
 	});
-	if (!bodies.length) { bodies.push({ locale: 'en', sections: bodyHTML(statement) }); }
+	if (!bodies.length) {
+		if (statement.querySelector('.lang-ja')) { throw new Error('statement-language-unavailable'); }
+		bodies.push({ locale: 'en', sections: bodyHTML(statement) });
+	}
 	const sampleRoot = statement.querySelector('.lang-ja') ?? statement.querySelector('.lang-en') ?? statement;
 	const samples: { input: string; output: string }[] = [];
 	const inputs = [...sampleRoot.querySelectorAll('h3')].filter(node => /\u5165\u529b\u4f8b|Sample Input/.test(node.textContent ?? ''));

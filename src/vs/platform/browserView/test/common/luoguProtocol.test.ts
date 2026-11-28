@@ -11,6 +11,15 @@ suite('Luogu production protocol', () => {
 	const problem = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
 	const config = { CodeLanguage: { 27: { id: 27, name: 'C++20', fileExt: ['cpp'], canO2: true, disabled: false }, 2: { id: 2, name: 'C', fileExt: ['c'], canO2: true, disabled: false } }, RecordStatus: { 0: { name: 'Waiting', shortName: 'Waiting' }, 12: { name: 'Accepted', shortName: 'AC' } } };
 	const context = { user: { uid: 123, name: 'test-user' }, data: { problem: { pid: 'P1001', name: 'A+B', content: { locale: 'zh-CN', description: '$a+b$', hint: 'Sample explanation' }, samples: [[' 20 30\n', '50\n']], limits: { time: [1000], memory: [524288] }, acceptLanguages: [27, 2] }, translations: {} } };
+	test('English body uses English generated headings and preserves each language title', () => {
+		const raw = structuredClone(context);
+		Object.assign(raw.data.problem, { content: { locale: 'en', name: 'English title', description: 'Original statement' } });
+		raw.data.translations = { 'zh-CN': { locale: 'zh-CN', name: 'Chinese title', description: 'Translated statement' } };
+		const value = parseLuoguProblem(problem, raw);
+		assert.strictEqual(value.bodies[0].sections[0].heading, 'Problem Statement');
+		assert.strictEqual(value.bodies[0].title, 'English title');
+		assert.strictEqual(value.bodies[1].title, 'Chinese title');
+	});
 	test('Luogu problem and language mappings use current official configuration', () => {
 		const data = parseLuoguProblem(problem, context);
 		assert.strictEqual(data.bodies[0].sections[0].content, '$a+b$');
@@ -77,12 +86,13 @@ suite('Luogu production protocol', () => {
 		assert.strictEqual(Reflect.get(absent, 'problemTitle'), undefined);
 	});
 
-	test('foreign statements retain the upstream Chinese translation', () => {
+	test('a Chinese summary is not treated as an English section or complete Chinese body', () => {
 		const raw = structuredClone(context);
 		Object.assign(raw.data.problem, { content: { locale: 'en', description: 'English statement' }, translation: '中文翻译' });
 		const data = parseLuoguProblem(problem, raw);
-		assert.ok(data.bodies[0].sections.some(section => section.content === '中文翻译'));
-		assert.strictEqual(data.bodies[0].sections[0].heading, '题目描述');
+		assert.deepStrictEqual(data.bodies.map(body => body.locale), ['en']);
+		assert.ok(!data.bodies[0].sections.some(section => section.content === '中文翻译'));
+		assert.strictEqual(data.bodies[0].sections[0].heading, 'Problem Statement');
 	});
 
 	test('testcase diagnostics survive mapping and legacy hidden results stay hidden', () => {

@@ -41,7 +41,7 @@
 	"atcoder.cCompiler": "AtCoder 的 C 编译器选择。可在题面或首次提交时选择，选择会保存至此并跨项目使用；离线预选会在登录后按当前官网目录校验。留空则未指定。版本不再可用时会要求重新选择。",
 	"atcoder.cppCompiler": "AtCoder 的 C++ 编译器 ID。可在题面或首次提交时选择，选择会保存至此并跨项目使用；留空则未指定。版本不再可用时会要求重新选择。",
 	"statementEnglish": "英文",
-	"statementJapanese": "日文",
+	"statementChinese": "中文",
 	"statementLanguage": "AtCoder 默认题面语言。页面切换会更新此个人设置；没有对应语言时显示题目实际提供的内容。",
 	"panelLocation": "新题面与评测页的打开位置；修改不会移动已打开页面。",
 	"panelAuto": "自动：复用源码右侧最近的编辑组，没有则在右侧打开。",

@@ -281,6 +281,13 @@ suite('Beacon read-only permissions', () => {
 		assert.equal((await files.execute({ operation: 'read', path: path.join(directory, 'neighbor.txt') }, signal)).ok, false);
 		assert.equal((await files.execute({ operation: 'list', path: directory }, signal)).ok, false);
 	}));
+	test('a later redirected application cache root is protected by its original path', async () => fixture(async directory => {
+		const privateRoot = path.join(directory, 'application-cache'), foreign = path.join(directory, 'foreign');
+		const files = new FileTools('computer', [], undefined, { protectedRoots: [privateRoot] });
+		await fs.mkdir(foreign); await fs.writeFile(path.join(foreign, 'problem-statements.json'), 'all-private-problems');
+		await fs.symlink(foreign, privateRoot, 'junction');
+		assert.equal((await files.execute({ operation: 'read', path: path.join(privateRoot, 'problem-statements.json') }, signal)).ok, false);
+	}));
 	test('none rejects every operation; workspace real targets stay inside roots; computer still rejects private files', async () => fixture(async directory => {
 		const root = path.join(directory, 'workspace');
 		const outside = path.join(directory, 'outside');

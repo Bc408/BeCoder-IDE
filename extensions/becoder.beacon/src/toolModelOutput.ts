@@ -33,7 +33,12 @@ export function webModelOutput(output: WebOutput): BeaconModelOutput {
 }
 
 export function contextModelOutput(name: BeaconContextToolName, output: ContextOutput): BeaconModelOutput {
-	if (output.error) { return modelFailureOutput(typeof output.error === 'object' ? output.error : { code: 'read_failed', message: 'The requested source could not be read.' }); }
+	if (output.error) {
+		if (name === 'fetchProblem' && typeof output.error === 'object' && output.error.code === 'statement_language_unavailable' && Array.isArray(output.availableLanguages)) {
+			return { type: 'json', value: { ok: false, error: output.error, availableLanguages: output.availableLanguages.filter(language => language === 'en' || language === 'zh-CN') } };
+		}
+		return modelFailureOutput(typeof output.error === 'object' ? output.error : { code: 'read_failed', message: 'The requested source could not be read.' });
+	}
 	const notes = contextResultNotes(name, output);
 	return { type: 'json', value: JSON.parse(JSON.stringify({ ...output, ...(notes.length ? { notes } : {}) })) as JSONValue };
 }

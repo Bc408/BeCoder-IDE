@@ -117,6 +117,7 @@ import './contrib/files/electron-browser/fileActions.contribution.js';
 import './contrib/codeEditor/electron-browser/codeEditor.contribution.js';
 import './contrib/becoder/electron-browser/beCoderDisplayLanguage.contribution.js';
 import './contrib/becoder/electron-browser/beaconContext.contribution.js';
+import './contrib/becoder/electron-browser/ojStatementCache.contribution.js';
 import './contrib/becoder/electron-browser/beCoderNotebook.contribution.js';
 import './contrib/becoder/electron-browser/beCoderRunner.contribution.js';
 

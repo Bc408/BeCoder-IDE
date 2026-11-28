@@ -97,7 +97,8 @@ test('webview state cannot terminate its script and actions cannot inject a sour
 	assert.strictEqual(panelMessage({ action: 'viewRecord' }), undefined);
 	assert.strictEqual(panelMessage({ action: 'stopTracking' }), undefined);
 	assert.strictEqual(panelMessage({ action: 'selectLocale', locale: 1 }), undefined);
-	assert.deepStrictEqual(panelMessage({ action: 'selectLocale', locale: 'ja' }), { action: 'selectLocale', locale: 'ja' });
+	assert.strictEqual(panelMessage({ action: 'selectLocale', locale: 'ja' }), undefined);
+	assert.deepStrictEqual(panelMessage({ action: 'cancelTranslation' }), { action: 'cancelTranslation' });
 	assert.deepStrictEqual(panelMessage({ action: 'ready' }), { action: 'ready' });
 	assert.deepStrictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 'text' }), { action: 'renderContent', format: 'markdown', content: 'text' });
 	assert.strictEqual(panelMessage({ action: 'renderContent', format: 'markdown', content: 1 }), undefined);
@@ -200,17 +201,17 @@ test('AtCoder statement displays a default compiler without storing it and resto
 		const { ProblemPanel } = require('../src/views/problemPanel');
 		const actions = { preferredLanguage: () => undefined, selectLanguage: () => { selected++; } };
 		const ref = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
-		const document = { ref, title: 'Product', languages: [{ id: '6017', label: 'C++23', family: 'cpp' }], bodies: ['ja', 'en'].map(locale => ({ locale, sections: [] })), samples: [], limits: [], interactive: false };
+		const document = { ref, title: 'Product', languages: [{ id: '6017', label: 'C++23', family: 'cpp' }], bodies: ['zh-CN', 'en'].map(locale => ({ locale, sections: [] })), samples: [], limits: [], interactive: false };
 		let panels = new ProblemPanel({}, actions, preferences);
 		await panels.open(document, uri, source);
 		assert.strictEqual(captures[0].state.locale, 'en'); assert.strictEqual(captures[0].state.languageId, '6017'); assert.strictEqual(selected, 0);
-		await captures[0].action({ action: 'selectLocale', locale: 'ja' }); panels.dispose();
+		await captures[0].action({ action: 'selectLocale', locale: 'zh-CN' }); panels.dispose();
 		panels = new ProblemPanel({}, actions, preferences);
 		await panels.open({ ...document, bodies: [document.bodies[1]] }, uri, source);
 		assert.strictEqual(captures[1].state.locale, 'en'); panels.dispose();
 		panels = new ProblemPanel({}, actions, preferences);
 		await panels.open(document, uri, source);
-		assert.strictEqual(captures[2].state.locale, 'ja'); assert.strictEqual(selected, 0); panels.dispose();
+		assert.strictEqual(captures[2].state.locale, 'zh-CN'); assert.strictEqual(selected, 0); panels.dispose();
 		panels = new ProblemPanel({}, { ...actions, preferredLanguage: () => '999' }, preferences);
 		await panels.open({ ...document, ref: { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } }, uri, source);
 		assert.strictEqual(captures[3].state.languageId, undefined, 'an expired preference must remain unselected');
@@ -420,7 +421,7 @@ test('reopening a statement replaces content and action data while retaining sou
 	const captures: { state: PanelState; action: (value: PanelAction) => Promise<void> }[] = [];
 	const reads: { signal: AbortSignal; resolve: (value: unknown) => void }[] = [];
 	const actions: { source: unknown; problem: unknown }[] = [];
-	const values = new Map<string, unknown>([['atcoder.statementLanguage', 'ja']]);
+	const values = new Map<string, unknown>([['atcoder.statementLanguage', 'zh-CN']]);
 	let finishSetting: (() => void) | undefined, deferSetting = false;
 	const preferences = new OjPreferences({ get: <T>(key: string) => values.get(key) as T | undefined, update: async (key, value) => { if (deferSetting) { await new Promise<void>(resolve => { finishSetting = resolve; }); } values.set(key, value); } });
 	const event = () => ({ dispose() { } });
@@ -447,11 +448,11 @@ test('reopening a statement replaces content and action data while retaining sou
 		await panels.open(old, uri, source);
 		const capture = captures[0];
 		assert.strictEqual(capture.state.locale, 'en');
-		const fresh = { ref, title: 'New', bodies: ['en', 'ja'].map(locale => ({ locale, sections: [{ format: 'html', content: '<p>New ' + locale + '</p>' }] })), samples: [{ input: '  new\n\n', output: 'answer\n' }], limits: [{ label: 'Time Limit', value: '2.00s' }], interactive: false };
+		const fresh = { ref, title: 'New', bodies: ['en', 'zh-CN'].map(locale => ({ locale, sections: [{ format: 'html', content: '<p>New ' + locale + '</p>' }] })), samples: [{ input: '  new\n\n', output: 'answer\n' }], limits: [{ label: 'Time Limit', value: '2.00s' }], interactive: false };
 		await panels.open(fresh, uri, source);
 		assert.strictEqual(captures.length, 1);
 		assert.deepStrictEqual(capture.state.problem, fresh, 'all fields are replaced, including removal of old optional metadata');
-		assert.strictEqual(capture.state.locale, 'ja', 'a previously missing saved locale returns when available');
+		assert.strictEqual(capture.state.locale, 'zh-CN', 'a previously missing saved locale returns when available');
 		assert.strictEqual(reads[0].signal.aborted, true);
 		reads[0].resolve({ languages: [{ id: '17', label: 'C++17', family: 'cpp' }] }); await new Promise(resolve => setImmediate(resolve));
 		assert.strictEqual(capture.state.problem!.title, 'New');
@@ -464,7 +465,7 @@ test('reopening a statement replaces content and action data while retaining sou
 		assert.strictEqual(actions[1].source, uri);
 		for (const action of actions) { assert.strictEqual(action.problem, capture.state.problem, 'actions use the same current document as the view'); }
 		deferSetting = true;
-		const selecting = capture.action({ action: 'selectLocale', locale: 'ja' });
+		const selecting = capture.action({ action: 'selectLocale', locale: 'zh-CN' });
 		await panels.open({ ...fresh, title: 'English only', bodies: [fresh.bodies[0]], languages: [{ id: '26', label: 'C++26', family: 'cpp' }] }, uri, source);
 		finishSetting!(); await selecting;
 		assert.strictEqual(capture.state.locale, 'en', 'late preference completion cannot restore a removed locale');

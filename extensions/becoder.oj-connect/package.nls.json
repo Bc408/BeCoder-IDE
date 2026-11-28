@@ -41,7 +41,7 @@
 	"atcoder.cCompiler": "AtCoder C compiler choice. Choosing in the problem panel or submission picker saves the choice here for all projects. Offline choices are checked against the current site catalogue after sign-in. Leave empty for no preference. Unavailable versions require a new choice.",
 	"atcoder.cppCompiler": "AtCoder C++ compiler ID. Choosing in the problem panel or submission picker saves the choice here for all projects. Leave empty for no preference. Unavailable versions require a new choice.",
 	"statementEnglish": "English",
-	"statementJapanese": "Japanese",
+	"statementChinese": "Chinese",
 	"statementLanguage": "Preferred AtCoder statement language. Switching in a problem panel updates this personal setting. Falls back to content the problem actually provides.",
 	"panelLocation": "Where new problem and submission panels open. Existing panels are not moved.",
 	"panelAuto": "Automatic: reuse the nearest group to the right of the source, or open beside it.",

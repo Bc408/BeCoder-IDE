@@ -20,6 +20,11 @@ test('five canonical Beacon problem IDs roundtrip through the real OJ parsers', 
 });
 
 const ref = { site: 'luogu', nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+test('per-language titles and translation provenance survive validation', () => {
+	const result = validateProblem({ ref, title: 'Original', bodies: [{ locale: 'zh-CN', title: 'Translated title', origin: 'translation', sections: [{ format: 'markdown', content: 'Translated' }] }], samples: [], limits: [], interactive: false });
+	assert.strictEqual(result.bodies[0].title, 'Translated title');
+	assert.strictEqual(result.bodies[0].origin, 'translation');
+});
 test('Beacon collects only problem identity and a final verdict, never a statement or intermediate poll', () => {
 	const document = validateProblem({ ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false });
 	assert.deepStrictEqual(toBeaconProblemRecord(document, 'file:///C:/practice/A%20B.cpp', 0), { problem: { oj: 'luogu', problemId: 'P1001' }, filePath: 'C:\\practice\\A B.cpp', viewedAt: '1970-01-01T00:00:00.000Z' });

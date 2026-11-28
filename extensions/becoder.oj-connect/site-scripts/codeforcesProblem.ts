@@ -44,11 +44,11 @@ function organizeCodeforcesProblem(problem: import('becoder-oj-connect').Problem
 	for (const child of [...body.children]) {
 		if (child.matches('.header, .input-specification, .output-specification, .sample-tests, .note')) { child.remove(); }
 	}
-	sections.push({ heading: '\u9898\u76ee\u63cf\u8ff0', format: 'html', content: body.innerHTML });
+	sections.push({ heading: 'Problem Statement', format: 'html', content: body.innerHTML });
 	for (const [selector, heading, notes] of [
-		['.input-specification', '\u8f93\u5165\u683c\u5f0f', false],
-		['.output-specification', '\u8f93\u51fa\u683c\u5f0f', false],
-		['.note', '\u8bf4\u660e/\u63d0\u793a', true]
+		['.input-specification', 'Input', false],
+		['.output-specification', 'Output', false],
+		['.note', 'Notes', true]
 	] as const) {
 		for (const element of statement.querySelectorAll(':scope > ' + selector)) {
 			const clone = element.cloneNode(true) as Element;

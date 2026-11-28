@@ -96,9 +96,40 @@ try {
 	];
 	const updateAcmState = async () => { await page.evaluate(value => { window.__OJ_STATE__ = value; window.dispatchEvent(new MessageEvent('message', { data: { type: 'state', state: value } })); }, state); };
 	for (const localLabels of [labels, englishLabels]) {
+		for (const sourceLocale of ['en', 'zh-CN']) {
+			const target = sourceLocale === 'en' ? 'zh-CN' : 'en';
+			state = { kind: 'problem', labels: localLabels, sourceName: 'P1001.cpp', locale: sourceLocale, languages: [{ id: '27', family: 'cpp', label: 'C++17' }], languageId: '27', problem: { ref: acmProblems[0], title: 'Original title', bodies: [{ locale: sourceLocale, sections: [{ format: 'markdown', content: 'Original statement $a+b$.' }] }], samples: [{ input: ' 1  2\r\n', output: '3\n' }], limits: [], interactive: false } };
+			await page.goto(url); await page.locator('.katex').waitFor();
+			const picker = page.locator('.statement-language');
+			assert.deepStrictEqual(await picker.locator('option').allTextContents(), ['zh-CN', 'en'].map(locale => locale + (locale === target ? '（' + localLabels.statementMissing + '）' : '')));
+			await page.evaluate(() => { window.__messages = []; });
+			await picker.focus(); await picker.press(sourceLocale === 'en' ? 'ArrowUp' : 'ArrowDown'); await picker.press('Enter');
+			assert.deepStrictEqual(await page.evaluate(() => window.__messages.filter(value => value.data?.action === 'selectLocale').map(value => value.data)), [{ action: 'selectLocale', locale: target }]);
+			state.translation = { target, completed: 1, total: 2 }; await updateAcmState();
+			await page.getByRole('button', { name: localLabels.cancelTranslation, exact: true }).waitFor();
+			assert.ok((await page.locator('.luogu-markdown').first().textContent()).includes('Original statement'));
+			await page.getByRole('button', { name: localLabels.cancelTranslation, exact: true }).click();
+			assert.deepStrictEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'cancelTranslation' });
+			state.translation = undefined; state.locale = target;
+			state.problem.bodies.push({ locale: target, origin: 'translation', title: 'Translated title', sections: [{ format: 'markdown', content: 'Translated statement $a+b$.' }] });
+			await updateAcmState(); await page.getByRole('heading', { name: 'P1001 Translated title', exact: true }).waitFor();
+			assert.equal(await picker.locator('option').filter({ hasText: target + '（' + localLabels.statementTranslated + '）' }).count(), 1);
+			for (const theme of ['light', 'dark']) {
+				await page.evaluate(theme => { document.body.className = 'vscode-' + theme; document.documentElement.style.setProperty('--vscode-foreground', theme === 'light' ? '#24292e' : '#d4d5d8'); document.documentElement.style.setProperty('--vscode-editor-foreground', theme === 'light' ? '#24292e' : '#d4d5d8'); document.documentElement.style.setProperty('--vscode-editor-background', theme === 'light' ? '#fff' : '#282c34'); }, theme);
+				for (const width of [360, 900]) {
+					await page.setViewportSize({ width, height: 820 });
+					assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Translated statement fits width ' + width);
+					await page.screenshot({ path: path.join(output, `translation-${localLabels === labels ? 'zh' : 'en'}-${target}-${theme}-${width}.png`), fullPage: true });
+				}
+			}
+		}
+	}
+	for (const localLabels of [labels, englishLabels]) {
 		for (const problem of acmProblems) {
 			state = { kind: 'problem', labels: localLabels, sourceName: 'a.cpp', acmMode: true, problem: { ref: problem, title: 'ACM fixture', bodies: [{ locale: 'en', sections: [{ format: 'markdown', content: 'Preserved statement.' }] }], difficulty: { label: 'Hard', color: '#ff0000' }, tags: [{ label: 'Hidden algorithm' }], limits: [{ label: 'Time Limit', value: '2.00s' }], samples: [{ input: '1 2', output: '3' }], interactive: false } };
 			await page.goto(url); await page.locator('h1').waitFor();
+			assert.strictEqual(await page.locator('.statement-language').count(), 1, 'Two statement languages are always visible');
+			assert.ok((await page.locator('.statement-language').textContent()).includes(localLabels.statementMissing), 'Missing source language explains translation before activation');
 			assert.equal(await page.locator('.problem-difficulty, .problem-tags').count(), 0, 'ACM mode removes difficulty and tags for every site');
 			assert.equal(await page.locator('.problem-limit').count(), 1);
 			await page.getByText('Preserved statement.', { exact: true }).waitFor();
@@ -424,7 +455,7 @@ try {
 	for (const site of ['luogu', 'atcoder', 'nowcoder', 'codeforces']) {
 		const ref = { site, nativeId: site === 'luogu' ? 'B2005' : site === 'atcoder' ? 'abc484/abc484_c' : site === 'codeforces' ? '2121/H' : 'problem/18204', url: site === 'codeforces' ? 'https://codeforces.com/contest/2121/problem/H' : 'https://example.org/problem' };
 		state = { kind: 'problem', labels, sourceName: 'solution.cpp', languages: [{ id: 'cpp', label: 'C++23 (GCC 15.2.0) (O2)', family: 'cpp' }], languageId: 'cpp', problem: { ref, title: site === 'luogu' ? '入门测试题目' : 'A+B Problem', limits: [{ label: 'Time Limit', value: '1.00s' }, { label: 'Memory Limit', value: '128.00MiB' }], bodies: [{ locale: 'en', sections: [{ heading: '题目描述', format: 'markdown', content: '求两个整数的和。' }] }], samples: [] } };
-		if (site === 'atcoder') { state.problem.title = 'Move One Card'; state.problem.bodies.push({ locale: 'ja', sections: [] }); }
+		if (site === 'atcoder') { state.problem.title = 'Move One Card'; state.problem.bodies.push({ locale: 'zh-CN', sections: [] }); }
 		if (site === 'luogu') { Object.assign(state.problem, { title: '字符三角形', difficulty: { label: '入门', color: '#FE4C61' }, tags: [{ label: '模拟', color: '#3498db' }] }); }
 		if (site === 'codeforces') { Object.assign(state.problem, { title: 'Ice Baby', limits: [{ label: 'Time Limit', value: '2.00s' }, { label: 'Memory Limit', value: '512.00MiB' }] }); }
 		for (const width of [320, 420, 480, 481, 532, 640, 700, 1000]) {
@@ -460,7 +491,7 @@ try {
 	}
 	for (const site of ['luogu', 'atcoder']) {
 		const ref = site === 'luogu' ? { site, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' } : { site, nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
-		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: '题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'ja', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
+		state = { kind: 'problem', labels, sourceName: site === 'luogu' ? 'P1001.cpp' : 'abc086_a.cpp', languages: [{ id: 'one', label: 'C++20 with O2', family: 'cpp' }, { id: 'two', label: 'C++23 with O2', family: 'cpp' }], languageId: 'one', problem: { ref, title: site === 'luogu' ? 'P1001 A+B Problem · 中文题面' : 'Product · A long title that wraps in a narrow editor', limits: [], interactive: false, bodies: [{ locale: site === 'luogu' ? 'zh-CN' : 'en', sections: [{ heading: '题目描述', format: site === 'luogu' ? 'markdown' : 'html', content: site === 'luogu' ? '求 $a+b$。\n\n$$a^2+b^2=c^2$$\n\n![figure](https://example.org/figure.png)\n\n<script data-remote>alert(1)</script><img src="/image.png" onerror="window.pwned=1"><a href="command:evil">bad</a>' : '<p>Determine whether <var>a \\times b</var> is odd.</p><img src="https://example.org/figure.png"><script data-remote>window.pwned=1</script><a href="javascript:alert(1)">bad</a>' }] }, { locale: 'zh-CN', sections: [{ format: 'html', content: '<h2>問題文</h2><p><var>a+b</var> を求めよ。</p>' }] }], samples: [{ input: ' 1  2\n\n', output: '3\n' }, { input: '', output: '' }] } };
 		const snippets = [
 			{ language: 'php', code: '<?php\n$input = trim(file_get_contents("php://stdin"));\necho $input;\n' },
 			{ language: 'rust', code: 'use std::io;\nfn main() { let mut input = String::new(); }\n' },
@@ -626,12 +657,12 @@ try {
 			}
 		}
 		assert.equal(themeColors[0], themeColors[1], 'syntax colors stay fixed when the editor theme changes');
-		await page.getByRole('combobox', { name: '题面语言', exact: true }).selectOption('ja'); assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLocale', locale: 'ja' });
+		await page.getByRole('combobox', { name: '题面语言', exact: true }).selectOption('zh-CN'); assert.deepEqual(await page.evaluate(() => window.__messages.at(-1).data), { action: 'selectLocale', locale: 'zh-CN' });
 		if (site === 'atcoder') {
 			// ABC467 E uses mathematical var nodes inside its input-format pre, not source code.
 			const format = '<section><h3>Input</h3><pre><var>N</var> <var>M</var>\n<var>A_1</var> <var>A_2</var> <var>\\ldots</var> <var>A_N</var>\n<var>B_1</var> <var>B_2</var> <var>\\ldots</var> <var>B_{N-1}</var>\n</pre></section>';
 			state.locale = 'en';
-			state.problem.bodies = [{ locale: 'en', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>After the operations, <var>A=(6,8,7)</var>.</p>' }] }, { locale: 'ja', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>操作後の列は <var>A=(6,8,7)</var> です。</p>' }] }];
+			state.problem.bodies = [{ locale: 'en', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>After the operations, <var>A=(6,8,7)</var>.</p>' }] }, { locale: 'zh-CN', sections: [{ format: 'html', content: format }, { kind: 'sample-explanation', sampleIndex: 0, format: 'html', content: '<p>操作後の列は <var>A=(6,8,7)</var> です。</p>' }] }];
 			await page.goto(url); await page.locator('.oj-input-format .katex').first().waitFor();
 			await page.locator('.sample-explanation .katex').waitFor();
 			assert.equal(await page.locator('.oj-input-format .katex').count(), 10);
@@ -644,7 +675,7 @@ try {
 			assert.equal(await pair.locator('.sample-explanation').evaluate(element => getComputedStyle(element).gridColumn), '1 / -1');
 			assert.equal(await pair.locator('pre code').first().textContent(), ' 1  2\n\n', 'sample bytes remain untouched');
 			await page.screenshot({ path: path.join(output, 'atcoder-format-sample-explanation.png'), fullPage: true });
-			state.locale = 'ja'; await page.goto(url); await page.locator('.sample-explanation .katex').waitFor();
+			state.locale = 'zh-CN'; await page.goto(url); await page.locator('.sample-explanation .katex').waitFor();
 			assert.ok((await page.locator('.sample-explanation').textContent()).includes('操作後'));
 			assert.ok(!(await page.locator('.sample-explanation').textContent()).includes('After the operations'));
 		}

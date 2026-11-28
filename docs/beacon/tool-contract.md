@@ -1,6 +1,6 @@
 # Beacon 工具合同
 
-更新：2026-11-26。本文维护当前接口与模型可见字段；验证和交付另见[实现状态](implementation-status.md)。九工具底座见[工具清洗设计](../superpowers/specs/2026-11-26-beacon-tool-information-design.md)，[上下文就绪与可见Notebook设计](../superpowers/specs/2026-11-26-beacon-context-availability-and-visible-notebook-design.md)已完成源码接入；本轮[信息流设计](../superpowers/specs/2026-11-26-beacon-prompt-information-flow-design.md)已按[实施计划](../superpowers/plans/2026-11-26-beacon-prompt-information-flow.md)接入工作树；历史报告不证明新合同效果。
+更新：2026-11-28。本文维护当前接口与模型可见字段；验证和交付另见[实现状态](implementation-status.md)。九工具底座见[工具清洗设计](../superpowers/specs/2026-11-26-beacon-tool-information-design.md)，[上下文就绪与可见Notebook设计](../superpowers/specs/2026-11-26-beacon-context-availability-and-visible-notebook-design.md)已完成源码接入；本轮[信息流设计](../superpowers/specs/2026-11-26-beacon-prompt-information-flow-design.md)已按[实施计划](../superpowers/plans/2026-11-26-beacon-prompt-information-flow.md)接入工作树；历史报告不证明新合同效果。
 
 ## 1. 九工具输入
 
@@ -9,14 +9,14 @@ readCurrentCode({})
 readProblemRecord({ id?: string, latest?: true, filePath?: string })
 readRunRecord({ id?: string, latest?: true, filePath?: string })
 readVerdictRecord({ id?: string, latest?: true, filePath?: string })
-fetchProblem({ oj: 'luogu'|'codeforces'|'atcoder'|'nowcoder'|'lanqiao', problemId: string })
+fetchProblem({ oj: 'luogu'|'codeforces'|'atcoder'|'nowcoder'|'lanqiao', problemId: string, language: 'zh-CN'|'en' })
 inspectFile({ operation: 'read'|'list'|'find'|'search', path: string, offset?: number, limit?: number, query?: string })
 readPage({ id: string, offset?: number, limit?: number, pageNumber?: number })
 browseWeb({ operation: 'search'|'fetch', query?: string, url?: string })
 readBeCoderInfo({ topic?: 'overview'|'problems'|'runner'|'cph'|'notebook'|'oj-connect'|'beacon' })
 ```
 
-成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／document／retrievedAt，页面为ok／contents／source和范围。文件、网页保自身形态。模型结果按实际条件增加外层notes，不写入record或业务队列；Notebook现场与语义文件内容同附input向上关联最近C/C++格、跳过Markdown的短释义。失败为安全error:{code,message}，不以空正文冒充失败。id与latest／filePath互斥。英文用途／参数在contextToolContract.ts及Provider，当前提示版本2026-11-27.2（本轮仅替换主对话人格core）；工具位置与中英文语义见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)和[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)，用途不规定调用顺序。
+成功形态：当前可见文档为files数组，以kind:code／notebook区分源码和笔记；记录为records目录或record投影，题面为problem／language／origin／document，页面为ok／contents／source和范围。文件、网页保自身形态。模型结果按实际条件增加外层notes，不写入record或业务队列；Notebook现场与语义文件内容同附input向上关联最近C/C++格、跳过Markdown的短释义。失败为安全error:{code,message}，不以空正文冒充失败。id与latest／filePath互斥。英文用途／参数在contextToolContract.ts及Provider，当前提示版本2026-11-27.2（本轮仅替换主对话人格core）；工具位置与中英文语义见[信息流接入](review/2026-11-26-prompt-information-flow-installed.md)和[产品上下文补充](review/2026-11-27-product-context-prompts-installed.md)，用途不规定调用顺序。
 
 notes解释当前实际返回字段：近期范围、执行与check、输出流、新旧截断、hash及Notebook位置时点。永久未保存片段不提供全文续读；文件／页面只在真实nextOffset存在时提示后续位置，PDF保同页pageNumber。网页真正空sources保持成功，零项被预算拒收为budget；部分来源被省略时保已有内容并说明集合缺失。
 
@@ -26,13 +26,13 @@ notes解释当前实际返回字段：近期范围、执行与check、输出流�
 
 ## 2. 权限、容量与来源
 
-工作区决定采集资格，模式决定消费：有效根在Blackout也持续采集，模型不得列／读持久记录；无根或异常不采集不补采。Spot普通文件限Beacon根，Flood保原只读扩展范围；当前可见C/C++与BeCoder Notebook内容及五站fetchProblem保原页面权限，fetch独立搜索开关。现场Notebook含dirty、未命名及根外内容，在三模式及无根可读；不授磁盘backing file、相邻文件或引用附件读权。
+工作区决定采集资格，模式决定消费：有效根在Blackout也持续采集，模型不得列／读持久行为记录；无根或异常不采集不补采。Spot普通文件限Beacon根，Flood保原只读扩展范围；当前可见C/C++与BeCoder Notebook内容及五站fetchProblem保原页面权限，fetch独立搜索开关。现场Notebook含dirty、未命名及根外内容，在三模式及无根可读；不授磁盘backing file、相邻文件或引用附件读权。
 
 collectionPending为独立宿主发送门禁，覆盖应采集事实适配至发布，不进入模型、持久记录或scope epoch；同根窗口共享、有效根三模式同规则。显示“正在保存用户行为上下文”，所有新请求在实际受理前复核。失败由原动作窗口右下角通知、同动作至多一次，确认不明如实说明；完成或失败结束后保草稿、由用户重发，不排队、重跑或自动重试采集。执行退役及清理不等待保存；远程OJ未取得终态不增加保存等待。
 
 problem13：五站Get／Import的题目身份、关联文件及时间，同题同路径更新入尾；不含题面。run30：Runner／CPH／Notebook一份程序的一次编译和多个input，不去重；CPH单点／全部同权，Compile Only不入队。verdict20：完整最终结果，同站同题严格相同实际提交稿替换旧项入尾；缺稿跳过去重。读取不续期。
 
-fetchProblem规范题号：Luogu P1001或P1001@12345；CF 2026/A；AtCoder abc300/abc300_a；牛客problem/12345或contest/12345/A；蓝桥12345。独立复用五站核心解析，不产生用户Get／Import副作用或题面持久库。非五站题沿授权.cph元数据／普通网页补充，不扩完整闭环。
+fetchProblem规范题号：Luogu P1001或P1001@12345；CF 2026/A；AtCoder abc300/abc300_a；牛客problem/12345或contest/12345/A；蓝桥12345。language必需且仅zh-CN／en；应用缓存精确命中则返回该版本，目标语种未命中才复用五站核心解析。不自动翻译，不写缓存或用户行为，不提供目录、次序或拿题时间。成功为problem／language／origin（site或translation）／document，document仅所选语种；不以retrievedAt冒充官网新观察。语种不存在时error.code为statement_language_unavailable，并提供该题availableLanguages。旧已完成工具交换原样回放，不补造语言或重执行。非五站题沿授权.cph元数据／普通网页补充，不扩完整闭环。
 
 ## 3. 模型投影与原生事实
 

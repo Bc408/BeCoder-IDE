@@ -10,6 +10,8 @@ import { Panel, labels } from './webview';
 import { SourceBinding } from '../sourceBinding';
 import { defaultLanguage, type OjPreferences } from '../preferences';
 import { compilerCatalogue, resolveCompiler, symbolicCompiler } from '../compilerCatalogue';
+import { selectStatement } from '../statementLanguages';
+import type { StatementRead, StatementLanguage, StatementContent } from 'becoder-oj-connect';
 
 export interface ProblemActions {
 	preferredLanguage(site: SiteId, family: 'c' | 'cpp'): string | undefined;
@@ -18,17 +20,22 @@ export interface ProblemActions {
 	importCph(sourceUri: string, document: ProblemDocument): Promise<void>;
 	openLink(url: string): Promise<void>;
 	loadLanguages?(problem: ProblemRef, signal: AbortSignal): Promise<LanguageCatalogue>;
+	mergeStatement?(document: StatementContent): Promise<StatementContent>;
+	translateStatement?(source: StatementRead, target: StatementLanguage, signal: AbortSignal, progress: (completed: number, total: number) => void): Promise<StatementContent>;
 }
 interface ProblemPanelEntry {
 	panel: Panel;
 	binding: SourceBinding<vscode.TextDocument>;
 	languageRead?: AbortController;
+	translation?: AbortController;
 }
 export class ProblemPanel implements vscode.Disposable {
 	private readonly panels = new Map<string, ProblemPanelEntry>();
 	constructor(private readonly context: vscode.ExtensionContext, private readonly actions: ProblemActions, private readonly preferences?: OjPreferences) { }
 	async open(input: ProblemDocument, sourceUri: string, sourceDocument?: vscode.TextDocument): Promise<void> {
-		const document = validateProblem(input), key = sourceUri + '\n' + document.ref.url;
+		let document = validateProblem(input);
+		if (this.actions.mergeStatement) { try { document = validateProblem({ ...document, ...await this.actions.mergeStatement(document) }); } catch { /* Fresh official content remains usable after cache failure. */ } }
+		const key = sourceUri + '\n' + document.ref.url;
 		const source = sourceDocument ?? await vscode.workspace.openTextDocument(vscode.Uri.parse(sourceUri));
 		const binding = new SourceBinding(source);
 		const family = source.languageId === 'c' ? 'c' : 'cpp';
@@ -41,9 +48,13 @@ export class ProblemPanel implements vscode.Disposable {
 			let current = false;
 			try { existing.binding.assertCurrent(); current = existing.binding.source === source; } catch { /* Explicitly reopening binds the new source. */ }
 			if (current) {
+				const oldLocale = existing.panel.state.locale;
+				const invalidated = existing.panel.state.problem?.bodies.some(body => body.locale === oldLocale && body.origin === 'translation') && !document.bodies.some(body => body.locale === oldLocale);
+				existing.translation?.abort(); existing.translation = undefined;
 				this.cancelLanguageRead(existing);
-				existing.panel.update({ problem: document, locale: this.statementLocale(document, existing.panel.state.locale), languages, languageId, languagesLoading: false, usingCompilerCatalogue });
+				existing.panel.update({ problem: document, locale: this.statementLocale(document, existing.panel.state.locale), translation: undefined, languages, languageId, languagesLoading: false, usingCompilerCatalogue });
 				this.loadLanguages(key, existing);
+				if (invalidated) { void vscode.window.showInformationMessage(vscode.l10n.t('The original statement changed. Select the missing language to translate again.')); }
 				existing.panel.reveal(); return;
 			}
 			existing.panel.dispose();
@@ -60,10 +71,26 @@ export class ProblemPanel implements vscode.Disposable {
 			switch (value.action) {
 				case 'selectLocale':
 					if (document.bodies.some(body => body.locale === value.locale)) {
+						this.panels.get(key)?.translation?.abort();
 						if (document.ref.site === 'atcoder') { await this.preferences?.selectStatementLocale(value.locale); }
 						if (panel.state.problem!.bodies.some(body => body.locale === value.locale)) { panel.update({ locale: value.locale }); }
+					} else {
+						const entry = this.panels.get(key);
+						if (entry?.translation) { throw new Error('statement-translation-busy'); }
+						const body = document.bodies.find(body => body.origin !== 'translation' && (body.locale === 'en' || body.locale === 'zh-CN'));
+						const sourceStatement = body && selectStatement(document, body.locale as StatementLanguage);
+						if (!entry || !sourceStatement || !this.actions.translateStatement) { throw new Error('translation-model-unavailable'); }
+						const request = new AbortController(); entry.translation = request;
+						const current = () => this.panels.get(key) === entry && entry.translation === request && !request.signal.aborted;
+						panel.update({ translation: { target: value.locale, completed: 0, total: 0 } });
+						try {
+							const translated = await this.actions.translateStatement(sourceStatement, value.locale, request.signal, (completed, total) => { if (current()) { panel.update({ translation: { target: value.locale, completed, total } }); } });
+							if (current()) { panel.update({ problem: validateProblem({ ...panel.state.problem!, ...translated }), locale: value.locale }); }
+						} catch (error) { if (!request.signal.aborted) { throw error; } }
+						finally { if (entry.translation === request) { entry.translation = undefined; panel.update({ translation: undefined }); } }
 					}
 					break;
+				case 'cancelTranslation': this.panels.get(key)?.translation?.abort(); panel.update({ translation: undefined }); break;
 				case 'selectLanguage': await this.updateLanguage(document.ref, panel.state.languages ?? [], value.languageId); break;
 				case 'submit': binding.assertCurrent(); await this.actions.submit(source, document); break;
 				case 'importCph': binding.assertCurrent(); await this.actions.importCph(sourceUri, document); break;
@@ -72,7 +99,7 @@ export class ProblemPanel implements vscode.Disposable {
 		}, () => {
 			listeners.splice(0).forEach(listener => listener.dispose());
 			const entry = this.panels.get(key);
-			if (entry?.panel === panel) { this.cancelLanguageRead(entry); this.panels.delete(key); }
+			if (entry?.panel === panel) { entry.translation?.abort(); this.cancelLanguageRead(entry); this.panels.delete(key); }
 		});
 		const entry = { panel, binding };
 		this.panels.set(key, entry);

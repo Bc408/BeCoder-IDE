@@ -152,5 +152,21 @@
 	"Waiting for test case results…": "正在等待测试点结果…",
 	"The official submission record has not been confirmed yet.": "正式提交记录尚未确认。",
 	"The submission receipt is still unconfirmed. Continue querying; no code will be resent.": "提交回执尚未确认。可继续查询，不会再次发送代码。",
-	"No confirmed submission result is available.": "尚无已确认的提交结果。"
+	"No confirmed submission result is available.": "尚无已确认的提交结果。",
+	"Not provided by source; click to translate": "原题未提供，点击翻译",
+	"Translation": "译文",
+	"Translating to Chinese…": "正在翻译为中文…",
+	"Translating to English…": "正在翻译为英文…",
+	"Cancel translation": "取消翻译",
+	"The problem was opened, but its statement could not be saved to the application cache.": "题目已打开，但题面未能保存至应用缓存。",
+	"Choose an available translation model in Beacon Settings → Problem translation.": "请在“Beacon 设置 → 题面翻译”中选择可用的翻译模型。",
+	"This problem is already being translated.": "这道题正在翻译中。",
+	"The problem changed or the translation was cancelled. Select the language again to start a new translation.": "原题已变化或翻译已取消，请重新选择语种开始翻译。",
+	"The original statement changed. Select the missing language to translate again.": "原题面已变化，请选择缺失的语种重新翻译。",
+	"The problem exceeds this model’s translation capacity. Choose a model with a larger context or output limit. The original statement is retained.": "题面超过当前模型的翻译容量，已保留原题面。请选择上下文或输出容量更大的模型。",
+	"The translation is incomplete or changed protected content. The original statement is retained. Try again or choose another translation model.": "译文不完整或改动了受保护内容，已保留原题面。请重试或更换翻译模型。",
+	"The translation save could not be confirmed. The original statement is retained. Reopen the problem to check before translating again.": "无法确认译文是否已保存，已保留原题面。请重新打开题目检查后再翻译。",
+	"The translation could not be saved. The original statement is retained. Check available storage and reopen the problem before trying again.": "译文未能保存，已保留原题面。请检查可用存储空间，重新打开题目后再试。",
+	"The statement is unavailable for translation. Reopen the problem and select the language again.": "当前题面无法翻译，请重新打开题目后再选择语种。",
+	"The translation service failed. The original statement is retained. Check the connection and translation model, then try again.": "翻译服务请求失败，已保留原题面。请检查连接和翻译模型后重试。"
 }

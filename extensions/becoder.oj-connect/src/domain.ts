@@ -112,7 +112,10 @@ export function validateProblem(raw: unknown): ProblemDocument {
 		...(value.languages === undefined ? {} : { languages: validateLanguageCatalogue({ languages: value.languages }, ref.site).languages }),
 		bodies: array(value.bodies, 32).map(rawBody => {
 			const body = object(rawBody);
+			if (body.origin !== undefined && body.origin !== 'site' && body.origin !== 'translation') { throw new Error('oj-connect-invalid-content'); }
 			return {
+				...(body.title === undefined ? {} : { title: text(body.title, 2048) }),
+				...(body.origin === undefined ? {} : { origin: body.origin as 'site' | 'translation' }),
 				locale: text(body.locale, 64), sections: array(body.sections, 64).map((rawSection): Section => {
 					const section = object(rawSection);
 					if (section.format !== 'markdown' && section.format !== 'html') { throw new Error('oj-connect-invalid-content'); }

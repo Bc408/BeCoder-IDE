@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import type { IBeaconContext, IBeaconPageRead } from '../../../src/vs/platform/beacon/common/beaconContextTypes';
 import type { IBeaconRecordByKind, BeaconRecordKind, IBeaconCurrentCodeFile } from 'becoder-beacon';
-import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
+import type { ProblemRef, ProblemDocument, StatementRead, StatementLanguage } from 'becoder-oj-connect';
 import type { BeaconContextClient, BeaconPage } from './context';
 import { isProtectedFilePath } from './fileTools';
 import { contextToolNames, contextInputValid, type BeaconContextToolName, type BeaconToolInputs } from './contextToolContract';
@@ -30,6 +30,7 @@ export interface ContextToolOptions {
 	authorizeLocal?: (path: string, signal: AbortSignal) => Promise<string>;
 	resolveProblemId?: (oj: BeaconToolInputs['fetchProblem']['oj'], problemId: string) => Promise<ProblemRef>;
 	readProblem?: (ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }) => Promise<ProblemDocument>;
+	readCachedProblem?: (ref: ProblemRef, language: StatementLanguage, signal: AbortSignal) => Promise<StatementRead | undefined>;
 }
 
 // Apply to the complete representation before pagination, including decoded bytes.
@@ -195,9 +196,17 @@ export class ContextTools implements ContextAccess {
 				if (this.compacting || !this.options.resolveProblemId || !this.options.readProblem) { return failure('unavailable', 'Problem fetching is unavailable.'); }
 				const request = input as unknown as BeaconToolInputs['fetchProblem'];
 				const ref = await this.options.resolveProblemId(request.oj, request.problemId);
-				const document = await this.options.readProblem(ref, signal);
+				const cached = await this.options.readCachedProblem?.(ref, request.language, signal);
+				let document: ProblemDocument;
+				if (cached) {
+					if (cached.ref.site !== ref.site || cached.ref.nativeId !== ref.nativeId || cached.version.language !== request.language) { throw new Error('oj-connect-invalid-host-response'); }
+					const { version, ...facts } = cached;
+					document = { ...facts, title: version.title, bodies: [{ locale: version.language, title: version.title, origin: version.origin, sections: version.sections }] };
+				} else { document = await this.options.readProblem(ref, signal); }
 				signal.throwIfAborted(); await this.call('context', {}, signal);
-				return redactValues({ problem: request, document: { title: document.title, bodies: document.bodies, samples: document.samples, limits: document.limits, interactive: document.interactive, ...(document.difficulty ? { difficulty: document.difficulty } : {}), ...(document.tags ? { tags: document.tags } : {}) }, retrievedAt: new Date().toISOString() }) as ContextOutput;
+				const body = document.bodies.find(body => body.locale === request.language);
+				if (!body) { return { ...failure('statement_language_unavailable', 'The requested statement language is not provided. No translation was started.'), availableLanguages: document.bodies.filter(body => body.locale === 'zh-CN' || body.locale === 'en').map(body => body.locale) }; }
+				return redactValues({ problem: { oj: request.oj, problemId: request.problemId }, language: request.language, origin: body.origin ?? 'site', document: { title: body.title ?? document.title, bodies: [body], samples: document.samples, limits: document.limits, interactive: document.interactive, ...(document.difficulty ? { difficulty: document.difficulty } : {}), ...(document.tags ? { tags: document.tags } : {}) } }) as ContextOutput;
 			}
 			if (name === 'readPage') {
 				if (this.compacting) { return failure('unavailable', 'Compaction cannot read a new page.'); }

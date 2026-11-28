@@ -9,6 +9,8 @@ const shared = { absWorkingDir: root, nodePaths: [path.join(root, 'node_modules'
 const syntax = await createSyntaxAssets(root);
 const syntaxAssets = syntax.plugin();
 const { grammarExtensions } = syntax;
+await build({ ...shared, entryPoints: ['test/translationContent.test.ts'], outfile: 'dist-test/translationContent.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
+await build({ ...shared, entryPoints: ['test/translation.test.ts'], outfile: 'dist-test/translation.test.cjs', platform: 'node', format: 'cjs', target: 'node22', minify: false });
 const host = await build({ ...shared, entryPoints: ['src/extension.ts'], outfile: 'dist/extension.cjs', platform: 'node', format: 'cjs', target: 'node22', external: ['vscode'] });
 const ui = await build({ ...shared, entryPoints: ['webview/App.tsx'], outfile: 'dist/beacon.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets], loader: { '.woff': 'file', '.woff2': 'file', '.ttf': 'file', '.svg': 'dataurl' }, assetNames: 'fonts/[name]-[hash]', define: { 'process.env.NODE_ENV': '"production"' } });
 const worker = await build({ ...shared, entryPoints: ['../becoder.shared/browser/content/syntax.worker.ts'], outfile: 'dist/syntax-worker.js', platform: 'browser', format: 'iife', target: 'chrome142', plugins: [syntaxAssets] });

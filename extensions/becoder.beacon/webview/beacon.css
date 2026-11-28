@@ -722,3 +722,5 @@ body[data-surface="configuration"] { background: var(--vscode-editor-background)
 .model-select-menu > [role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; padding: 5px 9px; border-radius: 7px; line-height: 20px; cursor: pointer; }
 .model-select-menu > [role="option"].active { background: var(--control-selected); }
 .model-select-menu > [role="option"] > svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* Keep model drafts mounted while the independent translation category is visible. */
+.settings-main-content[hidden] { display: none; }

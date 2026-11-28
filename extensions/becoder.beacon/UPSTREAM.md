@@ -64,3 +64,7 @@ resources/deepseek.svg comes from LobeHub lobe-icons, MIT, Copyright (c) 2023 Lo
 ## Additional provider marks
 
 `resources/bailian-color.svg`, `resources/moonshot.svg` and `resources/ollama.svg` are unmodified LobeHub lobe-icons assets from commit `453719ea68e6d480d0109a598c5a4cf80cda6a84` (retrieved 2026-10-23). Source directory: https://github.com/lobehub/lobe-icons/tree/453719ea68e6d480d0109a598c5a4cf80cda6a84/packages/static-svg/icons . The MIT license is retained in `licenses/lobe-icons.txt` and bundled by `build.mjs`. These marks identify Alibaba Cloud Bailian, Moonshot and Ollama; they do not imply affiliation or trademark ownership. Monochrome marks receive a white CSS backing for visibility in both themes; SVG geometry is unchanged.
+
+## Problem translation prompt reference
+
+The independently authored competitive-programming translation prompt and its format-protection tests reference the ideas in immersive-translate/prompts `programming-docs.yml` and its sidecar tests at `76daffe489fa5dfc929eb4da7c6b69a82992c5cc` (https://github.com/immersive-translate/prompts). No upstream translation runtime, YAML plugin or code is bundled. The prompt preserves task meaning, code, formulas, values and document structure, and uses BeCoder's own numbered response contract. Reference checkout inspected 2026-11-28.

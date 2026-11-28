@@ -42,6 +42,8 @@ import { EncryptionMainService } from '../../platform/encryption/electron-main/e
 import { ipcBrowserViewChannelName } from '../../platform/browserView/common/browserView.js';
 import { BrowserViewMainService, IBrowserViewMainService } from '../../platform/browserView/electron-main/browserViewMainService.js';
 import { BeaconContextMainService } from '../../platform/beacon/electron-main/beaconContextMainService.js';
+import { IProblemStatementCacheService, statementCacheChannel } from '../../platform/browserView/common/ojStatementCache.js';
+import { OjStatementCacheService } from '../../platform/browserView/electron-main/ojStatementCacheService.js';
 import { beaconContextChannel, IBeaconContextService } from '../../platform/beacon/common/beaconContext.js';
 import { NativeParsedArgs } from '../../platform/environment/common/argv.js';
 import { IEnvironmentMainService } from '../../platform/environment/electron-main/environmentMainService.js';
@@ -1106,6 +1108,7 @@ export class CodeApplication extends Disposable {
 		// Browser View
 		services.set(IBrowserViewMainService, new SyncDescriptor(BrowserViewMainService, undefined, false /* proxied to other processes */));
 		services.set(IBeaconContextService, new SyncDescriptor(BeaconContextMainService, undefined, false));
+		services.set(IProblemStatementCacheService, new SyncDescriptor(OjStatementCacheService, undefined, false));
 
 		// Keyboard Layout
 		services.set(IKeyboardLayoutMainService, new SyncDescriptor(KeyboardLayoutMainService));
@@ -1263,6 +1266,7 @@ export class CodeApplication extends Disposable {
 		sharedProcessClient.then(client => client.registerChannel(ipcBrowserViewChannelName, browserViewChannel));
 		const beaconChannel = ProxyChannel.fromService(accessor.get(IBeaconContextService), disposables);
 		mainProcessElectronServer.registerChannel(beaconContextChannel, beaconChannel);
+		mainProcessElectronServer.registerChannel(statementCacheChannel, ProxyChannel.fromService(accessor.get(IProblemStatementCacheService), disposables));
 
 		// Signing
 		const signChannel = ProxyChannel.fromService(accessor.get(ISignService), disposables);

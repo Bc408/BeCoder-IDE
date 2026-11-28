@@ -219,6 +219,24 @@ export async function testModelConnection(connection: Connection, signal: AbortS
 	} finally { controller.abort(); }
 }
 
+/** Independent task generation: no conversation assembly, tools, retries or history writes. */
+export async function generateTranslationBatch(connection: Connection, system: string, payload: string, signal: AbortSignal, request: typeof fetch = fetch): Promise<string> {
+	signal.throwIfAborted();
+	const capabilities = connection.capabilities ?? defaultCapabilities;
+	const result = streamText({ model: adapters[connection.provider].createModel(connection, request), system,
+		messages: [{ role: 'user', content: payload }], abortSignal: signal, maxRetries: 0, onError: () => {},
+		...connection.parameters, providerOptions: reasoningOptions(connection.provider, connection.model, capabilities, connection.modelSettings ?? {}) });
+	let text = '';
+	for await (const part of result.fullStream) {
+		signal.throwIfAborted();
+		if (part.type === 'error') { throw part.error; }
+		if (part.type === 'text-delta') { text += part.text; if (Buffer.byteLength(text, 'utf8') > 8 * 1024 * 1024) { throw new Error('translation-too-large'); } }
+	}
+	signal.throwIfAborted();
+	if (await result.finishReason !== 'stop' || !text.trim()) { throw new Error('translation-incomplete'); }
+	return text;
+}
+
 function fileScopeDescription(permission: FilePermission, roots: readonly FileRoot[]): string {
 	const scope = permission === 'workspace' ? 'ordinary files within the selected Beacon workspace' : 'local files on this computer, including outside the selected Beacon workspace';
 	const base = roots.length === 1 ? roots[0].path : roots.length ? `prefix relative paths with the matching folder name: ${JSON.stringify(roots)}` : 'no relative-path root is available; use an absolute path';

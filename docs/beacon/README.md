@@ -1,11 +1,12 @@
 # Beacon 文档入口
 
-更新：2026-11-27。Beacon 是编辑器内可选的算法与编程导师。Beacon_Persona分支的2.2.0源码已接入负责人审定的人格提示2026-11-27.2，将BeCoder作为工位；工具和宿主上下文保持既有合同。前轮自定义Responses供应商已有stage和负责人验收，此前访谈仍属于各自原版本，不代表本轮人格效果。实际结果另见[实现状态](implementation-status.md)。
+更新：2026-11-28。Beacon 是编辑器内可选的算法与编程导师。Beacon_Persona分支的2.2.0源码已接入负责人审定的人格提示2026-11-27.2，将BeCoder作为工位；工具和宿主上下文保持既有合同。前轮自定义Responses供应商已有stage和负责人验收，此前访谈仍属于各自原版本，不代表本轮人格效果。实际结果另见[实现状态](implementation-status.md)。
 
 先读根目录[仓库规则](../../AGENTS.md)和[产品方向](../../VISION.md)，负责人最新决定优先。按下列职责阅读，现行文档不混入已完成的实施待办。
 
 | 文档 | 职责 |
 | --- | --- |
+| [题面缓存与中英翻译设计](../superpowers/specs/2026-11-28-problem-statement-translation-design.md) · [实施计划](../superpowers/plans/2026-11-28-problem-statement-translation.md) | 应用级30题缓存、中英语种、独立翻译模型与fetchProblem本地路由；负责人已确认 Native；源码已接入，源码验证与真实模型／stage／负责人验收分开记录 |
 | [前端审查与外链修复](review/2026-11-27-frontend-review.md) | 删除绕过宿主确认的直开旁路，修复图片预览、键盘密钥操作、续答重连提示与运行中测试门禁；源码与headless回归，不代表新stage或原生体验验收 |
 | [Responses容量误判修复](implementation-status.md#2026-11-27-responses容量误判修复) | 修正加密推理的计量及原生input出站检查，保留真实载荷、工具配对与原有容量边界；离线回归和实际服务复测分别成立 |
 | [自定义 Responses 供应商实施计划](../superpowers/plans/2026-11-27-beacon-custom-responses-provider.md) | 单连接、多模型、手动添加与同步、HTTP／HTTPS、可选密钥和服务默认推理；源码和实际验证边界见实现状态 |
@@ -23,7 +24,7 @@
 
 当前提供 `readCurrentCode`、`readProblemRecord`、`readRunRecord`、`readVerdictRecord`、`fetchProblem`、`inspectFile`、`readPage`、`browseWeb`、`readBeCoderInfo`。读题、运行、最终测评分别保留13／30／20条；代码读取没有独立快照存储。讨论对象和取材由LLM判断。readBeCoderInfo按七个固定主题读取随包产品知识和运行宿主发行版本，三模式和无工作区均可用，不读取个人配置。
 
-**工作区决定软件采集资格，模式决定模型消费权限。** 有效根下Blackout仍采集业务记录，但模型不能列出或读取持久来源；当前可见C/C++与BeCoder Notebook内容和五站fetchProblem保持可用。现场读取含dirty、未命名及根外文档，读取前按文档身份合并多视图，不按正文去重，也不含Notebook执行结果。fetchProblem与聊天搜索开关互不影响。
+**工作区决定软件采集资格，模式决定模型消费权限。** 有效根下Blackout仍采集业务记录，但模型不能列出或读取持久行为来源；当前可见C/C++与BeCoder Notebook内容和五站fetchProblem保持可用。现场读取含dirty、未命名及根外文档，读取前按文档身份合并多视图，不按正文去重，也不含Notebook执行结果。fetchProblem按指定题号和语种优先读应用级30题题面缓存，未命中才联网，不自动翻译或写缓存；无目录、次序或拿题时间，与聊天搜索开关互不影响。
 
 应采集事实从整理到原子发布期间，独立的collectionPending在有效根三模式下阻止新请求，提示“正在保存用户行为上下文”。失败由原动作窗口右下角通知、同动作至多一次，结束等待并保留草稿；执行清理与下一次用户运行不等待保存，不排队、重试采集或自动发送。本轮源码事实不等于新stage、模型效果或真实流程验收。
 

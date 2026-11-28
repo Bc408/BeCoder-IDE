@@ -149,23 +149,18 @@ export function parseLuoguProblem(ref: ProblemRef, raw: unknown, rawTags?: unkno
 	assertLuoguProblem(ref);
 	const data = dataOf(raw), problem = object(data.problem), content = object(problem.content);
 	if (problem.pid !== ref.nativeId.split('@')[0]) { throw new Error('Luogu returned a different problem.'); }
-	const bodies: { locale: string; sections: Section[] }[] = [];
+	const bodies: { locale: string; title?: string; sections: Section[] }[] = [];
 	const add = (rawContent: unknown, fallback: string) => {
 		const value = object(rawContent), locale = typeof value.locale === 'string' ? value.locale : fallback;
+		if (locale !== 'zh-CN' && locale !== 'en') { return; }
 		const fields = [['background', '\u9898\u76ee\u80cc\u666f'], ['description', '\u9898\u76ee\u63cf\u8ff0'], ['formatI', '\u8f93\u5165\u683c\u5f0f'], ['formatO', '\u8f93\u51fa\u683c\u5f0f'], ['hint', '\u8bf4\u660e/\u63d0\u793a']];
-		const sections: Section[] = fields.filter(([key]) => typeof value[key] === 'string' && value[key]).map(([key, heading]) => ({ heading, format: 'markdown', content: text(value[key], 8 * 1024 * 1024, true), ...(key === 'hint' ? { kind: 'notes' as const } : {}) }));
-		if (sections.length && !bodies.some(body => body.locale === locale)) { bodies.push({ locale, sections }); }
+		const english: Record<string, string> = { background: 'Background', description: 'Problem Statement', formatI: 'Input', formatO: 'Output', hint: 'Notes' };
+		const sections: Section[] = fields.filter(([key]) => typeof value[key] === 'string' && value[key]).map(([key, heading]) => ({ heading: locale === 'en' ? english[key] : heading, format: 'markdown', content: text(value[key], 8 * 1024 * 1024, true), ...(key === 'hint' ? { kind: 'notes' as const } : {}) }));
+		if (sections.length && !bodies.some(body => body.locale === locale)) { bodies.push({ locale, ...(typeof value.name === 'string' ? { title: text(value.name, 2048) } : {}), sections }); }
 	};
 	add(content, 'zh-CN');
 	for (const [locale, value] of Object.entries(data.translations && typeof data.translations === 'object' ? data.translations : {})) {
 		if (value && typeof value === 'object') { add(value, locale); }
-	}
-	const translations = Object.keys(data.translations && typeof data.translations === 'object' ? data.translations : {});
-	if (typeof problem.translation === 'string' && problem.translation && (translations.length === 1 && translations[0] !== 'zh-CN' || translations.length === 0 && !String(content.locale ?? 'zh-CN').toLowerCase().startsWith('zh'))) {
-		for (const body of bodies) {
-			const notes = body.sections.findIndex(section => section.kind === 'notes');
-			body.sections.splice(notes < 0 ? body.sections.length : notes, 0, { heading: '\u9898\u610f\u7ffb\u8bd1', format: 'markdown', content: text(problem.translation, 8 * 1024 * 1024, true) });
-		}
 	}
 	const limits: { label: string; value: string }[] = [];
 	const limit = problem.limits && typeof problem.limits === 'object' ? object(problem.limits) : {};

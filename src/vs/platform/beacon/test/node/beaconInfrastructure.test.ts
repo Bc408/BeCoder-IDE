@@ -25,6 +25,14 @@ const conversation = (id: string, text = 'original'): IBeaconConversation => ({ 
 suite('Beacon bounded context queues', function () {
 	this.timeout(10000);
 	ensureNoDisposablesAreLeakedInTestSuite();
+	test('internal application statements cannot be read as ordinary loaded files', () => fixture(async root => {
+		const selection = { slot: 'test', mode: 'blackout' as const };
+		const privateRoot = path.join(root, 'private-statements'); await fs.mkdir(privateRoot);
+		const file = path.join(privateRoot, 'problem-statements.json'); await fs.writeFile(file, '{}');
+		const coordinator = new BeaconCoordinator({ getSelection: () => selection, saveSelection: () => { }, getRecent: () => [], saveRecent: () => { }, changed: () => { }, protectedRoots: [privateRoot] });
+		try { await assert.rejects(coordinator.checkPageAccess(1, file), /beacon-protected-page/); }
+		finally { await coordinator.dispose(); }
+	}));
 
 
 

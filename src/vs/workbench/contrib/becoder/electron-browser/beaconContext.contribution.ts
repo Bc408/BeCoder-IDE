@@ -33,6 +33,7 @@ CommandsRegistry.registerCommand(beaconContextCommand, (accessor, operation: unk
 	const pages = () => pageProvider ??= new BeaconWorkbenchPages(accessor.get(IEditorService), accessor.get(IModelService), ProxyChannel.toService<IBrowserViewService>(accessor.get(IMainProcessService).getChannel(ipcBrowserViewChannelName)), service, windowId, accessor.get(INotebookService));
 	const semantic = input as { kind?: BeaconRecordKind; record?: IBeaconRecordByKind[BeaconRecordKind]; collectionScope?: IBeaconCollectionScope; scope?: IBeaconContext; handle?: string; id?: string } | undefined;
 	switch (operation) {
+		case 'internalResourceRoots': return service.getProtectedResourceRoots(windowId);
 		case 'visibleCurrentCode': return pages().readVisibleCurrentCode();
 		case 'captureProblemRecord': if (semantic?.record && semantic.collectionScope) { return service.captureProblemRecord(windowId, semantic.record as IBeaconRecordWrite<'problem'>, semantic.collectionScope); } break;
 		case 'captureVerdict': if (semantic?.record && semantic.collectionScope) { return service.captureVerdict(windowId, semantic.record as IBeaconRecordWrite<'verdict'>, semantic.collectionScope); } break;

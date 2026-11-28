@@ -133,15 +133,18 @@
 				},
 				"becoder.ojConnect.atcoder.statementLanguage": {
 					"title": "%becoder.ojConnect.atcoder.statementLanguage.title%",
-					"enumItemLabels": ["%statementEnglish%","%statementJapanese%"],
+					"enumItemLabels": [
+						"%statementEnglish%",
+						"%statementChinese%"
+					],
 					"type": "string",
 					"enum": [
 						"en",
-						"ja"
+						"zh-CN"
 					],
 					"enumDescriptions": [
 						"%statementEnglish%",
-						"%statementJapanese%"
+						"%statementChinese%"
 					],
 					"default": "en",
 					"scope": "application",
@@ -149,7 +152,14 @@
 				},
 				"becoder.ojConnect.panelLocation": {
 					"title": "%becoder.ojConnect.panelLocation.title%",
-					"enumItemLabels": ["%settings.enum.auto%","%settings.enum.active%","%settings.enum.beside%","%settings.enum.one%","%settings.enum.two%","%settings.enum.three%"],
+					"enumItemLabels": [
+						"%settings.enum.auto%",
+						"%settings.enum.active%",
+						"%settings.enum.beside%",
+						"%settings.enum.one%",
+						"%settings.enum.two%",
+						"%settings.enum.three%"
+					],
 					"type": "string",
 					"enum": [
 						"auto",

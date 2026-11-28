@@ -6,6 +6,15 @@
 import * as vscode from 'vscode';
 export function userError(error: unknown): string {
 	const message = error instanceof Error ? error.message : String(error);
+	if (message === 'translation-model-unavailable') { return vscode.l10n.t('Choose an available translation model in Beacon Settings → Problem translation.'); }
+	if (message === 'statement-translation-busy') { return vscode.l10n.t('This problem is already being translated.'); }
+	if (message === 'statement-source-changed' || message === 'statement-translation-owner') { return vscode.l10n.t('The problem changed or the translation was cancelled. Select the language again to start a new translation.'); }
+	if (message === 'translation-capacity' || message === 'translation-too-large') { return vscode.l10n.t('The problem exceeds this model\u2019s translation capacity. Choose a model with a larger context or output limit. The original statement is retained.'); }
+	if (['translation-incomplete', 'translation-invalid-output', 'translation-invalid-structure', 'translation-protected-content'].includes(message)) { return vscode.l10n.t('The translation is incomplete or changed protected content. The original statement is retained. Try again or choose another translation model.'); }
+	if (message === 'statement-cache-publication-uncertain') { return vscode.l10n.t('The translation save could not be confirmed. The original statement is retained. Reopen the problem to check before translating again.'); }
+	if (message.startsWith('statement-cache-')) { return vscode.l10n.t('The translation could not be saved. The original statement is retained. Check available storage and reopen the problem before trying again.'); }
+	if (message.startsWith('statement-')) { return vscode.l10n.t('The statement is unavailable for translation. Reopen the problem and select the language again.'); }
+	if (message.startsWith('translation-')) { return vscode.l10n.t('The translation service failed. The original statement is retained. Check the connection and translation model, then try again.'); }
 	if (message === 'lanqiao-login-required') { return vscode.l10n.t('Sign in to Lanqiao from the OJ Connect sidebar.'); }
 	if (message === 'lanqiao-unsupported-problem') { return vscode.l10n.t('Only accessible public Lanqiao C/C++ standard input/output practice problems are supported.'); }
 	if (message === 'lanqiao-receipt-unconfirmed') { return vscode.l10n.t('The Lanqiao submission is unconfirmed. Continue querying this attempt; no code or report will be sent again.'); }

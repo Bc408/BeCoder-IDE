@@ -30,7 +30,7 @@ test('Codeforces reads current DOM sections and reuses exact CPH samples and lim
 		assert.strictEqual(JSON.stringify(value.samples), JSON.stringify(companion.tests));
 		assert.deepStrictEqual(Array.from(value.limits, (limit: any) => limit.label + '=' + limit.value), ['Time Limit=1.00s', 'Memory Limit=64.00MiB']);
 		assert.strictEqual(value.title, 'Watermelon');
-		assert.deepStrictEqual(Array.from(value.bodies[0].sections, (section: any) => section.heading), ['题目描述', '输入格式', '输出格式', '说明/提示']);
+		assert.deepStrictEqual(Array.from(value.bodies[0].sections, (section: any) => section.heading), ['Problem Statement', 'Input', 'Output', 'Notes']);
 		assert.strictEqual(value.bodies[0].sections.at(-1).kind, 'notes');
 		assert.ok(!JSON.stringify(value.bodies).includes('DUPLICATED_SAMPLE'));
 		assert.ok(JSON.stringify(value.bodies).includes('<var>w</var>'));
@@ -88,14 +88,14 @@ test('the injected runtime cannot submit Luogu code or create its DOM captcha', 
 	finally { dom.window.close(); }
 });
 
-test('AtCoder reads bilingual raw statements and sample whitespace without rendered-page pollution', async () => {
+test('AtCoder reads English statements and sample whitespace without rendered-page pollution', async () => {
 	const dom = fixture();
 	const problem = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
 	dom.reconfigure({ url: problem.url });
-	const html = '<span class="h2">A - Product</span><p>Time Limit: 2 sec / Memory Limit: 256 MiB</p><div id="task-statement"><span class="lang-ja"><section><h3>入力例 1</h3><pre> 3 4\n</pre></section><section><h3>出力例 1</h3><pre>Even\n</pre><p>EXPLANATION_REQUIRED <var>a+b</var></p></section><var>a*b</var></span><span class="lang-en">English <var>a*b</var></span></div>';
+	const html = '<span class="h2">A - Product</span><p>Time Limit: 2 sec / Memory Limit: 256 MiB</p><div id="task-statement"><span class="lang-ja"><section><h3>入力例 1</h3><pre> 3 4\n</pre></section><section><h3>出力例 1</h3><pre>Even\n</pre><p>EXPLANATION_REQUIRED <var>a+b</var></p></section><var>a*b</var></span><span class="lang-en">English <var>a*b</var><section><h3>Sample Output 1</h3><pre>Even\n</pre><p>EXPLANATION_REQUIRED <var>a+b</var></p></section></span></div>';
 	try {
 		const value = dom.window.BeCoderOj.parseAtCoderProblem(problem, html);
-		assert.deepStrictEqual(Array.from(value.bodies, (body: any) => body.locale), ['ja', 'en']);
+		assert.deepStrictEqual(Array.from(value.bodies, (body: any) => body.locale), ['en']);
 		assert.strictEqual(value.samples[0].input, ' 3 4\n');
 		assert.strictEqual(value.limits[0].value, '2.00s');
 		assert.strictEqual(value.limits[1].value, '256.00MiB');
@@ -157,7 +157,7 @@ test('AtCoder limits use Luogu units and remain usable by CPH', async () => {
 	} finally { dom.window.close(); }
 });
 
-test('AtCoder common chapter headings follow Luogu without translating prose or code', async () => {
+test('AtCoder chapter headings stay English without changing prose or code', async () => {
 	const dom = fixture();
 	const problem = { site: 'atcoder', nativeId: 'abc086/abc086_a', url: 'https://atcoder.jp/contests/abc086/tasks/abc086_a' };
 	dom.reconfigure({ url: problem.url });
@@ -166,10 +166,10 @@ test('AtCoder common chapter headings follow Luogu without translating prose or 
 		const value = dom.window.BeCoderOj.parseAtCoderProblem(problem, html);
 		for (const body of value.bodies) {
 			const page = new dom.window.DOMParser().parseFromString(body.sections.map((section: any) => section.content).join(''), 'text/html');
-			assert.deepStrictEqual(Array.from(page.querySelectorAll('h2'), (heading: any) => heading.textContent), ['题目描述', body.locale === 'en' ? 'Constraints' : '制約', '输入格式', '输出格式']);
+			assert.deepStrictEqual(Array.from(page.querySelectorAll('h2'), (heading: any) => heading.textContent), ['Problem Statement', 'Constraints', 'Input', 'Output']);
 			assert.ok(page.querySelector('var'));
 			if (body.locale === 'en') {
-				assert.strictEqual(page.querySelector('#statement')?.textContent, '题目描述');
+				assert.strictEqual(page.querySelector('#statement')?.textContent, 'Problem Statement');
 				assert.strictEqual(page.querySelector('code')?.textContent, 'Input:\n');
 				assert.ok(page.body.textContent.includes('English statement'));
 			} else { assert.ok(page.body.textContent.includes('日本語の本文')); }

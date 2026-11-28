@@ -61,9 +61,10 @@ function Content({ section, url, scope, lanqiao = false, problemTitle }: { secti
 // Cropped from viewProblem/app.tsx: the original header, controls and paired sample layout.
 export default function Problem({ state }: { state: PanelState }) {
 	const scope = useId() + (state.locale ?? '');
-	const data = state.problem!, problemId = data.ref.site === 'nowcoder' ? data.ref.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : data.ref.nativeId.split('/').at(-1)!, languagesList = data.bodies.map(body => body.locale);
-	const choosedLanguage = state.locale ?? languagesList[0];
+	const data = state.problem!, problemId = data.ref.site === 'nowcoder' ? data.ref.nativeId.replace(/^problem\//, 'NC').replace(/^contest\//, '').replace('/', ' / ') : data.ref.nativeId.split('/').at(-1)!, languagesList = ['zh-CN', 'en'];
+	const choosedLanguage = state.locale ?? data.bodies[0]?.locale;
 	const problemContent = data.bodies.find(body => body.locale === choosedLanguage) ?? data.bodies[0];
+	const title = problemContent?.title ?? data.title;
 	const content = (notes: boolean) => problemContent?.sections.filter(section => section.kind !== 'sample-explanation' && (section.kind === 'notes') === notes).map((section, index) => <div key={index}>
 		{section.heading && <h2>{section.heading}</h2>}
 		<Content section={section} url={data.ref.url} scope={scope} lanqiao={data.ref.site === 'lanqiao'} problemTitle={!notes && index === 0 ? data.title : undefined} />
@@ -71,12 +72,12 @@ export default function Problem({ state }: { state: PanelState }) {
 	return <>
 		<header>
 			<div>
-				<h1><a href={data.ref.url}>{problemId}</a>{' '}{data.title.startsWith(problemId + ' ') ? data.title.slice(problemId.length + 1) : data.title}</h1>
+				<h1><a href={data.ref.url}>{problemId}</a>{' '}{title.startsWith(problemId + ' ') ? title.slice(problemId.length + 1) : title}</h1>
 				<div>
-					{languagesList.length > 1 && <VSCodeDropdown ariaLabelledby={state.labels.statementLanguage} value={choosedLanguage}
-						onChange={event => { void send({ action: 'selectLocale', locale: event.target.value }).catch(() => undefined); }}>
-						{languagesList.map(locale => <VSCodeOption value={locale} key={locale}>{locale}</VSCodeOption>)}
-					</VSCodeDropdown>}
+					<VSCodeDropdown className={'statement-language'} ariaLabelledby={state.labels.statementLanguage} value={choosedLanguage}
+						onChange={event => { void send({ action: 'selectLocale', locale: event.target.value as 'zh-CN' | 'en' }).catch(() => undefined); }}>
+						{languagesList.map(locale => { const body = data.bodies.find(body => body.locale === locale); return <VSCodeOption value={locale} key={locale}>{locale + (!body ? '\uFF08' + state.labels.statementMissing + '\uFF09' : body.origin === 'translation' ? '\uFF08' + state.labels.statementTranslated + '\uFF09' : '')}</VSCodeOption>; })}
+					</VSCodeDropdown>
 					<VSCodeButton onClick={() => { void send({ action: 'importCph' }).catch(() => undefined); }} appearance={'primary'} className={'problem-action problem-action-cph'} aria-label={state.labels.importCph} title={state.labels.importCph}><CphIcon /></VSCodeButton>
 					<SubmissionControls state={state} />
 				</div>
@@ -94,6 +95,7 @@ export default function Problem({ state }: { state: PanelState }) {
 				{data.interactive && <div><div>{state.labels.interactive}</div></div>}
 			</div>
 		</header>
+		{state.translation && <div className={'statement-translation-progress'} role={'status'}><span>{state.translation.target === 'zh-CN' ? state.labels.translatingChinese : state.labels.translatingEnglish}{state.translation.total > 1 ? ` ${state.translation.completed}/${state.translation.total}` : ''}</span><VSCodeButton appearance={'secondary'} onClick={() => { void send({ action: 'cancelTranslation' }); }}>{state.labels.cancelTranslation}</VSCodeButton></div>}
 		<div className={'problemContent'}>
 			{content(false)}
 			{data.samples.length > 0 && <div>

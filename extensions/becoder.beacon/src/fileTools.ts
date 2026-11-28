@@ -139,6 +139,7 @@ export class FileTools {
 			target = path.resolve(root.path, target);
 		}
 		checkPath(target);
+		if (!this.suppliedFiles && this.options.protectedRoots?.some(root => within(path.resolve(target), path.resolve(root)))) { throw new Error('beacon-assets'); }
 		if (!this.suppliedFiles && target.split(/[\\/]/).some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('beacon-assets'); }
 		const real = await fs.realpath(target);
 		checkPath(real);

@@ -18,9 +18,11 @@ export interface ConfiguredModel {
 export interface ProviderConfiguration { baseURL: string; models: ConfiguredModel[]; enabled?: boolean }
 export interface ModelConfiguration {
 	selection?: { provider: ProviderId; model: string };
+	translationSelection?: { provider: ProviderId; model: string };
 	providers: Record<ProviderId, ProviderConfiguration>;
 }
 export interface SettingsSnapshot extends ModelConfiguration {
+	translationError?: string;
 	discovery?: ModelDiscovery;
 	providerTest?: ProviderTestSnapshot;
 	parameterIssues?: Partial<Record<ProviderId, Record<string, ParameterIssue[]>>>;
@@ -31,7 +33,7 @@ export interface SettingsSnapshot extends ModelConfiguration {
 	error: string;
 }
 export interface SettingsCommand {
-	type: 'saveKey' | 'saveConnection' | 'saveModel' | 'removeModel' | 'fetchModels' | 'selectModel' | 'toggleProvider' | 'confirmModels' | 'cancelDiscovery' | 'testProvider' | 'cancelProviderTest';
+	type: 'saveKey' | 'saveConnection' | 'saveModel' | 'removeModel' | 'fetchModels' | 'selectModel' | 'selectTranslationModel' | 'toggleProvider' | 'confirmModels' | 'cancelDiscovery' | 'testProvider' | 'cancelProviderTest';
 	requestId: number;
 	revision: number;
 	provider: ProviderId;
@@ -82,6 +84,10 @@ export function parseConfiguration(value: unknown): ModelConfiguration {
 	if (value.selection !== undefined) {
 		if (!record(value.selection) || !isProvider(value.selection.provider) || typeof value.selection.model !== 'string') { throw new Error('invalid-selection'); }
 		result.selection = { provider: value.selection.provider, model: value.selection.model };
+	}
+	if (value.translationSelection !== undefined) {
+		if (!record(value.translationSelection) || !isProvider(value.translationSelection.provider) || typeof value.translationSelection.model !== 'string' || !value.translationSelection.model.trim()) { throw new Error('invalid-selection'); }
+		result.translationSelection = { provider: value.translationSelection.provider, model: value.translationSelection.model };
 	}
 	return result;
 }

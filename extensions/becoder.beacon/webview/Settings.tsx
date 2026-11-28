@@ -12,6 +12,7 @@ import { Notifications, type Notification } from './Notifications';
 import { ApiKeyDialog, ProviderTestResults, SavedApiKey, type RunSettings as Run } from './ApiKeyControls';
 import { ProviderMark, providerName } from './ProviderIdentity';
 import { Icon } from './Icon';
+import { TranslationSettings } from './TranslationSettings';
 
 const zh = document.documentElement.lang.startsWith('zh');
 const t = (en: string, cn: string) => zh ? cn : en;
@@ -132,6 +133,7 @@ function ModelForm({ provider, snapshot, model, run, close }: { provider: Provid
 }
 
 export function Settings({ post }: { post(message: unknown): void }) {
+	const [category, setCategory] = useState<'models' | 'translation'>('models');
 	const settingsPage = useRef<HTMLElement>(null);
 	const [incomingSnapshot, setSnapshot] = useState<SettingsSnapshot>();
 	const [provider, setProvider] = useState<ProviderId>('deepseek');
@@ -230,8 +232,8 @@ export function Settings({ post }: { post(message: unknown): void }) {
 	const hasAddress = provider !== 'custom' || !!profile.baseURL.trim();
 	const locked = state.pending || connectionDirty || !!editing || discovering || !!keyFlow;
 	return <main ref={settingsPage} className="settings-page settings-v3">
-		<aside className="settings-navigation"><nav aria-label={t('Settings categories', '设置分类')}><button type="button" className="settings-category" aria-current="page" onClick={() => settingsPage.current?.scrollTo({ top: 0 })}><Icon name="settings" /><span>{t('Model configuration', '模型配置')}</span></button></nav></aside>
-		<div className="settings-main-content"><header className="settings-header"><h1>{t('Model services', '模型服务')}</h1></header>
+		<aside className="settings-navigation"><nav aria-label={t('Settings categories', '设置分类')}><button type="button" className="settings-category" aria-current={category === 'models' ? 'page' : undefined} onClick={() => { setCategory('models'); settingsPage.current?.scrollTo({ top: 0 }); }}><Icon name="settings" /><span>{t('Model configuration', '模型配置')}</span></button><button type="button" className="settings-category" aria-current={category === 'translation' ? 'page' : undefined} disabled={!!keyFlow || !!editing || discovering || state.pending} onClick={() => { setCategory('translation'); settingsPage.current?.scrollTo({ top: 0 }); }}><Icon name="settings" /><span>{t('Problem translation', '题面翻译')}</span></button></nav></aside>
+		<div className="settings-main-content" hidden={category !== 'models'}><header className="settings-header"><h1>{t('Model services', '模型服务')}</h1></header>
 		<section className="settings-card settings-provider-selection"><div className="settings-row"><div className="settings-row-copy"><label className="settings-row-title" htmlFor="settings-provider">{t('Provider', '供应商')}</label><small>{t('Choose a model service', '选择模型服务')}</small></div><div className="settings-row-control"><ProviderSelector value={provider} disabled={locked} onChange={value => { flowEpoch.current++; setResult(undefined); setModelsOpen(true); setProvider(value); }} /></div></div></section>
 		{busy && <p className="settings-note">{t('Busy. Changes apply next round.', '正在忙碌，修改下一轮生效')}</p>}
 		{snapshot.error && <div className="settings-feedback failure" role="alert">{snapshot.error}</div>}
@@ -248,6 +250,6 @@ export function Settings({ post }: { post(message: unknown): void }) {
 		</div><footer>{!state.pending && profile.models.length > 0 && <button disabled={busy} onClick={startTests}>{t('Test again', '重新检测')}</button>}<button className="settings-primary" onClick={closeFlow}>{state.pending ? t('Cancel tests', '取消检测') : t('Done', '完成')}</button></footer></SettingsDialog>}
 
 		{editing && <SettingsDialog title={editing === 'new' ? t('Add model', '添加模型') : t('Edit model', '编辑模型')} close={() => { if (!state.pending) { setEditing(undefined); } }}>{result && !result.ok && <p className="settings-feedback failure" role="alert">{result.text}</p>}<ModelForm provider={provider} snapshot={state} model={editing === 'new' ? undefined : editing} run={run} close={() => setEditing(undefined)} /></SettingsDialog>}
-		</div><div className="settings-notifications"><Notifications notices={notices} latest={latestNotice} dismiss={dismissNotice} /></div>
+		</div>{category === 'translation' && <div className="settings-main-content"><TranslationSettings snapshot={snapshot} post={post} /></div>}<div className="settings-notifications"><Notifications notices={notices} latest={latestNotice} dismiss={dismissNotice} /></div>
 	</main>;
 }

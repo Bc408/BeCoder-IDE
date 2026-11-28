@@ -18,6 +18,8 @@ export function labels(): Record<string, string> {
 		preparing: vscode.l10n.t('Preparing submission…'), submitting: vscode.l10n.t('Submitting code…'), confirming: vscode.l10n.t('Confirming the official record…'), waitingTests: vscode.l10n.t('Waiting for test case results…'),
 		interactive: vscode.l10n.t('Interactive problem'), samples: vscode.l10n.t('Samples'), input: vscode.l10n.t('Input'), output: vscode.l10n.t('Output'),
 		copy: vscode.l10n.t('Copy'), copied: vscode.l10n.t('Copied'), copyFailed: vscode.l10n.t('Copy failed. Select the text and copy it manually.'), score: vscode.l10n.t('Score'),
+		statementMissing: vscode.l10n.t('Not provided by source; click to translate'), statementTranslated: vscode.l10n.t('Translation'),
+		translatingChinese: vscode.l10n.t('Translating to Chinese…'), translatingEnglish: vscode.l10n.t('Translating to English…'), cancelTranslation: vscode.l10n.t('Cancel translation'),
 		chooseLanguage: vscode.l10n.t('Choose a compiler'), languagesLoading: vscode.l10n.t('Loading compiler options…'), languagesUnavailable: vscode.l10n.t('Compiler options unavailable'), languagesLoginRequired: vscode.l10n.t('Sign in to load compiler options'), statementLanguage: vscode.l10n.t('Statement language'), problem: vscode.l10n.t('Problem'), verdict: vscode.l10n.t('Verdict'), resources: vscode.l10n.t('Time / Memory'),
 		'Time Limit': vscode.l10n.t('Time Limit'), 'Memory Limit': vscode.l10n.t('Memory Limit'),
 		difficulty: vscode.l10n.t('Problem Difficulty'), tags: vscode.l10n.t('Problem Tags'),

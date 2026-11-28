@@ -12,7 +12,8 @@ import { isProvider } from './connection';
 import type { SettingsCommand } from './modelConfiguration';
 import { createFileTools } from './workspaceFiles';
 import { BeaconContextClient, withPdfPages, type PdfPageApi, type BeaconHistoryBinding } from './context';
-import type { ProblemRef, ProblemDocument } from 'becoder-oj-connect';
+import type { ProblemRef, ProblemDocument, StatementTranslationTicket, StatementLanguage, StatementRead } from 'becoder-oj-connect';
+import { translateStatement } from './translation';
 import { ContextTools, redactContext } from './contextTools';
 import { createBeCoderInfoReader } from './productInfo';
 import { isFilePermission, type FilePermission } from './fileTools';
@@ -103,6 +104,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	const connectionLog = vscode.window.createOutputChannel(vscode.l10n.t('Beacon Connections'));
 	context.subscriptions.push(connectionLog);
 	const connections = new Connections(context, schedule, event => connectionLog.appendLine(JSON.stringify(event)));
+	const translationJobs = new Map<string, AbortController>();
+	context.subscriptions.push({ dispose: () => { for (const job of translationJobs.values()) { job.abort(); } translationJobs.clear(); } });
 	let permission = native.permission;
 	const readWebEnabled = () => vscode.workspace.getConfiguration('beacon').get<boolean>('webEnabled', true) !== false;
 	let webEnabled = readWebEnabled();
@@ -115,17 +118,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		const roots = native.roots;
 		const scope = native.captureScope();
 		const requestHistory = history;
-		const fileTools = createFileTools(permission, roots, { protectedRoots: [context.globalStorageUri.fsPath] });
+		const internalRoots = await vscode.commands.executeCommand<readonly string[]>('_becoder.beacon.context', 'internalResourceRoots');
+		const protectedRoots = [context.globalStorageUri.fsPath, ...(Array.isArray(internalRoots) ? internalRoots.filter(root => typeof root === 'string') : [])];
+		const fileTools = createFileTools(permission, roots, { protectedRoots });
 		const files = fileTools.execute;
 		const oj = async () => {
-			const extension = vscode.extensions.getExtension<{ resolveBeaconProblemId(oj: import('becoder-beacon').IBeaconProblemIdentity['oj'], problemId: string): ProblemRef; readBeaconProblem(ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }): Promise<ProblemDocument> }>('becoder.oj-connect');
+			const extension = vscode.extensions.getExtension<{ resolveBeaconProblemId(oj: import('becoder-beacon').IBeaconProblemIdentity['oj'], problemId: string): ProblemRef; readBeaconProblem(ref: ProblemRef, signal: AbortSignal, options?: { family?: 'c' | 'cpp' }): Promise<ProblemDocument>; readCachedBeaconProblem?(ref: ProblemRef, language: StatementLanguage): Promise<StatementRead | undefined> }>('becoder.oj-connect');
 			if (!extension) { throw new Error('beacon-page-provider-unavailable'); } return extension.activate();
 		};
 
-		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, [context.globalStorageUri.fsPath], {
+		const next = connections.request((input, signal) => native.guardRead(scope, files, input, signal), permission, roots, webEnabled, new ContextTools(native, scope, protectedRoots, {
 			readBeCoderInfo: createBeCoderInfoReader(path.join(context.extensionUri.fsPath, 'resources', 'product-info'), signal => native.productVersion(signal)),
 			authorizeLocal: (file, signal) => fileTools.authorize(file, signal),
 			resolveProblemId: async (ojName, problemId) => (await oj()).resolveBeaconProblemId(ojName, problemId),
+			readCachedProblem: async (ref, language, signal) => { signal.throwIfAborted(); const value = await (await oj()).readCachedBeaconProblem?.(ref, language); signal.throwIfAborted(); return value; },
 			readProblem: async (ref, signal, options) => (await oj()).readBeaconProblem(ref, signal, options)
 		}));
 		const generate = next.generate;
@@ -699,6 +705,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	}
 	try { if (!historyUnreadable) { await restoreWorkspace(true); } } catch { historyUnreadable = true; }
 	context.subscriptions.push(
+		vscode.commands.registerCommand('_becoder.beacon.translateProblem', async (ticket: StatementTranslationTicket, requestId: string) => {
+			if (typeof requestId !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestId) || !ticket?.source || !['en', 'zh-CN'].includes(ticket.targetLanguage) || translationJobs.has(requestId)) { throw new Error('translation-invalid-source'); }
+			const controller = new AbortController(); translationJobs.set(requestId, controller);
+			try { return await translateStatement(ticket, connections.translationConnection(), controller.signal, (completed, total) => { void vscode.commands.executeCommand('_becoder.ojConnect.translationProgress', { requestId, completed, total }); }); }
+			finally { translationJobs.delete(requestId); }
+		}),
+		vscode.commands.registerCommand('_becoder.beacon.cancelProblemTranslation', (requestId: string) => { translationJobs.get(requestId)?.abort(); }),
 		vscode.commands.registerCommand('_becoder.beacon.contextChanged', refreshContext),
 		vscode.commands.registerCommand('_becoder.beacon.shutdown', () => shutdown?.()),
 		vscode.commands.registerCommand('_becoder.beacon.flush', async () => {

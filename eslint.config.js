@@ -159,6 +159,8 @@ export default defineConfig(
 	{
 		files: [
 			'src/vs/platform/beacon/**/*.ts',
+			'src/vs/platform/browserView/{common,node,electron-main}/ojStatementCache*.ts',
+			'src/vs/platform/browserView/test/{node,electron-main}/ojStatementCache*.test.ts',
 			'scripts/test-toolbar-hover.mts',
 			'extensions/danielpinto8zz6.c-cpp-compile-run/src/{beaconEvidence,compilationSnapshot,notebookProcess,executionResults,runRecordAdapter}.ts',
 			'extensions/danielpinto8zz6.c-cpp-compile-run/test/{beaconEvidence,compilationSnapshot,notebookProcess}.test.ts',

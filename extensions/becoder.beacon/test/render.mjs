@@ -159,7 +159,62 @@ async function checkBusyKeySetup(context) {
 	}
 }
 
+async function renderTranslationSettings(context) {
+	for (const language of ['zh', 'en']) {
+		const page = await context.newPage(), errors = [];
+		page.on('pageerror', error => errors.push(error.message));
+		const t = (en, zh) => language === 'zh' ? zh : en;
+		await page.addInitScript(() => {
+			window.messages = [];
+			window.settings = { revision: 1, pending: false, error: '', keyConfigured: {}, selection: { provider: 'deepseek', model: 'chat' }, providers: {
+				deepseek: { baseURL: 'https://api.deepseek.com', enabled: false, models: [{ id: 'chat', name: 'Chat model' }, { id: 'translate', name: 'Translation model' }] },
+				bailian: { baseURL: '', models: [] }, moonshot: { baseURL: '', models: [] }, ollama: { baseURL: '', models: [] }, custom: { baseURL: '', models: [] }
+			} };
+			window.acquireVsCodeApi = () => ({ postMessage: message => { window.messages.push(message); if (message.type === 'ready') { window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*'); } } });
+		});
+		await page.goto(`http://127.0.0.1:${server.address().port}/configuration${language === 'en' ? '-english' : ''}`);
+		await page.getByLabel(t('API address', 'API 地址'), { exact: true }).fill('https://draft.invalid/v1');
+		await page.getByRole('button', { name: t('Problem translation', '题面翻译'), exact: true }).click();
+		await page.getByRole('heading', { name: t('Problem translation', '题面翻译'), exact: true }).waitFor();
+		const selector = page.getByRole('combobox', { name: t('Translation model', '翻译模型'), exact: true });
+		await selector.selectOption(JSON.stringify({ provider: 'deepseek', model: 'translate' }));
+		const message = await page.evaluate(() => window.messages.at(-1));
+		assert.equal(message.type, 'selectTranslationModel'); assert.equal(message.provider, 'deepseek'); assert.equal(message.id, 'translate');
+		assert.ok(message.requestId < 0); assert.ok(await selector.isDisabled());
+		await page.evaluate(message => {
+			window.settings = { ...window.settings, revision: 2, translationSelection: { provider: 'deepseek', model: message.id } };
+			window.postMessage({ type: 'settingsSnapshot', settings: window.settings, busy: false }, '*');
+			window.postMessage({ type: 'settingsResult', requestId: message.requestId, ok: true }, '*');
+		}, message);
+		await selector.waitFor();
+		assert.deepStrictEqual(await page.evaluate(() => window.settings.selection), { provider: 'deepseek', model: 'chat' });
+		for (const theme of ['light', 'dark']) {
+			await page.evaluate(theme => { document.body.className = 'vscode-' + theme; }, theme);
+			await page.addStyleTag({ content: theme === 'light' ? ':root{--vscode-editor-background:#fff;--vscode-foreground:#24292e;--vscode-input-background:#f4f5f6;--vscode-input-foreground:#24292e;--vscode-widget-border:#d0d7de;--vscode-font-family:Segoe UI,sans-serif}' : ':root{--vscode-editor-background:#282c34;--vscode-foreground:#d4d5d8;--vscode-input-background:#21252b;--vscode-input-foreground:#d4d5d8;--vscode-widget-border:#3a3e46;--vscode-font-family:Segoe UI,sans-serif}' });
+			for (const width of [360, 900]) {
+				await page.setViewportSize({ width, height: 820 });
+				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Translation settings fit ' + width);
+				const box = await selector.boundingBox(); assert.ok(box && box.x >= 0 && box.x + box.width <= width);
+				await page.screenshot({ path: path.join(output, `translation-${language}-${theme}-${width}.png`), fullPage: true });
+			}
+		}
+		await page.getByRole('button', { name: t('Model configuration', '模型配置'), exact: true }).click();
+		assert.equal(await page.getByLabel(t('API address', 'API 地址'), { exact: true }).inputValue(), 'https://draft.invalid/v1', 'Category navigation preserves the unsaved connection draft');
+		assert.deepStrictEqual(errors, []); await page.close();
+	}
+	console.log('Translation settings: independent selection, disabled chat provider, preserved draft, en/zh, light/dark and 360/900 passed.');
+}
+
 async function renderCustomSettings(context) {
+	{
+		const page = await context.newPage();
+		await page.addInitScript(() => { window.acquireVsCodeApi = () => ({ postMessage: () => {} }); });
+		await page.goto(`http://127.0.0.1:${server.address().port}/configuration`);
+		await page.evaluate(() => window.postMessage({ type: 'settingsSnapshot', settings: { revision: 1, pending: false, error: '', providers: Object.fromEntries(['deepseek', 'bailian', 'moonshot', 'ollama', 'custom'].map(id => [id, { baseURL: '', models: [] }])), keyConfigured: {} } }, '*'));
+		await page.getByRole('button', { name: '题面翻译', exact: true }).click({ timeout: 1500 });
+		await page.getByRole('heading', { name: '题面翻译', exact: true }).waitFor();
+		await page.close();
+	}
 	for (const language of ['zh', 'en']) {
 		const page = await context.newPage();
 		const errors = [];
@@ -1384,7 +1439,7 @@ async function renderExistingUI(context) {
 	assert.equal(await page.locator('.settings-row-copy small').count(), 4);
 	assert.equal(await page.locator('.settings-connection > form').evaluate(element => getComputedStyle(element).borderTopWidth), '1px');
 	assert.equal(await page.locator('.settings-header h1').evaluate(element => getComputedStyle(element).fontSize), '24px');
-	assert.equal(await page.locator('.settings-category').evaluate(element => getComputedStyle(element).fontSize), '13px');
+	assert.equal(await page.locator('.settings-category').first().evaluate(element => getComputedStyle(element).fontSize), '13px');
 	assert.equal(await page.locator('.settings-card').first().evaluate(element => getComputedStyle(element).borderRadius), '16px');
 	assert.equal(await page.locator('.settings-v3 .settings-switch').evaluate(element => getComputedStyle(element).width), '32px');
 	await page.setViewportSize({ width: 360, height: 1000 });
@@ -1831,6 +1886,7 @@ try {
 	await checkModeCopyAndSelection(context);
 	await checkBusyKeySetup(context);
 	await renderCustomSettings(context);
+	await renderTranslationSettings(context);
 	if (!process.argv.includes('--custom')) { await renderExistingUI(context); }
 } catch (error) {
 	const page = browser.contexts()[0]?.pages()[0];

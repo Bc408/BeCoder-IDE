@@ -1,8 +1,26 @@
 # Beacon 实现状态与验证边界
 
-更新：2026-11-27。当前源码在Beacon_Persona上接入负责人审定的人格提示词2026-11-27.2，保留前轮产品上下文及自定义Responses供应商；应用源码版本2.2.0，最新前端维护在a8d1dd9f之上实施，前轮人格及Responses修复基线见各段。本页分别维护源码、回归、模型观察、stage及负责人验收，不用设计或旧产物替代实际交付。
+更新：2026-11-28。当前源码为 Beacon_Persona 上的 2.2.0；实现、离线回归、模型观察、stage 与负责人验收分别记录，旧产物不证明新源码。
 
 [统一入口](README.md) · [工具合同](tool-contract.md) · [底层设计](foundation-design.md)
+
+## 2026-11-28 题面缓存与中英翻译
+
+负责人确认 [设计](../superpowers/specs/2026-11-28-problem-statement-translation-design.md) 与 [计划](../superpowers/plans/2026-11-28-problem-statement-translation.md)，选择 Native 并授权源码实施。当前工作树基于 `Beacon_Persona@076eb778`，应用版本仍为 2.2.0；以下结果不代表旧 stage 已包含本轮修改。
+
+主进程统一持有应用级30题缓存与内存翻译任务身份；同题中英文合并，Get与成功显式翻译入尾，读取不调整顺序。无工作区也可使用，独立于problem13／run30／verdict20；模型仅按指定题号与语种读取，没有缓存目录、最近顺序、路径或用户拿题时间。普通文件／页面工具同时保护应用私有目录。
+
+OJ Connect常驻zh-CN／en，AtCoder只提供实际英文正文；缺失项显示“原题未提供，点击翻译”，生成项标“译文”。选择缺失语种才发起请求，完整验证与发布后切换；进度可见且可取消，关闭／重新拿题／窗口重载退役旧任务。设置中“模型配置”下新增“题面翻译”，独立选择模型，复用已保存连接、密钥及参数；聊天开关与模型切换不改翻译选择，无默认自动选模。
+
+翻译使用独立英文任务提示，不带人格、聊天、用户代码或工具。AST范围与占位保护保留公式、代码及注释、数值符号、链接、样例字节和结构；完整返回、占位顺序及结构校验通过才发布。按模型容量完整分批，不截断题面。原文变化失效依赖译文，站点完整版本优先。`fetchProblem`必需`language`，先查目标语种缓存，未命中才联网；不自动翻译、写缓存或采集读题行为，缺失语种返回`availableLanguages`。
+
+独立只读复核发现并修复五项问题：字段顺序导致译文无法复用、混合HTML代码／带符号数值／HTML公式保护不全、编译器列表更新吞掉翻译结果、应用缓存写盘推迟行为保存门禁，以及失败恢复提示混淆。缓存合并收敛为原生所有者的一次只读快照；新增失败复现后修复并完整重跑。
+
+离线结果：Beacon **418项**、OJ Connect **204项**、核心缓存／权限／洛谷 **68项**、隔离Electron原生组件 **39项**、发行边界 **35项**通过。客户端与两扩展类型检查、生产bundle、统一OI扩展编译和分层检查退出0。Beacon strict lint退出0；核心与OJ lint无错误，仍保留既有或类型字面量提示。stylelint退出0但存在既有自定义变量诊断及设计token建议，与HEAD对照未新增未知变量，不称零诊断。最终命令及中间失败留在本地`.superpowers/sdd/2026-11-28-problem-statement-translation/`台账。
+
+生产Webview隔离渲染通过：两页英文／中文导航、独立模型选择、聊天供应商关闭仍可选择翻译模型、切页保留连接草稿、浅／深色及360／900宽度；OJ五站、语言缺失提示、窄栏提交布局、公式与样例回归通过。截图位于`tmp/beacon-render/translation-*.png`和`tmp/oj-connect-audit/shared-workflow/render/`。双向内容夹具验证保护与回填，不冒充真实模型译文。
+
+本轮未调用真实模型、构建stage／Setup、启动原生GUI或执行Git提交／推送。真实译文质量、原生语言下拉体验、取消与跨窗口使用体验，以及负责人视觉验收仍待后续授权验证；源码测试与headless截图不能替代这些验收。
 
 2026-11-25提示优化[设计](../superpowers/specs/2026-11-25-beacon-prompt-quality-design.md)和[实施计划](../superpowers/plans/2026-11-25-beacon-prompt-quality.md)已获批准，负责人选择Native实施。导师核心精简、逐工具capabilities退出和readBeCoderInfo均已接入；system、工具说明及产品主题正文统一英文，回答跟随用户语言。[能力报告](evaluation/2026-11-25-prompt-quality-report.md)及[完整问答](evaluation/2026-11-25-prompt-quality-samples.md)保改善、退化和失败；整体教学质量未全面通过。
 

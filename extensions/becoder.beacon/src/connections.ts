@@ -80,6 +80,7 @@ export class Connections implements vscode.Disposable {
 		const providerIds = Object.keys(providers) as ProviderId[];
 		return structuredClone({
 			...this.data,
+			translationError: this.translationSnapshot.error,
 			providers: Object.fromEntries(providerIds.map(id => [id, { ...this.data.providers[id], enabled: this.enabled(id) }])) as ModelConfiguration['providers'],
 			providerTest: this.tests.snapshot, discovery: this.discovery,
 			parameterIssues: Object.fromEntries(providerIds.map(id => [id, Object.fromEntries(this.data.providers[id].models.map(model => [model.id, modelParameterIssues(id, this.data.providers[id].baseURL, model)]))])),
@@ -229,6 +230,13 @@ export class Connections implements vscode.Disposable {
 					if (!value.enabled && data.selection?.provider === value.provider) { delete data.selection; }
 					await this.persist(data); break;
 				}
+				case 'selectTranslationModel': {
+					const model = profile.models.find(item => item.id === value.id);
+					if (!model || !this.connectionReady(value.provider) || !['chat', 'unknown'].includes(resolveCapabilities(value.provider, profile.baseURL, model.id, model.discovered, model.settings).purpose)) { throw new Error('translation-model-unavailable'); }
+					validateModel(value.provider, profile.baseURL, model);
+					data.translationSelection = { provider: value.provider, model: model.id };
+					await this.persist(data); break;
+				}
 				case 'selectModel': case 'removeModel': {
 					const model = profile.models.find(item => item.id === value.id);
 					if (!model) { throw new Error('settings-stale'); }
@@ -255,6 +263,21 @@ export class Connections implements vscode.Disposable {
 	}
 	private async writeKey(provider: ProviderId, key: string | undefined): Promise<void> {
 		if (key) { await this.context.secrets.store(secretName(provider), key); } else { await this.context.secrets.delete(secretName(provider)); }
+	}
+	translationConnection(): Connection {
+		const selected = this.data.translationSelection;
+		if (!selected || this.pending || this.refreshing || this.error) { throw new Error('translation-model-unavailable'); }
+		const profile = this.data.providers[selected.provider], model = profile.models.find(model => model.id === selected.model);
+		if (!model || !this.connectionReady(selected.provider)) { throw new Error('translation-model-unavailable'); }
+		const capabilities = resolveCapabilities(selected.provider, profile.baseURL, model.id, model.discovered, model.settings);
+		if (!['chat', 'unknown'].includes(capabilities.purpose)) { throw new Error('translation-model-unavailable'); }
+		validateModel(selected.provider, profile.baseURL, model);
+		return structuredClone({ provider: selected.provider, baseURL: profile.baseURL, model: model.id, parameters: model.parameters, modelSettings: model.settings, capabilities, apiKey: this.keys[selected.provider] });
+	}
+	get translationSnapshot(): { selection?: ModelConfiguration['translationSelection']; error?: string } {
+		if (!this.data.translationSelection) { return {}; }
+		try { this.translationConnection(); return { selection: this.data.translationSelection }; }
+		catch { return { selection: this.data.translationSelection, error: vscode.l10n.t('The selected translation model is unavailable. Check its connection, credentials and parameters in Model configuration.') }; }
 	}
 	request(files: FileTool, permission: FilePermission, roots: FileRoot[], webEnabled: boolean, context?: import('./contextTools').ContextAccess) {
 		if (this.testing) { throw new Error('settings-pending'); }

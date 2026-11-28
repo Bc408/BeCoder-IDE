@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter } from '../../../base/common/event.js';
+import * as path from '../../../base/common/path.js';
+import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../base/common/uuid.js';
 import { ILogService } from '../../log/common/log.js';
@@ -20,16 +22,20 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	private readonly changed = this._register(new Emitter<number>());
 	readonly onDidChange = this.changed.event;
 	private readonly coordinator: BeaconCoordinator;
+	private readonly protectedRoots: readonly string[];
 	private readonly watched = new Map<number, DisposableStore>();
 
 	constructor(
 		@IWindowsMainService private readonly windowsService: IWindowsMainService,
 		@IStateService state: IStateService,
 		@ILifecycleMainService lifecycle: ILifecycleMainService,
-		@ILogService private readonly log: ILogService
+		@ILogService private readonly log: ILogService,
+		@IEnvironmentMainService environment?: IEnvironmentMainService
 	) {
 		super();
+		this.protectedRoots = environment ? [path.join(environment.userDataPath, 'becoder')] : [];
 		this.coordinator = new BeaconCoordinator({
+			protectedRoots: this.protectedRoots,
 			getSelection: id => {
 				const configuration = this.windowsService.getWindowById(id)?.config;
 				if (!configuration) { return undefined; }
@@ -65,6 +71,7 @@ export class BeaconContextMainService extends Disposable implements IBeaconConte
 	}
 
 	getContext(windowId: number) { return this.coordinator.getContext(windowId); }
+	async getProtectedResourceRoots(_windowId: number): Promise<readonly string[]> { return this.protectedRoots; }
 	getResume(windowId: number) { return this.coordinator.getResume(windowId); }
 	setView(windowId: number, view: IBeaconResume) { return this.coordinator.setView(windowId, view); }
 	selectWorkspace(windowId: number, root: string) { return this.coordinator.selectWorkspace(windowId, root); }

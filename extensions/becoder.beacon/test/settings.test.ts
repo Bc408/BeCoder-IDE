@@ -22,6 +22,22 @@ function apply(connections: Connections, command: Omit<SettingsCommand, 'revisio
 }
 
 suite('Beacon settings', () => {
+	test('translation selection is independent from chat enabled state and uses frozen shared credentials', async () => fixture(async (connections, context) => {
+		const chatSelection = connections.settings.selection;
+		await apply(connections, { type: 'saveModel', provider: 'custom', model: { id: 'translate', name: 'Translator', parameters: {}, settings: {} } });
+		await apply(connections, { type: 'saveConnection', provider: 'custom', baseURL: 'http://localhost:9000/v1', key: 'shared-secret' });
+		await apply(connections, { type: 'toggleProvider', provider: 'custom', enabled: false });
+		await apply(connections, { type: 'selectTranslationModel', provider: 'custom', id: 'translate' });
+		assert.deepStrictEqual(connections.settings.selection, chatSelection);
+		assert.deepStrictEqual(connections.settings.translationSelection, { provider: 'custom', model: 'translate' });
+		const frozen = connections.translationConnection();
+		assert.equal(frozen.apiKey, 'shared-secret');
+		await context.secrets.store(secretName('custom'), 'new-secret'); await connections.refresh();
+		assert.equal(frozen.apiKey, 'shared-secret');
+		assert.equal(connections.translationConnection().apiKey, 'new-secret');
+		await apply(connections, { type: 'removeModel', provider: 'custom', id: 'translate' });
+		assert.throws(() => connections.translationConnection(), /translation-model-unavailable/);
+	}));
 	test('custom defaults preserve a valid four-provider document and its selected model', () => {
 		const data = emptyConfiguration();
 		data.providers.deepseek.models = [parseModel({ id: 'saved', name: 'My model', parameters: { topP: 0.7 }, settings: { thinking: 'disabled' } })];

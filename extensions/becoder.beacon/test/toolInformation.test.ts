@@ -116,7 +116,7 @@ suite('Beacon concise tool information', () => {
 	test('invalid canonical problem ID retains invalid-input feedback', async () => {
 		const client = new BeaconContextClient(async () => state); await client.refresh();
 		const tools = new ContextTools(client, client.captureScope(), [], { resolveProblemId: async () => { throw new Error('oj-connect-invalid-problem'); }, readProblem: async () => { assert.fail('invalid target must not fetch'); } });
-		const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'nonsense' }, signal);
+		const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'nonsense', language: 'en' }, signal);
 		assert.equal((result.error as { code: string }).code, 'oj-connect-invalid-problem');
 		assert.equal(toolErrorCode((result.error as { code: string }).code), 'invalid-input');
 	});
@@ -141,8 +141,8 @@ suite('Beacon concise tool information', () => {
 			if (operation !== 'listRecords') { throw new Error('Unexpected lookup or file access'); }
 			const kind = (raw as { kind: string }).kind;
 			return ['A', 'B', 'A'].map((file, index) => kind === 'run' ? run('item' + index, `C:/chosen/deleted/${file}.cpp`) : kind === 'problem'
-				? { id: 'item' + index, filePath: `C:/chosen/deleted/${file}.cpp`, problem: { oj: 'luogu', problemId: 'P1001' }, viewedAt: '2026-11-26T00:00:00Z' }
-				: { id: 'item' + index, filePath: `C:/chosen/deleted/${file}.cpp`, problem: { oj: 'luogu', problemId: 'P1001' }, observedAt: '2026-11-26T00:00:00Z', submission: {}, result: { rawStatus: 'AC' } });
+				? { id: 'item' + index, filePath: `C:/chosen/deleted/${file}.cpp`, problem: { oj: 'luogu', problemId: 'P1001', language: 'en' }, viewedAt: '2026-11-26T00:00:00Z' }
+				: { id: 'item' + index, filePath: `C:/chosen/deleted/${file}.cpp`, problem: { oj: 'luogu', problemId: 'P1001', language: 'en' }, observedAt: '2026-11-26T00:00:00Z', submission: {}, result: { rawStatus: 'AC' } });
 		});
 		await client.refresh(); const tools = new ContextTools(client, client.captureScope());
 		for (const name of ['readProblemRecord', 'readRunRecord', 'readVerdictRecord'] as const) {

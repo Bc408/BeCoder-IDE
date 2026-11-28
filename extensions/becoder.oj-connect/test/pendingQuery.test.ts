@@ -21,7 +21,7 @@ function deferred<T>() {
 	return { promise, resolve, reject };
 }
 
-async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeaconCollectionScope; scopeError?: boolean; importRoot?: string; confirmedSend?: boolean; failCapture?: boolean; captureError?: string; endError?: string; sourceUri?: string; outside?: boolean; publication?: ReturnType<typeof deferred<void>>; verification?: RecordSnapshot['sourceVerification'] } = {}) {
+async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeaconCollectionScope; scopeError?: boolean; importRoot?: string; confirmedSend?: boolean; failCapture?: boolean; captureError?: string; endError?: string; sourceUri?: string; outside?: boolean; statementPublication?: ReturnType<typeof deferred<void>>; publication?: ReturnType<typeof deferred<void>>; verification?: RecordSnapshot['sourceVerification'] } = {}) {
 	const Module = require('module'), original = Module._load;
 	const commands = new Map<string, (...args: any[]) => Promise<any>>();
 	let problemActions!: ProblemActions;
@@ -35,6 +35,7 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 	const previews: { closed: boolean; adopted: RecordRef[] }[] = [];
 	const captures: { record: IBeaconRecordWrite<'verdict'>; collectionScope: IBeaconCollectionScope }[] = [];
 	const problemCaptures: { record: IBeaconRecordWrite<'problem'>; collectionScope: IBeaconCollectionScope }[] = [];
+	const statements: ProblemDocument[] = [];
 	const collections = new Set<string>(), collectionEvents: { operation: string; input: unknown }[] = [];
 	let collectionId = 0;
 	let captureRecord!: (ref: RecordRef, sourceUri: string, scope?: IBeaconCollectionScope, attemptId?: string) => RecordCapture;
@@ -53,6 +54,10 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 		Uri: { parse: (value: string) => value }, ViewColumn: { One: 1 },
 		commands: {
 			registerCommand: (id: string, action: (...args: any[]) => Promise<any>) => { commands.set(id, action); return disposable(); }, executeCommand: async (id: string, ...args: unknown[]) => {
+				if (id === '_becoder.ojConnect.statementCache') {
+					if (args[0] === 'publishAcquired') { statements.push(structuredClone((args[1] as { document: ProblemDocument }).document)); await options.statementPublication?.promise; }
+					return undefined;
+				}
 				if (id === '_becoder.beacon.context') {
 					if (args[0] === 'captureCollectionScope') { if (options.scopeError) { throw new Error('scope capture unavailable'); } return options.scope; }
 					if (args[0] === 'beginCollection') {
@@ -107,10 +112,10 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 		return original.call(this, id, ...args);
 	};
 	const subscriptions: { dispose(): void }[] = [];
-	const extension = require('../src/extension'); await extension.activate({ subscriptions, globalState: { get: () => undefined, update: async () => { } } });
+	const extension = require('../src/extension'); const api = await extension.activate({ subscriptions, globalState: { get: () => undefined, update: async () => { } } });
 	t.after(async () => { await extension.deactivate(); subscriptions.forEach(value => value.dispose()); Module._load = original; delete require.cache[extensionPath]; });
 	return {
-		queries, opened, notices, warnings, previews, captures, problemCaptures, collections, collectionEvents, imports,
+		queries, opened, notices, warnings, previews, captures, problemCaptures, collections, collectionEvents, imports, statements, api,
 		captureRecord: (snapshot: RecordSnapshot, attemptId?: string, sourceUri = source.uri.toString()) => captureRecord(snapshot.ref, sourceUri, options.scopeError ? undefined : options.scope, attemptId),
 		importCph: (document: ProblemDocument) => problemActions.importCph(source.uri.toString(), document),
 		importBrowser: (document: ProblemDocument) => commands.get('_becoder.ojConnect.importFromBrowser')!(document),
@@ -125,6 +130,25 @@ async function fixture(t: TestContext, lanqiao = false, options: { scope?: IBeac
 		record
 	};
 }
+
+test('Get publishes the application statement without a Beacon root while model reads and sample import stay read only', async t => {
+	const f = await fixture(t), document = f.problemDocument('A+B');
+	const getting = f.showProblem(); await f.settle(); f.reads[0].resolve(document); await getting;
+	assert.deepStrictEqual(f.statements, [document]); assert.deepStrictEqual(f.problemCaptures, []);
+	await f.importCph(document);
+	const fetching = f.api.readBeaconProblem(document.ref, new AbortController().signal); await f.settle(); f.reads[1].resolve(document); await fetching;
+	assert.strictEqual(f.statements.length, 1);
+});
+
+test('Get registers behavior collection before a slow application cache write', async t => {
+	const statementPublication = deferred<void>(), publication = deferred<void>();
+	const f = await fixture(t, false, { scope: { slot: 'chosen', root: 'C:/practice', workspaceIdentity: 'root', rootSelectionEpoch: 1 }, statementPublication, publication });
+	const getting = f.showProblem(); await f.settle(); f.reads[0].resolve(f.problemDocument('A+B')); await f.settle();
+	const active = f.collections.size;
+	statementPublication.resolve(); publication.resolve(); await getting;
+	assert.strictEqual(active, 1, 'behavior collection must cover the entire pending publication');
+	assert.strictEqual(f.collections.size, 0);
+});
 
 for (const scopeError of [false, true]) {
 	for (const action of ['get', 'import-cph', 'import-browser', 'submit-final']) {

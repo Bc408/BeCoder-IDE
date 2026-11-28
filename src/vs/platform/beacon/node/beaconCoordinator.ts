@@ -20,6 +20,7 @@ const sameWorkspacePath = (left: string, right: string) => {
 };
 
 export interface IBeaconCoordinatorCallbacks {
+	protectedRoots?: readonly string[];
 	getSelection(id: number): IBeaconWindowSelection | undefined;
 	saveSelection(id: number, selection: IBeaconWindowSelection): void;
 	getRecent(): string[];
@@ -466,6 +467,7 @@ export class BeaconCoordinator {
 				}
 			}
 			for (const target of [file, canonical]) {
+				if (this.callbacks.protectedRoots?.some(root => { const relative = path.relative(root, target); return relative === '' || relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); })) { throw new Error('beacon-protected-page'); }
 				const parts = target.split(/[\\/]/);
 				if (parts.some(part => part.toLowerCase() === '.beaconwork')) { throw new Error('beacon-protected-page'); }
 				if (parts.some((part, index) => part.toLowerCase() === 'globalstorage' && parts[index + 1]?.toLowerCase() === 'becoder.beacon')) { throw new Error('beacon-protected-page'); }

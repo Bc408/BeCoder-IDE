@@ -61,3 +61,7 @@ pre.markdown-code .copyButton [data-copied='true'] {
 .markdown-copy-error {
 	color: var(--vscode-errorForeground);
 }
+/* Translation is a user action; long option explanations must not displace submission controls. */
+.statement-language { flex: 0 0 88px; width: 88px; min-width: 0; }
+.oj-problem .submissionControls { flex-basis: 140px; min-width: 140px; }
+.statement-translation-progress { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; color: var(--vscode-descriptionForeground); }

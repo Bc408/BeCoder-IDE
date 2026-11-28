@@ -74,5 +74,6 @@
 	"PDF selection": "PDF 选区",
 	"The selected page is no longer available. Select the text again.": "选区页面已不可用，请重新选择文字。",
 	"Wait for the current run to finish before sending to Beacon.": "请等待当前运行任务完成后再向 Beacon 发送。",
-	"Saving user activity context": "正在保存用户行为上下文"
+	"Saving user activity context": "正在保存用户行为上下文",
+	"The selected translation model is unavailable. Check its connection, credentials and parameters in Model configuration.": "所选翻译模型不可用，请在“模型配置”中检查连接、密钥和参数。"
 }

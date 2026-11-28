@@ -70,14 +70,14 @@ export class OjPreferences {
 		return typeof saved === 'string' && available.includes(saved) ? saved : available.find(locale => locale === 'en') ?? available[0];
 	}
 	async selectStatementLocale(locale: string): Promise<void> {
-		if (locale !== 'en' && locale !== 'ja') { throw new Error('Invalid statement locale.'); }
+		if (locale !== 'en' && locale !== 'zh-CN') { throw new Error('Invalid statement locale.'); }
 		await this.store.update('atcoder.statementLanguage', locale);
 	}
 	async migrate(legacy: PreferenceStore, configured: (key: string) => boolean): Promise<void> {
 		for (const [oldKey, key] of [['atcoder.language.c', 'atcoder.cCompiler'], ['atcoder.language.cpp', 'atcoder.cppCompiler'], ['atcoder.statementLocale', 'atcoder.statementLanguage']]) {
 			const value = legacy.get<unknown>(oldKey);
 			if (value === undefined) { continue; }
-			const valid = key === 'atcoder.statementLanguage' ? value === 'en' || value === 'ja' : validLanguage('atcoder', key === 'atcoder.cCompiler' ? 'c' : 'cpp', value);
+			const valid = key === 'atcoder.statementLanguage' ? value === 'en' || value === 'zh-CN' : validLanguage('atcoder', key === 'atcoder.cCompiler' ? 'c' : 'cpp', value);
 			if (valid && !configured(key)) { await this.store.update(key, value); }
 			// Never erase an old choice until its settings write has succeeded.
 			await legacy.update(oldKey, undefined);

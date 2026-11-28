@@ -20,13 +20,24 @@ declare module 'becoder-oj-connect' {
 		readonly ref: ProblemRef; readonly title: string;
 		readonly difficulty?: { readonly label: string; readonly color?: string };
 		readonly tags?: readonly { readonly label: string; readonly color?: string }[];
-		readonly bodies: readonly { readonly locale: string; readonly sections: readonly Section[] }[];
+		readonly bodies: readonly { readonly locale: string; readonly title?: string; readonly origin?: StatementOrigin; readonly sections: readonly Section[] }[];
 		readonly samples: readonly { readonly input: string; readonly output: string }[];
 		readonly limits: readonly { readonly label: string; readonly value: string }[];
 		readonly interactive: boolean;
 		readonly languages?: readonly LanguageOption[];
 		readonly languageError?: 'unavailable' | 'login-required';
 	}
+	export type StatementLanguage = 'zh-CN' | 'en';
+	export type StatementOrigin = 'site' | 'translation';
+	export type StatementContent = Pick<ProblemDocument, 'ref' | 'title' | 'bodies' | 'samples' | 'limits' | 'interactive' | 'difficulty' | 'tags'>;
+	export interface StatementVersion {
+		readonly language: StatementLanguage;
+		readonly title: string;
+		readonly sections: readonly Section[];
+		readonly origin: StatementOrigin;
+	}
+	export type StatementRead = Omit<StatementContent, 'title' | 'bodies'> & { readonly version: StatementVersion };
+	export interface StatementTranslationTicket { readonly id: string; readonly source: StatementRead; readonly targetLanguage: StatementLanguage }
 	export interface LanguageOption { readonly id: string; readonly label: string; readonly family: 'c' | 'cpp' }
 	export interface LanguageCatalogue { readonly languages: readonly LanguageOption[]; readonly languageError?: 'unavailable' | 'login-required' }
 	export interface RecordRef { readonly problem: ProblemRef; readonly id: string; readonly url: string }

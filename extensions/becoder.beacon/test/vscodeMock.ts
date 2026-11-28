@@ -75,6 +75,7 @@ export function reset(directory: string) {
 	workspace.workspaceFolders = [{ name: 'root', uri: Uri.file(directory) }]; workspace.textDocuments = [];
 	beaconContext = { slot: 'test-window', usable: false, workspaceState: 'none', mode: 'blackout', epoch: 0, busy: false, runtimeBusy: false, collectionPending: false, recent: [] }; beaconConversations.clear(); beaconResumes.clear();
 	commandHandlers.set('_becoder.beacon.context', (operation, argument) => {
+		if (operation === 'internalResourceRoots') { return []; }
 		const input = argument as { root: string; busy: boolean; mode: IBeaconContext['mode']; retainConversation?: boolean; id: string; create: boolean; data: IBeaconConversation; revision: number; title: string };
 		const key = (id: string) => `${beaconContext.root}:${id}`;
 		switch (operation) {

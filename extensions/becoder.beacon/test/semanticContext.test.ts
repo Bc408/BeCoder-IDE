@@ -13,6 +13,36 @@ import { contextToolNames, contextInputValid, type BeaconContextToolName } from 
 
 const state = { slot: 'fixture', root: 'C:/practice', mode: 'spot', workspaceState: 'ready', usable: true, epoch: 1, busy: false, runtimeBusy: false, collectionPending: false, activeId: 'chat', recent: [] };
 const signal = new AbortController().signal;
+test('fetchProblem reads only the requested cached language in every mode without network or timestamps', async () => {
+	for (const mode of ['blackout', 'spot', 'flood'] as const) {
+		const current = { ...state, mode, workspaceState: mode === 'blackout' ? 'blackout' : 'ready' };
+		const client = new BeaconContextClient(async () => current); await client.refresh();
+		let reads = 0;
+		const ref = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+		const tools = new ContextTools(client, client.captureScope(), [], {
+			resolveProblemId: async () => ref,
+			readCachedProblem: async () => ({ ref, version: { language: 'zh-CN', origin: 'translation', title: 'Cached', sections: [{ format: 'markdown', content: 'Only this problem' }] }, samples: [], limits: [], interactive: false }),
+			readProblem: async () => { reads++; throw new Error('unexpected-network'); }
+		} as ConstructorParameters<typeof ContextTools>[3]);
+		const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'zh-CN' }, signal);
+		assert.equal(result.language, 'zh-CN'); assert.equal(result.origin, 'translation'); assert.equal(reads, 0);
+		assert.doesNotMatch(JSON.stringify(result), /retrievedAt|viewedAt|entries|filePath/);
+	}
+});
+test('fetchProblem checks the requested language on network fallback and exposes only available languages on failure', async () => {
+	const client = new BeaconContextClient(async () => ({ ...state, root: undefined, mode: 'blackout', usable: false, workspaceState: 'none' })); await client.refresh();
+	let network = 0;
+	const ref = { site: 'luogu' as const, nativeId: 'P1001', url: 'https://www.luogu.com.cn/problem/P1001' };
+	const tools = new ContextTools(client, client.captureScope(), [], { resolveProblemId: async () => ref, readCachedProblem: async () => undefined,
+		readProblem: async () => { network++; return { ref, title: 'English', bodies: [{ locale: 'en', sections: [{ format: 'markdown', content: 'Official content' }] }], samples: [], limits: [], interactive: false }; } });
+	const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'zh-CN' }, signal);
+	assert.equal((result.error as { code: string }).code, 'statement_language_unavailable'); assert.deepEqual(result.availableLanguages, ['en']);
+	assert.equal(network, 1); assert.doesNotMatch(JSON.stringify(result), /Official content/);
+	const english = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'en' }, signal);
+	assert.equal(english.origin, 'site'); assert.equal(network, 2);
+	assert.equal(contextInputValid('fetchProblem', { oj: 'luogu', problemId: 'P1001' }), false);
+	assert.equal(contextInputValid('fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'ja' }), false);
+});
 interface FixtureOutput { files: { code: string }[]; records: { program: { code?: string }; problem?: unknown }[]; record: { program: { code: string } }; error?: unknown }
 const execute = (tools: ContextTools, name: string, input: object = {}) => tools.execute(name as BeaconContextToolName, input as Record<string, unknown>, signal) as unknown as Promise<FixtureOutput>;
 
@@ -68,7 +98,7 @@ test('provider registers independent semantic tools and no legacy writer or oper
 
 test('each semantic schema accepts its own request and rejects nulls, selectors and unknown fields', () => {
 	for (const name of contextToolNames) {
-		const input = name === 'fetchProblem' ? { oj: 'luogu', problemId: 'P1001' } : name === 'readPage' ? { id: 'page' } : {};
+		const input = name === 'fetchProblem' ? { oj: 'luogu', problemId: 'P1001', language: 'en' } : name === 'readPage' ? { id: 'page' } : {};
 		assert.equal(contextInputValid(name, input), true);
 		assert.equal(contextInputValid(name, { ...input, producer: 'runner' }), false);
 		assert.equal(contextInputValid(name, null), false);
@@ -94,7 +124,7 @@ test('concurrent first reads share one fixed body and a failed first read can be
 test('compaction permits only fixed records and never new pages, code, directories or network', async () => {
 	const client = new BeaconContextClient(async operation => operation === 'context' ? state : []);
 	await client.refresh(); const tools = new ContextTools(client, client.captureScope()).compactionView();
-	for (const [name, input] of [['readCurrentCode', {}], ['readPage', { id: 'page' }], ['fetchProblem', { oj: 'luogu', problemId: 'P1001' }], ['readProblemRecord', {}], ['readVerdictRecord', { id: 'unknown' }]] as const) {
+	for (const [name, input] of [['readCurrentCode', {}], ['readPage', { id: 'page' }], ['fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'en' }], ['readProblemRecord', {}], ['readVerdictRecord', { id: 'unknown' }]] as const) {
 		assert.ok((await tools.execute(name, input, signal)).error);
 	}
 });
@@ -105,9 +135,9 @@ test('Blackout fetches canonical statements without saving records or requiring 
 	await client.refresh(); let fetched = 0;
 	const tools = new ContextTools(client, client.captureScope(), [], {
 		resolveProblemId: async (oj, problemId) => ({ site: oj, nativeId: problemId, url: 'https://www.luogu.com.cn/problem/P1001' }),
-		readProblem: async ref => { fetched++; return { ref, title: 'A+B', bodies: [], samples: [], limits: [], interactive: false }; }
+		readProblem: async ref => { fetched++; return { ref, title: 'A+B', bodies: [{locale:'en',sections:[{format:'markdown',content:'Statement'}]}], samples: [], limits: [], interactive: false }; }
 	});
-	const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'P1001' }, signal);
+	const result = await tools.execute('fetchProblem', { oj: 'luogu', problemId: 'P1001', language: 'en' }, signal);
 	assert.equal(result.error, undefined); assert.equal(fetched, 1); assert.ok(operations.every(name => name === 'context'));
 	assert.deepEqual(tools.names, ['readCurrentCode', 'fetchProblem', 'readPage']);
 });

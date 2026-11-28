@@ -17,6 +17,7 @@
 ## 开发与维护
 
 - [开发指南](development.md)：工程入口、检查和构建。
+- [内置浏览器导航白闪（需求已撤回）](browser-navigation-flash-withdrawn-2026-11-28.md)：因内核维护成本撤回，保留调查结论与证据；问题未修复，不列为待办。
 - [设置本地化修复](settings-localization-review-2026-11-27.md)：默认语言覆盖、118项随包配置标题与中英文切换的源码和组件验证边界。
 - [工具栏与 Notebook 调整](toolbar-notebook-ui-review-2026-11-27.md)：原生分体运行按钮、OJ 纸飞机、Markdown 入口与账户默认可见性的验证。
 - [Beacon 需求与架构入口](beacon/README.md)：完整能力、架构、九工具合同、三个业务队列与同步压缩；[实现状态](beacon/implementation-status.md)单列源码差距与验收边界。

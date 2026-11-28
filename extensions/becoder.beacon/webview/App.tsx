@@ -23,6 +23,7 @@ import type { FilePermission } from '../src/fileTools';
 import type { Attachment } from '../src/attachments';
 import { providers, type ConnectionState } from '../src/connection';
 import { providerName } from './ProviderIdentity';
+import beaconIcon from '../resources/beacon.svg';
 import 'katex/dist/katex.min.css';
 import './beacon.css';
 
@@ -227,6 +228,9 @@ function App() {
 	const visibleHistory = state.context?.workspaceState === 'ready' ? state.history : [];
 	const failedReply = state.messages.at(-1)?.status === 'error';
 	const temporaryFailure = !!state.messages.at(-1)?.failure;
+	const welcome = !state.configured ? t('Click the settings button in the upper right to configure a provider and select a model', '点击右上角设置按钮，配置服务商并选择模型后开始')
+		: state.permission === 'none' ? t('Start a temporary chat, or look at the current code together', '临时聊聊，或一起看看当前代码')
+			: t('Read problems, ask questions, understand code, and learn together', '读题、提问、解释代码，一起学习');
 	const webTitle = (state.webEnabled ? t('Web search on · Exa', '联网已开启 · Exa') : t('Web search off', '联网已关闭')) + (!capabilities.tools ? '\n' + t('This model does not support tools. Web search is unavailable; check its capabilities in settings.', '当前模型不支持工具，联网不可用；请在设置中检查模型能力。') : '\n' + t('Search public information when needed, without a search API key.', '按需查询公开信息，无需配置搜索密钥。'));
 	const renderHistory = (items: HistoryItem[]) => items.map(item => <div className={`history-row ${item.id === state.activeId ? 'active' : ''} ${item.id === confirmDelete ? 'confirming' : ''}`} key={item.id} onMouseLeave={() => setConfirmDelete(undefined)}>
 		<button className="history-open" disabled={busy} aria-current={item.id === state.activeId ? 'true' : undefined} onClick={() => { setPending('navigation'); api.postMessage({ type: 'openHistory', conversationId: item.id }); }} data-becoder-tooltip={[item.title, ...(item.workspace ?? []).map(root => root.path)].join('\n')}><span>{item.title}</span><time dateTime={new Date(item.updatedAt).toISOString()}>{formatTime(item.updatedAt, now)}</time></button>
@@ -247,7 +251,7 @@ function App() {
 		{home && visibleHistory.length > 0 && <section className="history-list" aria-label={t('Chats', '聊天列表')}>{renderHistory(visibleHistory)}</section>}
 		<Conversation hidden={home && visibleHistory.length > 0}>
 			<ConversationContent conversationId={state.activeId}>
-				{home && <div className="welcome"><div className="welcome-mark" aria-hidden="true">✦</div><p>{state.configured ? t('Ask a question, explain code, or explore an algorithm.', '提问、解释代码，或一起探索算法。') : t('Click the settings button in the upper right to configure a provider and select a model.', '点击右上角设置按钮，配置服务商并选择模型后开始。')}</p></div>}
+				{home && <div className="welcome"><div className="welcome-mark" aria-hidden="true" style={{ maskImage: `url(${JSON.stringify(beaconIcon)})` }} /><p>{welcome}</p></div>}
 				{state.messages.map(message => <Fragment key={message.id}>
 					{message.transition && <div className="conversation-transition" role="separator"><span>{message.transition === 'temporary' ? t('Context inherited. Starting a temporary conversation.', '已继承上文，开始临时对话') : t('Context inherited. Creating a persistent conversation.', '已继承上文，建立持久化对话')}</span></div>}
 					<article className={`message ${message.role} ${editing === message.id ? 'editing' : ''}`}>

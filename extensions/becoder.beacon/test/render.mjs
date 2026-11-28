@@ -26,6 +26,60 @@ const server = createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: true });
 
+async function checkModeCopyAndSelection(context) {
+	for (const language of ['zh', 'en']) {
+		const page = await context.newPage();
+		const t = (en, zh) => language === 'zh' ? zh : en;
+		await page.addInitScript(() => {
+			window.messages = [];
+			window.acquireVsCodeApi = () => ({ postMessage: message => window.messages.push(message) });
+		});
+		await page.setViewportSize({ width: 440, height: 820 });
+		await page.goto(`http://127.0.0.1:${server.address().port}/${language === 'en' ? 'english' : ''}`);
+		await page.addStyleTag({ content: ':root{--vscode-sideBar-background:#21262d;--vscode-foreground:#d4d4d4;--vscode-descriptionForeground:#999fa8;--vscode-input-background:#1b1f24;--vscode-input-foreground:#d4d4d4;--vscode-font-family:Segoe UI,sans-serif;--vscode-font-size:13px}' });
+		const publish = async (permission, configured, messages = [], usable = true) => {
+			await page.evaluate(({ permission, configured, messages, usable }) => window.postMessage({ type: 'snapshot', screen: messages.length ? 'conversation' : 'home', activeId: '', viewKey: 'intro', configured, canSend: true, busy: false, responseBusy: false, temporary: permission === 'none', permission, messages, attachments: [], history: [], error: '', context: { slot: 'intro', ...(usable ? { root: 'C:/fixture' } : {}), usable, workspaceState: usable ? permission === 'none' ? 'blackout' : 'ready' : 'none', mode: permission === 'none' ? 'blackout' : permission === 'workspace' ? 'spot' : 'flood', busy: false, runtimeBusy: false, collectionPending: false, recent: [] } }, '*'), { permission, configured, messages, usable });
+		};
+		await publish('none', false, [], false);
+		const setup = t('Click the settings button in the upper right to configure a provider and select a model', '点击右上角设置按钮，配置服务商并选择模型后开始');
+		await page.locator('.welcome p').filter({ hasText: setup }).waitFor();
+		await page.locator('.welcome p').click({ clickCount: 3 });
+		assert.equal(await page.evaluate(() => getSelection().toString()), '', 'Welcome copy is not selectable');
+		await page.keyboard.press('Control+A');
+		assert.equal(await page.evaluate(() => getSelection().toString()), '', 'Selecting the page excludes chrome labels and the empty composer placeholder');
+		for (const permission of ['none', 'workspace', 'computer']) {
+			await publish(permission, true);
+			const welcome = permission === 'none' ? t('Start a temporary chat, or look at the current code together', '临时聊聊，或一起看看当前代码') : t('Read problems, ask questions, understand code, and learn together', '读题、提问、解释代码，一起学习');
+			await page.waitForFunction(text => document.querySelector('.welcome p')?.textContent === text, welcome);
+			assert.notEqual(await page.locator('.welcome-mark').evaluate(element => getComputedStyle(element).maskImage), 'none', 'Welcome uses the shared Beacon logo');
+			for (const theme of ['light', 'dark']) {
+				await page.evaluate(theme => {
+					document.body.className = `vscode-${theme}`;
+					for (const [name, value] of Object.entries(theme === 'light' ? { 'sideBar-background': '#fafafa', foreground: '#292d33', descriptionForeground: '#656970', 'input-background': '#eee', 'input-foreground': '#222' } : { 'sideBar-background': '#21262d', foreground: '#d4d4d4', descriptionForeground: '#999fa8', 'input-background': '#1b1f24', 'input-foreground': '#d4d4d4' })) { document.documentElement.style.setProperty('--vscode-' + name, value); }
+				}, theme);
+				await page.screenshot({ path: path.join(output, `intro-${language}-${permission}-${theme}.png`) });
+			}
+			await publish(permission, false);
+			await page.waitForFunction(text => document.querySelector('.welcome p')?.textContent === text, setup);
+		}
+		await publish('none', true, [], false);
+		await page.getByRole('button', { name: 'Blackout', exact: true }).click();
+		await page.getByText(t('Incognito mode which reads only open files', '只读已打开文件的无痕模式'), { exact: true }).waitFor();
+		await page.keyboard.press('Escape');
+		const input = page.locator('.composer textarea');
+		await input.fill('editable text');
+		await input.press('Control+A');
+		assert.deepStrictEqual(await input.evaluate(element => [element.selectionStart, element.selectionEnd]), [0, 13], 'Composer text remains selectable');
+		await publish('workspace', true, [{ id: 1, role: 'user', text: 'Student message', status: 'complete', activities: [] }, { id: 2, role: 'assistant', text: 'Tutor explanation\n\n```cpp\nint answer = 42;\n```', status: 'complete', activities: [] }]);
+		for (const [selector, expected] of [['.user-content', 'Student message'], ['.assistant > .markdown p', 'Tutor explanation'], ['.code-block pre code', 'int answer = 42;']]) {
+			await page.locator(selector).click({ clickCount: 3 });
+			assert.ok((await page.evaluate(() => getSelection().toString())).includes(expected), 'Conversation text and code remain selectable');
+		}
+		await page.close();
+	}
+	console.log('Mode copy and selection: Chinese/English, three modes, configuration priority, light/dark logos, non-selectable UI and selectable messages/code/input passed.');
+}
+
 async function checkLinkRouting(page) {
 	// Use the actual native Webview click handler, including its trusted-event
 	// and fragment behavior. A normal browser page otherwise misses this path.
@@ -425,7 +479,7 @@ async function renderExistingUI(context) {
 	assert.equal(await page.locator('.add-files').evaluate(node => getComputedStyle(node).opacity), '0.4', 'Runtime activity takes precedence over quiet navigation');
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', navigationBusy: false, busy: false, context: { ...window.fixtureState().context, runtimeBusy: false } }, '*'));
 	await page.evaluate(() => window.fixtureSnapshot({ type: 'snapshot', screen: 'home', activeId: '', canSend: false, configured: false, busy: false, messages: [], history: [], permission: 'none', context: { slot: 'test', usable: false, workspaceState: 'none', mode: 'blackout', busy: false, runtimeBusy: false, collectionPending: false, recent: [] } }, '*'));
-	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始。').waitFor();
+	await page.getByText('点击右上角设置按钮，配置服务商并选择模型后开始', { exact: true }).waitFor();
 	assert.equal(await page.getByText('打开一段聊天，或点击新聊天开始提问。', { exact: true }).count(), 0, 'A clean home screen does not show an obsolete chat-selection warning');
 	assert.equal(await page.getByRole('button', { name: '选择工作区' }).count(), 1, 'The workspace selector appears on the home page');
 	assert.equal(await page.locator('.chats-title').textContent(), '聊天', 'Home has the same secondary heading as the reference');
@@ -1774,6 +1828,7 @@ async function renderExistingUI(context) {
 }
 try {
 	const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+	await checkModeCopyAndSelection(context);
 	await checkBusyKeySetup(context);
 	await renderCustomSettings(context);
 	if (!process.argv.includes('--custom')) { await renderExistingUI(context); }

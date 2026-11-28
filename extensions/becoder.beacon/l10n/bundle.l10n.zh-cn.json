@@ -68,7 +68,7 @@
 	"Save the current chat successfully before changing its context.": "请先成功保存当前聊天，再切换其上下文。",
 	"The saved chat changed. Your local messages are retained; reopen it after resolving the change.": "磁盘中的聊天已变化，已保留本窗口消息；处理冲突后再重新打开。",
 	"Open or start a chat in the current Beacon workspace before asking.": "请先在当前 Beacon 工作区打开或新建聊天，再提问。",
-	"A usable workspace allows Spot or Flood. Without one, only Blackout is available.": "有可用工作区时只能选 Spot 或 Flood；无可用工作区时只能用 Blackout。",
+	"With a usable workspace, any mode is available; without one, only Blackout is available": "有可用工作区时自由选择模式；无可用工作区时只能用 Blackout",
 	"Another window is saving this workspace data. Try again shortly.": "另一个窗口正在保存此工作区的数据，请稍后重试。",
 	"Could not identify local files in this drop. Use Add files or paste an image.": "无法从此次拖入中识别本地文件，请使用“添加文件”或粘贴图片。",
 	"PDF selection": "PDF 选区",

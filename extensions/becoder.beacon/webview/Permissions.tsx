@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 
 const zh = document.documentElement.lang.startsWith('zh');
 const choices: { value: FilePermission; label: string; detail: string; icon: 'shield' | 'folder' | 'computer' }[] = [
-	{ value: 'none', label: 'Blackout', detail: zh ? '只读已打开文件的无痕模式' : 'Incognito mode: read only open files', icon: 'shield' },
+	{ value: 'none', label: 'Blackout', detail: zh ? '只读已打开文件的无痕模式' : 'Incognito mode which reads only open files', icon: 'shield' },
 	{ value: 'workspace', label: 'Spot', detail: zh ? '只工作在当前Beacon工作区' : 'Work only in the current Beacon workspace', icon: 'folder' },
 	{ value: 'computer', label: 'Flood', detail: zh ? '可自由访问本机文件' : 'Freely access local files', icon: 'computer' }
 ];

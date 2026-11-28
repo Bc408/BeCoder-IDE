@@ -480,7 +480,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			'beacon-unsaved-history': vscode.l10n.t('Save the current chat successfully before changing its context.'),
 			'beacon-history-conflict': vscode.l10n.t('The saved chat changed. Your local messages are retained; reopen it after resolving the change.'),
 			'beacon-conversation-owner': vscode.l10n.t('Open or start a chat in the current Beacon workspace before asking.'),
-			'beacon-mode-unavailable': vscode.l10n.t('A usable workspace allows Spot or Flood. Without one, only Blackout is available.'),
+			'beacon-mode-unavailable': vscode.l10n.t('With a usable workspace, any mode is available; without one, only Blackout is available'),
 			'beacon-write-busy': vscode.l10n.t('Another window is saving this workspace data. Try again shortly.')
 		};
 		const contextText = error instanceof Error ? contextErrors[error.message] : undefined;
